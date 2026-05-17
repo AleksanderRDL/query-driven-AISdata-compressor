@@ -1009,6 +1009,48 @@ If Level 5 passes, run Level 6.
 
 Never run the full grid to “see what happens” when the standard strict single-cell evidence is already failing. The grid is expensive and mostly useful after the one-cell gates show the candidate is coherent.
 
+### Exploratory real-scale diagnostics
+
+It is acceptable to occasionally run a real-scale diagnostic slice for the most promising current candidate before every strict gate passes, but only to answer a specific scaling or instrumentation question. This is not the full final grid and it is not acceptance evidence.
+
+Use this only when the question is concrete:
+
+```text
+does the candidate collapse at realistic trajectory/query scale?
+do artifacts, gate fields, runtime fields, and child reports survive production-like caps?
+does a tiny-probe pattern disappear when query/workload counts become meaningful?
+is runtime or memory already infeasible for the current direction?
+```
+
+Recommended scope:
+
+```text
+one representative cell, or a small slice such as 1x7 or 2x2
+strict gates unchanged
+fixed candidate/config except for the diagnostic variable being tested
+production-like caps/workload shape where runtime permits
+clearly marked exploratory output directory and report labels
+```
+
+Allowed conclusions:
+
+```text
+the candidate has or lacks obvious scaling/instrumentation viability
+the benchmark harness needs repair before larger runs
+the next checkpoint should continue, narrow, or pivot
+```
+
+Forbidden conclusions:
+
+```text
+final success
+final model quality
+final grid robustness
+gate success by visual inspection or encouraging partial numbers
+```
+
+Do not run these slices repeatedly to search for a lucky result, compensate for failed causality/support/workload gates, or justify loosening thresholds. If the result is interesting but child gates still fail, diagnose the failed gates before changing code.
+
 ---
 
 ## 11. Full final grid requirements

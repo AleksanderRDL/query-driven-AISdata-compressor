@@ -1084,3 +1084,34 @@ Decision:
   checkpointed and verified.
 - No scientific success claim is made. No probe or final-grid evidence was
   generated.
+
+## Checkpoint 5.16 — Real-Scale Diagnostic Slice Policy
+
+Status: completed
+
+Goal:
+- Clarify when a production-like benchmark slice is useful before the full
+  final-grid prerequisites pass.
+
+Changes:
+- Added a guide section that allows occasional real-scale exploratory
+  diagnostic slices for concrete scaling, instrumentation, runtime, or
+  tiny-probe-collapse questions.
+- Reaffirmed that these slices are not the full final grid, not acceptance
+  evidence, and must keep strict gates unchanged.
+
+Tests:
+- `git diff --check -- Range_QDS/docs/query-driven-rework-guide.md Range_QDS/docs/query-driven-rework-progress.md`
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was a protocol documentation
+  update.
+
+Key results:
+- The guide now distinguishes useful real-scale diagnostic slices from
+  forbidden full-grid "see what happens" runs.
+
+Decision:
+- Continue using real-scale slices only for named diagnostic questions.
+- Do not treat exploratory slice results as final success evidence.
