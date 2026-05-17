@@ -5,12 +5,14 @@ from typing import Any
 
 import pytest
 
-from experiments.benchmark_report import (
+from experiments.benchmark_common import audit_ratio_prefix
+from experiments.benchmark_final_grid import (
     QUERY_DRIVEN_FINAL_COMPRESSION_RATIOS,
     QUERY_DRIVEN_FINAL_COVERAGE_TARGETS,
-    _audit_ratio_prefix,
-    _row_from_run,
     query_driven_final_grid_summary,
+)
+from experiments.benchmark_report import (
+    _row_from_run,
 )
 
 pytestmark = pytest.mark.regression
@@ -33,7 +35,7 @@ def _final_grid_row(coverage: float) -> dict[str, Any]:
         "global_sanity_gate_pass": True,
     }
     for ratio in QUERY_DRIVEN_FINAL_COMPRESSION_RATIOS:
-        prefix = _audit_ratio_prefix(ratio)
+        prefix = audit_ratio_prefix(ratio)
         base = 0.50 + coverage + ratio
         row[f"{prefix}_mlqds_query_useful_v1"] = base + 0.05
         row[f"{prefix}_uniform_query_useful_v1"] = base
@@ -161,7 +163,16 @@ def test_benchmark_row_field_set_regression(data_regression: Any, tmp_path: Path
     row = _row_from_run(
         workload="range",
         run_label="fixture",
-        command=["uv", "run", "--group", "dev", "--", "python", "-m", "experiments.run_ais_experiment"],
+        command=[
+            "uv",
+            "run",
+            "--group",
+            "dev",
+            "--",
+            "python",
+            "-m",
+            "experiments.run_ais_experiment",
+        ],
         returncode=0,
         elapsed_seconds=1.0,
         run_dir=tmp_path,

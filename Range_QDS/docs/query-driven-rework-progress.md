@@ -1026,3 +1026,463 @@ Extra discoveries:
 Decision:
 - Do not perform a broad module split now.
 - Use the documented extraction order for future cleanup: gates first, then causality diagnostics, segment audits, benchmark row/report helpers, target-family splits, selector allocation/repair splits, and query generator planning/acceptance splits.
+
+## Checkpoint 4.91 — Gate Module Extraction
+
+Status: completed
+
+Goal:
+- Execute the first safe refactor from Checkpoint 4.90 by extracting final-candidate gate helpers out of the overloaded experiment pipeline.
+- Preserve gate behavior, artifact schemas, public commands, and scientific state.
+
+Changes:
+- Added `experiments/gates.py` for final-candidate gate helpers.
+- Moved support-overlap, workload-stability, coverage-overshoot tolerance, global-sanity, and target-diffusion gate logic out of `experiments/experiment_pipeline.py`.
+- Updated `experiment_pipeline.py` to import gate helpers from the new module.
+- Updated `tests/test_query_driven_rework.py` so gate tests import from `experiments.gates` instead of the orchestration pipeline.
+- Updated `CODE_LAYOUT.md` to mark gate extraction done and keep the next extraction order focused on causality and segment-audit helpers.
+
+Tests:
+- `git diff --check`
+- `uv run --group dev -- ruff check Range_QDS/experiments/gates.py`
+- `uv run --group dev -- ruff check --select F401,F821,F822,F823 Range_QDS/experiments/gates.py Range_QDS/experiments/experiment_pipeline.py Range_QDS/tests/test_query_driven_rework.py`
+- `uv run --group dev -- pyright Range_QDS/experiments/gates.py Range_QDS/experiments/experiment_pipeline.py Range_QDS/tests/test_query_driven_rework.py`
+- `uv run --group dev -- pyright Range_QDS/data Range_QDS/evaluation Range_QDS/experiments Range_QDS/models Range_QDS/queries Range_QDS/simplification Range_QDS/training Range_QDS/scripts Range_QDS/tests`
+- `uv run --group dev -- pytest Range_QDS/tests/test_query_driven_rework.py -q`
+- `uv run --group dev -- pytest Range_QDS/tests -q`
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was structure-only refactoring.
+
+Key results:
+- Full pytest passed: `421 passed, 1 warning`.
+- Full Pyright passed.
+- New `experiments/gates.py` passes full Ruff.
+- `experiment_pipeline.py` dropped from `4965` to `4501` lines; `experiments/gates.py` is `483` lines.
+
+Extra discoveries:
+- Gate extraction was clean because the moved helpers were pure enough and already had focused tests.
+- The remaining high-value extraction from `experiment_pipeline.py` is causality diagnostics. It is more coupled than gates because it touches selector traces, ablation masks, and artifact payload fields.
+- `experiment_pipeline.py` still re-exports no compatibility facade for gate tests; tests now depend on the new owner module directly.
+
+Decision:
+- Gate extraction is safe to save.
+- Next structural refactor, if requested, should target causality diagnostics only after preserving current artifact fields with focused tests.
+
+## Checkpoint 4.92 — Causality Helper Extraction
+
+Status: completed
+
+Hypothesis:
+- Pure causality summary and sensitivity helpers can move out of `experiment_pipeline.py` without changing behavior, artifact schemas, or experiment commands.
+
+Expected files:
+- `experiments/causality.py`
+- `experiments/experiment_pipeline.py`
+- `tests/test_query_driven_rework.py`
+- `CODE_LAYOUT.md`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- Stop before moving `_selection_causality_diagnostics` if the extraction would drag method construction, ablation freezing, evaluation, config, and training-output dependencies into the new helper module.
+
+Changes:
+- Added `experiments/causality.py` for learned-slot accounting, QueryUsefulV1 delta summaries, causality ablation payloads, delta gate configuration, retained-mask comparison, score/head sensitivity, and prior-feature sample sensitivity.
+- Updated `experiment_pipeline.py` to import the moved helpers and keep orchestration-local selection-causality freezing in place.
+- Updated `tests/test_query_driven_rework.py` so causality helper tests import from `experiments.causality` instead of the orchestration pipeline.
+- Updated `CODE_LAYOUT.md` to reflect the completed gate and pure-causality-helper extraction and the remaining split target.
+
+Tests:
+- `git diff --check`
+- `uv run --group dev -- ruff check Range_QDS/experiments/causality.py`
+- `uv run --group dev -- ruff check --select F401,F821,F822,F823 Range_QDS/experiments/causality.py Range_QDS/experiments/experiment_pipeline.py Range_QDS/tests/test_query_driven_rework.py`
+- `uv run --group dev -- pyright Range_QDS/experiments/causality.py Range_QDS/experiments/experiment_pipeline.py Range_QDS/tests/test_query_driven_rework.py`
+- `uv run --group dev -- pyright Range_QDS/data Range_QDS/evaluation Range_QDS/experiments Range_QDS/models Range_QDS/queries Range_QDS/simplification Range_QDS/training Range_QDS/scripts Range_QDS/tests`
+- `uv run --group dev -- pytest Range_QDS/tests/test_query_driven_rework.py -q`
+- `uv run --group dev -- pytest Range_QDS/tests -q`
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was structure-only refactoring.
+
+Key results:
+- Full pytest passed: `421 passed, 1 warning`.
+- Full Pyright passed.
+- New `experiments/causality.py` passes full Ruff.
+- `experiment_pipeline.py` dropped from `4501` to `3931` lines; `experiments/causality.py` is `593` lines.
+
+Extra discoveries:
+- `_selection_causality_diagnostics` is not a clean helper boundary yet. It owns method construction, mask freezing, ablation evaluation, training-output cloning, query-cache use, and config access. Moving it now would spread orchestration coupling instead of reducing it.
+- `QUERY_PRIOR_FIELD_NAMES` still belongs in `experiment_pipeline.py` for prior-channel ablation loops, while `sample_query_prior_fields` moved cleanly with prior-feature sensitivity.
+- `_query_useful_delta` is a reusable reporting helper now owned by `experiments.causality`; no compatibility facade was left behind in `experiment_pipeline.py`.
+
+Decision:
+- Causality helper extraction is safe to save.
+- Next structure checkpoint should target `experiments/segment_audits.py` or first narrow the selection-causality method/freezing boundary before extracting more causality orchestration.
+
+## Checkpoint 4.93 — Segment Audit Extraction
+
+Status: completed
+
+Hypothesis:
+- Segment-oracle and ranking audit helpers are pure enough to move out of `experiment_pipeline.py` without changing artifact schemas, selector behavior, or experiment commands.
+
+Expected files:
+- `experiments/segment_audits.py`
+- `experiments/experiment_pipeline.py`
+- `tests/test_query_driven_rework.py`
+- `CODE_LAYOUT.md`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- Stop before moving helpers that construct frozen selector methods, mutate training/config state, or own final report assembly.
+
+Changes:
+- Added `experiments/segment_audits.py` for tie-aware ranking helpers, segment top-mean aggregation, factorized-head probability score sources, segment oracle allocation audits, paired/all segment transfer rows, and eval-target segment alignment audits.
+- Updated `experiment_pipeline.py` to import the moved audit helpers while keeping frozen selector method builders and segment-score ablation helpers in the pipeline.
+- Updated `tests/test_query_driven_rework.py` so segment audit tests import from `experiments.segment_audits`.
+- Updated `CODE_LAYOUT.md` to mark segment-audit extraction done and record the remaining pipeline pressure points.
+
+Tests:
+- `git diff --check`
+- `uv run --group dev -- ruff check Range_QDS/experiments/segment_audits.py`
+- `uv run --group dev -- ruff check --select F401,F821,F822,F823 Range_QDS/experiments/segment_audits.py Range_QDS/experiments/experiment_pipeline.py Range_QDS/tests/test_query_driven_rework.py`
+- `uv run --group dev -- pyright Range_QDS/experiments/segment_audits.py Range_QDS/experiments/experiment_pipeline.py Range_QDS/tests/test_query_driven_rework.py`
+- `uv run --group dev -- pyright Range_QDS/data Range_QDS/evaluation Range_QDS/experiments Range_QDS/models Range_QDS/queries Range_QDS/simplification Range_QDS/training Range_QDS/scripts Range_QDS/tests`
+- `uv run --group dev -- pytest Range_QDS/tests/test_query_driven_rework.py -q`
+- `uv run --group dev -- pytest Range_QDS/tests -q`
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was structure-only refactoring.
+
+Key results:
+- Full pytest passed: `421 passed, 1 warning`.
+- Full Pyright passed.
+- New `experiments/segment_audits.py` passes full Ruff.
+- `experiment_pipeline.py` dropped from `3931` to `3441` lines; `experiments/segment_audits.py` is `506` lines.
+
+Extra discoveries:
+- Segment oracle audits were a clean boundary because they depend on tensors, labels, workload type, and target builders, but not on experiment config mutation or method orchestration.
+- `_segment_top_mean` is shared by the extracted audit module and remaining segment-score ablation helpers, so `experiment_pipeline.py` still imports it from `experiments.segment_audits`.
+- Frozen method builders, pre-repair trace methods, and segment-score band ablation helpers should not move into `segment_audits.py`; they are selector diagnostic behavior, not audit reporting.
+
+Decision:
+- Segment audit extraction is safe to save.
+- The remaining `experiment_pipeline.py` helpers should be split only if a clean selector/length diagnostic module can be created without hiding orchestration inside another private module.
+
+## Checkpoint 4.94 — Length Diagnostic Extraction
+
+Status: completed
+
+Hypothesis:
+- Score-protected length feasibility and frontier helpers are pure enough to move out of `experiment_pipeline.py` without changing selector behavior, artifact fields, or experiment commands.
+
+Expected files:
+- `experiments/length_diagnostics.py`
+- `experiments/experiment_pipeline.py`
+- `tests/test_query_driven_rework.py`
+- `CODE_LAYOUT.md`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- Stop before moving helpers that build frozen selector methods, mutate config/training state, or own run output assembly.
+
+Changes:
+- Added `experiments/length_diagnostics.py` for local distance matrices, required-point max-length masks, score-protected length feasibility, and score-protected length frontiers.
+- Updated `experiment_pipeline.py` to import the length diagnostics and removed its direct `compute_length_preservation` dependency.
+- Updated `tests/test_query_driven_rework.py` so length diagnostic tests import from `experiments.length_diagnostics`.
+- Updated `CODE_LAYOUT.md` to mark length-diagnostic extraction done and narrow the remaining pipeline pressure point to selector diagnostic/orchestration helpers.
+
+Tests:
+- `git diff --check`
+- `uv run --group dev -- ruff check Range_QDS/experiments/length_diagnostics.py`
+- `uv run --group dev -- ruff check --select F401,F821,F822,F823 Range_QDS/experiments/length_diagnostics.py Range_QDS/experiments/experiment_pipeline.py Range_QDS/tests/test_query_driven_rework.py`
+- `uv run --group dev -- pyright Range_QDS/experiments/length_diagnostics.py Range_QDS/experiments/experiment_pipeline.py Range_QDS/tests/test_query_driven_rework.py`
+- `uv run --group dev -- pyright Range_QDS/data Range_QDS/evaluation Range_QDS/experiments Range_QDS/models Range_QDS/queries Range_QDS/simplification Range_QDS/training Range_QDS/scripts Range_QDS/tests`
+- `uv run --group dev -- pytest Range_QDS/tests/test_query_driven_rework.py -q`
+- `uv run --group dev -- pytest Range_QDS/tests -q`
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was structure-only refactoring.
+
+Key results:
+- Full pytest passed: `421 passed, 1 warning`.
+- Full Pyright passed.
+- New `experiments/length_diagnostics.py` passes full Ruff.
+- `experiment_pipeline.py` dropped from `3441` to `3197` lines; `experiments/length_diagnostics.py` is `259` lines.
+
+Extra discoveries:
+- Length diagnostics are a clean module boundary because they depend only on tensors, boundaries, compression ratio, and `compute_length_preservation`.
+- `experiment_pipeline.py` no longer needs to import `compute_length_preservation` directly.
+- The remaining helper block is mostly selector diagnostic behavior: frozen learned-segment methods, pre-repair trace masks, segment-score band ablations, selection-causality orchestration, untrained/shuffled model helpers, and factorized-head ablation helpers.
+
+Decision:
+- Length diagnostic extraction is safe to save.
+- Do not force the remaining selector diagnostic helpers into a generic module unless the next checkpoint defines a tighter owner than "everything left over".
+
+## Checkpoint 4.95 — Selector Diagnostic Extraction
+
+Status: completed
+
+Hypothesis:
+- Frozen selector diagnostic method builders and segment-score ablation helpers have a tighter owner than the remaining pipeline and can move to `experiments/selector_diagnostics.py` without changing behavior, artifact fields, or experiment commands.
+
+Expected files:
+- `experiments/selector_diagnostics.py`
+- `experiments/experiment_pipeline.py`
+- `tests/test_query_driven_rework.py`
+- `CODE_LAYOUT.md`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- Stop before moving helpers that require config mutation, evaluation orchestration, training-output cloning, or final artifact assembly.
+
+Changes:
+- Added `experiments/selector_diagnostics.py` for learned-segment frozen diagnostic methods, pre-repair trace frozen methods, selector segment-source labeling, neutral segment-score ablations, and top-band/quantile segment-score ablations.
+- Updated `experiment_pipeline.py` to import selector diagnostics from the new module.
+- Updated `tests/test_query_driven_rework.py` so selector diagnostic tests import from `experiments.selector_diagnostics`.
+- Updated `CODE_LAYOUT.md` to mark selector-diagnostic extraction done and narrow the remaining pipeline pressure points.
+
+Tests:
+- `git diff --check`
+- `uv run --group dev -- ruff check Range_QDS/experiments/selector_diagnostics.py`
+- `uv run --group dev -- ruff check --select F401,F821,F822,F823 Range_QDS/experiments/selector_diagnostics.py Range_QDS/experiments/experiment_pipeline.py Range_QDS/tests/test_query_driven_rework.py`
+- `uv run --group dev -- pyright Range_QDS/experiments/selector_diagnostics.py Range_QDS/experiments/experiment_pipeline.py Range_QDS/tests/test_query_driven_rework.py`
+- `uv run --group dev -- pyright Range_QDS/data Range_QDS/evaluation Range_QDS/experiments Range_QDS/models Range_QDS/queries Range_QDS/simplification Range_QDS/training Range_QDS/scripts Range_QDS/tests`
+- `uv run --group dev -- pytest Range_QDS/tests/test_query_driven_rework.py -q`
+- `uv run --group dev -- pytest Range_QDS/tests -q`
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was structure-only refactoring.
+
+Key results:
+- Full pytest passed: `421 passed, 1 warning`.
+- Full Pyright passed.
+- New `experiments/selector_diagnostics.py` passes full Ruff.
+- `experiment_pipeline.py` dropped from `3197` to `3032` lines; `experiments/selector_diagnostics.py` is `189` lines.
+
+Extra discoveries:
+- Selector diagnostics were a clean boundary because they depend on tensors, frozen masks, and selector primitives, but not on experiment config mutation or run output assembly.
+- `experiment_pipeline.py` still legitimately imports `blend_segment_support_scores` directly because selection-causality ablations compose support scores before freezing masks.
+- The remaining private helpers in `experiment_pipeline.py` are now only phase timing, `_selection_causality_diagnostics`, untrained/shuffled prior helpers, factorized-head ablation helpers, and `run_experiment_pipeline`.
+
+Decision:
+- Selector diagnostic extraction is safe to save.
+- Further pipeline splitting should pause unless the next checkpoint targets a narrow model-ablation helper module or first reduces `_selection_causality_diagnostics` coupling.
+
+## Checkpoint 4.96 — Model Ablation Helper Extraction
+
+Status: completed
+
+Hypothesis:
+- Resetting model parameters, shuffled query-prior fields, and factorized-head ablation score helpers form a narrow model-ablation boundary and can move to `experiments/model_ablations.py` without changing behavior, artifact fields, or experiment commands.
+
+Expected files:
+- `experiments/model_ablations.py`
+- `experiments/experiment_pipeline.py`
+- `tests/test_query_driven_rework.py`
+- `CODE_LAYOUT.md`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- Stop before moving helpers that require evaluation orchestration, `TrainingOutputs` cloning, config mutation, or final artifact assembly.
+
+Changes:
+- Added `experiments/model_ablations.py` for untrained-model reset helpers, shuffled query-prior field construction, and factorized-head raw prediction/score ablations.
+- Updated `experiment_pipeline.py` to import model ablation helpers from the new module and removed no-longer-needed `copy`, `Callable`, and `mlqds_simplification_scores` imports.
+- Updated `tests/test_query_driven_rework.py` so reset-model tests import from `experiments.model_ablations`.
+- Updated `CODE_LAYOUT.md` to record that only selection-causality orchestration and run output assembly remain in `experiment_pipeline.py`.
+
+Tests:
+- `git diff --check`
+- `uv run --group dev -- ruff check Range_QDS/experiments/model_ablations.py`
+- `uv run --group dev -- ruff check --select F401,F821,F822,F823 Range_QDS/experiments/model_ablations.py Range_QDS/experiments/experiment_pipeline.py Range_QDS/tests/test_query_driven_rework.py`
+- `uv run --group dev -- pyright Range_QDS/experiments/model_ablations.py Range_QDS/experiments/experiment_pipeline.py Range_QDS/tests/test_query_driven_rework.py`
+- `uv run --group dev -- pyright Range_QDS/data Range_QDS/evaluation Range_QDS/experiments Range_QDS/models Range_QDS/queries Range_QDS/simplification Range_QDS/training Range_QDS/scripts Range_QDS/tests`
+- `uv run --group dev -- pytest Range_QDS/tests/test_query_driven_rework.py -q`
+- `uv run --group dev -- pytest Range_QDS/tests -q`
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was structure-only refactoring.
+
+Key results:
+- Full pytest passed: `421 passed, 1 warning`.
+- Full Pyright passed.
+- New `experiments/model_ablations.py` passes full Ruff.
+- `experiment_pipeline.py` dropped from `3032` to `2955` lines; `experiments/model_ablations.py` is `93` lines.
+
+Extra discoveries:
+- Model ablation helpers were a clean boundary because they depend on model/head tensors, query-prior field payloads, and MLQDS scoring, but not on evaluation loops or experiment config mutation.
+- `experiment_pipeline.py` now has only `_phase`, `_selection_causality_diagnostics`, and `run_experiment_pipeline` as private functions.
+- `_selection_causality_diagnostics` remains the main coupling point. Moving it now would still carry method construction, ablation freezing, evaluation, query caches, and training-output cloning into another module.
+
+Decision:
+- Model ablation helper extraction is safe to save.
+- Pause broad `experiment_pipeline.py` extraction here unless the next checkpoint first reduces `_selection_causality_diagnostics` coupling or targets a different pressure point from `CODE_LAYOUT.md`.
+
+## Checkpoint 4.97 — Benchmark Table Formatting Extraction
+
+Status: completed
+
+Hypothesis:
+- Benchmark markdown table formatting is isolated enough to move out of `benchmark_report.py` without changing report rows, final-grid logic, child-run execution, or artifact schemas.
+
+Expected files:
+- `experiments/benchmark_table.py`
+- `experiments/benchmark_report.py`
+- `experiments/benchmark_runner.py`
+- `tests/test_benchmark_runner.py`
+- `CODE_LAYOUT.md`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- Stop before moving `_row_from_run` or final-grid helpers if the extraction would drag child artifact parsing, gate decisions, or row schema flattening into the table module.
+
+Changes:
+- Added `experiments/benchmark_table.py` with `BENCHMARK_REPORT_TABLE_COLUMNS`, `_format_value`, and `_format_report_table`.
+- Updated `benchmark_runner.py` to import `_format_report_table` from `experiments.benchmark_table`.
+- Removed table formatting from `benchmark_report.py`.
+- Updated `CODE_LAYOUT.md` to mark table-formatting extraction done and keep remaining benchmark-report split targets focused on final-grid summary and row-field builders.
+
+Tests:
+- `git diff --check`
+- `uv run --group dev -- ruff check Range_QDS/experiments/benchmark_table.py`
+- `uv run --group dev -- ruff check --select F401,F821,F822,F823 Range_QDS/experiments/benchmark_table.py Range_QDS/experiments/benchmark_report.py Range_QDS/experiments/benchmark_runner.py Range_QDS/tests/test_benchmark_runner.py`
+- `uv run --group dev -- pyright Range_QDS/experiments/benchmark_table.py Range_QDS/experiments/benchmark_report.py Range_QDS/experiments/benchmark_runner.py Range_QDS/tests/test_benchmark_runner.py`
+- `uv run --group dev -- pyright Range_QDS/data Range_QDS/evaluation Range_QDS/experiments Range_QDS/models Range_QDS/queries Range_QDS/simplification Range_QDS/training Range_QDS/scripts Range_QDS/tests`
+- `uv run --group dev -- pytest Range_QDS/tests/test_benchmark_runner.py::test_benchmark_markdown_table_is_compact Range_QDS/tests/regression/test_benchmark_report_regression.py::test_benchmark_row_field_set_regression -q`
+- `uv run --group dev -- pytest Range_QDS/tests -q`
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was structure-only refactoring.
+
+Key results:
+- Full pytest passed: `421 passed, 1 warning`.
+- Full Pyright passed.
+- New `experiments/benchmark_table.py` passes full Ruff.
+- `benchmark_report.py` dropped from `1957` to `1685` lines; `experiments/benchmark_table.py` is `284` lines.
+
+Extra discoveries:
+- `_row_from_run` is not a clean extraction target yet. It is a large schema flattener with many small report helpers and broad artifact-field coupling.
+- Table formatting is genuinely independent of final-grid decisions and child-run parsing; `benchmark_runner.py` is the natural caller.
+- The benchmark row field regression test is the right guardrail before any future row-builder extraction; without it, a row split can silently drop fields.
+
+Decision:
+- Benchmark table extraction is safe to save.
+- Next benchmark-report cleanup should target a narrow row-field builder cluster or final-grid summary only if regression coverage is kept in place.
+
+## Checkpoint 4.98 — Benchmark Final-Grid Extraction
+
+Status: completed
+
+Hypothesis:
+- Final-grid acceptance summary logic is narrow enough to move out of `benchmark_report.py` without changing row schemas, child-run parsing, or table output.
+
+Expected files:
+- `experiments/benchmark_common.py`
+- `experiments/benchmark_final_grid.py`
+- `experiments/benchmark_report.py`
+- `experiments/benchmark_runner.py`
+- `tests/test_benchmark_runner.py`
+- `tests/regression/test_benchmark_report_regression.py`
+- `CODE_LAYOUT.md`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- Stop before moving `_row_from_run`, child artifact parsing, or broad row-field flattening if final-grid extraction pulls those concerns into the new module.
+
+Changes:
+- Added `experiments/benchmark_common.py` for shared benchmark numeric coercion, low-compression threshold, and audit-ratio prefix helpers.
+- Added `experiments/benchmark_final_grid.py` for QueryUsefulV1 final-grid targets, acceptance thresholds, grid normalization, and `query_driven_final_grid_summary`.
+- Updated `benchmark_runner.py` and tests to import final-grid logic from `experiments.benchmark_final_grid` instead of `experiments.benchmark_report`.
+- Kept `benchmark_report.py` focused on child-run row shaping and audit-field flattening; no compatibility alias was left behind.
+- Fixed audit-summary `zip()` calls to use `strict=True` while the touched function was under Ruff.
+- Updated `test_benchmark_runner.py` subprocess capture style to satisfy the active lint rules.
+- Updated `CODE_LAYOUT.md` to record the new benchmark helper ownership and leave only row-builder extraction as the remaining `benchmark_report.py` split target.
+
+Tests:
+- `git diff --check -- Range_QDS`
+- `uv run --group dev -- ruff check Range_QDS/experiments/benchmark_common.py Range_QDS/experiments/benchmark_final_grid.py Range_QDS/experiments/benchmark_report.py Range_QDS/experiments/benchmark_runner.py Range_QDS/tests/test_benchmark_runner.py Range_QDS/tests/regression/test_benchmark_report_regression.py`
+- `uv run --group dev -- pyright Range_QDS/experiments/benchmark_common.py Range_QDS/experiments/benchmark_final_grid.py Range_QDS/experiments/benchmark_report.py Range_QDS/experiments/benchmark_runner.py Range_QDS/tests/test_benchmark_runner.py Range_QDS/tests/regression/test_benchmark_report_regression.py`
+- `uv run --group dev -- pytest Range_QDS/tests/test_benchmark_runner.py::test_query_driven_final_grid_summary_accepts_complete_passing_grid Range_QDS/tests/test_benchmark_runner.py::test_query_driven_final_grid_summary_blocks_missing_or_failed_evidence Range_QDS/tests/test_benchmark_runner.py::test_query_driven_final_grid_summary_blocks_prior_alignment_failure Range_QDS/tests/regression/test_benchmark_report_regression.py::test_query_driven_final_grid_summary_regression Range_QDS/tests/regression/test_benchmark_report_regression.py::test_benchmark_row_field_set_regression -q`
+- `uv run --group dev -- pyright Range_QDS/data Range_QDS/evaluation Range_QDS/experiments Range_QDS/models Range_QDS/queries Range_QDS/simplification Range_QDS/training Range_QDS/scripts Range_QDS/tests`
+- `uv run --group dev -- pytest Range_QDS/tests -q`
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was structure-only refactoring.
+
+Key results:
+- Focused Ruff, focused Pyright, and focused final-grid/report regression tests passed.
+- Full Pyright passed.
+- Full pytest passed: `421 passed, 1 warning`.
+- `benchmark_report.py` is now `1670` lines; `experiments/benchmark_final_grid.py` is `229` lines; `experiments/benchmark_common.py` is `22` lines.
+
+Extra discoveries:
+- Final-grid acceptance was a clean owner once shared audit-prefix/numeric helpers were pulled into a tiny common module. It does not need child artifact parsing or row-schema flattening.
+- `_row_from_run` remains the real benchmark-report coupling point. Moving it wholesale would still mix data-source metadata, run-config fields, gate fields, audit fields, timings, and model diagnostics.
+- The audit summary relies on paired delta lists being built in lockstep. `zip(..., strict=True)` now makes that assumption explicit instead of silently truncating if a future edit breaks the pairing.
+
+Decision:
+- Benchmark final-grid extraction is safe to save.
+- The next benchmark-report cleanup should target one row-field builder cluster at a time, with `test_benchmark_row_field_set_regression` guarding field preservation.
+
+## Checkpoint 4.99 — Benchmark Runtime Row Extraction
+
+Status: completed
+
+Hypothesis:
+- Runtime and training-history row helpers are isolated enough to move out of `benchmark_report.py` without changing row schemas, final-grid logic, child-run parsing, or table output.
+
+Expected files:
+- `experiments/benchmark_row_runtime.py`
+- `experiments/benchmark_report.py`
+- `tests/test_benchmark_runner.py`
+- `tests/regression/test_benchmark_report_regression.py`
+- `CODE_LAYOUT.md`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- Stop before moving `_row_from_run`, data-source metadata, gate fields, audit-score flattening, or broad child artifact parsing if the runtime helper split starts pulling those concerns into the new module.
+
+Changes:
+- Added `experiments/benchmark_row_runtime.py` for runtime bottleneck fields, phase duration extraction, epoch timing aggregation, training-history summaries, and collapse-warning summary.
+- Updated `benchmark_report.py` to import runtime/history helpers from the new module and removed the local copies.
+- Kept row output field names unchanged, including `runtime_bottleneck_*`, `train_seconds`, `evaluate_matched_seconds`, `epoch_*`, and collapse-warning fields.
+- Updated `CODE_LAYOUT.md` to record runtime/history row helper ownership.
+
+Tests:
+- `git diff --check -- Range_QDS`
+- `uv run --group dev -- ruff check Range_QDS/experiments/benchmark_row_runtime.py Range_QDS/experiments/benchmark_report.py Range_QDS/tests/test_benchmark_runner.py Range_QDS/tests/regression/test_benchmark_report_regression.py`
+- `uv run --group dev -- pyright Range_QDS/experiments/benchmark_row_runtime.py Range_QDS/experiments/benchmark_report.py Range_QDS/tests/test_benchmark_runner.py Range_QDS/tests/regression/test_benchmark_report_regression.py`
+- `uv run --group dev -- pytest Range_QDS/tests/test_benchmark_runner.py::test_benchmark_row_records_effective_child_torch_runtime Range_QDS/tests/test_benchmark_runner.py::test_benchmark_markdown_table_is_compact Range_QDS/tests/regression/test_benchmark_report_regression.py::test_benchmark_row_field_set_regression -q`
+- `uv run --group dev -- pytest Range_QDS/tests/test_benchmark_runner.py::test_benchmark_row_reports_zero_effective_diversity_for_stratified Range_QDS/tests/test_benchmark_runner.py::test_benchmark_row_records_data_source_metadata -q`
+- `uv run --group dev -- pyright Range_QDS/data Range_QDS/evaluation Range_QDS/experiments Range_QDS/models Range_QDS/queries Range_QDS/simplification Range_QDS/training Range_QDS/scripts Range_QDS/tests`
+- `uv run --group dev -- pytest Range_QDS/tests -q`
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was structure-only refactoring.
+
+Key results:
+- Focused Ruff passed.
+- Focused Pyright passed.
+- Focused benchmark row tests passed: `3 passed` and `2 passed`.
+- Full Pyright passed.
+- Full pytest passed: `421 passed, 1 warning`.
+- `benchmark_report.py` is now `1577` lines; `experiments/benchmark_row_runtime.py` is `111` lines.
+
+Extra discoveries:
+- Runtime/history row fields are a clean extraction boundary because they depend only on parsed timings, `training_history`, `elapsed_seconds`, and numeric coercion.
+- The remaining `benchmark_report.py` row builder is still broad. The next plausible small clusters are data-source metadata or workload-generation fields; gate and metric-score fields are more coupled and should not be moved as a broad sweep.
+- Existing row tests already exercise the runtime fields well enough for a move-only extraction; the regression field-set test still guards against silent column loss.
+
+Decision:
+- Benchmark runtime row extraction is safe to save.
+- Continue with one narrow row-field cluster at a time if staying in `benchmark_report.py`; do not extract `_row_from_run` wholesale.

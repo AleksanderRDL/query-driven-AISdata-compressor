@@ -46,9 +46,9 @@ approximate and should be treated as refactor signals, not automatic defects.
 
 | File | Current issue | Recommended split |
 | --- | --- | --- |
-| `experiments/experiment_pipeline.py` (~5k lines) | Mixes orchestration, phase timing, gates, causality ablations, segment audits, support checks, artifact assembly, and run output. | Extract in this order: `experiments/gates.py`, `experiments/causality.py`, `experiments/segment_audits.py`; leave `run_experiment_pipeline` as the orchestrator. |
+| `experiments/experiment_pipeline.py` (~3.0k lines after gate, causality-helper, segment-audit, length-diagnostic, selector-diagnostic, and model-ablation extraction) | Still mixes orchestration, phase timing, selection-causality ablation freezing, artifact assembly, and run output. | Do not split further unless `_selection_causality_diagnostics` is first narrowed enough to move without carrying evaluation orchestration into another module. Leave `run_experiment_pipeline` as the orchestrator. |
 | `training/training_targets.py` (~3k lines) | Multiple generations of range target builders and aggregation paths live together. | Split by target family: scalar/legacy diagnostics, set-utility targets, local-swap targets, aggregation/balancing. Keep public wrappers until call sites move. |
-| `experiments/benchmark_report.py` (~2k lines) | Final-grid logic, child-run row flattening, audit extraction, and table formatting are interleaved. | Separate `final_grid_summary`, `row_fields`, and `table_formatting`. |
+| `experiments/benchmark_report.py` (~1.6k lines after table-format, final-grid, and runtime-row extraction) | Child-run row flattening and audit extraction are still interleaved. Shared numeric helpers live in `experiments/benchmark_common.py`; final-grid acceptance lives in `experiments/benchmark_final_grid.py`; runtime/history row helpers live in `experiments/benchmark_row_runtime.py`; table formatting lives in `experiments/benchmark_table.py`. | Extract narrow row-field builder clusters only after preserving report field regression coverage. Do not move `_row_from_run` as one broad block. |
 | `simplification/learned_segment_budget.py` (~1.5k lines) | Budget allocation, length repair, trace payloads, and diagnostics are tightly packed. | Split allocation, length repair, and diagnostics/trace once selector behavior is stable. |
 | `queries/query_generator.py` (~1.3k lines) | Anchor weighting, profile planning, acceptance filtering, signature generation, and workload assembly share one module. | Split range anchor sampling/profile planning from acceptance/signature diagnostics. |
 
@@ -58,7 +58,7 @@ approximate and should be treated as refactor signals, not automatic defects.
   checkpoint explicitly says it is changing them.
 - Move behavior only with focused tests around the moved boundary. Do not do
   broad file splits during scientific probe checkpoints.
-- Prefer extraction of pure helpers first: gates, row-field builders, signature
+- Prefer extraction of pure helpers first: row-field builders, signature
   builders, allocation diagnostics.
 - Avoid permanent compatibility shims. If a temporary facade is needed during a
   split, mark its removal checkpoint in the progress log.

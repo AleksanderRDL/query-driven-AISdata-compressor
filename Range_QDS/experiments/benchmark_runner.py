@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import argparse
 import json
-import signal
 import shlex
+import signal
 import sys
 import time
 from pathlib import Path
@@ -23,10 +23,7 @@ from experiments.benchmark_artifacts import (
     write_json,
     write_status,
 )
-from experiments.benchmark_profiles import (
-    DEFAULT_PROFILE,
-    PROFILE_CHOICES,
-)
+from experiments.benchmark_final_grid import query_driven_final_grid_summary
 from experiments.benchmark_inputs import (
     DEFAULT_WORKLOADS,
     PURE_WORKLOADS,
@@ -38,21 +35,23 @@ from experiments.benchmark_inputs import (
     _runner_environment_metadata,
 )
 from experiments.benchmark_process import _run_capture_streaming
-from experiments.benchmark_report import (
-    _child_run_dir,
-    _format_report_table,
-    _row_from_run,
-    query_driven_final_grid_summary,
+from experiments.benchmark_profiles import (
+    DEFAULT_PROFILE,
+    PROFILE_CHOICES,
 )
+from experiments.benchmark_report import _child_run_dir, _row_from_run
 from experiments.benchmark_runtime import (
     _git_metadata,
     _qds_root,
     _split_extra_args,
     _write_text,
 )
+from experiments.benchmark_table import _format_report_table
 
 
-def _warm_csv_caches(args: argparse.Namespace, data_sources: BenchmarkDataSources) -> list[dict[str, Any]]:
+def _warm_csv_caches(
+    args: argparse.Namespace, data_sources: BenchmarkDataSources
+) -> list[dict[str, Any]]:
     """Prebuild segmented AIS caches for all CSV sources used by the benchmark."""
     if not args.cache_dir or not data_sources.csv_sources or args.no_cache_warmup:
         return []
@@ -130,7 +129,9 @@ def _run_config(
             "max_segments": args.max_segments,
             "max_trajectories": args.max_trajectories,
         },
-        "checkpoint_selection_metric": _profile_settings(args.profile).get("checkpoint_selection_metric"),
+        "checkpoint_selection_metric": _profile_settings(args.profile).get(
+            "checkpoint_selection_metric"
+        ),
         "validation_score_every": int(args.validation_score_every),
         "extra_args": extra_args,
         "continue_on_failure": bool(args.continue_on_failure),
@@ -200,7 +201,9 @@ def _build_parser() -> argparse.ArgumentParser:
         type=str,
         default=None,
     )
-    parser.add_argument("--eval_csv_path", "--eval_csv", dest="eval_csv_path", type=str, default=None)
+    parser.add_argument(
+        "--eval_csv_path", "--eval_csv", dest="eval_csv_path", type=str, default=None
+    )
     parser.add_argument("--cache_dir", type=str, default=None)
     parser.add_argument("--refresh_cache", action="store_true")
     parser.add_argument(
@@ -250,9 +253,13 @@ def _parse_coverage_targets(raw: str | None) -> list[float]:
             if value <= 100.0:
                 value = value / 100.0
             else:
-                raise ValueError("coverage targets must be fractions in (0, 1] or percents in (0, 100].")
+                raise ValueError(
+                    "coverage targets must be fractions in (0, 1] or percents in (0, 100]."
+                )
         if value <= 0.0 or value > 1.0:
-            raise ValueError("coverage targets must be fractions in (0, 1] or percents in (0, 100].")
+            raise ValueError(
+                "coverage targets must be fractions in (0, 1] or percents in (0, 100]."
+            )
         targets.append(float(value))
     return targets
 
@@ -274,7 +281,9 @@ def main() -> None:
     coverage_targets = _parse_coverage_targets(args.coverage_targets)
     extra_args = _split_extra_args(args.extra_args)
     if coverage_targets and "--query_coverage" in extra_args:
-        raise ValueError("--coverage_targets cannot be combined with --query_coverage inside --extra_args.")
+        raise ValueError(
+            "--coverage_targets cannot be combined with --query_coverage inside --extra_args."
+        )
     data_sources = _resolve_data_sources(args)
     results_dir = Path(args.results_dir)
     results_dir.mkdir(parents=True, exist_ok=True)
@@ -398,7 +407,11 @@ def main() -> None:
                 stdout_path = run_dir / "stdout.log"
                 proc = _run_capture_streaming(command, cwd=_qds_root(), stdout_path=stdout_path)
                 run_json_path = run_dir / "example_run.json"
-                run_json = json.loads(run_json_path.read_text(encoding="utf-8")) if run_json_path.exists() else None
+                run_json = (
+                    json.loads(run_json_path.read_text(encoding="utf-8"))
+                    if run_json_path.exists()
+                    else None
+                )
                 timings = proc.timings
                 row = _row_from_run(
                     workload=workload,
@@ -520,7 +533,9 @@ def main() -> None:
     )
     print(f"[benchmark] wrote {results_dir / 'benchmark_report.md'}", flush=True)
     if failures:
-        raise SystemExit(f"{failures} benchmark run(s) failed. See {results_dir / 'benchmark_report.json'}.")
+        raise SystemExit(
+            f"{failures} benchmark run(s) failed. See {results_dir / 'benchmark_report.json'}."
+        )
 
 
 if __name__ == "__main__":

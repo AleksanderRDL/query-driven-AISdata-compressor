@@ -12,34 +12,42 @@ from data.ais_loader import generate_synthetic_ais_data
 from evaluation.evaluate_methods import score_range_usefulness
 from evaluation.metrics import MethodEvaluation, compute_length_preservation
 from evaluation.query_useful_v1 import query_useful_v1_from_range_audit
-from experiments.experiment_pipeline import (
+from experiments.gates import (
+    _global_sanity_gate,
+    _support_overlap_gate,
+    _target_diffusion_gate,
+    _workload_stability_gate,
+)
+from experiments.causality import (
     _causality_ablation_diagnostics_payload,
     _causality_ablation_tradeoff_summary,
-    _factorized_head_probability_sources_from_logits,
-    _global_sanity_gate,
     _head_ablation_sensitivity,
-    _learned_segment_frozen_method,
     _learned_slot_summary,
     _learning_causality_delta_gate_config,
-    _neutral_segment_scores_for_ablation,
     _prior_feature_sample_sensitivity,
     _prior_sample_gate_failures,
     _query_useful_component_delta_summary,
-    _pre_repair_frozen_method_from_trace,
     _retained_mask_comparison,
-    _reset_module_parameters,
+    _score_ablation_sensitivity,
+)
+from experiments.segment_audits import (
+    _factorized_head_probability_sources_from_logits,
+    _segment_oracle_allocation_audit,
+    _target_segment_oracle_alignment_audit,
+)
+from experiments.length_diagnostics import (
     _max_length_required_mask,
     _score_protected_length_feasibility,
     _score_protected_length_frontier,
+)
+from experiments.selector_diagnostics import (
+    _learned_segment_frozen_method,
+    _neutral_segment_scores_for_ablation,
+    _pre_repair_frozen_method_from_trace,
     _segment_score_quantile_bands_for_ablation,
     _segment_score_top_band_for_ablation,
-    _segment_oracle_allocation_audit,
-    _score_ablation_sensitivity,
-    _support_overlap_gate,
-    _target_diffusion_gate,
-    _target_segment_oracle_alignment_audit,
-    _workload_stability_gate,
 )
+from experiments.model_ablations import _reset_module_parameters
 from experiments.range_diagnostics import _range_workload_distribution_comparison
 from models.workload_blind_range_v2 import WorkloadBlindRangeV2Model
 from queries.query_generator import (

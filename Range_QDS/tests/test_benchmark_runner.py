@@ -5,13 +5,16 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
 import experiments.benchmark_runner as benchmark_runner
+from experiments.benchmark_artifacts import index_entry, write_family_indexes
+from experiments.benchmark_final_grid import query_driven_final_grid_summary
+from experiments.benchmark_process import BenchmarkChildResult
 from experiments.benchmark_profiles import (
     BLIND_EXPECTED_USEFULNESS_PROFILE,
     BLIND_RETAINED_FREQUENCY_PROFILE,
@@ -20,11 +23,15 @@ from experiments.benchmark_profiles import (
     benchmark_profile_args,
     benchmark_profile_settings,
 )
+from experiments.benchmark_report import (
+    MIN_MATCHED_LEARNED_SLOT_FRACTION_FOR_BLIND_CLAIM,
+    _query_floor_fields,
+)
 from experiments.benchmark_runner import (
-    DEFAULT_WORKLOADS,
     DEFAULT_PROFILE,
-    BenchmarkDataSources,
+    DEFAULT_WORKLOADS,
     PURE_WORKLOADS,
+    BenchmarkDataSources,
     _child_run_dir,
     _coverage_label_suffix,
     _format_report_table,
@@ -33,17 +40,10 @@ from experiments.benchmark_runner import (
     _profile_args,
     _resolve_data_sources,
     _row_from_run,
-    _run_config,
     _run_capture_streaming,
+    _run_config,
     _runner_environment_metadata,
 )
-from experiments.benchmark_process import BenchmarkChildResult
-from experiments.benchmark_report import (
-    MIN_MATCHED_LEARNED_SLOT_FRACTION_FOR_BLIND_CLAIM,
-    _query_floor_fields,
-    query_driven_final_grid_summary,
-)
-from experiments.benchmark_artifacts import index_entry, write_family_indexes
 from experiments.experiment_config import build_experiment_config
 from experiments.experiment_workloads import resolve_workload_maps, validation_query_count
 
@@ -336,7 +336,7 @@ def test_benchmark_row_records_effective_child_torch_runtime(tmp_path) -> None:
                 "allow_tf32": True,
                 "amp_mode": "bf16",
                 "compression_ratio": 0.05,
-            }
+            },
         },
         "oracle_diagnostic": {
             "kind": "additive_label_greedy",
@@ -370,7 +370,11 @@ def test_benchmark_row_records_effective_child_torch_runtime(tmp_path) -> None:
                 "positive_spearman_head_count": 1,
             },
             "per_head_predictability": {
-                "query_hit_probability": {"spearman": 0.03, "lift_at_5_percent": 1.04, "pr_auc_lift_over_base_rate": 1.01},
+                "query_hit_probability": {
+                    "spearman": 0.03,
+                    "lift_at_5_percent": 1.04,
+                    "pr_auc_lift_over_base_rate": 1.01,
+                },
                 "conditional_behavior_utility": {"spearman": -0.02, "lift_at_5_percent": 0.95},
                 "replacement_representative_value": {"spearman": 0.08, "lift_at_5_percent": 1.06},
                 "segment_budget_target": {"spearman": 0.01, "lift_at_5_percent": 1.02},
@@ -839,7 +843,7 @@ def test_benchmark_row_records_effective_child_torch_runtime(tmp_path) -> None:
             "tf32_matmul_allowed": True,
             "tf32_cudnn_allowed": True,
             "amp": {"enabled": True, "dtype": "bfloat16"},
-        }
+        },
     }
 
     row = _row_from_run(
@@ -1089,10 +1093,16 @@ def test_benchmark_row_records_effective_child_torch_runtime(tmp_path) -> None:
     assert row["audit_ratio_0p0100_douglas_peucker_range_usefulness"] == pytest.approx(0.09)
     assert row["audit_ratio_0p0100_temporal_random_fill_range_usefulness"] == pytest.approx(0.11)
     assert row["audit_ratio_0p0100_mlqds_vs_uniform_range_usefulness"] == pytest.approx(-0.02)
-    assert row["audit_ratio_0p0100_mlqds_vs_douglas_peucker_range_usefulness"] == pytest.approx(0.01)
-    assert row["audit_ratio_0p0100_mlqds_vs_temporal_random_fill_range_usefulness"] == pytest.approx(-0.01)
+    assert row["audit_ratio_0p0100_mlqds_vs_douglas_peucker_range_usefulness"] == pytest.approx(
+        0.01
+    )
+    assert row[
+        "audit_ratio_0p0100_mlqds_vs_temporal_random_fill_range_usefulness"
+    ] == pytest.approx(-0.01)
     assert row["audit_ratio_0p0500_mlqds_vs_uniform_range_usefulness"] == pytest.approx(0.05)
-    assert row["audit_ratio_0p1000_mlqds_vs_temporal_random_fill_range_usefulness"] == pytest.approx(-0.02)
+    assert row[
+        "audit_ratio_0p1000_mlqds_vs_temporal_random_fill_range_usefulness"
+    ] == pytest.approx(-0.02)
     assert row["range_boundary_prior_weight"] == 0.0
     assert row["range_boundary_prior_enabled"] is False
     assert row["teacher_distillation_enabled"] is True
@@ -1292,7 +1302,9 @@ def test_query_driven_final_grid_summary_blocks_prior_alignment_failure() -> Non
     assert summary["final_success_allowed"] is False
     assert "required_single_run_gates_failed" in summary["failed_checks"]
     assert "prior_predictive_alignment_gate_pass" in summary["required_single_run_gate_names"]
-    assert summary["child_gate_failures"][0]["failed_gates"] == ["prior_predictive_alignment_gate_pass"]
+    assert summary["child_gate_failures"][0]["failed_gates"] == [
+        "prior_predictive_alignment_gate_pass"
+    ]
 
 
 def test_query_floor_fields_flags_coverage_target_miss() -> None:
@@ -1653,7 +1665,9 @@ def test_profile_args_support_workload_blind_profiles() -> None:
         eval_csv_path="../AISDATA/cleaned/day3.csv",
     )
 
-    profile_args = _profile_args(BLIND_RETAINED_FREQUENCY_PROFILE, args, data_sources, include_refresh_cache=False)
+    profile_args = _profile_args(
+        BLIND_RETAINED_FREQUENCY_PROFILE, args, data_sources, include_refresh_cache=False
+    )
 
     assert profile_args[:6] == [
         "--train_csv_path",
@@ -1664,7 +1678,9 @@ def test_profile_args_support_workload_blind_profiles() -> None:
         "../AISDATA/cleaned/day3.csv",
     ]
     assert profile_args[profile_args.index("--model_type") + 1] == "workload_blind_range"
-    assert profile_args[profile_args.index("--range_training_target_mode") + 1] == "retained_frequency"
+    assert (
+        profile_args[profile_args.index("--range_training_target_mode") + 1] == "retained_frequency"
+    )
     assert profile_args[profile_args.index("--range_max_coverage_overshoot") + 1] == "0.02"
     assert profile_args[profile_args.index("--range_audit_compression_ratios") + 1] == (
         "0.01,0.02,0.05,0.10,0.15,0.20,0.30"
@@ -1736,7 +1752,9 @@ def test_family_index_upserts_current_status_and_appends_events(tmp_path) -> Non
         max_trajectories=None,
     )
     run_label = "custom_run"
-    sources = BenchmarkDataSources(train_csv_path="day1.csv", validation_csv_path="day2.csv", eval_csv_path="day3.csv")
+    sources = BenchmarkDataSources(
+        train_csv_path="day1.csv", validation_csv_path="day2.csv", eval_csv_path="day3.csv"
+    )
     git = {"commit": "abc123", "dirty": False}
     running_status = {
         "status": "running",
@@ -1807,7 +1825,9 @@ def test_family_index_upserts_current_status_and_appends_events(tmp_path) -> Non
     assert events_text.count('"run_id": "run-a"') == 2
 
 
-def test_benchmark_report_records_concrete_family_root(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_benchmark_report_records_concrete_family_root(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     family = tmp_path / "range_family"
     results_dir = family / "runs" / "artifact-test"
     train_csv = tmp_path / "train.csv"
@@ -1889,7 +1909,9 @@ def test_resolve_data_sources_selects_three_cleaned_days(tmp_path) -> None:
     (tmp_path / "aisdk-2026-02-03_cleaned.csv").write_text("x\n", encoding="utf-8")
     (tmp_path / "aisdk-2026-02-04_cleaned.csv").write_text("x\n", encoding="utf-8")
     (tmp_path / "README.md").write_text("ignore\n", encoding="utf-8")
-    args = argparse.Namespace(csv_path=str(tmp_path), train_csv_path=None, validation_csv_path=None, eval_csv_path=None)
+    args = argparse.Namespace(
+        csv_path=str(tmp_path), train_csv_path=None, validation_csv_path=None, eval_csv_path=None
+    )
 
     sources = _resolve_data_sources(args)
 
@@ -1897,11 +1919,17 @@ def test_resolve_data_sources_selects_three_cleaned_days(tmp_path) -> None:
     assert sources.train_csv_path == str(tmp_path / "aisdk-2026-02-02_cleaned.csv")
     assert sources.validation_csv_path == str(tmp_path / "aisdk-2026-02-03_cleaned.csv")
     assert sources.eval_csv_path == str(tmp_path / "aisdk-2026-02-04_cleaned.csv")
-    assert sources.csv_sources == (sources.train_csv_path, sources.validation_csv_path, sources.eval_csv_path)
+    assert sources.csv_sources == (
+        sources.train_csv_path,
+        sources.validation_csv_path,
+        sources.eval_csv_path,
+    )
 
 
 def test_resolve_data_sources_requires_paired_train_eval() -> None:
-    args = argparse.Namespace(csv_path=None, train_csv_path="train.csv", validation_csv_path=None, eval_csv_path=None)
+    args = argparse.Namespace(
+        csv_path=None, train_csv_path="train.csv", validation_csv_path=None, eval_csv_path=None
+    )
 
     with pytest.raises(ValueError, match="supplied together"):
         _resolve_data_sources(args)
@@ -2060,7 +2088,9 @@ def test_benchmark_markdown_table_is_compact() -> None:
     assert "| range | custom | 0 | 12.3457 |" in table
 
 
-def test_run_capture_streaming_writes_log_and_console(tmp_path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_run_capture_streaming_writes_log_and_console(
+    tmp_path, capsys: pytest.CaptureFixture[str]
+) -> None:
     stdout_path = tmp_path / "child" / "stdout.log"
 
     result = _run_capture_streaming(
@@ -2126,7 +2156,14 @@ def test_mark_benchmark_failed_updates_stale_running_status_and_family_index(tmp
     with open(family / "runs_index.csv", "w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(
             f,
-            fieldnames=["run_id", "status", "finished_at_utc", "exit_status", "failures", "results_dir"],
+            fieldnames=[
+                "run_id",
+                "status",
+                "finished_at_utc",
+                "exit_status",
+                "failures",
+                "results_dir",
+            ],
         )
         writer.writeheader()
         writer.writerow(
@@ -2153,8 +2190,7 @@ def test_mark_benchmark_failed_updates_stale_running_status_and_family_index(tmp
             "killed",
         ],
         text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         check=False,
     )
 
@@ -2170,4 +2206,6 @@ def test_mark_benchmark_failed_updates_stale_running_status_and_family_index(tmp
     assert rows[0]["status"] == "failed"
     assert rows[0]["exit_status"] == "-9"
     assert rows[0]["failures"] == "1"
-    assert '"run_id": "stale-run"' in (family / "runs_index_events.jsonl").read_text(encoding="utf-8")
+    assert '"run_id": "stale-run"' in (family / "runs_index_events.jsonl").read_text(
+        encoding="utf-8"
+    )
