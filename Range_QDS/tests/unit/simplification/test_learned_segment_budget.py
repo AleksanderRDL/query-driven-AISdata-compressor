@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import inspect
+
 import torch
 
 from evaluation.metrics import compute_length_preservation
@@ -42,6 +44,13 @@ def test_learned_segment_budget_public_api_and_trace_accounting() -> None:
     assert source_count == int(retained.sum().item())
     assert diagnostics["schema_version"] == LEARNED_SEGMENT_BUDGET_SCHEMA_VERSION
     assert diagnostics["budget_rows"][0]["no_fixed_85_percent_temporal_scaffold"] is True
+
+
+def test_learned_segment_budget_public_api_uses_trajectory_budget_keyword() -> None:
+    signature = inspect.signature(simplify_with_learned_segment_budget_v1)
+
+    assert "max_budget_share_per_trajectory" in signature.parameters
+    assert "max_budget_share_per_ship" not in signature.parameters
 
 
 def test_learned_segment_budget_length_repair_preserves_budget_and_reports_attribution() -> None:

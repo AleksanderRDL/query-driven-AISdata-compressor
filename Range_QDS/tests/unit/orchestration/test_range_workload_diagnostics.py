@@ -12,7 +12,7 @@ from config.experiment_config import build_experiment_config
 from data.ais_loader import generate_synthetic_ais_data
 from orchestration.range_cache import RangeRuntimeCache
 from orchestration.range_cache import prepare_range_label_cache as _prepare_range_label_cache
-from orchestration.range_diagnostics import _range_workload_diagnostics
+from orchestration.range_diagnostics import range_workload_diagnostics
 from queries.generation.workload import generate_typed_query_workload
 from queries.query_types import QUERY_TYPE_ID_RANGE, pad_query_features
 from queries.workload import TypedQueryWorkload
@@ -302,7 +302,7 @@ def test_range_workload_diagnostics_cache_reuses_labels(tmp_path: Path) -> None:
     )
 
     first_cache = RangeRuntimeCache()
-    first_summary, first_rows = _range_workload_diagnostics(
+    first_summary, first_rows = range_workload_diagnostics(
         "train",
         points,
         boundaries,
@@ -318,7 +318,7 @@ def test_range_workload_diagnostics_cache_reuses_labels(tmp_path: Path) -> None:
     first_labels = first_cache.labels.clone()
 
     second_cache = RangeRuntimeCache()
-    second_summary, second_rows = _range_workload_diagnostics(
+    second_summary, second_rows = range_workload_diagnostics(
         "train",
         points,
         boundaries,
@@ -356,7 +356,7 @@ def test_range_workload_diagnostics_populates_runtime_query_cache_masks(tmp_path
     )
 
     runtime_cache = RangeRuntimeCache()
-    _summary, _rows = _range_workload_diagnostics(
+    _summary, _rows = range_workload_diagnostics(
         "eval",
         points,
         boundaries,

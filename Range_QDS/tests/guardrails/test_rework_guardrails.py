@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 from pathlib import Path
 
@@ -42,6 +43,24 @@ def test_removed_compatibility_shims_stay_removed(module_name: str) -> None:
 
 def test_removed_query_useful_target_build_alias_stays_removed() -> None:
     assert not hasattr(query_useful_targets, "build")
+
+
+def test_orchestration_production_modules_do_not_cross_import_private_helpers() -> None:
+    violations: list[str] = []
+    orchestration_dir = REPO_ROOT / "Range_QDS" / "orchestration"
+
+    for path in sorted(orchestration_dir.glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ImportFrom):
+                continue
+            if not node.module or not node.module.startswith("orchestration."):
+                continue
+            for alias in node.names:
+                if alias.name.startswith("_") and not alias.name.startswith("__"):
+                    violations.append(f"{path.relative_to(REPO_ROOT)}:{node.lineno}:{alias.name}")
+
+    assert violations == []
 
 
 def test_root_makefile_points_to_range_qds() -> None:

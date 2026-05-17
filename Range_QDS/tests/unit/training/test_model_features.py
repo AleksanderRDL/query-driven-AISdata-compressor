@@ -768,7 +768,7 @@ def test_forward_predict_supports_historical_query_free_feature_dims() -> None:
 
 
 def test_range_aware_rejects_non_range_workloads() -> None:
-    queries = [{"type": "legacy", "params": {}}]
+    queries = [{"type": "unsupported", "params": {}}]
 
     with pytest.raises(ValueError, match="Only range"):
         pad_query_features(queries)

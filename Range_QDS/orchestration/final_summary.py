@@ -11,18 +11,18 @@ from config.experiment_config import ExperimentConfig
 from evaluation.metrics import MethodEvaluation
 from orchestration.causality import (
     LEARNING_CAUSALITY_MIN_MATERIAL_DELTA,
-    _causality_ablation_tradeoff_summary,
-    _learned_slot_summary,
-    _learning_causality_delta_gate_config,
-    _prior_sample_gate_failures,
-    _query_useful_component_delta_summary,
-    _query_useful_delta,
+    build_learned_slot_summary,
+    causality_ablation_tradeoff_summary,
+    learning_causality_delta_gate_config,
+    prior_sample_gate_failures,
+    query_useful_component_delta_summary,
+    query_useful_delta,
 )
 from orchestration.gates import (
-    _global_sanity_gate,
-    _support_overlap_gate,
-    _target_diffusion_gate,
-    _workload_stability_gate,
+    evaluate_global_sanity_gate,
+    evaluate_support_overlap_gate,
+    evaluate_target_diffusion_gate,
+    evaluate_workload_stability_gate,
 )
 from training.training_outputs import TrainingOutputs
 
@@ -84,20 +84,20 @@ def build_final_run_summaries(
         and workload_signature_gate.get("all_available")
         and workload_signature_gate.get("all_pass")
     )
-    workload_stability_gate = _workload_stability_gate(
+    workload_stability_gate = evaluate_workload_stability_gate(
         config=config,
         train_label_workloads=train_label_workloads,
         eval_workload=eval_workload,
         selection_workload=selection_workload,
     )
     workload_stability_gate_pass = bool(workload_stability_gate.get("gate_pass", False))
-    support_overlap_gate = _support_overlap_gate(
+    support_overlap_gate = evaluate_support_overlap_gate(
         train_points=train_points,
         eval_points=test_points,
         query_prior_field=trained.feature_context.get("query_prior_field"),
     )
     support_overlap_gate_pass = bool(support_overlap_gate.get("gate_pass", False))
-    target_diffusion_gate = _target_diffusion_gate(trained.target_diagnostics)
+    target_diffusion_gate = evaluate_target_diffusion_gate(trained.target_diagnostics)
     target_diffusion_gate_pass = bool(target_diffusion_gate.get("gate_pass", False))
     final_candidate = (
         str(config.query.workload_profile_id or "").lower() == "range_workload_v1"
@@ -117,58 +117,58 @@ def build_final_run_summaries(
             else None
         ),
     }
-    learned_slot_summary = _learned_slot_summary(
+    learned_slot_summary = build_learned_slot_summary(
         selector_budget_diagnostics,
         float(config.model.compression_ratio),
         primary_selector_trace,
     )
     primary_eval = matched["MLQDS"]
-    shuffled_delta = _query_useful_delta(
+    shuffled_delta = query_useful_delta(
         primary_eval, causality_ablation_evaluations, "MLQDS_shuffled_scores"
     )
-    prior_only_delta = _query_useful_delta(
+    prior_only_delta = query_useful_delta(
         primary_eval,
         causality_ablation_evaluations,
         "MLQDS_prior_field_only_score",
     )
-    untrained_delta = _query_useful_delta(
+    untrained_delta = query_useful_delta(
         primary_eval, causality_ablation_evaluations, "MLQDS_untrained_model"
     )
-    shuffled_prior_delta = _query_useful_delta(
+    shuffled_prior_delta = query_useful_delta(
         primary_eval,
         causality_ablation_evaluations,
         "MLQDS_shuffled_prior_fields",
     )
-    no_query_prior_delta = _query_useful_delta(
+    no_query_prior_delta = query_useful_delta(
         primary_eval,
         causality_ablation_evaluations,
         "MLQDS_without_query_prior_features",
     )
-    no_behavior_head_delta = _query_useful_delta(
+    no_behavior_head_delta = query_useful_delta(
         primary_eval,
         causality_ablation_evaluations,
         "MLQDS_without_behavior_utility_head",
     )
-    no_segment_budget_head_delta = _query_useful_delta(
+    no_segment_budget_head_delta = query_useful_delta(
         primary_eval,
         causality_ablation_evaluations,
         "MLQDS_without_segment_budget_head",
     )
-    no_fairness_preallocation_delta = _query_useful_delta(
+    no_fairness_preallocation_delta = query_useful_delta(
         primary_eval,
         causality_ablation_evaluations,
         "MLQDS_without_trajectory_fairness_preallocation",
     )
-    no_geometry_tie_breaker_delta = _query_useful_delta(
+    no_geometry_tie_breaker_delta = query_useful_delta(
         primary_eval,
         causality_ablation_evaluations,
         "MLQDS_without_geometry_tie_breaker",
     )
-    causality_ablation_component_deltas = _query_useful_component_delta_summary(
+    causality_ablation_component_deltas = query_useful_component_delta_summary(
         primary=primary_eval,
         ablations=causality_ablation_evaluations,
     )
-    causality_ablation_tradeoff_diagnostics = _causality_ablation_tradeoff_summary(
+    causality_ablation_tradeoff_diagnostics = causality_ablation_tradeoff_summary(
         component_deltas=causality_ablation_component_deltas,
         mask_diagnostics=causality_ablation_mask_diagnostics,
     )
@@ -186,7 +186,7 @@ def build_final_run_summaries(
         channel_eval = causality_ablation_evaluations.get(method_name)
         if channel_eval is not None:
             channel_diagnostics["query_useful_v1_score"] = float(channel_eval.query_useful_v1_score)
-            channel_diagnostics["query_useful_v1_delta"] = _query_useful_delta(
+            channel_diagnostics["query_useful_v1_delta"] = query_useful_delta(
                 primary_eval,
                 causality_ablation_evaluations,
                 method_name,
@@ -224,7 +224,7 @@ def build_final_run_summaries(
         "without_segment_budget_head_should_lose": no_segment_budget_head_delta,
         "prior_field_only_should_not_match_trained": prior_only_delta,
     }
-    delta_gate_config = _learning_causality_delta_gate_config(
+    delta_gate_config = learning_causality_delta_gate_config(
         primary=primary_eval,
         uniform=uniform_eval,
     )
@@ -233,7 +233,7 @@ def build_final_run_summaries(
         threshold = float(delta_thresholds.get(check_name, LEARNING_CAUSALITY_MIN_MATERIAL_DELTA))
         if delta is not None and float(delta) + 1e-12 < threshold:
             failed_causality_checks.append(check_name)
-    prior_sample_failures = _prior_sample_gate_failures(prior_sensitivity_diagnostics)
+    prior_sample_failures = prior_sample_gate_failures(prior_sensitivity_diagnostics)
     failed_causality_checks.extend(prior_sample_failures)
     learned_slot_fraction = float(
         learned_slot_summary.get("learned_controlled_retained_slot_fraction") or 0.0
@@ -324,7 +324,7 @@ def build_final_run_summaries(
         "workload_signature_gate_pass": signature_gate_pass,
         "support_overlap_gate_pass": support_overlap_gate_pass,
     }
-    global_sanity_gate = _global_sanity_gate(
+    global_sanity_gate = evaluate_global_sanity_gate(
         primary=matched["MLQDS"],
         uniform=uniform_eval,
         compression_ratio=float(config.model.compression_ratio),

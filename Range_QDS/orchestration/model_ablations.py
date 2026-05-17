@@ -11,7 +11,7 @@ import torch
 from simplification.mlqds_scoring import mlqds_simplification_scores
 
 
-def _reset_module_parameters(module: torch.nn.Module, seed: int) -> torch.nn.Module:
+def reset_module_parameters(module: torch.nn.Module, seed: int) -> torch.nn.Module:
     """Return a deepcopy with reset trainable parameters for untrained-model ablations."""
     clone = copy.deepcopy(module)
     with torch.random.fork_rng(devices=[]):
@@ -23,7 +23,7 @@ def _reset_module_parameters(module: torch.nn.Module, seed: int) -> torch.nn.Mod
     return clone
 
 
-def _shuffled_query_prior_field(prior_field: dict[str, Any], seed: int) -> dict[str, Any]:
+def shuffled_query_prior_field(prior_field: dict[str, Any], seed: int) -> dict[str, Any]:
     """Return a copy of query-prior fields with spatial associations broken."""
     shuffled: dict[str, Any] = {}
     generator = torch.Generator().manual_seed(int(seed))
@@ -40,7 +40,7 @@ def _shuffled_query_prior_field(prior_field: dict[str, Any], seed: int) -> dict[
     return shuffled
 
 
-def _raw_predictions_without_factorized_head(
+def raw_predictions_without_factorized_head(
     *,
     model: torch.nn.Module,
     head_logits: torch.Tensor,
@@ -71,7 +71,7 @@ def _raw_predictions_without_factorized_head(
     return pred
 
 
-def _scores_without_factorized_head(
+def scores_without_factorized_head(
     *,
     model: torch.nn.Module,
     head_logits: torch.Tensor,
@@ -83,7 +83,7 @@ def _scores_without_factorized_head(
     rank_confidence_weight: float,
 ) -> torch.Tensor:
     """Return simplification scores with one factorized head neutralized."""
-    pred = _raw_predictions_without_factorized_head(
+    pred = raw_predictions_without_factorized_head(
         model=model,
         head_logits=head_logits,
         disabled_head_name=disabled_head_name,

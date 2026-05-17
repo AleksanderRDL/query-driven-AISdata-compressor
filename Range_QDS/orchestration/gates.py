@@ -58,7 +58,7 @@ def _spatial_extent_intersection_fraction(
     return float(max(0.0, min(1.0, (lat_overlap * lon_overlap) / eval_area)))
 
 
-def _support_overlap_gate(
+def evaluate_support_overlap_gate(
     *,
     train_points: torch.Tensor,
     eval_points: torch.Tensor,
@@ -164,7 +164,7 @@ def _optional_float_for_gate(value: Any) -> float | None:
     return float(value)
 
 
-def _workload_stability_gate(
+def evaluate_workload_stability_gate(
     *,
     config: ExperimentConfig,
     train_label_workloads: list[Any],
@@ -335,7 +335,7 @@ def _coverage_overshoot_tolerance_for_target(target: float | None) -> float | No
     return 0.020
 
 
-def _global_sanity_gate(
+def evaluate_global_sanity_gate(
     *,
     primary: MethodEvaluation,
     uniform: MethodEvaluation | None,
@@ -404,7 +404,7 @@ def _global_sanity_gate(
     }
 
 
-def _target_diffusion_gate(target_diagnostics: dict[str, Any]) -> dict[str, Any]:
+def evaluate_target_diffusion_gate(target_diagnostics: dict[str, Any]) -> dict[str, Any]:
     """Return gate evidence for labels that are too diffuse for low-budget ranking."""
     max_support_fraction = 0.50
     min_top5_mass_fraction = 0.10

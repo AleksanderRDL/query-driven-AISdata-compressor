@@ -35,4 +35,4 @@ def test_typed_query_rejects_non_range_workloads() -> None:
     points = torch.zeros((1, 3), dtype=torch.float32)
 
     with pytest.raises(ValueError, match="Only range queries"):
-        execute_typed_query(points, {"type": "legacy", "params": {}}, [(0, 1)])
+        execute_typed_query(points, {"type": "unsupported", "params": {}}, [(0, 1)])

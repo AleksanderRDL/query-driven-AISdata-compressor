@@ -19,7 +19,7 @@ from evaluation.tables import (
     print_range_usefulness_table,
     print_shift_table,
 )
-from orchestration.causality import _retained_mask_comparison
+from orchestration.causality import retained_mask_comparison
 from orchestration.experiment_methods import (
     attach_range_geometry_scores,
     build_learned_fill_methods,
@@ -28,11 +28,11 @@ from orchestration.experiment_methods import (
     prepare_eval_query_cache,
 )
 from orchestration.range_cache import RangeRuntimeCache, range_only_queries
-from orchestration.range_diagnostics import _evaluation_metrics_payload
+from orchestration.range_diagnostics import evaluation_metrics_payload
 from orchestration.segment_audits import (
-    _factorized_head_probability_sources_from_logits,
-    _segment_oracle_allocation_audit,
-    _target_segment_oracle_alignment_audit,
+    factorized_head_probability_sources_from_logits,
+    segment_oracle_allocation_audit,
+    target_segment_oracle_alignment_audit,
 )
 from queries.query_types import single_workload_type
 from queries.workload import TypedQueryWorkload
@@ -94,8 +94,8 @@ def run_evaluation_stage(
     matched: dict[str, MethodEvaluation] = {}
     oracle_method: OracleMethod | None = None
     eval_labels: torch.Tensor | None = None
-    segment_oracle_allocation_audit: dict[str, Any] = {"available": False, "reason": "not_run"}
-    target_segment_oracle_alignment_audit: dict[str, Any] = {
+    segment_oracle_audit_payload: dict[str, Any] = {"available": False, "reason": "not_run"}
+    target_segment_alignment_payload: dict[str, Any] = {
         "available": False,
         "reason": "not_run",
     }
@@ -144,20 +144,20 @@ def run_evaluation_stage(
         workload_blind_eval
         and str(getattr(config.model, "selector_type", "")).lower() == "learned_segment_budget_v1"
     ):
-        segment_oracle_allocation_audit = _segment_oracle_allocation_audit(
+        segment_oracle_audit_payload = segment_oracle_allocation_audit(
             point_scores=frozen_primary_scores.get("MLQDS"),
             segment_budget_scores=frozen_primary_segment_scores.get("MLQDS"),
             selector_segment_scores=frozen_primary_selector_segment_scores.get("MLQDS"),
             eval_labels=eval_labels,
             boundaries=test_boundaries,
             workload_type=single_workload_type(eval_workload_map),
-            head_scores_by_name=_factorized_head_probability_sources_from_logits(
+            head_scores_by_name=factorized_head_probability_sources_from_logits(
                 frozen_primary_head_logits.get("MLQDS")
             ),
             retained_mask=frozen_primary_masks.get("MLQDS"),
         )
         try:
-            target_segment_oracle_alignment_audit = _target_segment_oracle_alignment_audit(
+            target_segment_alignment_payload = target_segment_oracle_alignment_audit(
                 points=test_points,
                 boundaries=test_boundaries,
                 typed_queries=eval_workload.typed_queries,
@@ -166,7 +166,7 @@ def run_evaluation_stage(
                 retained_mask=frozen_primary_masks.get("MLQDS"),
             )
         except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
-            target_segment_oracle_alignment_audit = {
+            target_segment_alignment_payload = {
                 "available": False,
                 "reason": "target_alignment_failed",
                 "diagnostic_only": True,
@@ -211,7 +211,7 @@ def run_evaluation_stage(
         primary_ablation_mask = frozen_primary_masks.get("MLQDS")
         with phase("learning-causality-ablations"):
             for method in causality_ablation_methods:
-                causality_ablation_mask_diagnostics[method.name] = _retained_mask_comparison(
+                causality_ablation_mask_diagnostics[method.name] = retained_mask_comparison(
                     primary_mask=primary_ablation_mask,
                     ablation_mask=method.retained_mask,
                     expected_shape=(
@@ -308,7 +308,7 @@ def run_evaluation_stage(
                             )
                 ratio_key = f"{float(ratio):.4f}"
                 range_compression_audit[ratio_key] = {
-                    name: _evaluation_metrics_payload(metrics)
+                    name: evaluation_metrics_payload(metrics)
                     for name, metrics in ratio_results.items()
                 }
                 audit_sections.append(
@@ -343,7 +343,7 @@ def run_evaluation_stage(
         range_compression_audit_table=range_compression_audit_table,
         shift_pairs=shift_pairs,
         shift_table=shift_table,
-        segment_oracle_allocation_audit=segment_oracle_allocation_audit,
-        target_segment_oracle_alignment_audit=target_segment_oracle_alignment_audit,
+        segment_oracle_allocation_audit=segment_oracle_audit_payload,
+        target_segment_oracle_alignment_audit=target_segment_alignment_payload,
         run_oracle_baseline=run_oracle_baseline,
     )

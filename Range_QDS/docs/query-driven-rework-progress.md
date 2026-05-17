@@ -2748,3 +2748,161 @@ Decision:
 - Generated artifact markdown was not deleted in this checkpoint.
 - No scientific success claim is made. No probe or final-grid evidence was
   generated.
+
+## Checkpoint 5.14 — Code and Naming Cleanup
+
+Status: completed
+
+Goal:
+- Remove or update clearly stale, outdated, misleading, or bad code in
+  `Range_QDS`, then improve poor names where the change is local and useful.
+
+Changes:
+- Renamed learned segment-budget allocation terminology from ship-level wording
+  to trajectory-level wording:
+  `max_budget_share_per_ship` -> `max_budget_share_per_trajectory`,
+  `ship_allocations` -> `trajectory_allocations`, and
+  `max_per_ship` -> `max_per_trajectory`.
+- Promoted production-crossing diagnostic helpers from private-style names to
+  public module API names where other production modules import them:
+  `evaluation_metrics_payload`, `retained_mask_comparison`,
+  `factorized_head_probability_sources_from_logits`,
+  `segment_oracle_allocation_audit`, and
+  `target_segment_oracle_alignment_audit`.
+- Promoted the main orchestration cross-module helper surface to public names,
+  including causality summaries, gate evaluators, range diagnostics, selector
+  diagnostics, model ablations, and selection-causality diagnostics.
+- Renamed summary/gate builders to verb-led names where noun-only public names
+  would shadow artifact payload variables, for example
+  `build_range_learned_fill_summary`,
+  `build_selection_causality_diagnostics`,
+  `build_learned_slot_summary`, and `evaluate_*_gate`.
+- Renamed shadowing locals in `evaluation_stage.py` so payload variables no
+  longer hide imported audit functions.
+- Updated stale package docstrings that still described runtime/config modules
+  as experiment-owned.
+- Updated affected orchestration tests to use the new diagnostic helper names.
+
+Tests:
+- `uv run --group dev -- ruff check --fix Range_QDS/simplification/learned_segment_budget/allocation.py Range_QDS/simplification/learned_segment_budget/core.py Range_QDS/orchestration/causality.py Range_QDS/orchestration/evaluation_stage.py Range_QDS/orchestration/experiment_outputs.py Range_QDS/orchestration/experiment_pipeline.py Range_QDS/orchestration/range_diagnostics.py Range_QDS/orchestration/segment_audits.py Range_QDS/orchestration/selection_causality.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
+- `uv run --group dev -- pyright Range_QDS/simplification/learned_segment_budget/allocation.py Range_QDS/simplification/learned_segment_budget/core.py Range_QDS/orchestration/causality.py Range_QDS/orchestration/evaluation_stage.py Range_QDS/orchestration/experiment_outputs.py Range_QDS/orchestration/experiment_pipeline.py Range_QDS/orchestration/range_diagnostics.py Range_QDS/orchestration/segment_audits.py Range_QDS/orchestration/selection_causality.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
+- `uv run --group dev -- pytest Range_QDS/tests/unit/simplification/test_learned_segment_budget.py Range_QDS/tests/property/test_learned_segment_selector_properties.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/unit/orchestration/test_evaluation_stage.py -q`
+- `uv run --group dev -- ruff check --fix Range_QDS/orchestration Range_QDS/tests/unit/orchestration Range_QDS/tests/integration Range_QDS/tests/guardrails`
+- `uv run --group dev -- pyright Range_QDS/orchestration Range_QDS/tests/unit/orchestration Range_QDS/tests/integration Range_QDS/tests/guardrails`
+- `uv run --group dev -- pytest Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/unit/orchestration/test_range_workload_diagnostics.py Range_QDS/tests/unit/orchestration/test_evaluation_stage.py Range_QDS/tests/unit/orchestration/test_retained_masks.py Range_QDS/tests/integration/test_beats_random_in_distribution.py Range_QDS/tests/guardrails -q`
+- `uv run --group dev -- pytest Range_QDS/tests/unit/simplification/test_learned_segment_budget.py Range_QDS/tests/property/test_learned_segment_selector_properties.py -q`
+- `make -C Range_QDS lint`
+- `make -C Range_QDS lint-full`
+- `make -C Range_QDS typecheck`
+- `make -C Range_QDS test`
+- `uv run --group dev -- yamllint .`
+- `uv run --group dev -- ruff format Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
+- `uv run --group dev -- ruff format --check Range_QDS/orchestration Range_QDS/simplification/learned_segment_budget Range_QDS/config/__init__.py Range_QDS/runtime/__init__.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/unit/orchestration/test_range_workload_diagnostics.py`
+- `git diff --check`
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was code cleanup.
+
+Key results:
+- Focused Ruff and Pyright passed.
+- Focused orchestration/guardrail/integration tests passed: `140 passed,
+  1 warning`.
+- Focused selector tests passed: `4 passed`.
+- Full Ruff lint passed.
+- Full Pyright passed with `0 errors, 0 warnings, 0 informations`.
+- Full pytest passed: `438 passed, 1 warning`.
+- yamllint, Ruff format check, and whitespace diff check passed.
+- Search found no remaining repo references to
+  `max_budget_share_per_ship`, `ship_allocations`, or `max_per_ship`.
+- Search found no remaining production cross-module private imports inside
+  `Range_QDS/orchestration`.
+
+Extra discoveries:
+- Several `legacy_*` names remain intentionally active in diagnostics,
+  artifact fields, CLI diagnostic profile IDs, and guardrail tests. Removing
+  those mechanically would be wrong without a schema/profile migration.
+- `models/workload_blind_range_v2.py` still retains `calibration_head` for
+  legacy checkpoint compatibility. That is not dead code unless checkpoint
+  loading policy is changed and tested.
+- Broader component-local underscore helper imports still exist in benchmarking,
+  query generation, simplification, and training. Those are lower-level package
+  boundary decisions, not stale code by themselves; changing them should be a
+  deliberate package API cleanup rather than a blind rename sweep.
+
+Decision:
+- Code and naming cleanup is checkpointed and verified.
+- The selector keyword rename deliberately does not keep a compatibility alias;
+  preserving the old ship-based name would keep the misleading API alive.
+- No scientific success claim is made. No probe or final-grid evidence was
+  generated.
+
+## Checkpoint 5.15 — Test Cleanup and Coverage Audit
+
+Status: completed
+
+Goal:
+- Remove or update stale, outdated, or misleading test logic, then identify
+  important missing behavior coverage in `Range_QDS/tests`.
+
+Changes:
+- Renamed the stale integration test module from
+  `test_beats_random_in_distribution.py` to
+  `test_pipeline_metrics_reporting.py`; the test now describes active pipeline
+  metric/reporting contracts instead of implying a random-baseline win check.
+- Replaced `"legacy"` fake query types with `"unsupported"` in non-range query
+  rejection tests.
+- Added a selector API guardrail asserting the public learned segment-budget
+  keyword is `max_budget_share_per_trajectory`, with no old
+  `max_budget_share_per_ship` keyword.
+- Added a guardrail that fails if production modules under
+  `Range_QDS/orchestration` cross-import private underscore helpers from sibling
+  orchestration modules.
+
+Tests:
+- `uv run --group dev -- ruff format Range_QDS/tests/guardrails/test_rework_guardrails.py Range_QDS/tests/integration/test_pipeline_metrics_reporting.py Range_QDS/tests/unit/queries/test_query_executor.py Range_QDS/tests/unit/simplification/test_learned_segment_budget.py Range_QDS/tests/unit/training/test_model_features.py`
+- `uv run --group dev -- ruff check --fix Range_QDS/tests/guardrails/test_rework_guardrails.py Range_QDS/tests/integration/test_pipeline_metrics_reporting.py Range_QDS/tests/unit/queries/test_query_executor.py Range_QDS/tests/unit/simplification/test_learned_segment_budget.py Range_QDS/tests/unit/training/test_model_features.py`
+- `uv run --group dev -- pyright Range_QDS/tests/guardrails/test_rework_guardrails.py Range_QDS/tests/integration/test_pipeline_metrics_reporting.py Range_QDS/tests/unit/queries/test_query_executor.py Range_QDS/tests/unit/simplification/test_learned_segment_budget.py Range_QDS/tests/unit/training/test_model_features.py`
+- `uv run --group dev -- pytest Range_QDS/tests/guardrails/test_rework_guardrails.py Range_QDS/tests/integration/test_pipeline_metrics_reporting.py Range_QDS/tests/unit/queries/test_query_executor.py Range_QDS/tests/unit/simplification/test_learned_segment_budget.py Range_QDS/tests/unit/training/test_model_features.py -q`
+- `make -C Range_QDS lint`
+- `make -C Range_QDS lint-full`
+- `make -C Range_QDS typecheck`
+- `make -C Range_QDS test`
+- `uv run --group dev -- yamllint .`
+- `uv run --group dev -- ruff format --check Range_QDS/tests Range_QDS/orchestration Range_QDS/simplification/learned_segment_budget Range_QDS/config/__init__.py Range_QDS/runtime/__init__.py`
+- `git diff --check`
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was test cleanup and coverage audit.
+
+Key results:
+- Focused Ruff and Pyright passed.
+- Focused affected tests passed: `48 passed, 1 warning`.
+- Full Ruff lint passed.
+- Full Pyright passed with `0 errors, 0 warnings, 0 informations`.
+- Full pytest passed: `440 passed, 1 warning`.
+- yamllint, Ruff format check, and whitespace diff check passed.
+- Search found no active test references to the old
+  `test_beats_random_in_distribution` filename or fake `"type": "legacy"`
+  unsupported-query fixtures.
+
+Extra discoveries:
+- Test coverage is broad, but `test_query_driven_rework.py` is still an
+  oversized omnibus file. It is not stale logic, but it hides ownership
+  boundaries and should be split by orchestration subcomponent when that file is
+  next touched heavily.
+- Tests still import private helpers from benchmarking, query generation,
+  training, and runtime modules. Those imports are acceptable for low-level unit
+  coverage today, but they show those packages do not yet expose clean testing
+  seams for all important behavior.
+- Ignored `__pycache__` directories exist under `Range_QDS/tests` after local
+  test runs. They are not tracked and regenerate, so deleting them would not be
+  a meaningful source cleanup.
+
+Decision:
+- Stale and misleading test logic found in this pass was updated.
+- The missing high-value behavior guardrail for orchestration private
+  cross-imports was added.
+- No scientific success claim is made. No probe or final-grid evidence was
+  generated.

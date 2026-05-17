@@ -33,16 +33,16 @@ from orchestration.geojson_writers import (
 )
 from orchestration.range_cache import RangeRuntimeCache
 from orchestration.range_diagnostics import (
-    _evaluation_metrics_payload,
-    _print_range_diagnostics_summary,
-    _print_range_distribution_comparison,
-    _range_audit_ratios,
-    _range_learned_fill_summary,
-    _range_workload_diagnostics,
-    _range_workload_distribution_comparison,
+    build_range_learned_fill_summary,
+    evaluation_metrics_payload,
+    print_range_diagnostics_summary,
+    print_range_distribution_comparison,
+    range_audit_ratios,
+    range_workload_diagnostics,
+    range_workload_distribution_comparison,
 )
 from orchestration.retained_masks import freeze_workload_blind_retained_masks
-from orchestration.selection_causality import _selection_causality_diagnostics
+from orchestration.selection_causality import build_selection_causality_diagnostics
 from orchestration.target_preparation import prepare_training_targets
 from queries.query_types import single_workload_type
 from runtime.torch_runtime import (
@@ -265,7 +265,7 @@ def run_experiment_pipeline(
     )
     retention_methods = list(methods)
     workload_blind_eval = is_workload_blind_model_type(config.model.model_type)
-    audit_ratios = _range_audit_ratios(config)
+    audit_ratios = range_audit_ratios(config)
     selector_budget_ratios = tuple(
         sorted({float(config.model.compression_ratio), *(float(ratio) for ratio in audit_ratios)})
     )
@@ -294,10 +294,10 @@ def run_experiment_pipeline(
                 min_learned_swaps=int(config.model.mlqds_min_learned_swaps),
             ),
         }
-    selection_causality_diagnostics: dict[str, Any] = {"available": False, "reason": "not_run"}
+    selection_causality_payload: dict[str, Any] = {"available": False, "reason": "not_run"}
     if workload_blind_eval:
         with _phase("selection-causality-diagnostics"):
-            selection_causality_diagnostics = _selection_causality_diagnostics(
+            selection_causality_payload = build_selection_causality_diagnostics(
                 trained=trained,
                 selection_points=selection_points,
                 selection_boundaries=selection_boundaries,
@@ -384,7 +384,7 @@ def run_experiment_pipeline(
     run_oracle_baseline = evaluation_stage.run_oracle_baseline
 
     with _phase("range-diagnostics"):
-        train_summary, train_rows = _range_workload_diagnostics(
+        train_summary, train_rows = range_workload_diagnostics(
             "train",
             train_points,
             train_boundaries,
@@ -394,7 +394,7 @@ def run_experiment_pipeline(
             seeds.train_query_seed,
             range_runtime_caches["train"],
         )
-        eval_summary, eval_rows = _range_workload_diagnostics(
+        eval_summary, eval_rows = range_workload_diagnostics(
             "eval",
             test_points,
             test_boundaries,
@@ -410,7 +410,7 @@ def run_experiment_pipeline(
         range_diagnostics_rows.extend(eval_rows)
         for replicate_index, replicate_workload in enumerate(train_label_workloads[1:], start=1):
             replicate_label = f"train_r{replicate_index}"
-            replicate_summary, replicate_rows = _range_workload_diagnostics(
+            replicate_summary, replicate_rows = range_workload_diagnostics(
                 replicate_label,
                 train_points,
                 train_boundaries,
@@ -427,7 +427,7 @@ def run_experiment_pipeline(
             and selection_points is not None
             and selection_boundaries is not None
         ):
-            selection_summary, selection_rows = _range_workload_diagnostics(
+            selection_summary, selection_rows = range_workload_diagnostics(
                 "selection",
                 selection_points,
                 selection_boundaries,
@@ -439,13 +439,13 @@ def run_experiment_pipeline(
             )
             range_diagnostics_summary["selection"] = selection_summary
             range_diagnostics_rows.extend(selection_rows)
-        _print_range_diagnostics_summary(range_diagnostics_summary)
-        workload_distribution_comparison = _range_workload_distribution_comparison(
+        print_range_diagnostics_summary(range_diagnostics_summary)
+        workload_distribution_comparison = range_workload_distribution_comparison(
             range_diagnostics_summary
         )
-        _print_range_distribution_comparison(workload_distribution_comparison)
+        print_range_distribution_comparison(workload_distribution_comparison)
 
-    range_learned_fill_summary = _range_learned_fill_summary(
+    range_learned_fill_summary = build_range_learned_fill_summary(
         learned_fill_diagnostics=learned_fill_diagnostics,
         training_target_diagnostics=trained.target_diagnostics,
         range_diagnostics_summary=range_diagnostics_summary,
@@ -474,7 +474,7 @@ def run_experiment_pipeline(
         prior_sensitivity_diagnostics=prior_sensitivity_diagnostics,
         prior_channel_ablation_diagnostics=prior_channel_ablation_diagnostics,
         head_ablation_sensitivity_diagnostics=head_ablation_sensitivity_diagnostics,
-        selection_causality_diagnostics=selection_causality_diagnostics,
+        selection_causality_diagnostics=selection_causality_payload,
         segment_oracle_allocation_audit=segment_oracle_allocation_audit,
         target_segment_oracle_alignment_audit=target_segment_oracle_alignment_audit,
         segment_budget_head_ablation_mode=segment_budget_head_ablation_mode,
@@ -535,13 +535,13 @@ def run_experiment_pipeline(
         },
         "segment_oracle_allocation_audit": segment_oracle_allocation_audit,
         "target_segment_oracle_alignment_audit": target_segment_oracle_alignment_audit,
-        "matched": {name: _evaluation_metrics_payload(m) for name, m in matched.items()},
+        "matched": {name: evaluation_metrics_payload(m) for name, m in matched.items()},
         "learning_causality_ablations": {
-            name: _evaluation_metrics_payload(metrics)
+            name: evaluation_metrics_payload(metrics)
             for name, metrics in causality_ablation_evaluations.items()
         },
         "learned_fill_diagnostics": {
-            name: _evaluation_metrics_payload(metrics)
+            name: evaluation_metrics_payload(metrics)
             for name, metrics in learned_fill_diagnostics.items()
         },
         "range_learned_fill_summary": range_learned_fill_summary,

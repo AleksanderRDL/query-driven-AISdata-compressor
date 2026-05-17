@@ -1,4 +1,4 @@
-"""Tests pipeline reporting of higher-is-better aggregate F1. See evaluation/README.md for details."""
+"""Tests pipeline metric and diagnostic reporting contracts."""
 
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ from config.experiment_config import build_experiment_config
 from orchestration.experiment_pipeline import run_experiment_pipeline
 
 
-def test_pipeline_reports_f1_scores(synthetic_dataset, tmp_path) -> None:
-    """Assert matched-workload metrics use F1 fields and valid score polarity."""
+def test_pipeline_reports_active_metrics_and_diagnostics(synthetic_dataset, tmp_path) -> None:
+    """Assert matched-workload metrics, diagnostics, and saved outputs use current names."""
     trajectories, _ = synthetic_dataset
     cfg = build_experiment_config(n_queries=64, epochs=3)
 

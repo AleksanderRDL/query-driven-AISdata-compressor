@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from evaluation.metrics import MethodEvaluation
-from orchestration.range_diagnostics import _evaluation_metrics_payload
+from orchestration.range_diagnostics import evaluation_metrics_payload
 
 
 @dataclass
@@ -59,7 +59,7 @@ def write_experiment_results(
     (out_dir / "learned_fill_diagnostics.json").write_text(
         json.dumps(
             {
-                name: _evaluation_metrics_payload(metrics)
+                name: evaluation_metrics_payload(metrics)
                 for name, metrics in learned_fill_diagnostics.items()
             },
             indent=2,

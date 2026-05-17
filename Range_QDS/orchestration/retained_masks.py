@@ -13,12 +13,12 @@ import torch
 from config.experiment_config import ExperimentConfig, SeedBundle
 from evaluation.baselines import FrozenMaskMethod, Method
 from orchestration.length_diagnostics import (
-    _score_protected_length_feasibility,
-    _score_protected_length_frontier,
+    score_protected_length_feasibility,
+    score_protected_length_frontier,
 )
 from orchestration.retained_mask_ablations import freeze_retained_mask_ablations
 from orchestration.selector_diagnostics import (
-    _selector_segment_score_source_label,
+    selector_segment_score_source_label,
 )
 from queries.workload import TypedQueryWorkload
 from simplification.learned_segment_budget import (
@@ -161,7 +161,7 @@ def freeze_workload_blind_retained_masks(
                     length_repair_fraction=float(
                         config.model.learned_segment_length_repair_fraction
                     ),
-                    segment_score_source_label=_selector_segment_score_source_label(
+                    segment_score_source_label=selector_segment_score_source_label(
                         segment_scores=primary_segment_scores,
                         path_length_support_scores=primary_path_length_support_scores,
                         length_support_blend_weight=float(
@@ -185,7 +185,7 @@ def freeze_workload_blind_retained_masks(
                 )
                 if learned_fraction_min_for_trace > 0.0:
                     trace["score_protected_length_feasibility"] = (
-                        _score_protected_length_feasibility(
+                        score_protected_length_feasibility(
                             scores=primary_scores,
                             points=test_points,
                             boundaries=test_boundaries,
@@ -193,7 +193,7 @@ def freeze_workload_blind_retained_masks(
                             learned_slot_fraction_min=learned_fraction_min_for_trace,
                         )
                     )
-                    trace["score_protected_length_frontier"] = _score_protected_length_frontier(
+                    trace["score_protected_length_frontier"] = score_protected_length_frontier(
                         scores=primary_scores,
                         points=test_points,
                         boundaries=test_boundaries,

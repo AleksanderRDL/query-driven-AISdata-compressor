@@ -134,17 +134,19 @@ def _allocate_segment_budgets(
     remaining: int,
     budget: int,
     boundaries: list[tuple[int, int]],
-    max_budget_share_per_ship: float,
+    max_budget_share_per_trajectory: float,
     fairness_preallocation_enabled: bool = True,
 ) -> dict[int, int]:
     """Allocate learned slots with score-weighted diminishing returns."""
     if remaining <= 0 or not segment_rows:
         return {}
     valid_trajectory_count = sum(1 for start, end in boundaries if int(end - start) > 0)
-    share_cap = math.ceil(float(budget) * max(0.01, min(1.0, float(max_budget_share_per_ship))))
+    share_cap = math.ceil(
+        float(budget) * max(0.01, min(1.0, float(max_budget_share_per_trajectory)))
+    )
     fair_share_cap = math.ceil(float(budget) / float(max(1, valid_trajectory_count)))
-    max_per_ship = max(1, share_cap, fair_share_cap)
-    ship_allocations = {
+    max_per_trajectory = max(1, share_cap, fair_share_cap)
+    trajectory_allocations = {
         idx: int(retained[start:end].sum().item()) for idx, (start, end) in enumerate(boundaries)
     }
     segment_allocations: dict[int, int] = {}
@@ -173,7 +175,7 @@ def _allocate_segment_budgets(
                 break
             row = segment_rows[segment_idx]
             trajectory_id = int(row["trajectory_id"])
-            if ship_allocations.get(trajectory_id, 0) >= max_per_ship:
+            if trajectory_allocations.get(trajectory_id, 0) >= max_per_trajectory:
                 continue
             start = int(row["start"])
             end = int(row["end"])
@@ -185,7 +187,9 @@ def _allocate_segment_budgets(
             if capacity <= 0:
                 continue
             segment_allocations[segment_idx] = int(segment_allocations.get(segment_idx, 0)) + 1
-            ship_allocations[trajectory_id] = int(ship_allocations.get(trajectory_id, 0)) + 1
+            trajectory_allocations[trajectory_id] = (
+                int(trajectory_allocations.get(trajectory_id, 0)) + 1
+            )
             remaining_slots -= 1
 
     if remaining_slots <= 0:
@@ -196,7 +200,7 @@ def _allocate_segment_budgets(
         best_key: tuple[float, int, float, int] | None = None
         for segment_idx, row in enumerate(segment_rows):
             trajectory_id = int(row["trajectory_id"])
-            if ship_allocations.get(trajectory_id, 0) >= max_per_ship:
+            if trajectory_allocations.get(trajectory_id, 0) >= max_per_trajectory:
                 continue
             current = int(segment_allocations.get(segment_idx, 0))
             start = int(row["start"])
@@ -215,6 +219,8 @@ def _allocate_segment_budgets(
         row = segment_rows[best_idx]
         trajectory_id = int(row["trajectory_id"])
         segment_allocations[best_idx] = int(segment_allocations.get(best_idx, 0)) + 1
-        ship_allocations[trajectory_id] = int(ship_allocations.get(trajectory_id, 0)) + 1
+        trajectory_allocations[trajectory_id] = (
+            int(trajectory_allocations.get(trajectory_id, 0)) + 1
+        )
         remaining_slots -= 1
     return segment_allocations

@@ -137,7 +137,7 @@ def _range_signal_diagnostics(
     }
 
 
-def _range_workload_diagnostics(
+def range_workload_diagnostics(
     label: str,
     points: torch.Tensor,
     boundaries: list[tuple[int, int]],
@@ -234,7 +234,7 @@ def _range_workload_diagnostics(
     return summary, rows
 
 
-def _print_range_diagnostics_summary(range_diagnostics_summary: dict[str, Any]) -> None:
+def print_range_diagnostics_summary(range_diagnostics_summary: dict[str, Any]) -> None:
     """Print compact range diagnostics for each split."""
     for label, summary in range_diagnostics_summary.items():
         range_summary = summary["range"]
@@ -254,7 +254,7 @@ def _print_range_diagnostics_summary(range_diagnostics_summary: dict[str, Any]) 
         )
 
 
-def _print_range_distribution_comparison(workload_distribution_comparison: dict[str, Any]) -> None:
+def print_range_distribution_comparison(workload_distribution_comparison: dict[str, Any]) -> None:
     """Print compact train/selection-vs-eval workload distribution deltas."""
     for label, delta in workload_distribution_comparison["deltas_vs_eval"].items():
         coverage_delta = delta.get("coverage_fraction_minus_eval")
@@ -526,7 +526,7 @@ def _workload_signature_gate_for_pair(
     }
 
 
-def _range_workload_distribution_comparison(summaries: dict[str, Any]) -> dict[str, Any]:
+def range_workload_distribution_comparison(summaries: dict[str, Any]) -> dict[str, Any]:
     """Compare train/selection workload shape against final eval workload shape."""
     compact = {
         label: _compact_range_workload_summary(summary) for label, summary in summaries.items()
@@ -578,13 +578,13 @@ def _range_workload_distribution_comparison(summaries: dict[str, Any]) -> dict[s
     }
 
 
-def _range_audit_ratios(config: ExperimentConfig) -> list[float]:
+def range_audit_ratios(config: ExperimentConfig) -> list[float]:
     """Return configured multi-budget range-audit ratios, deduped and sorted."""
     raw = getattr(config.model, "range_audit_compression_ratios", []) or []
     return sorted({float(value) for value in raw if 0.0 < float(value) <= 1.0})
 
 
-def _evaluation_metrics_payload(metrics: MethodEvaluation) -> dict[str, Any]:
+def evaluation_metrics_payload(metrics: MethodEvaluation) -> dict[str, Any]:
     """Serialize method metrics with explicit range fields."""
     return {
         "aggregate_f1": metrics.aggregate_f1,
@@ -664,7 +664,7 @@ def _metric_value(metrics: MethodEvaluation | None, field_name: str) -> float | 
     return float(value) if value is not None else None
 
 
-def _range_learned_fill_summary(
+def build_range_learned_fill_summary(
     *,
     learned_fill_diagnostics: dict[str, MethodEvaluation],
     training_target_diagnostics: dict[str, Any],

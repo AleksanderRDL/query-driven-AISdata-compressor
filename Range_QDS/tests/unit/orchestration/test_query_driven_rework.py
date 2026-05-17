@@ -14,43 +14,43 @@ from evaluation.metrics import MethodEvaluation, compute_length_preservation
 from evaluation.query_useful_v1 import query_useful_v1_from_range_audit
 from models.workload_blind_range_v2 import WorkloadBlindRangeV2Model
 from orchestration.causality import (
-    _causality_ablation_diagnostics_payload,
-    _causality_ablation_tradeoff_summary,
-    _head_ablation_sensitivity,
-    _learned_slot_summary,
-    _learning_causality_delta_gate_config,
-    _prior_feature_sample_sensitivity,
-    _prior_sample_gate_failures,
-    _query_useful_component_delta_summary,
-    _retained_mask_comparison,
-    _score_ablation_sensitivity,
+    build_learned_slot_summary,
+    causality_ablation_diagnostics_payload,
+    causality_ablation_tradeoff_summary,
+    head_ablation_sensitivity,
+    learning_causality_delta_gate_config,
+    prior_feature_sample_sensitivity,
+    prior_sample_gate_failures,
+    query_useful_component_delta_summary,
+    retained_mask_comparison,
+    score_ablation_sensitivity,
 )
 from orchestration.final_summary import build_final_run_summaries
 from orchestration.gates import (
-    _global_sanity_gate,
-    _support_overlap_gate,
-    _target_diffusion_gate,
-    _workload_stability_gate,
+    evaluate_global_sanity_gate,
+    evaluate_support_overlap_gate,
+    evaluate_target_diffusion_gate,
+    evaluate_workload_stability_gate,
 )
 from orchestration.length_diagnostics import (
     _max_length_required_mask,
-    _score_protected_length_feasibility,
-    _score_protected_length_frontier,
+    score_protected_length_feasibility,
+    score_protected_length_frontier,
 )
-from orchestration.model_ablations import _reset_module_parameters
-from orchestration.range_diagnostics import _range_workload_distribution_comparison
+from orchestration.model_ablations import reset_module_parameters
+from orchestration.range_diagnostics import range_workload_distribution_comparison
 from orchestration.segment_audits import (
-    _factorized_head_probability_sources_from_logits,
-    _segment_oracle_allocation_audit,
-    _target_segment_oracle_alignment_audit,
+    factorized_head_probability_sources_from_logits,
+    segment_oracle_allocation_audit,
+    target_segment_oracle_alignment_audit,
 )
-from orchestration.selection_causality import _selection_causality_diagnostics
+from orchestration.selection_causality import build_selection_causality_diagnostics
 from orchestration.selector_diagnostics import (
-    _learned_segment_frozen_method,
-    _neutral_segment_scores_for_ablation,
-    _pre_repair_frozen_method_from_trace,
-    _segment_score_quantile_bands_for_ablation,
-    _segment_score_top_band_for_ablation,
+    learned_segment_frozen_method,
+    neutral_segment_scores_for_ablation,
+    pre_repair_frozen_method_from_trace,
+    segment_score_quantile_bands_for_ablation,
+    segment_score_top_band_for_ablation,
 )
 from queries.generation.anchors import _anchor_weights_for_family
 from queries.generation.profile_planning import (
@@ -679,7 +679,7 @@ def test_target_diffusion_gate_blocks_broad_low_budget_labels() -> None:
         }
     }
 
-    gate = _target_diffusion_gate(diagnostics)
+    gate = evaluate_target_diffusion_gate(diagnostics)
 
     assert gate["gate_pass"] is False
     assert "final_label_support_fraction_above_max" in gate["failed_checks"]
@@ -705,7 +705,7 @@ def test_target_diffusion_gate_accepts_concentrated_factorized_labels() -> None:
         }
     }
 
-    gate = _target_diffusion_gate(diagnostics)
+    gate = evaluate_target_diffusion_gate(diagnostics)
 
     assert gate["gate_pass"] is True
     assert gate["failed_checks"] == []
@@ -1026,7 +1026,9 @@ def test_support_overlap_gate_passes_same_support_eval_points() -> None:
         smoothing_passes=0,
     )
 
-    gate = _support_overlap_gate(train_points=points, eval_points=points, query_prior_field=prior)
+    gate = evaluate_support_overlap_gate(
+        train_points=points, eval_points=points, query_prior_field=prior
+    )
 
     assert gate["gate_pass"] is True
     assert gate["failed_checks"] == []
@@ -1058,7 +1060,7 @@ def test_support_overlap_gate_blocks_out_of_extent_eval_points() -> None:
         smoothing_passes=0,
     )
 
-    gate = _support_overlap_gate(
+    gate = evaluate_support_overlap_gate(
         train_points=train_points, eval_points=eval_points, query_prior_field=prior
     )
 
@@ -1103,7 +1105,7 @@ def test_workload_signature_gate_rejects_profile_mismatch_and_tiny_query_counts(
         },
     }
 
-    gate = _range_workload_distribution_comparison(summaries)["workload_signature_gate"]["pairs"][
+    gate = range_workload_distribution_comparison(summaries)["workload_signature_gate"]["pairs"][
         "train"
     ]
 
@@ -1139,7 +1141,7 @@ def test_workload_signature_gate_rejects_query_count_mismatch() -> None:
         },
     }
 
-    gate = _range_workload_distribution_comparison(summaries)["workload_signature_gate"]["pairs"][
+    gate = range_workload_distribution_comparison(summaries)["workload_signature_gate"]["pairs"][
         "train"
     ]
 
@@ -1176,7 +1178,7 @@ def test_workload_signature_gate_allows_small_calibrated_query_count_drift() -> 
         },
     }
 
-    gate = _range_workload_distribution_comparison(summaries)["workload_signature_gate"]["pairs"][
+    gate = range_workload_distribution_comparison(summaries)["workload_signature_gate"]["pairs"][
         "train"
     ]
 
@@ -1215,7 +1217,7 @@ def test_workload_signature_gate_reports_normalized_hit_distribution_diagnostics
         },
     }
 
-    gate = _range_workload_distribution_comparison(summaries)["workload_signature_gate"]["pairs"][
+    gate = range_workload_distribution_comparison(summaries)["workload_signature_gate"]["pairs"][
         "train"
     ]
     metrics = gate["metrics"]
@@ -1321,7 +1323,7 @@ def test_range_v2_untrained_reset_restores_standalone_parameters() -> None:
     )
     model.prior_feature_scale.data.fill_(3.0)
 
-    reset_model = cast(WorkloadBlindRangeV2Model, _reset_module_parameters(model, seed=101))
+    reset_model = cast(WorkloadBlindRangeV2Model, reset_module_parameters(model, seed=101))
 
     assert torch.allclose(reset_model.prior_feature_scale.detach(), torch.tensor(0.25))
     assert torch.allclose(model.prior_feature_scale.detach(), torch.tensor(3.0))
@@ -1456,7 +1458,7 @@ def test_no_geometry_tie_breaker_ablation_freezes_same_scores_without_geometry_g
     scores = torch.ones((5,), dtype=torch.float32)
     boundaries = [(0, 5)]
 
-    geometry_method = _learned_segment_frozen_method(
+    geometry_method = learned_segment_frozen_method(
         name="MLQDS",
         scores=scores,
         boundaries=boundaries,
@@ -1464,7 +1466,7 @@ def test_no_geometry_tie_breaker_ablation_freezes_same_scores_without_geometry_g
         points=points,
         learned_segment_geometry_gain_weight=1.0,
     )
-    no_geometry_method = _learned_segment_frozen_method(
+    no_geometry_method = learned_segment_frozen_method(
         name="MLQDS_without_geometry_tie_breaker",
         scores=scores,
         boundaries=boundaries,
@@ -1486,7 +1488,7 @@ def test_point_score_allocation_diagnostic_uses_point_score_segments() -> None:
     bad_segment_scores[32:64] = 10.0
     boundaries = [(0, 64)]
 
-    point_allocation_method = _learned_segment_frozen_method(
+    point_allocation_method = learned_segment_frozen_method(
         name="MLQDS_point_score_allocation_diagnostic",
         scores=scores,
         boundaries=boundaries,
@@ -1495,7 +1497,7 @@ def test_point_score_allocation_diagnostic_uses_point_score_segments() -> None:
         learned_segment_geometry_gain_weight=0.0,
         learned_segment_length_repair_fraction=0.0,
     )
-    bad_segment_method = _learned_segment_frozen_method(
+    bad_segment_method = learned_segment_frozen_method(
         name="MLQDS_bad_segment_allocation",
         scores=scores,
         boundaries=boundaries,
@@ -1521,13 +1523,13 @@ def test_segment_allocation_authority_bands_coarsen_segment_scores() -> None:
     segment_scores[12:16] = 0.8
     boundaries = [(0, 16)]
 
-    top_half = _segment_score_top_band_for_ablation(
+    top_half = segment_score_top_band_for_ablation(
         segment_scores,
         boundaries,
         segment_size=4,
         top_fraction=0.50,
     )
-    quartiles = _segment_score_quantile_bands_for_ablation(
+    quartiles = segment_score_quantile_bands_for_ablation(
         segment_scores,
         boundaries,
         segment_size=4,
@@ -1578,7 +1580,7 @@ def test_score_protected_length_feasibility_reports_protected_score_upper_bound(
     )
     scores = torch.tensor([0.0, 10.0, 1.0, 0.0, 0.0], dtype=torch.float32)
 
-    diagnostic = _score_protected_length_feasibility(
+    diagnostic = score_protected_length_feasibility(
         scores=scores,
         points=points,
         boundaries=[(0, 5)],
@@ -1611,7 +1613,7 @@ def test_score_protected_length_frontier_reports_materiality_floor() -> None:
     )
     scores = torch.tensor([0.0, 10.0, 1.0, 0.0, 0.0], dtype=torch.float32)
 
-    frontier = _score_protected_length_frontier(
+    frontier = score_protected_length_frontier(
         scores=scores,
         points=points,
         boundaries=[(0, 5)],
@@ -1845,7 +1847,7 @@ def test_no_segment_budget_head_ablation_uses_neutral_segment_scores() -> None:
     learned_segment_scores = torch.zeros_like(scores)
     learned_segment_scores[24:32] = 5.0
 
-    neutral_segment_scores = _neutral_segment_scores_for_ablation(learned_segment_scores)
+    neutral_segment_scores = neutral_segment_scores_for_ablation(learned_segment_scores)
     learned_retained, learned_trace = simplify_with_learned_segment_budget_v1_with_trace(
         scores,
         boundaries,
@@ -1934,9 +1936,9 @@ def test_segment_oracle_allocation_audit_reports_ranking_alignment_after_freeze(
     labels[0:2, QUERY_TYPE_ID_RANGE] = 1.0
     labels[6:8, QUERY_TYPE_ID_RANGE] = 0.5
     retained_mask = torch.tensor([True, False, False, False, False, False, True, False])
-    head_sources = _factorized_head_probability_sources_from_logits(head_logits)
+    head_sources = factorized_head_probability_sources_from_logits(head_logits)
 
-    audit = _segment_oracle_allocation_audit(
+    audit = segment_oracle_allocation_audit(
         point_scores=point_scores,
         segment_budget_scores=segment_scores,
         selector_segment_scores=selector_scores,
@@ -2021,7 +2023,7 @@ def test_target_segment_oracle_alignment_audit_reports_eval_target_sources_after
     labels[0:4, QUERY_TYPE_ID_RANGE] = 1.0
     retained_mask = torch.tensor([True, False, True, False, False, False, False, True])
 
-    audit = _target_segment_oracle_alignment_audit(
+    audit = target_segment_oracle_alignment_audit(
         points=points,
         boundaries=[(0, 8)],
         typed_queries=[query],
@@ -2169,7 +2171,7 @@ def test_learned_segment_trace_reports_pre_repair_source_attribution() -> None:
     assert pre_mask_payload["retained_count"] == pre_summary["retained_count_total"]
     assert pre_mask_payload["indices"] == sorted(set(pre_mask_payload["indices"]))
 
-    pre_repair_method = _pre_repair_frozen_method_from_trace(
+    pre_repair_method = pre_repair_frozen_method_from_trace(
         name="MLQDS_pre_repair_allocation_diagnostic",
         selector_trace=trace,
         point_count=int(scores.numel()),
@@ -2456,7 +2458,7 @@ def test_learning_causality_summary_reports_learned_slot_budget_without_ablation
         }
     }
 
-    summary = _learned_slot_summary(selector_diagnostics, 0.10)
+    summary = build_learned_slot_summary(selector_diagnostics, 0.10)
 
     assert summary["learned_controlled_retained_slots"] == 16
     assert summary["learned_controlled_retained_slot_fraction"] == 0.80
@@ -2493,7 +2495,7 @@ def test_learning_causality_summary_prefers_point_attribution_when_available() -
         "retained_mask_matches_frozen_primary": True,
     }
 
-    summary = _learned_slot_summary(selector_diagnostics, 0.10, trace)
+    summary = build_learned_slot_summary(selector_diagnostics, 0.10, trace)
 
     assert summary["learned_controlled_retained_slots"] == 12
     assert summary["planned_learned_controlled_retained_slots"] == 16
@@ -2504,7 +2506,7 @@ def test_learning_causality_summary_prefers_point_attribution_when_available() -
 
 
 def test_selection_causality_diagnostics_reports_unavailable_preconditions() -> None:
-    missing_split = _selection_causality_diagnostics(
+    missing_split = build_selection_causality_diagnostics(
         trained=cast(Any, object()),
         selection_points=None,
         selection_boundaries=None,
@@ -2515,7 +2517,7 @@ def test_selection_causality_diagnostics_reports_unavailable_preconditions() -> 
         seeds=SimpleNamespace(eval_query_seed=1),
     )
 
-    wrong_selector = _selection_causality_diagnostics(
+    wrong_selector = build_selection_causality_diagnostics(
         trained=cast(Any, object()),
         selection_points=torch.zeros((2, 8), dtype=torch.float32),
         selection_boundaries=[(0, 2)],
@@ -2708,7 +2710,7 @@ def test_learning_causality_delta_gate_requires_material_ablation_loss() -> None
         query_useful_v1_score=0.25,
     )
 
-    gate = _learning_causality_delta_gate_config(primary=primary, uniform=uniform)
+    gate = learning_causality_delta_gate_config(primary=primary, uniform=uniform)
     thresholds = gate["thresholds"]
 
     assert gate["min_material_query_useful_delta"] == 0.005
@@ -2740,7 +2742,7 @@ def test_query_useful_component_delta_summary_reports_weighted_tradeoffs() -> No
         },
     )
 
-    summary = _query_useful_component_delta_summary(
+    summary = query_useful_component_delta_summary(
         primary=primary,
         ablations={"MLQDS_without_behavior_utility_head": ablation},
         top_k=2,
@@ -2785,20 +2787,20 @@ def test_causality_ablation_tradeoff_summary_connects_mask_and_component_changes
     primary_mask = torch.tensor([True, True, False, False])
     ablation_mask = torch.tensor([False, True, True, False])
 
-    component_deltas = _query_useful_component_delta_summary(
+    component_deltas = query_useful_component_delta_summary(
         primary=primary,
         ablations={"MLQDS_without_behavior_utility_head": ablation},
         top_k=2,
     )
     mask_diagnostics = {
-        "MLQDS_without_behavior_utility_head": _retained_mask_comparison(
+        "MLQDS_without_behavior_utility_head": retained_mask_comparison(
             primary_mask=primary_mask,
             ablation_mask=ablation_mask,
             expected_shape=primary_mask.shape,
         )
     }
 
-    summary = _causality_ablation_tradeoff_summary(
+    summary = causality_ablation_tradeoff_summary(
         component_deltas=component_deltas,
         mask_diagnostics=mask_diagnostics,
     )
@@ -2846,7 +2848,7 @@ def test_causality_ablation_diagnostics_payload_reuses_component_and_mask_tradeo
         }
     }
 
-    payload = _causality_ablation_diagnostics_payload(
+    payload = causality_ablation_diagnostics_payload(
         primary=primary,
         ablations={"MLQDS_without_behavior_utility_head": ablation},
         mask_diagnostics=mask_diagnostics,
@@ -2869,7 +2871,7 @@ def test_score_ablation_sensitivity_reports_score_and_mask_changes() -> None:
     primary_mask = torch.tensor([True, True, False, False])
     ablation_mask = torch.tensor([False, True, True, False])
 
-    diagnostics = _score_ablation_sensitivity(
+    diagnostics = score_ablation_sensitivity(
         primary_scores=primary_scores,
         ablation_scores=ablation_scores,
         primary_mask=primary_mask,
@@ -2893,7 +2895,7 @@ def test_head_ablation_sensitivity_reports_selector_raw_and_segment_channels() -
     primary_mask = torch.tensor([True, True, False, False])
     ablation_mask = torch.tensor([False, True, True, False])
 
-    diagnostics = _head_ablation_sensitivity(
+    diagnostics = head_ablation_sensitivity(
         primary_scores=primary_scores,
         ablation_scores=ablation_scores,
         primary_raw_predictions=primary_raw_predictions,
@@ -2914,7 +2916,7 @@ def test_retained_mask_comparison_reports_ablation_overlap() -> None:
     primary_mask = torch.tensor([True, True, False, False])
     ablation_mask = torch.tensor([False, True, True, False])
 
-    diagnostics = _retained_mask_comparison(
+    diagnostics = retained_mask_comparison(
         primary_mask=primary_mask,
         ablation_mask=ablation_mask,
         expected_shape=primary_mask.shape,
@@ -2961,7 +2963,7 @@ def test_prior_feature_sample_sensitivity_reports_input_level_changes() -> None:
         smoothing_passes=0,
     )
 
-    diagnostics = _prior_feature_sample_sensitivity(
+    diagnostics = prior_feature_sample_sensitivity(
         points=points,
         primary_prior_field=prior,
         ablation_prior_field=None,
@@ -2988,7 +2990,7 @@ def test_prior_sample_gate_failures_explain_empty_or_out_of_extent_priors() -> N
         }
     }
 
-    failures = _prior_sample_gate_failures(diagnostics)
+    failures = prior_sample_gate_failures(diagnostics)
 
     assert "sampled_query_prior_features_all_zero" in failures
     assert "shuffled_prior_fields_did_not_change_sampled_inputs" in failures
@@ -3015,7 +3017,7 @@ def test_workload_signature_gate_reports_pass_for_matching_profiles() -> None:
         },
     }
 
-    comparison = _range_workload_distribution_comparison(summaries)
+    comparison = range_workload_distribution_comparison(summaries)
     gate = comparison["workload_signature_gate"]
 
     assert gate["all_available"] is True
@@ -3274,7 +3276,7 @@ def test_workload_stability_gate_rejects_tiny_fixed_count_workloads() -> None:
         },
     )
 
-    gate = _workload_stability_gate(
+    gate = evaluate_workload_stability_gate(
         config=cast(Any, config),
         train_label_workloads=[workload],
         eval_workload=workload,
@@ -3310,7 +3312,7 @@ def test_workload_stability_gate_accepts_coverage_calibrated_replicates() -> Non
             },
         )
 
-    gate = _workload_stability_gate(
+    gate = evaluate_workload_stability_gate(
         config=cast(Any, config),
         train_label_workloads=[workload(), workload(), workload(), workload()],
         eval_workload=workload(),
@@ -3353,7 +3355,7 @@ def test_workload_stability_gate_rejects_exhausted_generation_after_coverage_sat
         },
     )
 
-    gate = _workload_stability_gate(
+    gate = evaluate_workload_stability_gate(
         config=cast(Any, config),
         train_label_workloads=[workload, workload, workload, workload],
         eval_workload=workload,
@@ -3390,7 +3392,7 @@ def test_workload_stability_gate_rejects_calibrated_low_query_count_in_final_mod
         },
     )
 
-    gate = _workload_stability_gate(
+    gate = evaluate_workload_stability_gate(
         config=cast(Any, config),
         train_label_workloads=[workload, workload, workload, workload],
         eval_workload=workload,
@@ -3426,7 +3428,7 @@ def test_workload_stability_gate_smoke_mode_allows_calibrated_low_query_count() 
         },
     )
 
-    gate = _workload_stability_gate(
+    gate = evaluate_workload_stability_gate(
         config=cast(Any, config),
         train_label_workloads=[workload, workload, workload, workload],
         eval_workload=workload,
@@ -3454,7 +3456,7 @@ def test_global_sanity_gate_enforces_endpoint_length_and_sed_ratio() -> None:
         range_audit={"endpoint_sanity": 1.0},
     )
 
-    gate = _global_sanity_gate(primary=primary, uniform=uniform, compression_ratio=0.05)
+    gate = evaluate_global_sanity_gate(primary=primary, uniform=uniform, compression_ratio=0.05)
 
     assert gate["gate_pass"] is True
     assert gate["avg_sed_ratio_vs_uniform"] == 1.5
@@ -3463,7 +3465,7 @@ def test_global_sanity_gate_enforces_endpoint_length_and_sed_ratio() -> None:
     primary.avg_length_preserved = 0.70
     primary.range_audit["endpoint_sanity"] = 0.5
     primary.geometric_distortion["avg_sed_km"] = 1.20
-    gate = _global_sanity_gate(primary=primary, uniform=uniform, compression_ratio=0.05)
+    gate = evaluate_global_sanity_gate(primary=primary, uniform=uniform, compression_ratio=0.05)
 
     assert gate["gate_pass"] is False
     assert "length_preservation_outside_range" in gate["failed_checks"]

@@ -1,1 +1,1 @@
-"""Shared configuration dataclasses for experiments, training, and tooling."""
+"""Shared configuration dataclasses for orchestration, training, and tooling."""

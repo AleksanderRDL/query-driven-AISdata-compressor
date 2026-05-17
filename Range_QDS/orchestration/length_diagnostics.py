@@ -90,7 +90,7 @@ def _max_length_required_mask(
     return retained
 
 
-def _score_protected_length_feasibility(
+def score_protected_length_feasibility(
     *,
     scores: torch.Tensor,
     points: torch.Tensor,
@@ -191,7 +191,7 @@ def _score_protected_length_feasibility(
     }
 
 
-def _score_protected_length_frontier(
+def score_protected_length_frontier(
     *,
     scores: torch.Tensor,
     points: torch.Tensor,
@@ -207,7 +207,7 @@ def _score_protected_length_frontier(
     materiality_floor = float(learned_slot_fraction_min)
     for raw_fraction in protected_fractions:
         fraction = max(0.0, min(1.0, float(raw_fraction)))
-        diagnostic = _score_protected_length_feasibility(
+        diagnostic = score_protected_length_feasibility(
             scores=scores,
             points=points,
             boundaries=boundaries,
@@ -238,7 +238,7 @@ def _score_protected_length_frontier(
         if abs(fraction - materiality_floor) <= 1e-12:
             materiality_row = row
     if materiality_row is None:
-        materiality_diagnostic = _score_protected_length_feasibility(
+        materiality_diagnostic = score_protected_length_feasibility(
             scores=scores,
             points=points,
             boundaries=boundaries,

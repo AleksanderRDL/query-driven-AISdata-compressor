@@ -60,7 +60,7 @@ def _spearman(xs: list[float], ys: list[float]) -> float | None:
     return _pearson(_average_ranks(xs), _average_ranks(ys))
 
 
-def _segment_top_mean(values: torch.Tensor, start: int, end: int) -> float:
+def segment_top_mean(values: torch.Tensor, start: int, end: int) -> float:
     """Return top-20% mean for one segment, matching selector segment aggregation."""
     local = values[int(start) : int(end)].detach().cpu().float()
     if int(local.numel()) <= 0:
@@ -69,7 +69,7 @@ def _segment_top_mean(values: torch.Tensor, start: int, end: int) -> float:
     return float(torch.topk(local, k=top_count).values.mean().item())
 
 
-def _factorized_head_probability_sources_from_logits(
+def factorized_head_probability_sources_from_logits(
     head_logits: torch.Tensor | None,
 ) -> dict[str, torch.Tensor]:
     """Return diagnostic-only per-head probability score sources from frozen logits."""
@@ -322,7 +322,7 @@ def _all_segment_transfer_rows(
     }
 
 
-def _segment_oracle_allocation_audit(
+def segment_oracle_allocation_audit(
     *,
     point_scores: torch.Tensor | None,
     segment_budget_scores: torch.Tensor | None,
@@ -395,7 +395,7 @@ def _segment_oracle_allocation_audit(
                 continue
             oracle_segment = oracle_values[seg_start:seg_end]
             oracle_mass = float(torch.clamp(oracle_segment, min=0.0).sum().item())
-            oracle_top_mean = _segment_top_mean(oracle_values, seg_start, seg_end)
+            oracle_top_mean = segment_top_mean(oracle_values, seg_start, seg_end)
             oracle_mass_by_segment.append(oracle_mass)
             oracle_top_mean_by_segment.append(oracle_top_mean)
             if retained_count_by_segment is not None and retained_values is not None:
@@ -403,7 +403,7 @@ def _segment_oracle_allocation_audit(
                     int(retained_values[seg_start:seg_end].sum().item())
                 )
             for name, values in score_sources.items():
-                source_segment_scores[name].append(_segment_top_mean(values, seg_start, seg_end))
+                source_segment_scores[name].append(segment_top_mean(values, seg_start, seg_end))
             segment_rows.append(
                 {
                     "trajectory_id": int(trajectory_id),
@@ -467,7 +467,7 @@ def _segment_oracle_allocation_audit(
     }
 
 
-def _target_segment_oracle_alignment_audit(
+def target_segment_oracle_alignment_audit(
     *,
     points: torch.Tensor,
     boundaries: list[tuple[int, int]],
@@ -497,7 +497,7 @@ def _target_segment_oracle_alignment_audit(
         for head_idx, head_name in enumerate(QUERY_USEFUL_V1_HEAD_NAMES)
         if int(head_targets.shape[1]) > head_idx
     }
-    audit = _segment_oracle_allocation_audit(
+    audit = segment_oracle_allocation_audit(
         point_scores=final_target,
         segment_budget_scores=None,
         selector_segment_scores=None,

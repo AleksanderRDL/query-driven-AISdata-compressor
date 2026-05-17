@@ -12,20 +12,20 @@ from evaluation.evaluate_methods import evaluate_method
 from evaluation.metrics import MethodEvaluation
 from evaluation.query_cache import EvaluationQueryCache
 from orchestration.causality import (
-    _causality_ablation_diagnostics_payload,
-    _head_ablation_sensitivity,
-    _prior_feature_sample_sensitivity,
-    _retained_mask_comparison,
-    _score_ablation_sensitivity,
+    causality_ablation_diagnostics_payload,
+    head_ablation_sensitivity,
+    prior_feature_sample_sensitivity,
+    retained_mask_comparison,
+    score_ablation_sensitivity,
 )
 from orchestration.model_ablations import (
-    _raw_predictions_without_factorized_head,
-    _scores_without_factorized_head,
-    _shuffled_query_prior_field,
+    raw_predictions_without_factorized_head,
+    scores_without_factorized_head,
+    shuffled_query_prior_field,
 )
 from orchestration.selector_diagnostics import (
-    _learned_segment_frozen_method,
-    _neutral_segment_scores_for_ablation,
+    learned_segment_frozen_method,
+    neutral_segment_scores_for_ablation,
 )
 from queries.query_types import single_workload_type
 from simplification.learned_segment_budget import blend_segment_support_scores
@@ -34,7 +34,7 @@ from training.query_prior_fields import query_prior_field_metadata, zero_query_p
 from training.training_outputs import TrainingOutputs
 
 
-def _selection_causality_diagnostics(
+def build_selection_causality_diagnostics(
     *,
     trained: TrainingOutputs,
     selection_points: torch.Tensor | None,
@@ -148,7 +148,7 @@ def _selection_causality_diagnostics(
                 else None
             )
             ablation_methods.append(
-                _learned_segment_frozen_method(
+                learned_segment_frozen_method(
                     name="MLQDS_without_geometry_tie_breaker",
                     scores=primary_scores,
                     boundaries=selection_boundaries,
@@ -175,7 +175,7 @@ def _selection_causality_diagnostics(
         primary_segment_scores, torch.Tensor
     ):
         try:
-            neutral_segment_scores = _neutral_segment_scores_for_ablation(primary_segment_scores)
+            neutral_segment_scores = neutral_segment_scores_for_ablation(primary_segment_scores)
             no_segment_selector_scores = blend_segment_support_scores(
                 segment_scores=neutral_segment_scores,
                 path_length_support_scores=(
@@ -187,7 +187,7 @@ def _selection_causality_diagnostics(
                     config.model.learned_segment_length_support_blend_weight
                 ),
             )
-            no_segment = _learned_segment_frozen_method(
+            no_segment = learned_segment_frozen_method(
                 name="MLQDS_without_segment_budget_head",
                 scores=primary_scores,
                 boundaries=selection_boundaries,
@@ -210,7 +210,7 @@ def _selection_causality_diagnostics(
             )
             ablation_methods.append(no_segment)
             head_sensitivity["MLQDS_without_segment_budget_head"] = {
-                **_head_ablation_sensitivity(
+                **head_ablation_sensitivity(
                     primary_scores=primary_scores,
                     ablation_scores=primary_scores,
                     primary_raw_predictions=primary_raw_preds
@@ -238,7 +238,7 @@ def _selection_causality_diagnostics(
         primary_path_length_support_scores, torch.Tensor
     ):
         try:
-            path_length_segment_method = _learned_segment_frozen_method(
+            path_length_segment_method = learned_segment_frozen_method(
                 name="MLQDS_path_length_support_segment_head_diagnostic",
                 scores=primary_scores,
                 boundaries=selection_boundaries,
@@ -260,7 +260,7 @@ def _selection_causality_diagnostics(
             )
             ablation_methods.append(path_length_segment_method)
             head_sensitivity["MLQDS_path_length_support_segment_head_diagnostic"] = {
-                **_head_ablation_sensitivity(
+                **head_ablation_sensitivity(
                     primary_scores=primary_scores,
                     ablation_scores=primary_scores,
                     primary_raw_predictions=primary_raw_preds
@@ -284,7 +284,7 @@ def _selection_causality_diagnostics(
                 "replacement_head_name": "path_length_support_target",
                 "ablation_mode": "path_length_support_as_segment_scores",
             }
-            path_length_allocation_method = _learned_segment_frozen_method(
+            path_length_allocation_method = learned_segment_frozen_method(
                 name="MLQDS_path_length_support_allocation_only_diagnostic",
                 scores=primary_scores,
                 boundaries=selection_boundaries,
@@ -307,7 +307,7 @@ def _selection_causality_diagnostics(
             )
             ablation_methods.append(path_length_allocation_method)
             head_sensitivity["MLQDS_path_length_support_allocation_only_diagnostic"] = {
-                **_head_ablation_sensitivity(
+                **head_ablation_sensitivity(
                     primary_scores=primary_scores,
                     ablation_scores=primary_scores,
                     primary_raw_predictions=primary_raw_preds
@@ -340,12 +340,12 @@ def _selection_causality_diagnostics(
         and isinstance(primary_selector_segment_scores, torch.Tensor)
     ):
         try:
-            behavior_raw_preds = _raw_predictions_without_factorized_head(
+            behavior_raw_preds = raw_predictions_without_factorized_head(
                 model=trained.model,
                 head_logits=primary_head_logits,
                 disabled_head_name="conditional_behavior_utility",
             )
-            behavior_scores = _scores_without_factorized_head(
+            behavior_scores = scores_without_factorized_head(
                 model=trained.model,
                 head_logits=primary_head_logits,
                 disabled_head_name="conditional_behavior_utility",
@@ -355,7 +355,7 @@ def _selection_causality_diagnostics(
                 score_temperature=float(config.model.mlqds_score_temperature),
                 rank_confidence_weight=float(config.model.mlqds_rank_confidence_weight),
             )
-            no_behavior = _learned_segment_frozen_method(
+            no_behavior = learned_segment_frozen_method(
                 name="MLQDS_without_behavior_utility_head",
                 scores=behavior_scores,
                 boundaries=selection_boundaries,
@@ -378,7 +378,7 @@ def _selection_causality_diagnostics(
             )
             ablation_methods.append(no_behavior)
             head_sensitivity["MLQDS_without_behavior_utility_head"] = {
-                **_head_ablation_sensitivity(
+                **head_ablation_sensitivity(
                     primary_scores=primary_scores,
                     ablation_scores=behavior_scores,
                     primary_raw_predictions=primary_raw_preds
@@ -405,7 +405,7 @@ def _selection_causality_diagnostics(
                 .cpu()
             )
             ablation_methods.append(
-                _learned_segment_frozen_method(
+                learned_segment_frozen_method(
                     name="MLQDS_prior_field_only_score",
                     scores=prior_scores,
                     boundaries=selection_boundaries,
@@ -428,7 +428,7 @@ def _selection_causality_diagnostics(
         except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
             freeze_failures["MLQDS_prior_field_only_score"] = str(exc)
         prior_ablation_fields = {
-            "MLQDS_shuffled_prior_fields": _shuffled_query_prior_field(
+            "MLQDS_shuffled_prior_fields": shuffled_query_prior_field(
                 query_prior_field,
                 seed=int(seeds.eval_query_seed) + 72_003,
             ),
@@ -441,7 +441,7 @@ def _selection_causality_diagnostics(
                     if ablation_name == "MLQDS_shuffled_prior_fields"
                     else "without_query_prior_features"
                 )
-                prior_feature_sensitivity = _prior_feature_sample_sensitivity(
+                prior_feature_sensitivity = prior_feature_sample_sensitivity(
                     points=selection_points,
                     primary_prior_field=query_prior_field,
                     ablation_prior_field=ablation_field,
@@ -478,7 +478,7 @@ def _selection_causality_diagnostics(
                 ablation_raw_preds = getattr(ablation_method, "_raw_pred_cache", None)
                 prior_sensitivity[prior_sensitivity_key] = {
                     "sampled_prior_features": prior_feature_sensitivity,
-                    "selector_score": _score_ablation_sensitivity(
+                    "selector_score": score_ablation_sensitivity(
                         primary_scores=primary_scores,
                         ablation_scores=ablation_scores
                         if isinstance(ablation_scores, torch.Tensor)
@@ -486,7 +486,7 @@ def _selection_causality_diagnostics(
                         primary_mask=primary_mask,
                         ablation_mask=ablation_mask,
                     ),
-                    "raw_prediction": _score_ablation_sensitivity(
+                    "raw_prediction": score_ablation_sensitivity(
                         primary_scores=primary_raw_preds
                         if isinstance(primary_raw_preds, torch.Tensor)
                         else None,
@@ -516,7 +516,7 @@ def _selection_causality_diagnostics(
     ablation_evaluations: dict[str, MethodEvaluation] = {}
     mask_diagnostics: dict[str, dict[str, Any]] = {}
     for method in ablation_methods:
-        mask_diagnostics[method.name] = _retained_mask_comparison(
+        mask_diagnostics[method.name] = retained_mask_comparison(
             primary_mask=primary_mask,
             ablation_mask=method.retained_mask,
             expected_shape=primary_mask.shape,
@@ -531,7 +531,7 @@ def _selection_causality_diagnostics(
             query_cache=selection_query_cache,
         )
 
-    payload = _causality_ablation_diagnostics_payload(
+    payload = causality_ablation_diagnostics_payload(
         primary=primary_eval,
         ablations=ablation_evaluations,
         mask_diagnostics=mask_diagnostics,

@@ -8,14 +8,14 @@ from typing import Any
 import torch
 
 from evaluation.baselines import FrozenMaskMethod
-from orchestration.segment_audits import _segment_top_mean
+from orchestration.segment_audits import segment_top_mean
 from simplification.learned_segment_budget import (
     blend_segment_support_scores,
     simplify_with_learned_segment_budget_v1,
 )
 
 
-def _learned_segment_frozen_method(
+def learned_segment_frozen_method(
     *,
     name: str,
     scores: torch.Tensor,
@@ -55,7 +55,7 @@ def _learned_segment_frozen_method(
     return FrozenMaskMethod(name=name, retained_mask=retained_mask.detach().cpu())
 
 
-def _pre_repair_frozen_method_from_trace(
+def pre_repair_frozen_method_from_trace(
     *,
     name: str,
     selector_trace: dict[str, Any],
@@ -94,7 +94,7 @@ def _pre_repair_frozen_method_from_trace(
     return FrozenMaskMethod(name=name, retained_mask=retained_mask)
 
 
-def _selector_segment_score_source_label(
+def selector_segment_score_source_label(
     *,
     segment_scores: torch.Tensor | None,
     path_length_support_scores: torch.Tensor | None,
@@ -111,12 +111,12 @@ def _selector_segment_score_source_label(
     return "point_score_top20_mean"
 
 
-def _neutral_segment_scores_for_ablation(segment_scores: torch.Tensor) -> torch.Tensor:
+def neutral_segment_scores_for_ablation(segment_scores: torch.Tensor) -> torch.Tensor:
     """Return neutral segment scores for the no-segment-budget-head ablation."""
     return torch.zeros_like(segment_scores.detach().cpu().float())
 
 
-def _segment_score_top_band_for_ablation(
+def segment_score_top_band_for_ablation(
     segment_scores: torch.Tensor,
     boundaries: list[tuple[int, int]],
     *,
@@ -135,7 +135,7 @@ def _segment_score_top_band_for_ablation(
                 continue
             segment_rows.append(
                 (
-                    _segment_top_mean(scores, seg_start, seg_end),
+                    segment_top_mean(scores, seg_start, seg_end),
                     -int(seg_start),
                     int(seg_start),
                     int(seg_end),
@@ -150,7 +150,7 @@ def _segment_score_top_band_for_ablation(
     return out.reshape(segment_scores.detach().cpu().shape)
 
 
-def _segment_score_quantile_bands_for_ablation(
+def segment_score_quantile_bands_for_ablation(
     segment_scores: torch.Tensor,
     boundaries: list[tuple[int, int]],
     *,
@@ -169,7 +169,7 @@ def _segment_score_quantile_bands_for_ablation(
                 continue
             segment_rows.append(
                 (
-                    _segment_top_mean(scores, seg_start, seg_end),
+                    segment_top_mean(scores, seg_start, seg_end),
                     -int(seg_start),
                     int(seg_start),
                     int(seg_end),

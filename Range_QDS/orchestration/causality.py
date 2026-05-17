@@ -11,7 +11,7 @@ from evaluation.query_useful_v1 import QUERY_USEFUL_V1_COMPONENT_WEIGHTS
 from training.query_prior_fields import QUERY_PRIOR_FIELD_NAMES, sample_query_prior_fields
 
 
-def _learned_slot_summary(
+def build_learned_slot_summary(
     selector_budget_diagnostics: dict[str, Any],
     compression_ratio: float,
     selector_trace: dict[str, Any] | None = None,
@@ -110,7 +110,7 @@ def _learned_slot_summary(
     return summary
 
 
-def _query_useful_delta(
+def query_useful_delta(
     primary: MethodEvaluation,
     ablations: dict[str, MethodEvaluation],
     name: str,
@@ -122,7 +122,7 @@ def _query_useful_delta(
     return float(primary.query_useful_v1_score - ablation.query_useful_v1_score)
 
 
-def _query_useful_component_delta_summary(
+def query_useful_component_delta_summary(
     *,
     primary: MethodEvaluation,
     ablations: dict[str, MethodEvaluation],
@@ -180,7 +180,7 @@ def _query_useful_component_delta_summary(
     return summary
 
 
-def _causality_ablation_tradeoff_summary(
+def causality_ablation_tradeoff_summary(
     *,
     component_deltas: dict[str, Any],
     mask_diagnostics: dict[str, dict[str, Any]],
@@ -299,18 +299,18 @@ def _causality_ablation_tradeoff_summary(
     return summary
 
 
-def _causality_ablation_diagnostics_payload(
+def causality_ablation_diagnostics_payload(
     *,
     primary: MethodEvaluation,
     ablations: dict[str, MethodEvaluation],
     mask_diagnostics: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
     """Return reusable score, component, and mask diagnostics for ablations."""
-    component_deltas = _query_useful_component_delta_summary(
+    component_deltas = query_useful_component_delta_summary(
         primary=primary,
         ablations=ablations,
     )
-    tradeoff_diagnostics = _causality_ablation_tradeoff_summary(
+    tradeoff_diagnostics = causality_ablation_tradeoff_summary(
         component_deltas=component_deltas,
         mask_diagnostics=mask_diagnostics,
     )
@@ -335,7 +335,7 @@ LEARNING_CAUSALITY_MIN_MATERIAL_DELTA = 0.005
 SHUFFLED_SCORE_DELTA_FRACTION_OF_UNIFORM_GAP_MIN = 0.60
 
 
-def _learning_causality_delta_gate_config(
+def learning_causality_delta_gate_config(
     *,
     primary: MethodEvaluation,
     uniform: MethodEvaluation | None,
@@ -369,7 +369,7 @@ def _learning_causality_delta_gate_config(
     }
 
 
-def _score_ablation_sensitivity(
+def score_ablation_sensitivity(
     *,
     primary_scores: torch.Tensor | None,
     ablation_scores: torch.Tensor | None,
@@ -400,7 +400,7 @@ def _score_ablation_sensitivity(
     )
 
     topk_jaccard: float | None = None
-    mask_diagnostics = _retained_mask_comparison(
+    mask_diagnostics = retained_mask_comparison(
         primary_mask=primary_mask,
         ablation_mask=ablation_mask,
         expected_shape=primary.shape,
@@ -437,7 +437,7 @@ def _score_ablation_sensitivity(
     }
 
 
-def _head_ablation_sensitivity(
+def head_ablation_sensitivity(
     *,
     primary_scores: torch.Tensor | None,
     ablation_scores: torch.Tensor | None,
@@ -450,7 +450,7 @@ def _head_ablation_sensitivity(
 ) -> dict[str, Any]:
     """Return score, raw-prediction, and segment-score sensitivity for one ablation."""
     diagnostics: dict[str, Any] = {
-        "selector_score": _score_ablation_sensitivity(
+        "selector_score": score_ablation_sensitivity(
             primary_scores=primary_scores,
             ablation_scores=ablation_scores,
             primary_mask=primary_mask,
@@ -458,14 +458,14 @@ def _head_ablation_sensitivity(
         )
     }
     if primary_raw_predictions is not None or ablation_raw_predictions is not None:
-        diagnostics["raw_prediction"] = _score_ablation_sensitivity(
+        diagnostics["raw_prediction"] = score_ablation_sensitivity(
             primary_scores=primary_raw_predictions,
             ablation_scores=ablation_raw_predictions,
             primary_mask=primary_mask,
             ablation_mask=ablation_mask,
         )
     if primary_segment_scores is not None or ablation_segment_scores is not None:
-        diagnostics["segment_score"] = _score_ablation_sensitivity(
+        diagnostics["segment_score"] = score_ablation_sensitivity(
             primary_scores=primary_segment_scores,
             ablation_scores=ablation_segment_scores,
             primary_mask=primary_mask,
@@ -474,7 +474,7 @@ def _head_ablation_sensitivity(
     return diagnostics
 
 
-def _retained_mask_comparison(
+def retained_mask_comparison(
     *,
     primary_mask: torch.Tensor | None,
     ablation_mask: torch.Tensor | None,
@@ -527,7 +527,7 @@ def _retained_mask_comparison(
     }
 
 
-def _prior_feature_sample_sensitivity(
+def prior_feature_sample_sensitivity(
     *,
     points: torch.Tensor,
     primary_prior_field: dict[str, Any] | None,
@@ -622,7 +622,7 @@ def _prior_feature_sample_sensitivity(
     }
 
 
-def _prior_sample_gate_failures(prior_sensitivity_diagnostics: dict[str, Any]) -> list[str]:
+def prior_sample_gate_failures(prior_sensitivity_diagnostics: dict[str, Any]) -> list[str]:
     """Return failures showing prior-feature ablations did not exercise useful inputs."""
     shuffled = prior_sensitivity_diagnostics.get("shuffled_prior_fields")
     if not isinstance(shuffled, dict):
