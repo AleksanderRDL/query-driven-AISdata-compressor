@@ -10,13 +10,10 @@ import torch
 from queries.workload import TypedQueryWorkload
 from training.query_prior_fields import QUERY_PRIOR_FIELD_NAMES, sample_query_prior_fields
 
-
 RANGE_AWARE_EXTRA_DIM = 8
 RANGE_AWARE_POINT_DIM = 8 + RANGE_AWARE_EXTRA_DIM
-OLD_WORKLOAD_BLIND_EXTRA_DIM = 9
-OLD_WORKLOAD_BLIND_POINT_DIM = 8 + OLD_WORKLOAD_BLIND_EXTRA_DIM
-WORKLOAD_BLIND_EXTRA_DIM = OLD_WORKLOAD_BLIND_EXTRA_DIM
-WORKLOAD_BLIND_POINT_DIM = OLD_WORKLOAD_BLIND_POINT_DIM
+WORKLOAD_BLIND_EXTRA_DIM = 9
+WORKLOAD_BLIND_POINT_DIM = 8 + WORKLOAD_BLIND_EXTRA_DIM
 CONTEXT_WORKLOAD_BLIND_EXTRA_DIM = 16
 CONTEXT_WORKLOAD_BLIND_POINT_DIM = 8 + CONTEXT_WORKLOAD_BLIND_EXTRA_DIM
 RANGE_PRIOR_CLOCK_DENSITY_POINT_DIM = CONTEXT_WORKLOAD_BLIND_POINT_DIM + 4
@@ -35,24 +32,47 @@ WORKLOAD_BLIND_RANGE_V2_POINT_DIM = (
     + WORKLOAD_BLIND_RANGE_V2_ABSOLUTE_DIM
     + WORKLOAD_BLIND_RANGE_V2_PRIOR_DIM
 )
-HISTORICAL_PRIOR_FEATURE_INDICES = (0, 1, 2, 3, 4, 7, 8, 9, 11, 12, 13, 14, 15, 17, 18, 20, 21, 22, 23)
-OLD_HISTORICAL_PRIOR_POINT_DIM = len(HISTORICAL_PRIOR_FEATURE_INDICES)
+WORKLOAD_BLIND_RANGE_V2_MODEL_DISABLED_PRIOR_FIELDS = ("route_density_prior",)
+HISTORICAL_PRIOR_ROUTE_CONTEXT_FEATURE_INDICES = (
+    0,
+    1,
+    2,
+    3,
+    4,
+    7,
+    8,
+    9,
+    11,
+    12,
+    13,
+    14,
+    15,
+    17,
+    18,
+    20,
+    21,
+    22,
+    23,
+)
+HISTORICAL_PRIOR_ROUTE_CONTEXT_POINT_DIM = len(HISTORICAL_PRIOR_ROUTE_CONTEXT_FEATURE_INDICES)
 HISTORICAL_PRIOR_MMSI_DIM = 4
 HISTORICAL_PRIOR_CLOCK_DIM = 2
 HISTORICAL_PRIOR_DENSITY_DIM = 2
-HISTORICAL_PRIOR_DENSITY_POINT_DIM = OLD_HISTORICAL_PRIOR_POINT_DIM + HISTORICAL_PRIOR_DENSITY_DIM
+HISTORICAL_PRIOR_DENSITY_POINT_DIM = (
+    HISTORICAL_PRIOR_ROUTE_CONTEXT_POINT_DIM + HISTORICAL_PRIOR_DENSITY_DIM
+)
 HISTORICAL_PRIOR_POINT_DIM = (
-    OLD_HISTORICAL_PRIOR_POINT_DIM
+    HISTORICAL_PRIOR_ROUTE_CONTEXT_POINT_DIM
     + HISTORICAL_PRIOR_CLOCK_DIM
     + HISTORICAL_PRIOR_DENSITY_DIM
 )
 HISTORICAL_PRIOR_MMSI_POINT_DIM = (
-    OLD_HISTORICAL_PRIOR_POINT_DIM
+    HISTORICAL_PRIOR_ROUTE_CONTEXT_POINT_DIM
     + HISTORICAL_PRIOR_MMSI_DIM
     + HISTORICAL_PRIOR_CLOCK_DIM
     + HISTORICAL_PRIOR_DENSITY_DIM
 )
-QUERY_AWARE_MODEL_TYPES = ("baseline", "turn_aware", "range_aware")
+QUERY_AWARE_MODEL_TYPES = ("baseline", "range_aware")
 WORKLOAD_BLIND_MODEL_TYPE_CHOICES = (
     "workload_blind_range",
     "range_prior",
@@ -68,14 +88,11 @@ WORKLOAD_BLIND_MODEL_TYPES = frozenset(WORKLOAD_BLIND_MODEL_TYPE_CHOICES)
 HISTORICAL_PRIOR_MODEL_TYPES = frozenset(
     ("historical_prior", "historical_prior_mmsi", "historical_prior_student")
 )
-NONPARAMETRIC_HISTORICAL_PRIOR_MODEL_TYPES = frozenset(("historical_prior", "historical_prior_mmsi"))
+NONPARAMETRIC_HISTORICAL_PRIOR_MODEL_TYPES = frozenset(
+    ("historical_prior", "historical_prior_mmsi")
+)
 MODEL_TYPE_METADATA: dict[str, dict[str, object]] = {
     "baseline": {
-        "model_family": "legacy_query_aware_diagnostic",
-        "trainable_final_candidate": False,
-        "final_success_allowed": False,
-    },
-    "turn_aware": {
         "model_family": "legacy_query_aware_diagnostic",
         "trainable_final_candidate": False,
         "final_success_allowed": False,
@@ -142,9 +159,13 @@ def model_type_metadata(model_type: str) -> dict[str, object]:
     return dict(MODEL_TYPE_METADATA.get(str(model_type).lower(), {}))
 
 
-def _range_relation_features(points: torch.Tensor, typed_queries: list[dict[str, Any]]) -> torch.Tensor:
+def _range_relation_features(
+    points: torch.Tensor, typed_queries: list[dict[str, Any]]
+) -> torch.Tensor:
     """Return per-point relation features for pure range workloads."""
-    range_queries = [query for query in typed_queries if str(query.get("type", "")).lower() == "range"]
+    range_queries = [
+        query for query in typed_queries if str(query.get("type", "")).lower() == "range"
+    ]
     device = points.device
     dtype = torch.float32
     n_points = int(points.shape[0])
@@ -171,7 +192,9 @@ def _range_relation_features(points: torch.Tensor, typed_queries: list[dict[str,
     t_span_all = torch.clamp(t1_all - t0_all, min=1e-6)
     lat_span_all = torch.clamp(lat1_all - lat0_all, min=1e-6)
     lon_span_all = torch.clamp(lon1_all - lon0_all, min=1e-6)
-    inv_sqrt_volume_all = torch.rsqrt(torch.clamp(t_span_all * lat_span_all * lon_span_all, min=1e-12))
+    inv_sqrt_volume_all = torch.rsqrt(
+        torch.clamp(t_span_all * lat_span_all * lon_span_all, min=1e-12)
+    )
 
     sqrt3 = math.sqrt(3.0)
     query_count = len(range_queries)
@@ -183,7 +206,9 @@ def _range_relation_features(points: torch.Tensor, typed_queries: list[dict[str,
         time = points[point_start:point_end, 0].to(dtype=dtype).unsqueeze(1)
         lat = points[point_start:point_end, 1].to(dtype=dtype).unsqueeze(1)
         lon = points[point_start:point_end, 2].to(dtype=dtype).unsqueeze(1)
-        local = torch.zeros((point_end - point_start, RANGE_AWARE_EXTRA_DIM), dtype=dtype, device=device)
+        local = torch.zeros(
+            (point_end - point_start, RANGE_AWARE_EXTRA_DIM), dtype=dtype, device=device
+        )
 
         for query_start in range(0, query_count, query_chunk_size):
             query_end = min(query_count, query_start + query_chunk_size)
@@ -219,7 +244,9 @@ def _range_relation_features(points: torch.Tensor, typed_queries: list[dict[str,
                 + torch.maximum(below_lat, above_lat).square()
                 + torch.maximum(below_lon, above_lon).square()
             )
-            local[:, 3] = torch.maximum(local[:, 3], torch.exp(-4.0 * outside_dist).max(dim=1).values)
+            local[:, 3] = torch.maximum(
+                local[:, 3], torch.exp(-4.0 * outside_dist).max(dim=1).values
+            )
 
             center_dist = torch.sqrt(
                 ((rel_t - 0.5) * 2.0).square()
@@ -252,22 +279,36 @@ def _build_workload_blind_context_point_features(points: torch.Tensor) -> torch.
     base = points[:, :8].float().clone()
     n_points = int(points.shape[0])
     if n_points == 0:
-        return torch.empty((0, CONTEXT_WORKLOAD_BLIND_POINT_DIM), dtype=torch.float32, device=points.device)
+        return torch.empty(
+            (0, CONTEXT_WORKLOAD_BLIND_POINT_DIM), dtype=torch.float32, device=points.device
+        )
 
     device = points.device
     dtype = torch.float32
     extras = torch.zeros((n_points, CONTEXT_WORKLOAD_BLIND_EXTRA_DIM), dtype=dtype, device=device)
-    is_start = points[:, 5].float() > 0.5 if points.shape[1] > 5 else torch.zeros(n_points, dtype=torch.bool, device=device)
-    is_end = points[:, 6].float() > 0.5 if points.shape[1] > 6 else torch.zeros(n_points, dtype=torch.bool, device=device)
+    is_start = (
+        points[:, 5].float() > 0.5
+        if points.shape[1] > 5
+        else torch.zeros(n_points, dtype=torch.bool, device=device)
+    )
+    is_end = (
+        points[:, 6].float() > 0.5
+        if points.shape[1] > 6
+        else torch.zeros(n_points, dtype=torch.bool, device=device)
+    )
     indices = torch.arange(n_points, device=device)
     start_indices = torch.where(is_start)[0]
     if start_indices.numel() == 0 or int(start_indices[0].item()) != 0:
-        start_indices = torch.cat([torch.zeros((1,), dtype=torch.long, device=device), start_indices])
+        start_indices = torch.cat(
+            [torch.zeros((1,), dtype=torch.long, device=device), start_indices]
+        )
     end_indices = torch.where(is_end)[0]
     if end_indices.numel() == 0 or int(end_indices[-1].item()) != n_points - 1:
-        end_indices = torch.cat([end_indices, torch.tensor([n_points - 1], dtype=torch.long, device=device)])
+        end_indices = torch.cat(
+            [end_indices, torch.tensor([n_points - 1], dtype=torch.long, device=device)]
+        )
 
-    for start_tensor, end_tensor in zip(start_indices.tolist(), end_indices.tolist()):
+    for start_tensor, end_tensor in zip(start_indices.tolist(), end_indices.tolist(), strict=False):
         start = int(start_tensor)
         end_inclusive = int(end_tensor)
         if end_inclusive < start:
@@ -308,7 +349,7 @@ def _build_workload_blind_context_point_features(points: torch.Tensor) -> torch.
     extras[:, 5] = torch.where(prev_valid, prev_dist, torch.zeros_like(prev_dist))
     extras[:, 6] = torch.where(next_valid, next_dist, torch.zeros_like(next_dist))
 
-    for start_tensor, end_tensor in zip(start_indices.tolist(), end_indices.tolist()):
+    for start_tensor, end_tensor in zip(start_indices.tolist(), end_indices.tolist(), strict=False):
         start = int(start_tensor)
         end_inclusive = int(end_tensor)
         if end_inclusive < start:
@@ -332,14 +373,24 @@ def _build_workload_blind_context_point_features(points: torch.Tensor) -> torch.
         speed_delta = torch.abs(points[:, 3].float() - points[prev_idx, 3].float())
         next_speed_delta = torch.abs(points[next_idx, 3].float() - points[:, 3].float())
         extras[:, 7] = torch.where(prev_valid, heading_delta, torch.zeros_like(heading_delta))
-        extras[:, 8] = torch.where(prev_valid, torch.log1p(speed_delta), torch.zeros_like(speed_delta))
-        extras[:, 13] = torch.where(next_valid, next_heading_delta, torch.zeros_like(next_heading_delta))
-        extras[:, 14] = torch.where(next_valid, torch.log1p(next_speed_delta), torch.zeros_like(next_speed_delta))
+        extras[:, 8] = torch.where(
+            prev_valid, torch.log1p(speed_delta), torch.zeros_like(speed_delta)
+        )
+        extras[:, 13] = torch.where(
+            next_valid, next_heading_delta, torch.zeros_like(next_heading_delta)
+        )
+        extras[:, 14] = torch.where(
+            next_valid, torch.log1p(next_speed_delta), torch.zeros_like(next_speed_delta)
+        )
 
     both_valid = prev_valid & next_valid
-    chord_dist = torch.linalg.vector_norm(points[next_idx, 1:3].float() - points[prev_idx, 1:3].float(), dim=1)
+    chord_dist = torch.linalg.vector_norm(
+        points[next_idx, 1:3].float() - points[prev_idx, 1:3].float(), dim=1
+    )
     curvature = torch.clamp(prev_dist + next_dist - chord_dist, min=0.0)
-    extras[:, 11] = torch.where(both_valid, torch.log1p(prev_dt + next_dt), torch.zeros_like(prev_dt))
+    extras[:, 11] = torch.where(
+        both_valid, torch.log1p(prev_dt + next_dt), torch.zeros_like(prev_dt)
+    )
     extras[:, 12] = torch.where(both_valid, curvature, torch.zeros_like(curvature))
     extras[:, 15] = torch.log1p(torch.maximum(extras[:, 5], extras[:, 6]))
 
@@ -351,7 +402,9 @@ def build_workload_blind_point_features(points: torch.Tensor) -> torch.Tensor:
     return _build_workload_blind_context_point_features(points)[:, :WORKLOAD_BLIND_POINT_DIM]
 
 
-def build_workload_blind_point_features_for_dim(points: torch.Tensor, point_dim: int) -> torch.Tensor:
+def build_workload_blind_point_features_for_dim(
+    points: torch.Tensor, point_dim: int
+) -> torch.Tensor:
     """Build workload-blind features compatible with current and old checkpoints."""
     point_dim_int = int(point_dim)
     features = _build_workload_blind_context_point_features(points)
@@ -369,7 +422,9 @@ def _spatial_density_features(points: torch.Tensor, bins: int = 64) -> torch.Ten
     """Return query-free spatial density/sparsity features from the current point cloud."""
     n_points = int(points.shape[0])
     if n_points == 0:
-        return torch.empty((0, HISTORICAL_PRIOR_DENSITY_DIM), dtype=torch.float32, device=points.device)
+        return torch.empty(
+            (0, HISTORICAL_PRIOR_DENSITY_DIM), dtype=torch.float32, device=points.device
+        )
 
     bin_count = max(1, int(bins))
     lat = points[:, 1].float()
@@ -396,7 +451,9 @@ def _clock_time_features(points: torch.Tensor) -> torch.Tensor:
     """Return circular query-free clock-time features for historical-prior KNN."""
     n_points = int(points.shape[0])
     if n_points == 0:
-        return torch.empty((0, HISTORICAL_PRIOR_CLOCK_DIM), dtype=torch.float32, device=points.device)
+        return torch.empty(
+            (0, HISTORICAL_PRIOR_CLOCK_DIM), dtype=torch.float32, device=points.device
+        )
     phase = torch.remainder(points[:, 0].float(), 86_400.0) / 86_400.0
     angle = phase * (2.0 * math.pi)
     return torch.stack([torch.sin(angle), torch.cos(angle)], dim=1)
@@ -428,7 +485,9 @@ def _mmsi_hash_features(point_mmsis: torch.Tensor) -> torch.Tensor:
     if point_mmsis.ndim != 1:
         raise ValueError("point_mmsis must be a vector.")
     if int(point_mmsis.numel()) == 0:
-        return torch.empty((0, HISTORICAL_PRIOR_MMSI_DIM), dtype=torch.float32, device=point_mmsis.device)
+        return torch.empty(
+            (0, HISTORICAL_PRIOR_MMSI_DIM), dtype=torch.float32, device=point_mmsis.device
+        )
     mmsi = point_mmsis.to(dtype=torch.float64)
     valid = mmsi > 0
     freqs = torch.tensor([12.9898, 78.233], dtype=torch.float64, device=point_mmsis.device)
@@ -439,15 +498,15 @@ def _mmsi_hash_features(point_mmsis: torch.Tensor) -> torch.Tensor:
     return torch.where(valid.unsqueeze(1), features, torch.zeros_like(features))
 
 
-def _legacy_historical_prior_point_features(points: torch.Tensor) -> torch.Tensor:
+def _historical_prior_route_context_features(points: torch.Tensor) -> torch.Tensor:
     """Build the query-free route-context features used by historical-prior KNN."""
     features = _build_workload_blind_context_point_features(points)
-    return features[:, list(HISTORICAL_PRIOR_FEATURE_INDICES)]
+    return features[:, list(HISTORICAL_PRIOR_ROUTE_CONTEXT_FEATURE_INDICES)]
 
 
 def build_historical_prior_point_features(points: torch.Tensor) -> torch.Tensor:
     """Build query-free route, clock-time, and density features for historical-prior KNN."""
-    route_context = _legacy_historical_prior_point_features(points)
+    route_context = _historical_prior_route_context_features(points)
     clock = _clock_time_features(points)
     density = _spatial_density_features(points)
     return torch.cat([route_context, clock, density], dim=1)
@@ -460,8 +519,10 @@ def build_historical_prior_mmsi_point_features(
 ) -> torch.Tensor:
     """Build historical-prior features with deterministic vessel-identity hashes."""
     if boundaries is None or trajectory_mmsis is None:
-        raise ValueError("model_type='historical_prior_mmsi' requires trajectory_mmsis and boundaries.")
-    route_context = _legacy_historical_prior_point_features(points)
+        raise ValueError(
+            "model_type='historical_prior_mmsi' requires trajectory_mmsis and boundaries."
+        )
+    route_context = _historical_prior_route_context_features(points)
     point_mmsis = point_mmsis_from_trajectory_mmsis(
         point_count=int(points.shape[0]),
         boundaries=boundaries,
@@ -482,7 +543,9 @@ def build_range_prior_clock_density_point_features(points: torch.Tensor) -> torc
     return torch.cat([context, clock, density], dim=1)
 
 
-def _extent_for_absolute_features(points: torch.Tensor, query_prior_field: dict[str, Any] | None) -> dict[str, float]:
+def _extent_for_absolute_features(
+    points: torch.Tensor, query_prior_field: dict[str, Any] | None
+) -> dict[str, float]:
     """Return the training extent used for stable absolute features."""
     if query_prior_field is not None and isinstance(query_prior_field.get("extent"), dict):
         return dict(query_prior_field["extent"])
@@ -500,16 +563,23 @@ def _extent_for_absolute_features(points: torch.Tensor, query_prior_field: dict[
     }
 
 
-def _absolute_range_v2_features(points: torch.Tensor, query_prior_field: dict[str, Any] | None) -> torch.Tensor:
+def _absolute_range_v2_features(
+    points: torch.Tensor, query_prior_field: dict[str, Any] | None
+) -> torch.Tensor:
     """Return fixed-extent absolute time and geo features for v2."""
     n_points = int(points.shape[0])
     if n_points == 0:
-        return torch.empty((0, WORKLOAD_BLIND_RANGE_V2_ABSOLUTE_DIM), dtype=torch.float32, device=points.device)
+        return torch.empty(
+            (0, WORKLOAD_BLIND_RANGE_V2_ABSOLUTE_DIM), dtype=torch.float32, device=points.device
+        )
     extent = _extent_for_absolute_features(points, query_prior_field)
-    has_training_extent = query_prior_field is not None and isinstance(query_prior_field.get("extent"), dict)
+    has_training_extent = query_prior_field is not None and isinstance(
+        query_prior_field.get("extent"), dict
+    )
     if has_training_extent:
         t_norm = (
-            (points[:, 0].float() - float(extent["t_min"])) / max(1e-9, float(extent["t_max"]) - float(extent["t_min"]))
+            (points[:, 0].float() - float(extent["t_min"]))
+            / max(1e-9, float(extent["t_max"]) - float(extent["t_min"]))
         ).clamp(0.0, 1.0)
     else:
         t_norm = torch.remainder(points[:, 0].float(), 86_400.0) / 86_400.0
@@ -530,6 +600,15 @@ def build_workload_blind_range_v2_point_features(
     context = build_workload_blind_point_features_for_dim(points, CONTEXT_WORKLOAD_BLIND_POINT_DIM)
     absolute = _absolute_range_v2_features(points, query_prior_field)
     priors = sample_query_prior_fields(points, query_prior_field)
+    if int(priors.numel()) > 0:
+        priors = priors.clone()
+        for field_name in WORKLOAD_BLIND_RANGE_V2_MODEL_DISABLED_PRIOR_FIELDS:
+            try:
+                field_idx = QUERY_PRIOR_FIELD_NAMES.index(field_name)
+            except ValueError:
+                continue
+            if field_idx < int(priors.shape[1]):
+                priors[:, field_idx] = 0.0
     return torch.cat([context, absolute, priors], dim=1)
 
 
@@ -545,8 +624,6 @@ def build_model_point_features(
     normalized_type = str(model_type).lower()
     if normalized_type == "baseline":
         return points[:, :7].float()
-    if normalized_type == "turn_aware":
-        return points[:, :8].float()
     if normalized_type == "workload_blind_range":
         return build_workload_blind_point_features(points)
     if normalized_type == "range_prior":
@@ -554,13 +631,17 @@ def build_model_point_features(
     if normalized_type in {"range_prior_clock_density", "segment_context_range"}:
         return build_range_prior_clock_density_point_features(points)
     if normalized_type == "workload_blind_range_v2":
-        return build_workload_blind_range_v2_point_features(points, query_prior_field=query_prior_field)
+        return build_workload_blind_range_v2_point_features(
+            points, query_prior_field=query_prior_field
+        )
     if normalized_type in {"historical_prior", "historical_prior_student"}:
         return build_historical_prior_point_features(points)
     if normalized_type == "historical_prior_mmsi":
         return build_historical_prior_mmsi_point_features(points, boundaries, trajectory_mmsis)
     if normalized_type == "range_aware":
-        range_count = sum(1 for query in workload.typed_queries if str(query.get("type", "")).lower() == "range")
+        range_count = sum(
+            1 for query in workload.typed_queries if str(query.get("type", "")).lower() == "range"
+        )
         if range_count != len(workload.typed_queries):
             raise ValueError("model_type='range_aware' requires a pure range workload.")
         base = points[:, :8].float()
@@ -616,18 +697,20 @@ def _build_query_free_point_features_for_dim(
         return build_workload_blind_point_features_for_dim(points, CONTEXT_WORKLOAD_BLIND_POINT_DIM)
     if point_dim_int == RANGE_PRIOR_CLOCK_DENSITY_POINT_DIM:
         return build_range_prior_clock_density_point_features(points)
-    if point_dim_int == OLD_HISTORICAL_PRIOR_POINT_DIM:
-        return _legacy_historical_prior_point_features(points)
+    if point_dim_int == HISTORICAL_PRIOR_ROUTE_CONTEXT_POINT_DIM:
+        return _historical_prior_route_context_features(points)
     if point_dim_int == HISTORICAL_PRIOR_DENSITY_POINT_DIM:
-        legacy = _legacy_historical_prior_point_features(points)
+        route_context = _historical_prior_route_context_features(points)
         density = _spatial_density_features(points)
-        return torch.cat([legacy, density], dim=1)
+        return torch.cat([route_context, density], dim=1)
     if point_dim_int == HISTORICAL_PRIOR_POINT_DIM:
         return build_historical_prior_point_features(points)
     if point_dim_int == HISTORICAL_PRIOR_MMSI_POINT_DIM:
         return build_historical_prior_mmsi_point_features(points, boundaries, trajectory_mmsis)
     if point_dim_int == WORKLOAD_BLIND_RANGE_V2_POINT_DIM:
-        return build_workload_blind_range_v2_point_features(points, query_prior_field=query_prior_field)
+        return build_workload_blind_range_v2_point_features(
+            points, query_prior_field=query_prior_field
+        )
     raise ValueError(f"Unsupported workload-blind saved model point_dim={point_dim}.")
 
 

@@ -7,7 +7,7 @@ import math
 import torch
 import torch.nn.functional as F
 
-from experiments.experiment_config import ModelConfig
+from config.experiment_config import ModelConfig
 from simplification.simplify_trajectories import evenly_spaced_indices
 
 _QUANTILE_SUBSAMPLE_CAP = 1_000_000  # torch.quantile errors past 2^24 on some builds.
@@ -55,7 +55,9 @@ def _balanced_pointwise_loss(
         zero_idx = zero_idx[zero_sample_order.to(zero_idx.device)]
 
     pointwise_idx = torch.cat([positive_idx, zero_idx]) if zero_idx.numel() > 0 else positive_idx
-    return F.binary_cross_entropy_with_logits(pred[pointwise_idx], target[pointwise_idx].clamp(0.0, 1.0))
+    return F.binary_cross_entropy_with_logits(
+        pred[pointwise_idx], target[pointwise_idx].clamp(0.0, 1.0)
+    )
 
 
 def _balanced_pointwise_loss_rows(
@@ -67,7 +69,9 @@ def _balanced_pointwise_loss_rows(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Return balanced pointwise BCE for each padded row in one tensor path."""
     if pred.ndim != 2 or target.shape != pred.shape or valid_mask.shape != pred.shape:
-        raise ValueError("pred, target, and valid_mask must have matching shape [batch, window_length].")
+        raise ValueError(
+            "pred, target, and valid_mask must have matching shape [batch, window_length]."
+        )
 
     positive = valid_mask & (target > 0.0)
     zero = valid_mask & (target <= 0.0)
@@ -76,12 +80,16 @@ def _balanced_pointwise_loss_rows(
     active_rows = positive_count > 0
 
     if pred.device.type == "cpu":
-        random_values = torch.rand(pred.shape, dtype=pred.dtype, device=pred.device, generator=generator)
+        random_values = torch.rand(
+            pred.shape, dtype=pred.dtype, device=pred.device, generator=generator
+        )
     else:
         random_values = torch.rand(pred.shape, dtype=pred.dtype, device=pred.device)
     zero_order = random_values.masked_fill(~zero, float("inf")).argsort(dim=1)
     zero_rank = torch.empty_like(zero_order)
-    rank_values = torch.arange(pred.shape[1], dtype=zero_order.dtype, device=pred.device).unsqueeze(0)
+    rank_values = torch.arange(pred.shape[1], dtype=zero_order.dtype, device=pred.device).unsqueeze(
+        0
+    )
     zero_rank.scatter_(1, zero_order, rank_values.expand_as(zero_order))
     selected_zero = zero & (zero_rank < max_zero.unsqueeze(1))
     selected = positive | selected_zero
@@ -104,7 +112,9 @@ def _pointwise_bce_loss_rows(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Return unbalanced pointwise BCE for every valid supervised point."""
     if pred.ndim != 2 or target.shape != pred.shape or valid_mask.shape != pred.shape:
-        raise ValueError("pred, target, and valid_mask must have matching shape [batch, window_length].")
+        raise ValueError(
+            "pred, target, and valid_mask must have matching shape [batch, window_length]."
+        )
 
     per_element = F.binary_cross_entropy_with_logits(
         pred,
@@ -147,7 +157,7 @@ def _budget_topk_recall_loss(
         ratio = min(1.0, max(0.0, float(raw_ratio)))
         if ratio <= 0.0:
             continue
-        keep_count = min(valid_count, max(1, int(math.ceil(ratio * valid_count))))
+        keep_count = min(valid_count, max(1, math.ceil(ratio * valid_count)))
         ideal_mass = torch.topk(valid_targets, k=keep_count).values.sum().detach()
         if float(ideal_mass.item()) <= 1e-12:
             continue
@@ -173,7 +183,9 @@ def _budget_topk_recall_loss_rows(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Return budget-top-k loss for each row in a padded prediction batch."""
     if pred.ndim != 2 or target.shape != pred.shape or valid_mask.shape != pred.shape:
-        raise ValueError("pred, target, and valid_mask must have matching shape [batch, window_length].")
+        raise ValueError(
+            "pred, target, and valid_mask must have matching shape [batch, window_length]."
+        )
 
     batch_size, window_length = pred.shape
     nonnegative_target = target.clamp(min=0.0)
@@ -206,8 +218,13 @@ def _budget_topk_recall_loss_rows(
         if not bool(active.any().item()):
             continue
 
-        soft_keep = torch.sigmoid((pred - threshold.unsqueeze(1)) / soft_keep_temperature) * valid_mask.float()
-        soft_keep = soft_keep * (keep_count.float() / soft_keep.sum(dim=1).clamp(min=1e-6)).unsqueeze(1)
+        soft_keep = (
+            torch.sigmoid((pred - threshold.unsqueeze(1)) / soft_keep_temperature)
+            * valid_mask.float()
+        )
+        soft_keep = soft_keep * (
+            keep_count.float() / soft_keep.sum(dim=1).clamp(min=1e-6)
+        ).unsqueeze(1)
         soft_keep = soft_keep.clamp(max=1.0)
         captured_mass = (soft_keep * nonnegative_target).sum(dim=1)
         recall = (captured_mass / ideal_mass.clamp(min=1e-6)).clamp(0.0, 1.0)
@@ -236,9 +253,11 @@ def _budget_stratified_recall_loss_rows(
     optimizes soft target-mass capture within each stratum independently.
     """
     if pred.ndim != 2 or target.shape != pred.shape or valid_mask.shape != pred.shape:
-        raise ValueError("pred, target, and valid_mask must have matching shape [batch, window_length].")
+        raise ValueError(
+            "pred, target, and valid_mask must have matching shape [batch, window_length]."
+        )
 
-    batch_size, window_length = pred.shape
+    batch_size, _window_length = pred.shape
     nonnegative_target = target.clamp(min=0.0)
     row_loss_sum = pred.new_zeros((batch_size,))
     row_loss_count = torch.zeros((batch_size,), dtype=torch.long, device=pred.device)
@@ -258,7 +277,7 @@ def _budget_stratified_recall_loss_rows(
             ratio = min(1.0, max(0.0, float(raw_ratio)))
             if ratio <= 0.0:
                 continue
-            keep_count = min(valid_count, max(2, int(math.ceil(ratio * valid_count))))
+            keep_count = min(valid_count, max(2, math.ceil(ratio * valid_count)))
             interior_count = valid_count - 2
             interior_slots = keep_count - 2
             if interior_slots <= 0 or interior_slots >= interior_count:
@@ -267,8 +286,8 @@ def _budget_stratified_recall_loss_rows(
             ratio_loss_sum = pred.new_tensor(0.0)
             ratio_loss_count = 0
             for slot in range(interior_slots):
-                left = 1 + int(math.floor(slot * interior_count / interior_slots))
-                right = 1 + int(math.floor((slot + 1) * interior_count / interior_slots))
+                left = 1 + math.floor(slot * interior_count / interior_slots)
+                right = 1 + math.floor((slot + 1) * interior_count / interior_slots)
                 if right <= left:
                     continue
                 candidate_idx = valid_idx[left:right]
@@ -279,7 +298,9 @@ def _budget_stratified_recall_loss_rows(
 
                 candidate_scores = pred[row, candidate_idx]
                 if center_penalty > 0.0 and int(candidate_idx.numel()) > 1:
-                    local_positions = torch.arange(left, right, dtype=pred.dtype, device=pred.device)
+                    local_positions = torch.arange(
+                        left, right, dtype=pred.dtype, device=pred.device
+                    )
                     center = 0.5 * float(left + right - 1)
                     denom = max(1.0, 0.5 * float(right - left))
                     center_distance = torch.abs(local_positions - center) / denom
@@ -333,17 +354,27 @@ def _budget_temporal_cdf_loss_rows(
         ratio = min(1.0, max(0.0, float(raw_ratio)))
         if ratio <= 0.0:
             continue
-        keep_count = torch.ceil(valid_counts.float() * ratio).to(dtype=torch.long).clamp(min=1, max=window_length)
+        keep_count = (
+            torch.ceil(valid_counts.float() * ratio)
+            .to(dtype=torch.long)
+            .clamp(min=1, max=window_length)
+        )
         active = active_base & (keep_count < valid_counts)
         if not bool(active.any().item()):
             continue
 
         threshold = sorted_score.gather(1, (keep_count - 1).unsqueeze(1)).squeeze(1).detach()
-        soft_keep = torch.sigmoid((pred - threshold.unsqueeze(1)) / soft_keep_temperature) * valid_float
-        soft_keep = soft_keep * (keep_count.float() / soft_keep.sum(dim=1).clamp(min=1e-6)).unsqueeze(1)
+        soft_keep = (
+            torch.sigmoid((pred - threshold.unsqueeze(1)) / soft_keep_temperature) * valid_float
+        )
+        soft_keep = soft_keep * (
+            keep_count.float() / soft_keep.sum(dim=1).clamp(min=1e-6)
+        ).unsqueeze(1)
         soft_keep = soft_keep.clamp(max=1.0)
         keep_cdf = soft_keep.cumsum(dim=1) / keep_count.float().clamp(min=1.0).unsqueeze(1)
-        ratio_loss = (((keep_cdf - target_cdf) ** 2) * valid_float).sum(dim=1) / valid_counts.clamp(min=1).float()
+        ratio_loss = (((keep_cdf - target_cdf) ** 2) * valid_float).sum(dim=1) / valid_counts.clamp(
+            min=1
+        ).float()
         row_loss_sum = torch.where(active, row_loss_sum + ratio_loss, row_loss_sum)
         row_loss_count = torch.where(active, row_loss_count + 1, row_loss_count)
 
@@ -384,13 +415,20 @@ def _effective_temporal_residual_label_mode(
     return "temporal"
 
 
-def _effective_budget_loss_ratios(model_config: ModelConfig, temporal_residual_label_mode: str) -> tuple[float, ...]:
+def _effective_budget_loss_ratios(
+    model_config: ModelConfig, temporal_residual_label_mode: str
+) -> tuple[float, ...]:
     """Return retained-budget ratios in the candidate set the model actually controls."""
     ratios = _budget_loss_ratios(model_config)
-    if _effective_temporal_residual_label_mode(model_config, temporal_residual_label_mode) != "temporal":
+    if (
+        _effective_temporal_residual_label_mode(model_config, temporal_residual_label_mode)
+        != "temporal"
+    ):
         return ratios
 
-    temporal_fraction = min(1.0, max(0.0, float(getattr(model_config, "mlqds_temporal_fraction", 0.0))))
+    temporal_fraction = min(
+        1.0, max(0.0, float(getattr(model_config, "mlqds_temporal_fraction", 0.0)))
+    )
     if temporal_fraction <= 0.0:
         return ratios
 
@@ -429,8 +467,8 @@ def _temporal_base_masks_for_budget_ratios(
             point_count = int(end - start)
             if point_count <= 0:
                 continue
-            k_total = min(point_count, max(2, int(math.ceil(total_ratio * point_count))))
-            k_base = min(k_total, max(2, int(math.ceil(k_total * base_fraction))))
+            k_total = min(point_count, max(2, math.ceil(total_ratio * point_count)))
+            k_base = min(k_total, max(2, math.ceil(k_total * base_fraction)))
             base_idx = evenly_spaced_indices(point_count, k_base, device)
             base_mask[start + base_idx] = True
         base_ratio = float(base_mask.float().mean().item()) if n_points > 0 else 0.0
@@ -533,7 +571,9 @@ def _ranking_loss_for_type(
     # CPU for deterministic consumption, then move only the sampled positions
     # to the model device instead of synchronizing labels/indices back to CPU.
     top_sample_pos = torch.randint(0, top_idx.numel(), (sample_count,), generator=generator)
-    comparison_sample_pos = torch.randint(0, valid_idx.numel(), (sample_count,), generator=generator)
+    comparison_sample_pos = torch.randint(
+        0, valid_idx.numel(), (sample_count,), generator=generator
+    )
     top_sample_idx = top_idx[top_sample_pos.to(top_idx.device)]
     comparison_idx = valid_idx[comparison_sample_pos.to(valid_idx.device)]
     keep_pair = (top_sample_idx != comparison_idx) & ~torch.isclose(
@@ -547,6 +587,8 @@ def _ranking_loss_for_type(
 
     target_order = torch.sign(target[top_sample_idx] - target[comparison_idx])
     return (
-        F.margin_ranking_loss(pred[top_sample_idx], pred[comparison_idx], target_order, margin=margin),
+        F.margin_ranking_loss(
+            pred[top_sample_idx], pred[comparison_idx], target_order, margin=margin
+        ),
         int(top_sample_idx.numel()),
     )

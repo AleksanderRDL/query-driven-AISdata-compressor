@@ -8,11 +8,11 @@ import torch
 
 from data.trajectory_index import trajectory_ids_for_points
 from evaluation.range_usefulness import RANGE_USEFULNESS_WEIGHTS
+from queries.query_types import NUM_QUERY_TYPES, QUERY_NAME_TO_ID, QUERY_TYPE_ID_RANGE
 from queries.range_geometry import (
     points_in_range_box,
     segment_box_bracket_mask,
 )
-from queries.query_types import QUERY_NAME_TO_ID, QUERY_TYPE_ID_RANGE, NUM_QUERY_TYPES
 
 RANGE_LABEL_MODES = ("point_f1", "usefulness", "usefulness_balanced", "usefulness_ship_balanced")
 RANGE_USEFULNESS_LABEL_WEIGHTS = dict(RANGE_USEFULNESS_WEIGHTS)
@@ -37,7 +37,9 @@ def _set_query_singleton_gain(original_ids: set[int]) -> float:
     return float(2.0 / (len(original_ids) + 1.0))
 
 
-def _add_distributed_hit_label(labels: torch.Tensor, support: torch.Tensor, type_idx: int, gain: float) -> None:
+def _add_distributed_hit_label(
+    labels: torch.Tensor, support: torch.Tensor, type_idx: int, gain: float
+) -> None:
     """Distribute one trajectory-hit gain over its interchangeable support points."""
     support_count = int(support.sum().item())
     if support_count <= 0:
@@ -194,7 +196,9 @@ def _add_range_point_f1_labels(
         boundaries,
         range_boundary_prior_weight,
     )
-    labels[box_support, type_idx] += float(component_weight) * base_gain * boundary_weights[box_support]
+    labels[box_support, type_idx] += (
+        float(component_weight) * base_gain * boundary_weights[box_support]
+    )
 
 
 def _support_trajectory_ids(
@@ -312,7 +316,9 @@ def _add_range_usefulness_labels(
         else:
             crossing_gain = float(2.0 / (crossing_count + 1.0))
             for target in _label_targets(labels, component_labels, "range_crossing_f1"):
-                target[crossing_support, type_idx] += float(weights["range_crossing_f1"]) * crossing_gain
+                target[crossing_support, type_idx] += (
+                    float(weights["range_crossing_f1"]) * crossing_gain
+                )
 
     if not hit_ids:
         return
@@ -341,7 +347,9 @@ def _add_range_usefulness_labels(
         else:
             boundary_gain = float(2.0 / (boundary_count + 1.0))
             for target in _label_targets(labels, component_labels, "range_entry_exit_f1"):
-                target[boundary_support, type_idx] += float(weights["range_entry_exit_f1"]) * boundary_gain
+                target[boundary_support, type_idx] += (
+                    float(weights["range_entry_exit_f1"]) * boundary_gain
+                )
 
     for trajectory_id in sorted(hit_ids):
         if trajectory_id >= len(boundaries):
@@ -365,7 +373,9 @@ def _add_range_usefulness_labels(
         if support_count > 0:
             ship_coverage_gain = float(2.0 / (support_count + 1.0))
             for target in _label_targets(labels, component_labels, "range_ship_coverage"):
-                target[trajectory_support, type_idx] += ship_coverage_mass_per_ship * ship_coverage_gain
+                target[trajectory_support, type_idx] += (
+                    ship_coverage_mass_per_ship * ship_coverage_gain
+                )
 
         in_offsets = torch.where(box_support[start:end])[0]
         if in_offsets.numel() == 0:
@@ -435,7 +445,9 @@ def _balance_range_component_label_mass(
         if mass <= 1e-12:
             component_labels[component_name][:, type_idx] = 0.0
             continue
-        target_mass = total_mass * float(RANGE_USEFULNESS_LABEL_WEIGHTS[component_name]) / available_weight
+        target_mass = (
+            total_mass * float(RANGE_USEFULNESS_LABEL_WEIGHTS[component_name]) / available_weight
+        )
         scaled = values * float(target_mass / mass)
         component_labels[component_name][:, type_idx] = scaled
         balanced += scaled
@@ -474,7 +486,9 @@ def _compute_typed_importance_labels(
     for q in typed_queries:
         qtype = str(q["type"]).lower()
         if qtype != "range":
-            raise ValueError(f"Only range queries are supported for labels; got query type: {qtype}")
+            raise ValueError(
+                f"Only range queries are supported for labels; got query type: {qtype}"
+            )
         t_idx = QUERY_NAME_TO_ID[qtype]
         params = q["params"]
         query_counts[t_idx] += 1.0

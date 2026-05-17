@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Callable, cast
+from collections.abc import Callable
+from typing import cast
 
 import torch
 
-from experiments.torch_runtime import normalize_amp_mode, torch_autocast_context
+from runtime.torch_runtime import normalize_amp_mode, torch_autocast_context
 from training.checkpoints import ModelArtifacts
 from training.model_features import (
     build_query_free_point_features_for_dim,
@@ -23,7 +24,9 @@ def _model_device(model: torch.nn.Module) -> torch.device:
     return torch.device("cpu")
 
 
-def _resolve_predict_device(model: torch.nn.Module, device: torch.device | str | None) -> torch.device:
+def _resolve_predict_device(
+    model: torch.nn.Module, device: torch.device | str | None
+) -> torch.device:
     """Resolve the inference device for windowed prediction."""
     if device is not None:
         return torch.device(device)
@@ -114,7 +117,9 @@ def windowed_predict_with_heads(
                         "factorized window_independent models must return head logits with shape "
                         f"[1, n_points, n_heads]; got {tuple(head_logits.shape)}."
                     )
-                heads = head_logits.reshape(int(head_logits.shape[1]), int(head_logits.shape[2])).to(output_device)
+                heads = head_logits.reshape(
+                    int(head_logits.shape[1]), int(head_logits.shape[2])
+                ).to(output_device)
             return point_scores.reshape(-1).to(output_device), heads
         finally:
             if original_device != predict_device:
@@ -160,21 +165,33 @@ def windowed_predict_with_heads(
                         dtype=window_head_logits.dtype,
                         device=predict_device,
                     )
-                    head_logit_count = torch.zeros((point_count,), dtype=window_head_logits.dtype, device=predict_device)
+                    head_logit_count = torch.zeros(
+                        (point_count,), dtype=window_head_logits.dtype, device=predict_device
+                    )
                 for batch_idx in range(window_scores.shape[0]):
                     point_indices = indices_dev[batch_idx]
                     valid_points = point_indices >= 0
-                    point_score_sum[point_indices[valid_points]] += window_scores[batch_idx, valid_points]
+                    point_score_sum[point_indices[valid_points]] += window_scores[
+                        batch_idx, valid_points
+                    ]
                     point_score_count[point_indices[valid_points]] += 1.0
-                    if window_head_logits is not None and head_logit_sum is not None and head_logit_count is not None:
-                        head_logit_sum[point_indices[valid_points]] += window_head_logits[batch_idx, valid_points]
+                    if (
+                        window_head_logits is not None
+                        and head_logit_sum is not None
+                        and head_logit_count is not None
+                    ):
+                        head_logit_sum[point_indices[valid_points]] += window_head_logits[
+                            batch_idx, valid_points
+                        ]
                         head_logit_count[point_indices[valid_points]] += 1.0
 
         point_score_count = point_score_count.clamp(min=1.0)
         scores = (point_score_sum / point_score_count).to(output_device)
         head_logits = None
         if head_logit_sum is not None and head_logit_count is not None:
-            head_logits = (head_logit_sum / head_logit_count.clamp(min=1.0).unsqueeze(-1)).to(output_device)
+            head_logits = (head_logit_sum / head_logit_count.clamp(min=1.0).unsqueeze(-1)).to(
+                output_device
+            )
         return scores, head_logits
     finally:
         if original_device != predict_device:
@@ -246,7 +263,9 @@ def forward_predict(
     else:
         model_points = points[:, :point_dim]
         if queries is None or query_type_ids is None:
-            raise RuntimeError("query-aware checkpoint inference requires queries and query_type_ids.")
+            raise RuntimeError(
+                "query-aware checkpoint inference requires queries and query_type_ids."
+            )
         norm_points, norm_queries = artifacts.scaler.transform(model_points, queries)
     return windowed_predict(
         model=artifacts.model,

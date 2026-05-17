@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Protocol, cast
+from typing import Any, Protocol, cast
 
 import torch
 import torch.nn.functional as F
 
-from experiments.experiment_config import ModelConfig
-from experiments.torch_runtime import torch_autocast_context
+from config.experiment_config import ModelConfig
 from queries.query_types import NUM_QUERY_TYPES
+from runtime.torch_runtime import torch_autocast_context
+from training.targets.query_useful_v1 import QUERY_USEFUL_V1_HEAD_NAMES
 from training.training_losses import (
     _balanced_pointwise_loss_rows,
     _budget_stratified_recall_loss_rows,
@@ -58,6 +60,8 @@ def _factorized_query_useful_loss(
     global_indices: torch.Tensor | None = None,
     segment_ids: torch.Tensor | None = None,
     segment_size: int = 32,
+    segment_budget_head_weight: float = 0.10,
+    segment_level_loss_weight: float = 0.25,
 ) -> torch.Tensor:
     """Return auxiliary multi-head QueryUsefulV1 loss for v2 models."""
     if head_logits.shape != head_targets.shape or head_mask.shape != head_logits.shape:
@@ -72,7 +76,20 @@ def _factorized_query_useful_loss(
         head_targets.clamp(0.0, 1.0),
         reduction="none",
     )
-    head_weights = head_logits.new_tensor([0.30, 0.25, 0.15, 0.20, 0.10]).view(1, 1, -1)
+    segment_weight = max(0.0, float(segment_budget_head_weight))
+    default_weights = {
+        "query_hit_probability": 0.30,
+        "conditional_behavior_utility": 0.25,
+        "boundary_event_utility": 0.15,
+        "replacement_representative_value": 0.20,
+        "segment_budget_target": segment_weight,
+        "path_length_support_target": 0.05,
+    }
+    if int(head_logits.shape[-1]) == len(QUERY_USEFUL_V1_HEAD_NAMES):
+        weights = [default_weights.get(str(name), 0.05) for name in QUERY_USEFUL_V1_HEAD_NAMES]
+    else:
+        weights = [1.0 for _idx in range(int(head_logits.shape[-1]))]
+    head_weights = head_logits.new_tensor(weights).view(1, 1, -1)
     weighted = per_element * head_weights * valid.to(dtype=per_element.dtype)
     denom = (head_weights * valid.to(dtype=per_element.dtype)).sum().clamp(min=1.0)
     point_loss = weighted.sum() / denom
@@ -84,7 +101,7 @@ def _factorized_query_useful_loss(
         segment_ids=segment_ids,
         segment_size=segment_size,
     )
-    return point_loss + 0.25 * segment_loss
+    return point_loss + max(0.0, float(segment_level_loss_weight)) * segment_loss
 
 
 def _segment_budget_head_segment_level_loss(
@@ -139,7 +156,9 @@ def _segment_budget_head_segment_level_loss(
             continue
         pooled_logits = torch.stack(row_segment_logits)
         pooled_targets = torch.stack(row_segment_targets).clamp(0.0, 1.0)
-        losses.append(F.binary_cross_entropy_with_logits(pooled_logits, pooled_targets, reduction="mean"))
+        losses.append(
+            F.binary_cross_entropy_with_logits(pooled_logits, pooled_targets, reduction="mean")
+        )
         if int(pooled_logits.numel()) >= 2:
             target_diff = pooled_targets.unsqueeze(1) - pooled_targets.unsqueeze(0)
             logit_diff = pooled_logits.unsqueeze(1) - pooled_logits.unsqueeze(0)
@@ -221,6 +240,9 @@ def _train_one_epoch(
         batch_labels = training_target_dev[safe_global_idx]
         batch_label_mask = labelled_mask_dev[safe_global_idx] & valid_batch
         aux_loss = pred_batch.new_tensor(0.0)
+        aux_loss_weight = max(
+            0.0, float(getattr(model_config, "query_useful_aux_loss_weight", 0.50))
+        )
         if (
             head_logits_batch is not None
             and factorized_targets_dev is not None
@@ -230,7 +252,9 @@ def _train_one_epoch(
             batch_head_mask = factorized_mask_dev[safe_global_idx] & valid_batch.unsqueeze(-1)
             batch_segment_ids = None
             if canonical_segment_ids_dev is not None:
-                batch_segment_ids = canonical_segment_ids_dev[safe_global_idx].to(device=device, dtype=torch.long)
+                batch_segment_ids = canonical_segment_ids_dev[safe_global_idx].to(
+                    device=device, dtype=torch.long
+                )
                 batch_segment_ids = torch.where(
                     valid_batch,
                     batch_segment_ids,
@@ -242,6 +266,12 @@ def _train_one_epoch(
                 head_mask=batch_head_mask,
                 global_indices=batch_global_idx,
                 segment_ids=batch_segment_ids,
+                segment_budget_head_weight=float(
+                    getattr(model_config, "query_useful_segment_budget_head_weight", 0.10)
+                ),
+                segment_level_loss_weight=float(
+                    getattr(model_config, "query_useful_segment_level_loss_weight", 0.25)
+                ),
             )
         positive_row_mask = (batch_label_mask & (batch_labels > 0)).any(dim=1)
         positive_windows[active_type_id] += int(positive_row_mask.sum().item())
@@ -274,7 +304,9 @@ def _train_one_epoch(
                     valid_mask=batch_label_mask,
                     budget_ratios=budget_ratios,
                     temperature=budget_loss_temperature,
-                    center_weight=float(getattr(model_config, "mlqds_stratified_center_weight", 0.0)),
+                    center_weight=float(
+                        getattr(model_config, "mlqds_stratified_center_weight", 0.0)
+                    ),
                 )
             else:
                 rank_loss_rows, _rank_active_rows = _budget_topk_recall_loss_rows(
@@ -286,22 +318,28 @@ def _train_one_epoch(
                 )
 
             if bool(positive_row_mask.any().item()):
-                row_losses = rank_loss_rows + model_config.pointwise_loss_weight * pointwise_loss_rows
+                row_losses = (
+                    rank_loss_rows + model_config.pointwise_loss_weight * pointwise_loss_rows
+                )
                 temporal_distribution_weight = float(
                     getattr(model_config, "temporal_distribution_loss_weight", 0.0) or 0.0
                 )
                 if temporal_distribution_weight > 0.0:
-                    temporal_distribution_rows, _distribution_active_rows = _budget_temporal_cdf_loss_rows(
-                        pred=pred_batch,
-                        valid_mask=batch_label_mask,
-                        budget_ratios=budget_ratios,
-                        temperature=budget_loss_temperature,
+                    temporal_distribution_rows, _distribution_active_rows = (
+                        _budget_temporal_cdf_loss_rows(
+                            pred=pred_batch,
+                            valid_mask=batch_label_mask,
+                            budget_ratios=budget_ratios,
+                            temperature=budget_loss_temperature,
+                        )
                     )
-                    row_losses = row_losses + temporal_distribution_weight * temporal_distribution_rows
+                    row_losses = (
+                        row_losses + temporal_distribution_weight * temporal_distribution_rows
+                    )
                 loss = (
                     row_losses[positive_row_mask].sum() / float(batch_size)
-                    + 0.50 * aux_loss
-                    + model_config.l2_score_weight * (pred_batch ** 2).mean()
+                    + aux_loss_weight * aux_loss
+                    + model_config.l2_score_weight * (pred_batch**2).mean()
                 )
         elif loss_objective == "pointwise_bce":
             pointwise_direct_rows, pointwise_direct_active_rows = _pointwise_bce_loss_rows(
@@ -312,8 +350,8 @@ def _train_one_epoch(
             if bool(pointwise_direct_active_rows.any().item()):
                 loss = (
                     pointwise_direct_rows[pointwise_direct_active_rows].sum() / float(batch_size)
-                    + 0.50 * aux_loss
-                    + model_config.l2_score_weight * (pred_batch ** 2).mean()
+                    + aux_loss_weight * aux_loss
+                    + model_config.l2_score_weight * (pred_batch**2).mean()
                 )
         else:
             loss_terms: list[torch.Tensor] = []
@@ -333,12 +371,14 @@ def _train_one_epoch(
                     generator=training_sample_generator,
                 )
                 ranking_pair_counts[active_type_id] += int(pair_count)
-                loss_terms.append(rank_loss + model_config.pointwise_loss_weight * pointwise_loss_rows[row])
+                loss_terms.append(
+                    rank_loss + model_config.pointwise_loss_weight * pointwise_loss_rows[row]
+                )
             if loss_terms:
                 loss = (
                     torch.stack(loss_terms).sum() / float(batch_size)
-                    + 0.50 * aux_loss
-                    + model_config.l2_score_weight * (pred_batch ** 2).mean()
+                    + aux_loss_weight * aux_loss
+                    + model_config.l2_score_weight * (pred_batch**2).mean()
                 )
         timing["loss_s"] += time.perf_counter() - loss_t0
 
@@ -346,7 +386,9 @@ def _train_one_epoch(
             backward_t0 = time.perf_counter()
             opt.zero_grad(set_to_none=True)
             if not torch.isfinite(loss):
-                raise RuntimeError(f"Non-finite training loss with amp_mode={amp_mode}: {float(loss.item())}")
+                raise RuntimeError(
+                    f"Non-finite training loss with amp_mode={amp_mode}: {float(loss.item())}"
+                )
             clip_norm = float(getattr(model_config, "gradient_clip_norm", 0.0) or 0.0)
             if grad_scaler.is_enabled():
                 grad_scaler.scale(loss).backward()

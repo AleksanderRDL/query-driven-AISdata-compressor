@@ -1,10 +1,13 @@
 {
   "include": [
+    "benchmarking",
+    "config",
     "data",
     "evaluation",
-    "experiments",
     "models",
+    "orchestration",
     "queries",
+    "runtime",
     "simplification",
     "training",
     "scripts",

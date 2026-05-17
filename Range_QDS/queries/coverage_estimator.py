@@ -6,12 +6,12 @@ from dataclasses import asdict, dataclass
 
 import torch
 
-from queries.query_generator import (
+from queries.generation.workload import (
     DEFAULT_RANGE_ANCHOR_MODE,
     DEFAULT_RANGE_FOOTPRINT_JITTER,
     DEFAULT_RANGE_SPATIAL_FRACTION,
-    DEFAULT_RANGE_TIME_FRACTION,
     DEFAULT_RANGE_TIME_DOMAIN_MODE,
+    DEFAULT_RANGE_TIME_FRACTION,
     generate_typed_query_workload,
 )
 
@@ -43,10 +43,16 @@ class RangeCoverageEstimate:
         return asdict(self)
 
 
-def sample_trajectories_by_stride(trajectories: list[torch.Tensor], sample_stride: int) -> list[torch.Tensor]:
+def sample_trajectories_by_stride(
+    trajectories: list[torch.Tensor], sample_stride: int
+) -> list[torch.Tensor]:
     """Return every Nth trajectory, preserving whole sampled trajectories."""
     stride = max(1, int(sample_stride))
-    return [trajectory for trajectory_idx, trajectory in enumerate(trajectories) if trajectory_idx % stride == 0]
+    return [
+        trajectory
+        for trajectory_idx, trajectory in enumerate(trajectories)
+        if trajectory_idx % stride == 0
+    ]
 
 
 def estimate_range_coverage(
@@ -116,7 +122,9 @@ def estimate_range_coverage(
     return estimates
 
 
-def best_query_count(estimates: list[RangeCoverageEstimate], target_coverage: float) -> RangeCoverageEstimate:
+def best_query_count(
+    estimates: list[RangeCoverageEstimate], target_coverage: float
+) -> RangeCoverageEstimate:
     """Return the estimate closest to a desired coverage fraction."""
     if not estimates:
         raise ValueError("estimates must not be empty.")

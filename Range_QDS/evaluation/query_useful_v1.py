@@ -42,7 +42,7 @@ def _component_value(components: dict[str, float], key: str, default: float = 0.
     """Return a finite component value clamped to [0, 1]."""
     try:
         value = float(components.get(key, default))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         value = float(default)
     if value != value:
         return float(default)
@@ -55,7 +55,7 @@ def _guardrail_from_sed(avg_sed_km: float | None) -> float:
         return 1.0
     try:
         sed = max(0.0, float(avg_sed_km))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return 1.0
     return float(1.0 / (1.0 + sed))
 
@@ -72,7 +72,9 @@ def query_useful_v1_components_from_range_audit(
     ship_coverage = _component_value(range_audit, "range_ship_coverage")
     ship_f1 = _component_value(range_audit, "range_ship_f1")
     temporal = _component_value(range_audit, "range_temporal_coverage")
-    gap_time = _component_value(range_audit, "range_gap_time_coverage", _component_value(range_audit, "range_gap_coverage"))
+    gap_time = _component_value(
+        range_audit, "range_gap_time_coverage", _component_value(range_audit, "range_gap_coverage")
+    )
     gap_distance = _component_value(
         range_audit,
         "range_gap_distance_coverage",
@@ -84,7 +86,9 @@ def query_useful_v1_components_from_range_audit(
     interpolation = _component_value(range_audit, "range_query_local_interpolation_fidelity", shape)
     entry_exit = _component_value(range_audit, "range_entry_exit_f1")
     crossing = _component_value(range_audit, "range_crossing_f1")
-    length_score = 1.0 if length_preservation is None else max(0.0, min(1.0, float(length_preservation)))
+    length_score = (
+        1.0 if length_preservation is None else max(0.0, min(1.0, float(length_preservation)))
+    )
     global_shape = _guardrail_from_sed(avg_sed_km)
 
     return {

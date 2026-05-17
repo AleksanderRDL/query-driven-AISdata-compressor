@@ -64,7 +64,9 @@ def combine(input_paths: list[Path], output_path: Path) -> None:
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--input", nargs="+", required=True, help="paths to preprocessed CSVs (one per day)")
+    p.add_argument(
+        "--input", nargs="+", required=True, help="paths to preprocessed CSVs (one per day)"
+    )
     p.add_argument("--output", required=True, help="combined CSV output path")
     args = p.parse_args()
 

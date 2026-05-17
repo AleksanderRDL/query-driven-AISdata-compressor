@@ -5,7 +5,7 @@ usage() {
   cat <<'EOF'
 Usage: scripts/run_range_benchmark_tmux.sh [launcher options] [benchmark_runner args...]
 
-Launch the range workload-aware diagnostic benchmark in tmux with a second pane
+Launch the query-driven workload-blind v2 range benchmark in tmux with a second pane
 logging lightweight system/GPU telemetry.
 
 Launcher options:
@@ -14,12 +14,13 @@ Launcher options:
   -h, --help           Show this help.
 
 Environment overrides:
-  PYTHON                       Python executable. Default: repo-root .venv absolute path.
-  PROFILE                      benchmark_runner profile. Default: range_workload_aware_diagnostic.
+  UV                           uv executable. Default: uv.
+  UV_GROUP                     uv dependency group. Default: dev.
+  PROFILE                      benchmark_runner profile. Default: range_workload_v1_workload_blind_v2.
   CSV_PATH                     Cleaned CSV file/directory. Default: ../AISDATA/cleaned.
-  CACHE_DIR                    Cache directory.
+  CACHE_DIR                    Cache directory, relative to Range_QDS when not absolute.
   ARTIFACT_ROOT                Benchmark family directory. Default:
-                               artifacts/benchmarks/range_workload_aware_diagnostic.
+                               artifacts/benchmarks/query_driven_workload_blind_v2 relative to Range_QDS.
   RUN_ID                       Run directory name. Default: timestamped slug.
   RESULTS_DIR                  Exact benchmark run directory. Overrides
                                ARTIFACT_ROOT/RUN_ID when set.
@@ -49,18 +50,18 @@ display_path() {
 }
 
 QDS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DEFAULT_PYTHON="$(cd "$QDS_ROOT/.." && pwd)/.venv/bin/python"
-PYTHON="${PYTHON:-$DEFAULT_PYTHON}"
-PROFILE="${PROFILE:-range_workload_aware_diagnostic}"
+UV="${UV:-uv}"
+UV_GROUP="${UV_GROUP:-dev}"
+PROFILE="${PROFILE:-range_workload_v1_workload_blind_v2}"
 CSV_PATH="${CSV_PATH:-../AISDATA/cleaned}"
-CACHE_DIR="${CACHE_DIR:-artifacts/cache/range_workload_aware_diagnostic}"
+CACHE_DIR="${CACHE_DIR:-artifacts/cache/query_driven_workload_blind_v2}"
 MAX_POINTS_PER_SEGMENT="${MAX_POINTS_PER_SEGMENT:-}"
 MAX_SEGMENTS="${MAX_SEGMENTS:-}"
 MAX_TRAJECTORIES="${MAX_TRAJECTORIES:-}"
 MONITOR_INTERVAL="${MONITOR_INTERVAL:-10}"
 SESSION="${SESSION:-qds-range-benchmark}"
 ATTACH="${ATTACH:-1}"
-ARTIFACT_ROOT="${ARTIFACT_ROOT:-artifacts/benchmarks/range_workload_aware_diagnostic}"
+ARTIFACT_ROOT="${ARTIFACT_ROOT:-artifacts/benchmarks/query_driven_workload_blind_v2}"
 RUN_ID="${RUN_ID:-$(date +%Y%m%d-%H%M%S)_range_${PROFILE}_3day_full}"
 RESULTS_DIR="${RESULTS_DIR:-$ARTIFACT_ROOT/runs/$RUN_ID}"
 
@@ -91,9 +92,9 @@ if ! command -v tmux >/dev/null 2>&1; then
   exit 127
 fi
 
-if [[ ! -x "$PYTHON" ]]; then
-  echo "Python executable is not executable: $PYTHON" >&2
-  exit 2
+if ! command -v "$UV" >/dev/null 2>&1; then
+  echo "uv executable was not found on PATH: $UV" >&2
+  exit 127
 fi
 
 if tmux has-session -t "$SESSION" 2>/dev/null; then
@@ -117,8 +118,12 @@ mkdir -p "$(display_path "$logs_dir")"
 rm -f "$(display_path "$monitor_log")" "$(display_path "$status_file")" "$(display_path "$done_file")"
 
 benchmark_cmd=(
-  "$PYTHON"
-  -m experiments.benchmark_runner
+  "$UV"
+  run
+  --group "$UV_GROUP"
+  --
+  python
+  -m benchmarking.benchmark_runner
   --profile "$PROFILE"
   --workloads range
   --csv_path "$CSV_PATH"
@@ -143,6 +148,8 @@ if [[ "${#extra_args[@]}" -gt 0 ]]; then
   benchmark_cmd+=("${extra_args[@]}")
 fi
 
+uv_python_cmd=("$UV" run --group "$UV_GROUP" -- python)
+
 monitor_cmd=(
   "$QDS_ROOT/scripts/monitor_system.sh"
   --interval "$MONITOR_INTERVAL"
@@ -165,7 +172,7 @@ trap 'touch $(q "$done_file")' EXIT
 $(join_shell "${benchmark_cmd[@]}") 2>&1 | tee $(q "$console_log")
 status=\${PIPESTATUS[0]}
 if [ "\$status" -ne 0 ]; then
-  $(q "$PYTHON") scripts/mark_benchmark_failed.py \
+  $(join_shell "${uv_python_cmd[@]}") scripts/mark_benchmark_failed.py \
     --status-file $(q "$RESULTS_DIR/run_status.json") \
     --exit-status "\$status" \
     --message "tmux launcher observed non-zero benchmark exit status \$status"

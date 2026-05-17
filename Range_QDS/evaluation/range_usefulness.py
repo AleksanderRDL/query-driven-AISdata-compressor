@@ -12,8 +12,7 @@ RANGE_USEFULNESS_SCHEMA_VERSION = 7
 RANGE_USEFULNESS_GAP_ABLATION_VERSION = 1
 RANGE_USEFULNESS_FINAL_SUCCESS_ALLOWED = False
 RANGE_USEFULNESS_LEGACY_REASON = (
-    "Old RangeUseful/scalar-target diagnostic path. "
-    "Not valid for query-driven rework acceptance."
+    "Old RangeUseful/scalar-target diagnostic path. Not valid for query-driven rework acceptance."
 )
 
 RANGE_USEFULNESS_WEIGHTS: dict[str, float] = {
@@ -40,7 +39,7 @@ def _component_value(components: Mapping[str, float], key: str, default: float =
     value = components.get(key, default)
     try:
         return float(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return float(default)
 
 
@@ -85,6 +84,7 @@ def range_usefulness_gap_ablation_scores(components: Mapping[str, float]) -> dic
         ),
         "range_usefulness_gap_ablation_version": int(RANGE_USEFULNESS_GAP_ABLATION_VERSION),
     }
+
 
 RANGE_USEFULNESS_WEIGHT_GROUPS: dict[str, tuple[str, ...]] = {
     "point_statistical_coverage": ("range_point_f1",),

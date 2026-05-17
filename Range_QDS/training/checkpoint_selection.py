@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import torch
 
-from experiments.experiment_config import ModelConfig
+from config.experiment_config import ModelConfig
 from queries.query_types import normalize_pure_workload_map
 
 
@@ -110,7 +110,9 @@ def record_validation_stats(
         )
         for type_name, value in uniform_per_type_score.items():
             stats[f"val_uniform_score_{type_name}"] = float(value)
-            stats[f"val_selection_score_gap_{type_name}"] = float(per_type_score.get(type_name, 0.0) - value)
+            stats[f"val_selection_score_gap_{type_name}"] = float(
+                per_type_score.get(type_name, 0.0) - value
+            )
 
 
 def selection_from_stats(

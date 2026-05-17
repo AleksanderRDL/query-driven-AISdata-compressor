@@ -49,11 +49,13 @@ def _tie_aware_rank_0_1(values: torch.Tensor) -> torch.Tensor:
     starts = torch.ones((length,), dtype=torch.bool, device=values.device)
     starts[1:] = sorted_values[1:] != sorted_values[:-1]
     start_idx = torch.where(starts)[0]
-    end_idx = torch.cat([start_idx[1:], torch.tensor([length], dtype=torch.long, device=values.device)])
+    end_idx = torch.cat(
+        [start_idx[1:], torch.tensor([length], dtype=torch.long, device=values.device)]
+    )
 
     ranks = values.new_empty((length,), dtype=torch.float32)
     denom = float(length - 1)
-    for start, end in zip(start_idx.tolist(), end_idx.tolist()):
+    for start, end in zip(start_idx.tolist(), end_idx.tolist(), strict=False):
         average_rank = 0.5 * float(start + end - 1)
         ranks[order[start:end]] = average_rank / denom
     return ranks
@@ -84,7 +86,9 @@ def pure_workload_scores(
     elif predictions.ndim == 2 and predictions.shape[1] == 1:
         head = predictions[:, 0].float()
     else:
-        raise ValueError("predictions must be pure single-workload scores with shape [n_points] or [n_points, 1].")
+        raise ValueError(
+            "predictions must be pure single-workload scores with shape [n_points] or [n_points, 1]."
+        )
 
     mode = score_mode.lower()
     if mode not in MLQDS_SCORE_MODES:
@@ -117,7 +121,9 @@ def pure_workload_scores(
                 local_score = zscore_confidence
             else:
                 rank = _ordinal_rank_0_1(local_head)
-                local_score = (1.0 - confidence_weight) * rank + confidence_weight * zscore_confidence
+                local_score = (
+                    1.0 - confidence_weight
+                ) * rank + confidence_weight * zscore_confidence
         score[start:end] = local_score.to(score.dtype)
     return score
 
@@ -179,10 +185,12 @@ def simplify_mlqds_predictions(
     min_learned_swaps: int = 0,
     selector_type: str = "temporal_hybrid",
     segment_scores: torch.Tensor | None = None,
+    segment_point_scores: torch.Tensor | None = None,
     points: torch.Tensor | None = None,
     learned_segment_geometry_gain_weight: float = 0.12,
     learned_segment_score_blend_weight: float = 0.05,
     learned_segment_fairness_preallocation: bool = True,
+    learned_segment_length_repair_fraction: float = 0.0,
 ) -> torch.Tensor:
     """Simplify using canonical MLQDS score conversion and retained-mask logic."""
     scores = mlqds_simplification_scores(
@@ -201,10 +209,12 @@ def simplify_mlqds_predictions(
             boundaries,
             compression_ratio,
             segment_scores=segment_scores,
+            segment_point_scores=segment_point_scores,
             points=points,
             geometry_gain_weight=learned_segment_geometry_gain_weight,
             segment_score_point_blend_weight=learned_segment_score_blend_weight,
             fairness_preallocation_enabled=learned_segment_fairness_preallocation,
+            length_repair_fraction=learned_segment_length_repair_fraction,
         )
     return simplify_with_temporal_score_hybrid(
         scores,

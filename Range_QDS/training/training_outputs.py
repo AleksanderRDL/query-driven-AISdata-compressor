@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import torch
+
 from training.scaler import FeatureScaler
 
 

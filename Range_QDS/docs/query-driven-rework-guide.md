@@ -38,66 +38,7 @@ The target product result is not “best possible geometric simplification.” I
 
 ---
 
-## 2. Current implementation state
-
-The candidate path exists and runs end to end:
-
-```text
-workload_profile_id               = range_workload_v1
-model_type                        = workload_blind_range_v2
-range_training_target_mode         = query_useful_v1_factorized
-selector_type                     = learned_segment_budget_v1
-checkpoint_score_variant           = query_useful_v1
-primary metric                    = QueryUsefulV1
-legacy diagnostic metric           = RangeUsefulLegacy
-```
-
-The following components are implemented and should be preserved unless a targeted replacement is justified:
-
-```text
-Range_QDS/queries/workload_profiles.py
-Range_QDS/queries/query_generator.py
-Range_QDS/evaluation/query_useful_v1.py
-Range_QDS/training/query_useful_targets.py
-Range_QDS/training/query_prior_fields.py
-Range_QDS/models/workload_blind_range_v2.py
-Range_QDS/simplification/learned_segment_budget.py
-Range_QDS/experiments/experiment_pipeline.py
-Range_QDS/experiments/benchmark_report.py
-```
-
-The repository includes gates and diagnostics for:
-
-```text
-workload stability
-workload signature stability
-support overlap
-query-prior predictability
-prior-predictive alignment
-target diffusion
-learning causality
-prior sample sensitivity
-global sanity
-final 4x7 grid acceptance
-```
-
-Integration verification currently passes:
-
-```text
-git diff --check
-ruff
-pyright
-tests/test_query_driven_rework.py
-tests/test_query_coverage_generation.py
-tests/test_benchmark_runner.py
-full test suite
-```
-
-The remaining PyTorch nested-tensor warning is not a project blocker unless CI treats warnings as errors.
-
----
-
-## 3. Current evidence and active blocker
+## 2. Current evidence and active blocker
 
 The most recent strict debug probe failed. It is useful evidence, not a success claim.
 
@@ -197,7 +138,7 @@ Do not run the full 4x7 grid until a strict single-cell probe passes or gives a 
 
 ---
 
-## 4. Design contract
+## 3. Design contract
 
 The redesign is a contract between five components:
 
@@ -222,7 +163,7 @@ All five must be aligned. If one is broken, a downstream model sweep will waste 
 
 ---
 
-## 5. Protocol rules
+## 4. Protocol rules
 
 ### Allowed
 
@@ -263,7 +204,7 @@ Any run that violates these rules is diagnostic only.
 
 ---
 
-## 6. Workload profile requirements
+## 5. Workload profile requirements
 
 The query workload is the product prior. It must be stable enough for the model to learn and broad enough to represent expected future use.
 
@@ -430,7 +371,7 @@ If planned family quotas match but accepted signatures fail, acceptance filters 
 
 ---
 
-## 7. Metric requirements
+## 6. Metric requirements
 
 ### Primary metric
 
@@ -479,7 +420,7 @@ Important rule:
 
 ---
 
-## 8. Target, prior, model, and selector requirements
+## 7. Target, prior, model, and selector requirements
 
 ### Factorized target
 
@@ -653,7 +594,7 @@ If fairness preallocation or geometry tie-breaker drives the win more than learn
 
 ---
 
-## 9. Learning-causality requirements
+## 8. Learning-causality requirements
 
 A final candidate must prove that learning caused the retained-mask improvement.
 
@@ -696,7 +637,7 @@ If an untrained model or shuffled score beats the trained model, stop model tuni
 
 ---
 
-## 10. Required acceptance gates
+## 9. Required acceptance gates
 
 A strict single-cell probe must pass all of these before running the full grid:
 
@@ -765,7 +706,7 @@ If this gate repeatedly fails, do not hide the problem with a large temporal sca
 ---
 
 
-## 11. Probe scale policy and evidence levels
+## 10. Probe scale policy and evidence levels
 
 Small probes are useful for code correctness and fast failure localization. They are dangerous for scientific conclusions.
 
@@ -1068,9 +1009,51 @@ If Level 5 passes, run Level 6.
 
 Never run the full grid to “see what happens” when the standard strict single-cell evidence is already failing. The grid is expensive and mostly useful after the one-cell gates show the candidate is coherent.
 
+### Exploratory real-scale diagnostics
+
+It is acceptable to occasionally run a real-scale diagnostic slice for the most promising current candidate before every strict gate passes, but only to answer a specific scaling or instrumentation question. This is not the full final grid and it is not acceptance evidence.
+
+Use this only when the question is concrete:
+
+```text
+does the candidate collapse at realistic trajectory/query scale?
+do artifacts, gate fields, runtime fields, and child reports survive production-like caps?
+does a tiny-probe pattern disappear when query/workload counts become meaningful?
+is runtime or memory already infeasible for the current direction?
+```
+
+Recommended scope:
+
+```text
+one representative cell, or a small slice such as 1x7 or 2x2
+strict gates unchanged
+fixed candidate/config except for the diagnostic variable being tested
+production-like caps/workload shape where runtime permits
+clearly marked exploratory output directory and report labels
+```
+
+Allowed conclusions:
+
+```text
+the candidate has or lacks obvious scaling/instrumentation viability
+the benchmark harness needs repair before larger runs
+the next checkpoint should continue, narrow, or pivot
+```
+
+Forbidden conclusions:
+
+```text
+final success
+final model quality
+final grid robustness
+gate success by visual inspection or encouraging partial numbers
+```
+
+Do not run these slices repeatedly to search for a lucky result, compensate for failed causality/support/workload gates, or justify loosening thresholds. If the result is interesting but child gates still fail, diagnose the failed gates before changing code.
+
 ---
 
-## 12. Full final grid requirements
+## 11. Full final grid requirements
 
 Run the full final grid only after a strict single-cell probe passes.
 
@@ -1152,7 +1135,7 @@ Do not report only aggregate wins. Component regressions are often where false s
 
 ---
 
-## 13. Ambiguity-resolution recommendations
+## 12. Ambiguity-resolution recommendations
 
 When a value or strategy is ambiguous, use these defaults unless evidence says otherwise.
 
@@ -1252,7 +1235,7 @@ If QueryUsefulV1 rewards behavior that conflicts with the actual product goal, i
 
 ---
 
-## 14. Risk register
+## 13. Risk register
 
 ### Risk: drawing scientific conclusions from undersized probes
 
@@ -1391,7 +1374,7 @@ narrow workload profile only if it matches real use
 
 ---
 
-## 15. Failure diagnosis tree
+## 14. Failure diagnosis tree
 
 Use this order after every strict probe.
 
@@ -1464,7 +1447,7 @@ check whether selector is allocating budget to wrong segments
 
 ---
 
-## 16. Forward roadmap: start checkpoints from here
+## 15. Forward roadmap: start checkpoints from here
 
 Use concise checkpoints. Numbering restarts here.
 
@@ -1481,8 +1464,8 @@ Use the standard strict diagnostic scale unless runtime makes it impossible. A s
 Recommended command shape:
 
 ```bash
-python -m experiments.run_ais_experiment \
-  --results_dir ../artifacts/results/query_driven_v2_checkpoint01_generator_health_probe_standard_c10_r05 \
+uv run --group dev -- python -m orchestration.run_ais_experiment \
+  --results_dir Range_QDS/artifacts/results/query_driven_v2_checkpoint01_generator_health_probe_standard_c10_r05 \
   --n_ships 64 \
   --n_points 256 \
   --synthetic_route_families 4 \
@@ -1656,7 +1639,7 @@ component/reporting checklist complete
 
 ---
 
-## 17. What not to do
+## 16. What not to do
 
 Do not compensate for failures with:
 
@@ -1689,72 +1672,7 @@ Those were useful historically but are no longer the main path.
 
 ---
 
-## 18. Relevant files by task
-
-### Workload profile and generator
-
-```text
-Range_QDS/queries/workload_profiles.py
-Range_QDS/queries/query_generator.py
-Range_QDS/queries/workload_diagnostics.py
-Range_QDS/experiments/range_diagnostics.py
-Range_QDS/experiments/workload_cache.py
-```
-
-### Metric and evaluation
-
-```text
-Range_QDS/evaluation/query_useful_v1.py
-Range_QDS/evaluation/evaluate_methods.py
-Range_QDS/evaluation/metrics.py
-Range_QDS/evaluation/query_cache.py
-```
-
-### Targets and priors
-
-```text
-Range_QDS/training/query_useful_targets.py
-Range_QDS/training/query_prior_fields.py
-Range_QDS/training/factorized_target_diagnostics.py
-Range_QDS/training/predictability_audit.py
-```
-
-### Model and training
-
-```text
-Range_QDS/models/workload_blind_range_v2.py
-Range_QDS/training/train_model.py
-Range_QDS/training/training_epoch.py
-Range_QDS/training/training_validation.py
-Range_QDS/training/model_features.py
-```
-
-### Selector
-
-```text
-Range_QDS/simplification/learned_segment_budget.py
-Range_QDS/simplification/mlqds_scoring.py
-```
-
-### Reports and gates
-
-```text
-Range_QDS/experiments/experiment_pipeline.py
-Range_QDS/experiments/benchmark_report.py
-Range_QDS/experiments/benchmark_runner.py
-```
-
-### Tests
-
-```text
-Range_QDS/tests/test_query_driven_rework.py
-Range_QDS/tests/test_query_coverage_generation.py
-Range_QDS/tests/test_benchmark_runner.py
-```
-
----
-
-## 19. Progress-log format
+## 17. Progress-log format
 
 Use concise checkpoints. Each checkpoint should record:
 
@@ -1791,7 +1709,7 @@ Keep the progress log short. Detailed stdout and raw metrics belong in artifacts
 
 ---
 
-## 20. Completion definition
+## 18. Completion definition
 
 The redesign is complete only when:
 

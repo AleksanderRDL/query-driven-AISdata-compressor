@@ -7,7 +7,7 @@ from typing import Any
 
 import torch
 
-from experiments.experiment_config import ModelConfig
+from config.experiment_config import ModelConfig
 from queries.query_types import NUM_QUERY_TYPES, QUERY_TYPE_ID_RANGE
 from queries.workload import TypedQueryWorkload
 from simplification.mlqds_scoring import pure_workload_scores
@@ -32,7 +32,9 @@ def build_range_teacher_config(student_config: ModelConfig) -> ModelConfig:
     The teacher is a supervision generator only. It is deliberately selected by
     training loss, not by final eval queries.
     """
-    teacher_epochs = int(getattr(student_config, "range_teacher_epochs", 0) or student_config.epochs)
+    teacher_epochs = int(
+        getattr(student_config, "range_teacher_epochs", 0) or student_config.epochs
+    )
     return replace(
         student_config,
         model_type="range_aware",
@@ -111,7 +113,9 @@ def _retained_frequency_labels(
             temporal_fraction=float(getattr(model_config, "mlqds_temporal_fraction", 0.0)),
             diversity_bonus=float(getattr(model_config, "mlqds_diversity_bonus", 0.0)),
             hybrid_mode=str(getattr(model_config, "mlqds_hybrid_mode", "fill")),
-            stratified_center_weight=float(getattr(model_config, "mlqds_stratified_center_weight", 0.0)),
+            stratified_center_weight=float(
+                getattr(model_config, "mlqds_stratified_center_weight", 0.0)
+            ),
             min_learned_swaps=int(getattr(model_config, "mlqds_min_learned_swaps", 0)),
         )
         frequency += mask.to(dtype=frequency.dtype)
@@ -160,7 +164,9 @@ def distill_range_teacher_labels(
     """Build query-blind training labels from a query-aware range teacher."""
     mode = str(getattr(model_config, "range_teacher_distillation_mode", "none")).lower()
     if mode not in RANGE_TEACHER_DISTILLATION_MODES:
-        raise ValueError(f"range_teacher_distillation_mode must be one of {RANGE_TEACHER_DISTILLATION_MODES}.")
+        raise ValueError(
+            f"range_teacher_distillation_mode must be one of {RANGE_TEACHER_DISTILLATION_MODES}."
+        )
     if mode == "none":
         raise ValueError("distill_range_teacher_labels requires an enabled distillation mode.")
 
@@ -179,14 +185,20 @@ def distill_range_teacher_labels(
     else:
         raise ValueError(f"Unsupported range_teacher_distillation_mode={mode!r}.")
 
-    labels = torch.zeros((points.shape[0], NUM_QUERY_TYPES), dtype=torch.float32, device=points.device)
+    labels = torch.zeros(
+        (points.shape[0], NUM_QUERY_TYPES), dtype=torch.float32, device=points.device
+    )
     labelled_mask = torch.zeros_like(labels, dtype=torch.bool)
-    labels[:, QUERY_TYPE_ID_RANGE] = target_values.to(device=points.device, dtype=torch.float32).clamp(0.0, 1.0)
+    labels[:, QUERY_TYPE_ID_RANGE] = target_values.to(
+        device=points.device, dtype=torch.float32
+    ).clamp(0.0, 1.0)
     labelled_mask[:, QUERY_TYPE_ID_RANGE] = True
     diagnostics = _label_diagnostics(labels[:, QUERY_TYPE_ID_RANGE], mode)
     diagnostics["teacher_model_type"] = str(teacher_model_type)
     diagnostics["teacher_epochs_trained"] = int(teacher.epochs_trained)
     diagnostics["budget_loss_ratios"] = list(_budget_loss_ratios(model_config))
-    diagnostics["mlqds_temporal_fraction"] = float(getattr(model_config, "mlqds_temporal_fraction", 0.0))
+    diagnostics["mlqds_temporal_fraction"] = float(
+        getattr(model_config, "mlqds_temporal_fraction", 0.0)
+    )
     diagnostics["mlqds_hybrid_mode"] = str(getattr(model_config, "mlqds_hybrid_mode", "fill"))
     return (labels, labelled_mask), diagnostics

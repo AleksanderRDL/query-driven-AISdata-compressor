@@ -20,7 +20,10 @@ def deterministic_topk_with_jitter(
 
     positions = torch.arange(score_count, device=scores.device, dtype=torch.float32)
     # Deterministic hash-like noise in [-0.5, 0.5].
-    noise = torch.frac(torch.sin(positions * 12.9898 + float(trajectory_id) * 78.233) * 43758.5453) - 0.5
+    noise = (
+        torch.frac(torch.sin(positions * 12.9898 + float(trajectory_id) * 78.233) * 43758.5453)
+        - 0.5
+    )
     jittered = scores + 1e-6 * noise
     top = torch.topk(jittered, k=keep_count, largest=True).indices
     return torch.sort(top).values
@@ -53,9 +56,10 @@ def diverse_topk_with_jitter(
 
     for step in range(keep_count):
         if retained.numel() > 0:
-            distance_to_retained = torch.abs(
-                positions.unsqueeze(1) - retained.float().unsqueeze(0)
-            ).min(dim=1).values / denom
+            distance_to_retained = (
+                torch.abs(positions.unsqueeze(1) - retained.float().unsqueeze(0)).min(dim=1).values
+                / denom
+            )
         else:
             distance_to_retained = torch.zeros_like(positions)
         adjusted_scores = candidate_scores + bonus * distance_to_retained
@@ -83,7 +87,9 @@ def evenly_spaced_indices(point_count: int, keep_count: int, device: torch.devic
         return torch.empty((0,), dtype=torch.long, device=device)
     if keep_count >= point_count:
         return torch.arange(point_count, dtype=torch.long, device=device)
-    local_indices = torch.linspace(0, point_count - 1, steps=keep_count, device=device).round().long().unique()
+    local_indices = (
+        torch.linspace(0, point_count - 1, steps=keep_count, device=device).round().long().unique()
+    )
     if local_indices.numel() < keep_count:
         filler_indices = torch.arange(point_count, dtype=torch.long, device=device)
         missing_indices = filler_indices[~torch.isin(filler_indices, local_indices)][
@@ -111,7 +117,9 @@ def stratified_topk_with_jitter(
     if keep_count >= score_count:
         return torch.arange(score_count, dtype=torch.long, device=scores.device)
     if score_count == 1 or keep_count == 1:
-        return deterministic_topk_with_jitter(scores, keep_count=keep_count, trajectory_id=trajectory_id)
+        return deterministic_topk_with_jitter(
+            scores, keep_count=keep_count, trajectory_id=trajectory_id
+        )
     if keep_count == 2:
         return torch.tensor([0, score_count - 1], dtype=torch.long, device=scores.device)
     center_penalty = max(0.0, float(center_weight))
@@ -129,8 +137,8 @@ def stratified_topk_with_jitter(
         torch.tensor([0, score_count - 1], dtype=torch.long, device=scores.device),
     ]
     for slot in range(interior_slots):
-        left = 1 + int(math.floor(slot * interior_count / interior_slots))
-        right = 1 + int(math.floor((slot + 1) * interior_count / interior_slots))
+        left = 1 + math.floor(slot * interior_count / interior_slots)
+        right = 1 + math.floor((slot + 1) * interior_count / interior_slots)
         if right <= left:
             continue
         candidates = torch.arange(left, right, dtype=torch.long, device=scores.device)
@@ -169,7 +177,7 @@ def _trajectory_budget(point_count: int, compression_ratio: float) -> int:
     point_count = int(point_count)
     if point_count <= 0:
         return 0
-    keep_count = max(2, int(math.ceil(float(compression_ratio) * point_count)))
+    keep_count = max(2, math.ceil(float(compression_ratio) * point_count))
     return min(keep_count, point_count)
 
 
@@ -210,8 +218,10 @@ def temporal_hybrid_selector_budget_diagnostics(
                 base_count = total_keep - learned
             elif mode in {"swap", "local_swap", "local_delta_swap"}:
                 base_indices = evenly_spaced_indices(point_count, total_keep, torch.device("cpu"))
-                removable_count = int(((base_indices != 0) & (base_indices != point_count - 1)).sum().item())
-                protected_count = min(total_keep, max(2, int(math.ceil(total_keep * base_fraction))))
+                removable_count = int(
+                    ((base_indices != 0) & (base_indices != point_count - 1)).sum().item()
+                )
+                protected_count = min(total_keep, max(2, math.ceil(total_keep * base_fraction)))
                 swap_count = min(total_keep - protected_count, point_count - total_keep)
                 if minimum_swaps > 0:
                     swap_count = max(swap_count, minimum_swaps)
@@ -223,7 +233,7 @@ def temporal_hybrid_selector_budget_diagnostics(
             else:
                 base_keep = 0
                 if base_fraction > 0.0:
-                    base_keep = min(total_keep, max(2, int(math.ceil(total_keep * base_fraction))))
+                    base_keep = min(total_keep, max(2, math.ceil(total_keep * base_fraction)))
                 base_count = base_keep
                 learned = max(0, total_keep - base_keep)
 
@@ -272,7 +282,9 @@ def simplify_with_scores(
         if point_count <= 0:
             continue
         keep_count = _trajectory_budget(point_count, compression_ratio)
-        local_indices = deterministic_topk_with_jitter(local_scores, keep_count=keep_count, trajectory_id=trajectory_id)
+        local_indices = deterministic_topk_with_jitter(
+            local_scores, keep_count=keep_count, trajectory_id=trajectory_id
+        )
         retained[start:end][local_indices] = True
         retained[start] = True
         retained[end - 1] = True
@@ -297,7 +309,7 @@ def simplify_with_global_score_budget(
 
     total_budget = 0
     minimum = max(0, int(min_points_per_trajectory))
-    for trajectory_id, (start, end) in enumerate(boundaries):
+    for _trajectory_id, (start, end) in enumerate(boundaries):
         point_count = int(end - start)
         if point_count <= 0:
             continue
@@ -347,7 +359,7 @@ def simplify_with_temporal_global_score_fill(
     total_budget = 0
     candidate_scores = scores.float().clone()
 
-    for trajectory_id, (start, end) in enumerate(boundaries):
+    for _trajectory_id, (start, end) in enumerate(boundaries):
         local_scores = scores[start:end]
         point_count = int(local_scores.numel())
         if point_count <= 0:
@@ -358,17 +370,21 @@ def simplify_with_temporal_global_score_fill(
             continue
         base_keep_count = min(
             total_keep_count,
-            max(2, int(math.ceil(total_keep_count * base_fraction))),
+            max(2, math.ceil(total_keep_count * base_fraction)),
         )
         base_indices = evenly_spaced_indices(point_count, base_keep_count, scores.device)
         retained[start + base_indices] = True
         if bonus > 0.0 and base_indices.numel() > 0 and point_count > 1:
             positions = torch.arange(point_count, dtype=torch.float32, device=scores.device)
-            distance_to_base = torch.abs(
-                positions.unsqueeze(1) - base_indices.float().unsqueeze(0)
-            ).min(dim=1).values
+            distance_to_base = (
+                torch.abs(positions.unsqueeze(1) - base_indices.float().unsqueeze(0))
+                .min(dim=1)
+                .values
+            )
             local_adjusted = candidate_scores[start:end]
-            local_adjusted = local_adjusted + bonus * (distance_to_base / float(max(1, point_count - 1)))
+            local_adjusted = local_adjusted + bonus * (
+                distance_to_base / float(max(1, point_count - 1))
+            )
             candidate_scores[start:end] = local_adjusted
 
     total_budget = min(int(scores.numel()), max(int(retained.sum().item()), int(total_budget)))
@@ -454,12 +470,18 @@ def simplify_with_temporal_score_hybrid(
         if mode in {"swap", "local_swap", "local_delta_swap"}:
             base_indices = evenly_spaced_indices(point_count, total_keep_count, scores.device)
             retained[start + base_indices] = True
-            protected_count = min(total_keep_count, max(2, int(math.ceil(total_keep_count * base_fraction))))
+            protected_count = min(
+                total_keep_count, max(2, math.ceil(total_keep_count * base_fraction))
+            )
             swap_count = min(total_keep_count - protected_count, point_count - total_keep_count)
-            removable_indices = base_indices[(base_indices != 0) & (base_indices != point_count - 1)]
+            removable_indices = base_indices[
+                (base_indices != 0) & (base_indices != point_count - 1)
+            ]
             if minimum_swaps > 0:
                 swap_count = max(swap_count, minimum_swaps)
-            swap_count = min(swap_count, int(removable_indices.numel()), point_count - total_keep_count)
+            swap_count = min(
+                swap_count, int(removable_indices.numel()), point_count - total_keep_count
+            )
             if swap_count <= 0:
                 continue
 
@@ -481,18 +503,25 @@ def simplify_with_temporal_score_hybrid(
             if mode == "local_swap" and add_indices.numel() > 0:
                 remove_values: list[int] = []
                 available = removable_indices.detach().cpu().tolist()
-                ordered_add = add_indices[
-                    torch.argsort(local_scores[add_indices], descending=True)
-                ].detach().cpu().tolist()
+                ordered_add = (
+                    add_indices[torch.argsort(local_scores[add_indices], descending=True)]
+                    .detach()
+                    .cpu()
+                    .tolist()
+                )
                 for add_value in ordered_add:
                     if not available:
                         break
                     add_int = int(add_value)
-                    remove_int = min(available, key=lambda value: (abs(int(value) - add_int), int(value)))
+                    remove_int = min(
+                        available, key=lambda value: (abs(int(value) - add_int), int(value))
+                    )
                     available.remove(remove_int)
                     remove_values.append(remove_int)
                 if remove_values:
-                    remove_indices = torch.tensor(remove_values, dtype=torch.long, device=scores.device)
+                    remove_indices = torch.tensor(
+                        remove_values, dtype=torch.long, device=scores.device
+                    )
                     add_indices = torch.tensor(
                         ordered_add[: len(remove_values)],
                         dtype=torch.long,
@@ -505,7 +534,9 @@ def simplify_with_temporal_score_hybrid(
                 add_values: list[int] = []
                 remove_values: list[int] = []
                 available = removable_indices.detach().cpu().tolist()
-                candidate_values = torch.where(torch.isfinite(candidate_scores))[0].detach().cpu().tolist()
+                candidate_values = (
+                    torch.where(torch.isfinite(candidate_scores))[0].detach().cpu().tolist()
+                )
                 for step in range(swap_count):
                     if not available or not candidate_values:
                         break
@@ -514,8 +545,13 @@ def simplify_with_temporal_score_hybrid(
                     best_value: float | None = None
                     for candidate_value in candidate_values:
                         candidate_int = int(candidate_value)
-                        remove_int = min(available, key=lambda value: (abs(int(value) - candidate_int), int(value)))
-                        delta = float(local_scores[candidate_int].item()) - float(local_scores[remove_int].item())
+                        remove_int = min(
+                            available,
+                            key=lambda value: (abs(int(value) - candidate_int), int(value)),
+                        )
+                        delta = float(local_scores[candidate_int].item()) - float(
+                            local_scores[remove_int].item()
+                        )
                         # Deterministic jitter only breaks exact ties; it must not turn a
                         # non-positive learned replacement into a positive one.
                         jitter = 1e-6 * math.sin(
@@ -528,7 +564,9 @@ def simplify_with_temporal_score_hybrid(
                             best_remove = int(remove_int)
                     if best_candidate is None or best_remove is None:
                         break
-                    raw_delta = float(local_scores[best_candidate].item()) - float(local_scores[best_remove].item())
+                    raw_delta = float(local_scores[best_candidate].item()) - float(
+                        local_scores[best_remove].item()
+                    )
                     if raw_delta <= 0.0:
                         break
                     add_values.append(best_candidate)
@@ -537,7 +575,9 @@ def simplify_with_temporal_score_hybrid(
                     available.remove(best_remove)
                 if add_values:
                     add_indices = torch.tensor(add_values, dtype=torch.long, device=scores.device)
-                    remove_indices = torch.tensor(remove_values, dtype=torch.long, device=scores.device)
+                    remove_indices = torch.tensor(
+                        remove_values, dtype=torch.long, device=scores.device
+                    )
                 else:
                     add_indices = add_indices[:0]
                     remove_indices = remove_indices[:0]
@@ -547,7 +587,9 @@ def simplify_with_temporal_score_hybrid(
 
         base_keep_count = 0
         if base_fraction > 0.0:
-            base_keep_count = min(total_keep_count, max(2, int(math.ceil(total_keep_count * base_fraction))))
+            base_keep_count = min(
+                total_keep_count, max(2, math.ceil(total_keep_count * base_fraction))
+            )
         base_indices = evenly_spaced_indices(point_count, base_keep_count, scores.device)
         retained[start + base_indices] = True
 

@@ -31,7 +31,9 @@ def build_trajectory_windows(
         n = traj.shape[0]
         if n <= window_length:
             pad = window_length - n
-            p = torch.cat([traj, torch.zeros((pad, traj.shape[1]), dtype=traj.dtype, device=device)], dim=0)
+            p = torch.cat(
+                [traj, torch.zeros((pad, traj.shape[1]), dtype=traj.dtype, device=device)], dim=0
+            )
             mask = torch.zeros((window_length,), dtype=torch.bool, device=device)
             if pad > 0:
                 mask[n:] = True

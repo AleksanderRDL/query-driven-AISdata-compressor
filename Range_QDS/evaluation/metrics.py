@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Hashable, Set
 from dataclasses import dataclass, field
-from typing import AbstractSet, Any, Hashable
+from typing import Any
 
 import torch
 
 KM_PER_DEG_LAT = 111.32
 
 
-def f1_score(r_o: AbstractSet[Hashable], r_s: AbstractSet[Hashable]) -> float:
+def f1_score(r_o: Set[Hashable], r_s: Set[Hashable]) -> float:
     """Compute F1 agreement between original and simplified query answer sets."""
     if not r_o and not r_s:
         return 1.0
@@ -189,7 +190,10 @@ def _polyline_length_km(lats: torch.Tensor, lons: torch.Tensor) -> float:
     lon_rad = torch.deg2rad(lons)
     dlat = lat_rad[1:] - lat_rad[:-1]
     dlon = lon_rad[1:] - lon_rad[:-1]
-    a = torch.sin(dlat / 2.0) ** 2 + torch.cos(lat_rad[:-1]) * torch.cos(lat_rad[1:]) * torch.sin(dlon / 2.0) ** 2
+    a = (
+        torch.sin(dlat / 2.0) ** 2
+        + torch.cos(lat_rad[:-1]) * torch.cos(lat_rad[1:]) * torch.sin(dlon / 2.0) ** 2
+    )
     c = 2.0 * torch.atan2(torch.sqrt(a), torch.sqrt(torch.clamp(1.0 - a, min=1e-9)))
     return float((radius_km * c).sum().item())
 
@@ -206,10 +210,15 @@ def _cumulative_polyline_length_km(lats: torch.Tensor, lons: torch.Tensor) -> to
     lon_rad = torch.deg2rad(lons.float())
     dlat = lat_rad[1:] - lat_rad[:-1]
     dlon = lon_rad[1:] - lon_rad[:-1]
-    a = torch.sin(dlat / 2.0) ** 2 + torch.cos(lat_rad[:-1]) * torch.cos(lat_rad[1:]) * torch.sin(dlon / 2.0) ** 2
+    a = (
+        torch.sin(dlat / 2.0) ** 2
+        + torch.cos(lat_rad[:-1]) * torch.cos(lat_rad[1:]) * torch.sin(dlon / 2.0) ** 2
+    )
     c = 2.0 * torch.atan2(torch.sqrt(a), torch.sqrt(torch.clamp(1.0 - a, min=1e-9)))
     segment_km = radius_km * c
-    return torch.cat([torch.zeros((1,), dtype=torch.float32, device=lats.device), segment_km.cumsum(dim=0)])
+    return torch.cat(
+        [torch.zeros((1,), dtype=torch.float32, device=lats.device), segment_km.cumsum(dim=0)]
+    )
 
 
 def compute_geometric_distortion(
@@ -252,7 +261,13 @@ def compute_geometric_distortion(
         total_removed += count
 
     if total_removed == 0:
-        return {"avg_sed_km": 0.0, "max_sed_km": 0.0, "avg_ped_km": 0.0, "max_ped_km": 0.0, "removed_points": 0}
+        return {
+            "avg_sed_km": 0.0,
+            "max_sed_km": 0.0,
+            "avg_ped_km": 0.0,
+            "max_ped_km": 0.0,
+            "removed_points": 0,
+        }
     return {
         "avg_sed_km": float(total_sed / total_removed),
         "max_sed_km": float(max_sed),

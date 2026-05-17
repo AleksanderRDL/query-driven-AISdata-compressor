@@ -7,8 +7,8 @@ import argparse
 import csv
 from pathlib import Path
 
-
-DEFAULT_FAMILY = Path("artifacts/benchmarks/range_workload_aware_diagnostic")
+QDS_ARTIFACTS_DIR = Path(__file__).resolve().parents[1] / "artifacts"
+DEFAULT_FAMILY = QDS_ARTIFACTS_DIR / "benchmarks" / "query_driven_workload_blind_v2"
 
 
 def _short(value: str | None, width: int) -> str:
@@ -96,7 +96,9 @@ def main() -> int:
                 _short(row.get("run_id"), 40),
                 _short(row.get("profile"), 8),
                 _short(best_metric, 16),
-                _format_score(_first(row, "best_mlqds_primary_score", "best_mlqds_range_usefulness")),
+                _format_score(
+                    _first(row, "best_mlqds_primary_score", "best_mlqds_range_usefulness")
+                ),
                 _format_score(_first(row, "best_mlqds_range_point_f1")),
                 _format_score(_first(row, "best_mlqds_range_usefulness")),
                 _short(row.get("best_mlqds_run_label"), 16),

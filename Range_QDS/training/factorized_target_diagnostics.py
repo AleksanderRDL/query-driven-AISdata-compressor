@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 import torch
 
@@ -104,13 +105,16 @@ def factorized_target_diagnostics(
         positive_fraction_by_head[str(head_name)] = float(
             positive.sum().item() / max(1, int(valid.sum().item()))
         )
-        positive_mass_by_head[str(head_name)] = float(values[positive].sum().item()) if bool(positive.any().item()) else 0.0
+        positive_mass_by_head[str(head_name)] = (
+            float(values[positive].sum().item()) if bool(positive.any().item()) else 0.0
+        )
         positive_point_count_by_head[str(head_name)] = int(positive.sum().item())
-        support_fraction_by_threshold_by_head[str(head_name)] = support_fraction_by_threshold(values, valid)
+        support_fraction_by_threshold_by_head[str(head_name)] = support_fraction_by_threshold(
+            values, valid
+        )
         entropy_by_head[str(head_name)] = _entropy(valid_values)
         topk_label_mass_budget_grid[str(head_name)] = {
-            f"{float(ratio):.2f}": _topk_mass(valid_values, float(ratio))
-            for ratio in budget_grid
+            f"{float(ratio):.2f}": _topk_mass(valid_values, float(ratio)) for ratio in budget_grid
         }
         label_mass_by_segment_position[str(head_name)] = _segment_position_mass(values, boundaries)
 

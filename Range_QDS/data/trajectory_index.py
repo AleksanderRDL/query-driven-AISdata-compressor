@@ -28,7 +28,9 @@ def default_boundaries(
     return boundaries if boundaries is not None else [(0, int(points.shape[0]))]
 
 
-def split_by_boundaries(points: torch.Tensor, boundaries: list[TrajectoryBoundary]) -> list[torch.Tensor]:
+def split_by_boundaries(
+    points: torch.Tensor, boundaries: list[TrajectoryBoundary]
+) -> list[torch.Tensor]:
     """Split flattened points into trajectory tensors by boundaries."""
     return [points[start:end] for start, end in boundaries]
 
@@ -46,7 +48,9 @@ def trajectory_ids_for_points(
     return trajectory_ids
 
 
-def trajectory_id_mask(point_trajectory_ids: torch.Tensor, trajectory_ids: Iterable[int]) -> torch.Tensor:
+def trajectory_id_mask(
+    point_trajectory_ids: torch.Tensor, trajectory_ids: Iterable[int]
+) -> torch.Tensor:
     """Return a point mask for rows belonging to any supplied trajectory id."""
     mask = torch.zeros_like(point_trajectory_ids, dtype=torch.bool)
     for trajectory_id in trajectory_ids:

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Validate queued benchmark child args before launching tmux."""
 
+# ruff: noqa: E402
+
 from __future__ import annotations
 
 import argparse
@@ -14,7 +16,7 @@ QDS_ROOT = Path(__file__).resolve().parents[1]
 if str(QDS_ROOT) not in sys.path:
     sys.path.insert(0, str(QDS_ROOT))
 
-from experiments.experiment_cli import build_parser as build_child_parser
+from orchestration.experiment_cli import build_parser as build_child_parser
 
 
 def _iter_plan_rows(path: Path) -> list[tuple[int, str, int, str]]:

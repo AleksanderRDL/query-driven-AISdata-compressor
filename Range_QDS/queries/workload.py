@@ -33,7 +33,7 @@ class TypedQueryWorkload:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "TypedQueryWorkload":
+    def from_dict(cls, data: dict[str, Any]) -> TypedQueryWorkload:
         """Deserialize workload from a JSON-compatible dictionary."""
         return cls(
             query_features=torch.tensor(data["query_features"], dtype=torch.float32),

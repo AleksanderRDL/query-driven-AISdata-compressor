@@ -12,7 +12,6 @@ from training.model_features import (
     HISTORICAL_PRIOR_POINT_DIM,
 )
 
-
 _SOURCE_AGGREGATIONS = {"none", "mean", "min", "median"}
 
 
@@ -63,16 +62,28 @@ class HistoricalPriorRangeQDSModel(nn.Module):
                 "historical_prior_source_aggregation must be one of "
                 f"{sorted(_SOURCE_AGGREGATIONS)}; got {historical_prior_source_aggregation!r}."
             )
-        self.historical_prior_clock_dim = 2 if self.point_dim in {
-            HISTORICAL_PRIOR_POINT_DIM,
-            HISTORICAL_PRIOR_MMSI_POINT_DIM,
-        } else 0
-        self.historical_prior_density_dim = 2 if self.point_dim in {
-            HISTORICAL_PRIOR_DENSITY_POINT_DIM,
-            HISTORICAL_PRIOR_POINT_DIM,
-            HISTORICAL_PRIOR_MMSI_POINT_DIM,
-        } else 0
-        self.historical_prior_mmsi_dim = 4 if self.point_dim == HISTORICAL_PRIOR_MMSI_POINT_DIM else 0
+        self.historical_prior_clock_dim = (
+            2
+            if self.point_dim
+            in {
+                HISTORICAL_PRIOR_POINT_DIM,
+                HISTORICAL_PRIOR_MMSI_POINT_DIM,
+            }
+            else 0
+        )
+        self.historical_prior_density_dim = (
+            2
+            if self.point_dim
+            in {
+                HISTORICAL_PRIOR_DENSITY_POINT_DIM,
+                HISTORICAL_PRIOR_POINT_DIM,
+                HISTORICAL_PRIOR_MMSI_POINT_DIM,
+            }
+            else 0
+        )
+        self.historical_prior_mmsi_dim = (
+            4 if self.point_dim == HISTORICAL_PRIOR_MMSI_POINT_DIM else 0
+        )
         self.register_buffer(
             "historical_features",
             torch.zeros((max(0, int(prior_feature_count)), self.point_dim), dtype=torch.float32),
@@ -104,12 +115,16 @@ class HistoricalPriorRangeQDSModel(nn.Module):
             raise ValueError("historical prior requires at least one training point.")
         if source_ids is not None:
             if source_ids.ndim != 1 or int(source_ids.shape[0]) != int(features.shape[0]):
-                raise ValueError("historical prior source ids must be a vector matching feature rows.")
+                raise ValueError(
+                    "historical prior source ids must be a vector matching feature rows."
+                )
             stored_source_ids = source_ids.detach().to(device=features.device, dtype=torch.long)
             if bool((stored_source_ids < 0).any().item()):
                 raise ValueError("historical prior source ids must be non-negative.")
         else:
-            stored_source_ids = torch.zeros((int(features.shape[0]),), dtype=torch.long, device=features.device)
+            stored_source_ids = torch.zeros(
+                (int(features.shape[0]),), dtype=torch.long, device=features.device
+            )
         stored_features = features.detach().to(dtype=torch.float32)
         stored_targets = targets.detach().to(dtype=torch.float32).clamp(0.0, 1.0)
         min_target = float(self.historical_prior_min_target)
@@ -142,7 +157,9 @@ class HistoricalPriorRangeQDSModel(nn.Module):
             distances = torch.cdist(flat[start:end], features, p=2).square()
             nearest_distances, nearest_idx = torch.topk(distances, k=k, largest=False, dim=1)
             weights = 1.0 / (nearest_distances + 1e-4)
-            scores[start:end] = (weights * targets[nearest_idx]).sum(dim=1) / weights.sum(dim=1).clamp(min=1e-9)
+            scores[start:end] = (weights * targets[nearest_idx]).sum(dim=1) / weights.sum(
+                dim=1
+            ).clamp(min=1e-9)
         return scores
 
     def _score_flat(self, flat_points: torch.Tensor) -> torch.Tensor:
@@ -156,20 +173,27 @@ class HistoricalPriorRangeQDSModel(nn.Module):
         needs_weighting = (
             (self.historical_prior_clock_dim > 0 and self.historical_prior_clock_weight != 1.0)
             or (self.historical_prior_mmsi_dim > 0 and self.historical_prior_mmsi_weight != 1.0)
-            or (self.historical_prior_density_dim > 0 and self.historical_prior_density_weight != 1.0)
+            or (
+                self.historical_prior_density_dim > 0
+                and self.historical_prior_density_weight != 1.0
+            )
         )
         if needs_weighting:
             features = features.clone()
             flat = flat.clone()
         if self.historical_prior_clock_dim > 0 and self.historical_prior_clock_weight != 1.0:
             feature_weight = float(self.historical_prior_clock_weight)
-            clock_start = self.point_dim - self.historical_prior_density_dim - self.historical_prior_clock_dim
+            clock_start = (
+                self.point_dim - self.historical_prior_density_dim - self.historical_prior_clock_dim
+            )
             clock_end = self.point_dim - self.historical_prior_density_dim
             features[:, clock_start:clock_end] *= feature_weight
             flat[:, clock_start:clock_end] *= feature_weight
         if self.historical_prior_mmsi_dim > 0 and self.historical_prior_mmsi_weight != 1.0:
             feature_weight = float(self.historical_prior_mmsi_weight)
-            clock_start = self.point_dim - self.historical_prior_density_dim - self.historical_prior_clock_dim
+            clock_start = (
+                self.point_dim - self.historical_prior_density_dim - self.historical_prior_clock_dim
+            )
             mmsi_start = clock_start - self.historical_prior_mmsi_dim
             features[:, mmsi_start:clock_start] *= feature_weight
             flat[:, mmsi_start:clock_start] *= feature_weight
@@ -187,7 +211,9 @@ class HistoricalPriorRangeQDSModel(nn.Module):
             source_mask = source_ids == source_id
             if not bool(source_mask.any().item()):
                 continue
-            source_scores.append(self._score_against(flat, features[source_mask], targets[source_mask]))
+            source_scores.append(
+                self._score_against(flat, features[source_mask], targets[source_mask])
+            )
         if not source_scores:
             return self._score_against(flat, features, targets)
         stacked = torch.stack(source_scores, dim=0)

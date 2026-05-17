@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import itertools
 from typing import Any
 
 import torch
 
 from training.query_prior_fields import QUERY_PRIOR_FIELD_NAMES, sample_query_prior_fields
-from training.query_useful_targets import QUERY_USEFUL_V1_HEAD_NAMES, build_query_useful_v1_targets
+from training.targets.query_useful_v1 import (
+    QUERY_USEFUL_V1_HEAD_NAMES,
+    build_query_useful_v1_targets,
+)
 
-PREDICTABILITY_AUDIT_SCHEMA_VERSION = 1
+PREDICTABILITY_AUDIT_SCHEMA_VERSION = 2
 PREDICTABILITY_GATE_THRESHOLDS = {
     "lift_at_1_percent": 1.10,
     "lift_at_2_percent": 1.15,
@@ -26,13 +30,19 @@ PRIOR_ALIGNMENT_GATE_THRESHOLDS = {
 
 
 def _rankdata(values: torch.Tensor) -> torch.Tensor:
-    """Return deterministic ordinal ranks normalized only by caller statistics."""
+    """Return deterministic average ranks, matching standard Spearman tie handling."""
     flat = values.detach().cpu().float().flatten()
     if int(flat.numel()) == 0:
         return flat
     order = torch.argsort(flat, stable=True)
+    sorted_values = flat[order]
+    _, counts = torch.unique_consecutive(sorted_values, return_counts=True)
+    ends = torch.cumsum(counts, dim=0).to(dtype=torch.float32)
+    starts = ends - counts.to(dtype=torch.float32)
+    average_ranks = (starts + ends - 1.0) * 0.5
+    sorted_ranks = torch.repeat_interleave(average_ranks, counts)
     ranks = torch.empty_like(flat)
-    ranks[order] = torch.arange(int(flat.numel()), dtype=torch.float32)
+    ranks[order] = sorted_ranks.to(dtype=torch.float32)
     return ranks
 
 
@@ -58,7 +68,9 @@ def _spearman(score: torch.Tensor, target: torch.Tensor) -> float:
     return _pearson(_rankdata(score), _rankdata(target))
 
 
-def _kendall_tau_sampled(score: torch.Tensor, target: torch.Tensor, max_pairs: int = 50_000) -> float:
+def _kendall_tau_sampled(
+    score: torch.Tensor, target: torch.Tensor, max_pairs: int = 50_000
+) -> float:
     """Return deterministic sampled Kendall tau for audit-scale diagnostics."""
     score = score.detach().cpu().float().flatten()
     target = target.detach().cpu().float().flatten()
@@ -94,7 +106,9 @@ def _auc(score: torch.Tensor, positive: torch.Tensor) -> float | None:
         return None
     ranks = _rankdata(score) + 1.0
     rank_sum_pos = float(ranks[positive].sum().item())
-    auc = (rank_sum_pos - pos_count * (pos_count + 1) / 2.0) / max(1.0, float(pos_count * neg_count))
+    auc = (rank_sum_pos - pos_count * (pos_count + 1) / 2.0) / max(
+        1.0, float(pos_count * neg_count)
+    )
     return float(max(0.0, min(1.0, auc)))
 
 
@@ -155,6 +169,47 @@ def _lift_at(score: torch.Tensor, target: torch.Tensor, ratio: float) -> float:
     return float(target_cpu[idx].mean().item() / base)
 
 
+def _score_decile_calibration(
+    score: torch.Tensor, target: torch.Tensor, bucket_count: int = 10
+) -> dict[str, Any]:
+    """Return equal-count score-bucket calibration diagnostics ordered low-to-high."""
+    score_cpu = score.detach().cpu().float().flatten()
+    target_cpu = target.detach().cpu().float().flatten().clamp(min=0.0)
+    valid = torch.isfinite(score_cpu) & torch.isfinite(target_cpu)
+    score_cpu = score_cpu[valid]
+    target_cpu = target_cpu[valid]
+    if int(score_cpu.numel()) == 0:
+        return {
+            "available": False,
+            "bucket_count": 0,
+            "score_mean_low_to_high": [],
+            "target_mean_low_to_high": [],
+            "positive_rate_low_to_high": [],
+            "target_mean_adjacent_monotonicity_violations": 0,
+        }
+    order = torch.argsort(score_cpu, stable=True)
+    buckets = torch.chunk(order, max(1, int(bucket_count)))
+    score_means: list[float] = []
+    target_means: list[float] = []
+    positive_rates: list[float] = []
+    for bucket in buckets:
+        if int(bucket.numel()) == 0:
+            continue
+        bucket_target = target_cpu[bucket]
+        score_means.append(float(score_cpu[bucket].mean().item()))
+        target_means.append(float(bucket_target.mean().item()))
+        positive_rates.append(float((bucket_target > 0.0).float().mean().item()))
+    violations = sum(1 for left, right in itertools.pairwise(target_means) if right + 1e-12 < left)
+    return {
+        "available": True,
+        "bucket_count": len(target_means),
+        "score_mean_low_to_high": score_means,
+        "target_mean_low_to_high": target_means,
+        "positive_rate_low_to_high": positive_rates,
+        "target_mean_adjacent_monotonicity_violations": int(violations),
+    }
+
+
 def _score_target_metrics(
     *,
     score: torch.Tensor,
@@ -183,8 +238,19 @@ def _score_target_metrics(
     auc = _auc(score_valid, positive)
     pr_auc_lift = float(pr_auc / max(base_rate, 1e-12)) if pr_auc is not None else None
     budget_ratios = (0.01, 0.02, 0.05, 0.10)
-    lifts = {f"lift_at_{int(ratio * 100)}_percent": _lift_at(score_valid, target_valid, ratio) for ratio in budget_ratios}
-    ndcg = {f"ndcg_at_{int(ratio * 100)}_percent": _ndcg_at(score_valid, target_valid, ratio) for ratio in budget_ratios}
+    lifts = {
+        f"lift_at_{int(ratio * 100)}_percent": _lift_at(score_valid, target_valid, ratio)
+        for ratio in budget_ratios
+    }
+    ndcg = {
+        f"ndcg_at_{int(ratio * 100)}_percent": _ndcg_at(score_valid, target_valid, ratio)
+        for ratio in budget_ratios
+    }
+    positive_target_spearman = (
+        _spearman(score_valid[positive], target_valid[positive])
+        if int(positive.sum().item()) >= 2
+        else None
+    )
     return {
         "available": True,
         "valid_count": int(target_valid.numel()),
@@ -193,18 +259,29 @@ def _score_target_metrics(
         "target_mean": float(target_valid.mean().item()),
         "target_mass": float(target_valid.sum().item()),
         "score_mean": float(score_valid.mean().item()),
-        "score_std": float(score_valid.std(unbiased=False).item()) if int(score_valid.numel()) > 1 else 0.0,
+        "score_std": float(score_valid.std(unbiased=False).item())
+        if int(score_valid.numel()) > 1
+        else 0.0,
+        "score_unique_count": int(torch.unique(score_valid).numel()),
+        "target_unique_count": int(torch.unique(target_valid).numel()),
+        "score_zero_fraction": float((score_valid == 0.0).float().mean().item()),
+        "target_zero_fraction": float((target_valid == 0.0).float().mean().item()),
+        "rank_correlation_method": "average_tie_ranks",
         "spearman": _spearman(score_valid, target_valid),
+        "positive_target_spearman": positive_target_spearman,
         "kendall_tau": _kendall_tau_sampled(score_valid, target_valid),
         "auc": auc,
         "pr_auc": pr_auc,
         "pr_auc_lift_over_base_rate": pr_auc_lift,
+        "score_decile_calibration": _score_decile_calibration(score_valid, target_valid),
         **lifts,
         **ndcg,
     }
 
 
-def _prior_channel_scores(points: torch.Tensor, query_prior_field: dict[str, Any]) -> dict[str, torch.Tensor]:
+def _prior_channel_scores(
+    points: torch.Tensor, query_prior_field: dict[str, Any]
+) -> dict[str, torch.Tensor]:
     """Return sampled prior channels and derived prior scores."""
     sampled = sample_query_prior_fields(points, query_prior_field).detach().cpu().float()
     point_count = int(points.shape[0])
@@ -225,19 +302,23 @@ def _prior_channel_scores(points: torch.Tensor, query_prior_field: dict[str, Any
         channels["crossing_likelihood"],
     )
     behavior = channels["behavior_utility_prior"]
-    replacement = torch.clamp(query_mass * (0.50 + behavior) + 0.25 * boundary_event.square(), 0.0, 1.0)
-    segment_budget = torch.clamp(
-        0.70 * replacement + 0.30 * channels["route_density_prior"],
-        0.0,
-        1.0,
+    replacement = torch.clamp(
+        query_mass * (0.50 + behavior) + 0.25 * boundary_event.square(), 0.0, 1.0
     )
+    # Segment-budget labels are segment aggregations of query-local utility.
+    # Raw route density is kept as a separate channel; blending it here can make
+    # the alignment gate test density rather than the segment-budget target.
+    segment_budget = replacement
     channels.update(
         {
             "query_mass_prior": query_mass,
             "boundary_event_prior": boundary_event,
             "replacement_representative_prior": replacement,
             "segment_budget_prior": segment_budget,
-            "combined_prior_score": _prior_predictability_score(points, query_prior_field).detach().cpu().float(),
+            "combined_prior_score": _prior_predictability_score(points, query_prior_field)
+            .detach()
+            .cpu()
+            .float(),
         }
     )
     return channels
@@ -258,6 +339,7 @@ def _per_head_predictability(
         "boundary_event_utility": "boundary_event_prior",
         "replacement_representative_value": "replacement_representative_prior",
         "segment_budget_target": "segment_budget_prior",
+        "path_length_support_target": "behavior_utility_prior",
     }
     per_head: dict[str, Any] = {}
     positive_spearman_count = 0
@@ -278,13 +360,24 @@ def _per_head_predictability(
     query_hit = per_head.get("query_hit_probability", {})
     segment_budget = per_head.get("segment_budget_target", {})
     failed_checks: list[str] = []
-    if float(query_hit.get("spearman", 0.0)) < PRIOR_ALIGNMENT_GATE_THRESHOLDS["query_hit_spearman_min"]:
+    if (
+        float(query_hit.get("spearman", 0.0))
+        < PRIOR_ALIGNMENT_GATE_THRESHOLDS["query_hit_spearman_min"]
+    ):
         failed_checks.append("query_hit_spearman_below_min")
-    if float(query_hit.get("lift_at_5_percent", 0.0)) < PRIOR_ALIGNMENT_GATE_THRESHOLDS["query_hit_lift_at_5_percent_min"]:
+    if (
+        float(query_hit.get("lift_at_5_percent", 0.0))
+        < PRIOR_ALIGNMENT_GATE_THRESHOLDS["query_hit_lift_at_5_percent_min"]
+    ):
         failed_checks.append("query_hit_lift_at_5_percent_below_min")
-    if float(segment_budget.get("lift_at_5_percent", 0.0)) < PRIOR_ALIGNMENT_GATE_THRESHOLDS["segment_budget_lift_at_5_percent_min"]:
+    if (
+        float(segment_budget.get("lift_at_5_percent", 0.0))
+        < PRIOR_ALIGNMENT_GATE_THRESHOLDS["segment_budget_lift_at_5_percent_min"]
+    ):
         failed_checks.append("segment_budget_lift_at_5_percent_below_min")
-    if positive_spearman_count < int(PRIOR_ALIGNMENT_GATE_THRESHOLDS["min_positive_spearman_head_count"]):
+    if positive_spearman_count < int(
+        PRIOR_ALIGNMENT_GATE_THRESHOLDS["min_positive_spearman_head_count"]
+    ):
         failed_checks.append("too_few_positive_spearman_heads")
 
     channel_vs_final: dict[str, Any] = {}
@@ -296,10 +389,49 @@ def _per_head_predictability(
             target=final_target,
             valid_mask=final_mask,
         )
+    channel_vs_head: dict[str, Any] = {}
+    best_channel_by_head: dict[str, Any] = {}
+    for head_idx, head_name in enumerate(QUERY_USEFUL_V1_HEAD_NAMES):
+        if head_idx >= int(head_targets.shape[1]):
+            continue
+        head_rows: dict[str, Any] = {}
+        for channel_name, score in channels.items():
+            head_rows[channel_name] = _score_target_metrics(
+                score=score,
+                target=head_targets[:, head_idx],
+                valid_mask=head_mask[:, head_idx],
+            )
+        channel_vs_head[head_name] = head_rows
+        available_rows = {
+            channel_name: metrics
+            for channel_name, metrics in head_rows.items()
+            if isinstance(metrics, dict) and metrics.get("available")
+        }
+        if available_rows:
+            best_lift_name, best_lift_metrics = max(
+                available_rows.items(),
+                key=lambda item: float(item[1].get("lift_at_5_percent", 0.0) or 0.0),
+            )
+            best_spearman_name, best_spearman_metrics = max(
+                available_rows.items(),
+                key=lambda item: float(item[1].get("spearman", 0.0) or 0.0),
+            )
+            best_channel_by_head[head_name] = {
+                "best_lift_at_5_percent": {
+                    "channel": best_lift_name,
+                    "value": float(best_lift_metrics.get("lift_at_5_percent", 0.0) or 0.0),
+                },
+                "best_spearman": {
+                    "channel": best_spearman_name,
+                    "value": float(best_spearman_metrics.get("spearman", 0.0) or 0.0),
+                },
+            }
     return {
         "schema_version": 1,
         "per_head": per_head,
         "channel_vs_segment_budget_target": channel_vs_final,
+        "channel_vs_head_target": channel_vs_head,
+        "best_channel_by_head": best_channel_by_head,
         "prior_predictive_alignment_gate": {
             "gate_pass": not failed_checks,
             "failed_checks": failed_checks,
@@ -309,7 +441,9 @@ def _per_head_predictability(
     }
 
 
-def _prior_predictability_score(points: torch.Tensor, query_prior_field: dict[str, Any]) -> torch.Tensor:
+def _prior_predictability_score(
+    points: torch.Tensor, query_prior_field: dict[str, Any]
+) -> torch.Tensor:
     """Build a simple train-prior score from sampled prior-field channels."""
     sampled = sample_query_prior_fields(points, query_prior_field).float()
     if sampled.shape[1] < 6:
@@ -317,26 +451,29 @@ def _prior_predictability_score(points: torch.Tensor, query_prior_field: dict[st
     spatial_query_hit_probability = sampled[:, 0].clamp(0.0, 1.0)
     spatiotemporal_query_hit_probability = sampled[:, 1].clamp(0.0, 1.0)
     boundary_entry_exit_likelihood = sampled[:, 2].clamp(0.0, 1.0)
+    crossing_likelihood = sampled[:, 3].clamp(0.0, 1.0)
     behavior_utility_prior = sampled[:, 4].clamp(0.0, 1.0)
 
-    # Query mass is the primary prior signal; behavior is an additive utility term
-    # and explicit boundary support is retained as a bounded bonus term.
+    # The aggregate target is query-local usefulness. Behavior utility is useful
+    # only where future query mass is plausible; do not let query-free behavior
+    # bypass the query-hit prior and dominate final-target predictability.
     query_mass = torch.clamp(
         0.70 * spatial_query_hit_probability + 0.30 * spatiotemporal_query_hit_probability,
         0.0,
         1.0,
     )
-    behavior_signal = torch.clamp(
-        0.50 * behavior_utility_prior + 0.50 * boundary_entry_exit_likelihood,
+    boundary_event = torch.maximum(boundary_entry_exit_likelihood, crossing_likelihood)
+    score = torch.clamp(
+        query_mass * (0.50 + behavior_utility_prior) + 0.25 * boundary_event.square(),
         0.0,
         1.0,
     )
-    score = query_mass * (0.50 + behavior_signal)
-    score = score + 0.25 * boundary_entry_exit_likelihood.square()
-    return score.clamp(0.0, 1.0)
+    return score
 
 
-def query_prior_predictability_scores(points: torch.Tensor, query_prior_field: dict[str, Any]) -> torch.Tensor:
+def query_prior_predictability_scores(
+    points: torch.Tensor, query_prior_field: dict[str, Any]
+) -> torch.Tensor:
     """Return the query-prior-only score used by predictability and causality diagnostics."""
     return _prior_predictability_score(points, query_prior_field)
 
@@ -368,24 +505,42 @@ def query_prior_predictability_audit(
     pr_auc = _pr_auc(score, positive)
     auc = _auc(score, positive)
     budget_ratios = (0.01, 0.02, 0.05, 0.10)
-    lifts = {f"lift_at_{int(ratio * 100)}_percent": _lift_at(score, target, ratio) for ratio in budget_ratios}
-    ndcg = {f"ndcg_at_{int(ratio * 100)}_percent": _ndcg_at(score, target, ratio) for ratio in budget_ratios}
+    lifts = {
+        f"lift_at_{int(ratio * 100)}_percent": _lift_at(score, target, ratio)
+        for ratio in budget_ratios
+    }
+    ndcg = {
+        f"ndcg_at_{int(ratio * 100)}_percent": _ndcg_at(score, target, ratio)
+        for ratio in budget_ratios
+    }
     pr_auc_lift = float(pr_auc / max(base_rate, 1e-12)) if pr_auc is not None else None
     spearman = _spearman(score, target)
     metrics: dict[str, Any] = {
+        "rank_correlation_method": "average_tie_ranks",
+        "score_unique_count": int(torch.unique(score).numel()),
+        "target_unique_count": int(torch.unique(target).numel()),
+        "score_zero_fraction": float((score == 0.0).float().mean().item()),
+        "target_zero_fraction": float((target == 0.0).float().mean().item()),
         "spearman": spearman,
+        "positive_target_spearman": _spearman(score[positive], target[positive])
+        if int(positive.sum().item()) >= 2
+        else None,
         "kendall_tau": _kendall_tau_sampled(score, target),
         "auc": auc,
         "pr_auc": pr_auc,
         "base_positive_rate": base_rate,
         "pr_auc_lift_over_base_rate": pr_auc_lift,
+        "score_decile_calibration": _score_decile_calibration(score, target),
         **lifts,
         **ndcg,
     }
     checks = {
-        "lift_at_1_percent": lifts["lift_at_1_percent"] >= PREDICTABILITY_GATE_THRESHOLDS["lift_at_1_percent"],
-        "lift_at_2_percent": lifts["lift_at_2_percent"] >= PREDICTABILITY_GATE_THRESHOLDS["lift_at_2_percent"],
-        "lift_at_5_percent": lifts["lift_at_5_percent"] >= PREDICTABILITY_GATE_THRESHOLDS["lift_at_5_percent"],
+        "lift_at_1_percent": lifts["lift_at_1_percent"]
+        >= PREDICTABILITY_GATE_THRESHOLDS["lift_at_1_percent"],
+        "lift_at_2_percent": lifts["lift_at_2_percent"]
+        >= PREDICTABILITY_GATE_THRESHOLDS["lift_at_2_percent"],
+        "lift_at_5_percent": lifts["lift_at_5_percent"]
+        >= PREDICTABILITY_GATE_THRESHOLDS["lift_at_5_percent"],
         "spearman_min": spearman >= PREDICTABILITY_GATE_THRESHOLDS["spearman_min"],
         "pr_auc_lift_over_base_rate": (
             pr_auc_lift is not None
@@ -404,6 +559,7 @@ def query_prior_predictability_audit(
         "evaluation_stage": "after_masks_frozen_diagnostic_only",
         "score_source": "train_query_prior_fields",
         "target_source": "heldout_eval_query_useful_v1_targets",
+        "score_formula": "query_mass_gated_behavior_boundary",
         "used_for_training": False,
         "used_for_checkpoint_selection": False,
         "used_for_retained_mask_decision": False,
@@ -411,10 +567,16 @@ def query_prior_predictability_audit(
         "metrics": metrics,
         "per_head_predictability": per_head_predictability["per_head"],
         "prior_channel_predictability": per_head_predictability["channel_vs_segment_budget_target"],
-        "prior_predictive_alignment_gate": per_head_predictability["prior_predictive_alignment_gate"],
+        "prior_channel_by_head_predictability": per_head_predictability["channel_vs_head_target"],
+        "best_prior_channel_by_head": per_head_predictability["best_channel_by_head"],
+        "prior_predictive_alignment_gate": per_head_predictability[
+            "prior_predictive_alignment_gate"
+        ],
         "gate_checks": checks,
         "gate_pass": all(checks.values()),
         "eval_point_count": int(points.shape[0]),
         "eval_positive_target_count": int(positive.sum().item()),
-        "eval_query_count": int(len([q for q in eval_typed_queries if str(q.get("type", "")).lower() == "range"])),
+        "eval_query_count": len(
+            [q for q in eval_typed_queries if str(q.get("type", "")).lower() == "range"]
+        ),
     }

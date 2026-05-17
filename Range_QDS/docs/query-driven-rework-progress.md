@@ -1,0 +1,1117 @@
+# Query-Driven Rework Progress
+
+This is the short checkpoint log required by `docs/query-driven-rework-guide.md`.
+Detailed stdout and raw metrics are kept in `Range_QDS/artifacts/results/`.
+
+## High-Value Summary
+
+The redesign has made real progress, but it is not complete. The project has moved from broad structural uncertainty to a narrower candidate-level blocker. The current best strict synthetic/debug cell beats both final baselines on `QueryUsefulV1`, while workload stability, support overlap, target diffusion, prior predictability, prior-predictive alignment, and workload signature gates pass. The remaining blockers are learning-causality materiality and global sanity, especially length preservation.
+
+Current best single-cell evidence is promising but not final success:
+
+```text
+MLQDS QueryUsefulV1:           0.1669032451715525
+uniform QueryUsefulV1:         0.14223795796380634
+Douglas-Peucker QueryUsefulV1: 0.16362459837911367
+length preservation:           0.7938149625265364
+```
+
+Interpretation:
+- This is the best current candidate because it beats both uniform and Douglas-Peucker in one strict synthetic/debug cell while keeping the workload/prior gates healthy.
+- It is not a final success claim because learning causality still fails and length preservation is below the active `0.80` gate.
+- The full 4x7 grid should remain unrun until the strict single-cell gates pass.
+- The next useful work is not more broad sweeping. It is targeted work on selector/length allocation and material learned causality from the current best candidate.
+
+Major durable discoveries so far:
+- Balanced synthetic split cardinalities were necessary to make workload-signature diagnostics meaningful. The old default `70/15/15` synthetic split created misleading raw hit-count and query-count drift.
+- Prior predictability became healthy after target/predictability fixes. The current blocker is no longer generic prior support or target diffusion.
+- Raw factorized scalar targets plus factorized head base-rate initialization materially improved model calibration and produced the first strict-cell MLQDS win over Douglas-Peucker in this sequence.
+- `route_density_prior` is harmful under the current raw-factorized/head-initialized setup. It should stay available for diagnostics/support overlap, but be excluded from v2 model inputs. Do not generalize this finding to older target/model states.
+- `learned_segment_length_repair_fraction=0.6` is material to the current best candidate. Removing repair improves `QueryUsefulV1` and some causality signs, but invalidates global geometry. Full repair or stronger geometry repair weakens learned control or loses to Douglas-Peucker.
+- Training-fit improvements are not enough. Several changes improved fit diagnostics but worsened retained-mask quality.
+
+Current research question:
+
+```text
+Can the selector/model make train-derived prior, behavior, and score perturbations materially affect frozen retained masks while preserving at least 0.80 length and the current MLQDS win over uniform and Douglas-Peucker?
+```
+
+If a future checkpoint does not answer that question more clearly, it is probably low-value.
+
+## Current State — 2026-05-17
+
+Status: active, not complete
+
+Best current code candidate:
+- `workload_blind_range_v2`
+- `route_density_prior` excluded from v2 model inputs
+- hidden prior residual scale `0.25`
+- no direct prior-to-head residual
+- `learned_segment_score_blend_weight=0.05`
+- `learned_segment_length_repair_fraction=0.6`
+
+Best current strict artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint04_no_route_density_strict_probe_c10_r05`
+
+Best current strict result:
+- MLQDS QueryUsefulV1: `0.1669032451715525`
+- uniform QueryUsefulV1: `0.14223795796380634`
+- Douglas-Peucker QueryUsefulV1: `0.16362459837911367`
+- length preservation: `0.7938149625265364`
+- gates passed: workload stability, support overlap, predictability, prior-predictive alignment, target diffusion, workload signature
+- gates failed: learning causality, global sanity
+
+Current blockers:
+- Learning causality still fails. In the best strict artifact, key deltas are correct-sign but below material thresholds: shuffled scores `0.008957581030671818` versus required `0.014799172324647697`; untrained model `0.002338397270806869` versus required `0.005`; shuffled prior fields `0.0028898208710833317` versus required `0.005`; without query-prior features `0.0028898208710833317` versus required `0.005`.
+- Segment-budget-head materiality is already useful in the best strict artifact: `0.010472792329425523`, above the `0.005` material threshold. Do not treat all heads as equally weak.
+- Length preservation is close but still below the guide's active `0.80` gate: `0.7938149625265364`.
+- No-length-repair improves MLQDS QueryUsefulV1 to `0.1759846099523811`, but length collapses to `0.6790996203798462` and learning causality still fails. It is a diagnostic, not a candidate.
+- Full 4x7 grid remains intentionally unrun because strict single-cell gates still fail.
+
+Current decision:
+- Do not run the full grid.
+- Do not increase workload/caps yet; current standard strict cell already has healthy accepted query counts.
+- Do not lower gates for a success claim while learning causality still fails.
+- Do not lower the length gate to `0.75`; that would still leave learning causality failed.
+- Keep `learned_segment_length_repair_fraction=0.6` in all summaries of the current candidate. It is material to the best-candidate trade-off.
+- Next scientific checkpoint should target either selector/length allocation or material causality from the Checkpoint 4.74 candidate.
+
+Current extra discoveries:
+- The best candidate depends materially on `learned_segment_length_repair_fraction=0.6`; summaries must carry this knob because no-repair has stronger score causality but invalid global geometry.
+- The score-protected length frontier in the best/no-repair artifacts only clears the `0.80` length gate while protecting about `10%` of budget for top learned-score points. At the guide's `25%` learned-slot materiality floor, the length upper bound is about `0.7911`, so the current selector/score distribution has a real learned-control-vs-length tension.
+- `max_budget_share_per_ship` in `simplification/learned_segment_budget.py` is not a strict per-ship cap when the fair-share cap is larger; it is effectively `max(share_cap, fair_share_cap)`. Treat the name as misleading when reasoning about selector allocation caps.
+
+Why this candidate is current best:
+- Earlier route-density exclusion failed under the Checkpoint 3.x target/model state, so route density should not be treated as generically bad across all historical runs.
+- Checkpoint 4.72 later isolated `route_density_prior` as the dominant harmful prior channel under the newer raw-factorized/head-initialized setup: zeroing only route density improved QueryUsefulV1 to `0.16718745914649327`, while other prior channels were neutral or slightly helpful.
+- Checkpoint 4.73 made the narrow code change: keep `route_density_prior` in prior fields for support diagnostics, but zero it for v2 model features.
+- Checkpoint 4.74 restored the strict-cell MLQDS win over Douglas-Peucker while keeping the standard workload/prior gates healthy.
+- Checkpoint 4.83 showed the current length-repair path suppresses some score/causality upside, but removing it destroys global geometry and still does not pass learning causality. Therefore `learned_segment_length_repair_fraction=0.6` remains part of the best current candidate.
+- The current problem is not workload health or generic prior harm. The remaining problem is making useful prior/behavior/score perturbations material enough in retained masks while preserving length.
+
+Evidence boundary:
+- A strict single-cell win is not a final success claim. Final acceptance still requires all strict single-cell gates plus the full 4x7 coverage/compression grid.
+- Any future change must be judged against Checkpoint 4.74 unless it intentionally redefines the candidate baseline.
+- Checkpoint 4.83 is useful evidence about the repair-vs-causality trade-off, but it does not replace Checkpoint 4.74 as the best candidate because its length is invalid.
+- Raw training-fit improvements are not enough. Checkpoint 4.79 showed better fit diagnostics can still worsen retained-mask quality and lose the Douglas-Peucker comparison.
+- Length-only improvements are not enough. Checkpoints 4.65, 4.66, and 4.81 improved length slightly or nearly cleared it but weakened MLQDS, learned control, or causality.
+- A no-repair score win is not enough. Checkpoint 4.83 beat both baselines on QueryUsefulV1 but failed global sanity badly and still failed learning causality.
+
+Rejected-path memory:
+
+| Path | Best observed effect | Rejection reason |
+|---|---:|---|
+| no length repair, `learned_segment_length_repair_fraction=0.0` | MLQDS `0.1759846099523811`; learned-controlled slot fraction `0.8461538461538461` | length collapsed to `0.6790996203798462`; learning causality still failed |
+| full length repair | length `0.7980194800294772` | learned-controlled slot fraction collapsed to `0.203125`; MLQDS lost to Douglas-Peucker |
+| geometry gain `0.25` | length `0.797193150044111` | MLQDS regressed and causality worsened |
+| full prior residual scale `1.0` after route removal | length `0.7939141083394758` | MLQDS `0.16109363670733973`, lost to Douglas-Peucker; shuffled-score causality failed by sign |
+| semantic prior-to-head residual | improved training fit | retained-mask result worsened; MLQDS `0.16054051959902663`, lost to Douglas-Peucker; prior ablations became harmful |
+| point-score blend `0.15` | length `0.7943720026689473` | MLQDS `0.1581758366351451`, lost to Douglas-Peucker; shuffled and untrained causality failed by sign |
+
+Next-checkpoint guardrails:
+- Prefer narrow changes that preserve Checkpoint 4.74's DP win and healthy workload/prior gates.
+- For length work, preserve learned-controlled slots; do not spend the budget with query-free repair that crowds out learned selection.
+- For causality work, focus on making prior/behavior/score perturbations move retained masks materially, not merely improving per-head fit.
+- Score-protected length filling is a plausible diagnostic direction, but it must respect the observed frontier: protecting `25%` learned-score budget currently appears incompatible with the `0.80` length gate.
+- Do not re-test blunt prior-strength escalation unless there is a new mechanism that explains why it will avoid the Checkpoint 4.76 and 4.79 failures.
+- Do not add temporal scaffold or change acceptance thresholds to manufacture a success claim.
+
+Minimum pass condition for the next scientific candidate update:
+- Keep the Checkpoint 4.74 baseline comparable unless there is an explicit reason to reset the baseline.
+- Preserve the MLQDS win over uniform and Douglas-Peucker on `QueryUsefulV1`.
+- Clear `global_sanity_gate`, especially length preservation `>=0.80`.
+- Clear `learning_causality_gate` with material deltas, not only correct signs.
+- Keep `workload_stability`, `workload_signature`, `support_overlap`, `target_diffusion`, `predictability`, and `prior_predictive_alignment` passing.
+- Report whether the change affects learned-controlled slot fraction, segment-budget-head delta, shuffled-score delta, no-prior delta, no-behavior-head delta, and length.
+
+## Checkpoint 1 — Workload Generator And Profile Health
+
+Status: completed
+
+Goal:
+- Make range workload generation healthy enough for standard strict single-cell probes.
+
+Changes:
+- Aligned `range_workload_v1` footprints and query-plan behavior with the guide.
+- Added workload-signature checks for query-count mismatch.
+- Added prefix-balanced profile-plan behavior so expanded workloads preserve family mix.
+
+Tests:
+- Focused workload/profile tests in `tests/test_query_driven_rework.py`
+- `tests/test_query_coverage_generation.py`
+- ruff/static checks on changed workload modules
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint01_*`
+- command: guide-aligned strict synthetic/debug single-cell probes
+
+Key results:
+- Early small probes exposed workload signature and query-count drift.
+- Later strict cells generated healthy train/eval/selection workloads with accepted query counts above standard strict diagnostic minimum.
+
+Decision:
+- Continue from healthy strict synthetic cells; do not tune model from unhealthy workload evidence.
+
+## Checkpoint 2 — Prior Predictability And Target Alignment
+
+Status: completed
+
+Goal:
+- Make train-derived priors and QueryUsefulV1 targets measurable under healthy workloads.
+
+Changes:
+- Added prior predictability and target-diffusion diagnostics.
+- Added support-overlap and prior-alignment gates.
+- Added factorized QueryUsefulV1 target diagnostics.
+
+Tests:
+- Focused predictability, prior-field, target, and gate tests in `tests/test_query_driven_rework.py`
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint02_*`
+
+Key results:
+- Workload, support, predictability, prior-alignment, target-diffusion, and signature gates pass in the retained strict cell.
+- Remaining failures moved to model/selector causality and global sanity.
+
+Decision:
+- Continue to model and selector checkpoints.
+
+## Checkpoint 3 — Factorized Model And Selector Diagnostics
+
+Status: completed
+
+Goal:
+- Make the learned workload-blind model interpretable and causally diagnosable.
+
+Changes:
+- Added `workload_blind_range_v2`.
+- Added factorized QueryUsefulV1 heads.
+- Added `learned_segment_budget_v1`.
+- Added frozen-mask protocol and causality ablations.
+- Added selector trace diagnostics, learned-slot accounting, head ablation sensitivity, and length feasibility audits.
+
+Tests:
+- Full project pytest currently passes.
+- Focused model/selector tests in `tests/test_query_driven_rework.py`
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint03_*`
+
+Key results:
+- Early learned runs beat uniform inconsistently but failed causality and global sanity.
+- Diagnostics showed retained-mask quality, segment allocation, and prior-path behavior needed targeted fixes.
+
+Decision:
+- Continue with targeted model/selector fixes only after gate-level diagnostics identify the component.
+
+## Checkpoint 4.61 — Raw Factorized Scalar Target
+
+Status: completed
+
+Goal:
+- Train factorized mode against the raw QueryUsefulV1 scalar target instead of legacy scaled labels.
+
+Changes:
+- Added raw scalar target handling for `query_useful_v1_factorized`.
+- Kept legacy target scaling for legacy modes.
+
+Tests:
+- Focused target and factorized diagnostics tests.
+- ruff, pyright, `git diff --check`.
+
+Experiment artifact:
+- path: not generated in this code checkpoint
+
+Key results:
+- Code checks passed.
+- Strict replay still needed after the change.
+
+Decision:
+- Continue to strict replay.
+
+## Checkpoint 4.62 — Raw Factorized Strict Replay
+
+Status: completed; diagnostic failed
+
+Goal:
+- Test whether raw scalar targets fix factorized learning.
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint04_raw_factorized_scalar_strict_probe_c10_r05`
+- path: `artifacts/results/query_driven_v2_checkpoint04_raw_factorized_scalar_diagnostic/raw_factorized_scalar_summary.json`
+
+Key results:
+- MLQDS QueryUsefulV1: `0.16057549994768916`
+- uniform QueryUsefulV1: `0.14223795796380634`
+- Douglas-Peucker QueryUsefulV1: `0.16362459837911367`
+- length: `0.7933048661024167`
+- gates failed: learning causality, global sanity
+- factorized heads were badly calibrated against low base-rate targets.
+
+Decision:
+- Fix factorized head initialization.
+
+## Checkpoint 4.63 — Factorized Head Base-Rate Initialization
+
+Status: completed
+
+Goal:
+- Initialize factorized output-head biases from empirical training target base rates.
+
+Changes:
+- Added factorized head output-bias initialization from target means.
+- Added diagnostics and focused regression test.
+
+Tests:
+- Focused factorized-head tests.
+- ruff, pyright, `git diff --check`.
+
+Experiment artifact:
+- path: not generated in this code checkpoint
+
+Key results:
+- Focused checks passed.
+
+Decision:
+- Continue to strict replay.
+
+## Checkpoint 4.64 — Head-Bias Initialization Strict Replay
+
+Status: completed; improved but still blocked
+
+Goal:
+- Test whether base-rate initialization fixes factorized calibration and causality.
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint04_head_bias_init_strict_probe_c10_r05`
+- path: `artifacts/results/query_driven_v2_checkpoint04_head_bias_init_diagnostic/head_bias_init_summary.json`
+
+Key results:
+- MLQDS QueryUsefulV1: `0.16512927110095915`
+- uniform QueryUsefulV1: `0.14223795796380634`
+- Douglas-Peucker QueryUsefulV1: `0.16362459837911367`
+- length: `0.7931550386328327`
+- first strict-cell MLQDS QueryUsefulV1 win over Douglas-Peucker in this sequence
+- gates failed: learning causality, global sanity
+- prior-feature removal slightly improved score, suggesting harmful prior integration.
+
+Decision:
+- Keep head-bias initialization.
+- Diagnose global sanity and prior causality separately.
+
+## Checkpoint 4.65 — Full Length Repair Diagnostic
+
+Status: completed; diagnostic failed
+
+Goal:
+- Test whether full existing length repair clears the length gate.
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint04_full_length_repair_strict_probe_c10_r05`
+- path: `artifacts/results/query_driven_v2_checkpoint04_full_length_repair_diagnostic/full_length_repair_summary.json`
+
+Key results:
+- MLQDS QueryUsefulV1: `0.16243558593475863`
+- length: `0.7980194800294772`
+- learned-controlled slot fraction dropped to `0.203125`
+- gates failed: learning causality, global sanity
+
+Decision:
+- Reject full repair. It weakens learned control and loses to Douglas-Peucker.
+
+## Checkpoint 4.66 — Higher Geometry-Gain Diagnostic
+
+Status: completed; diagnostic failed
+
+Goal:
+- Test whether stronger geometry gain clears length without collapsing learned slots.
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint04_geometry_gain025_strict_probe_c10_r05`
+- path: `artifacts/results/query_driven_v2_checkpoint04_geometry_gain025_diagnostic/geometry_gain025_summary.json`
+
+Key results:
+- MLQDS QueryUsefulV1: `0.16022420264941584`
+- length: `0.797193150044111`
+- learned-controlled slot fraction stayed healthy
+- causality worsened
+
+Decision:
+- Reject geometry gain `0.25`.
+
+## Checkpoint 4.67 — Query-Prior Branch Initialization
+
+Status: completed
+
+Goal:
+- Fix the near-zero prior branch output initialization.
+
+Changes:
+- Changed prior output initialization from `std=1e-3` to Xavier.
+- Added focused prior-branch tests.
+
+Tests:
+- Focused prior-branch tests.
+- ruff, pyright, `git diff --check`.
+
+Experiment artifact:
+- path: not generated in this code checkpoint
+
+Key results:
+- Focused checks passed.
+
+Decision:
+- Continue to strict replay.
+
+## Checkpoint 4.68 — Prior-Init Strict Replay
+
+Status: completed; diagnostic failed
+
+Goal:
+- Test whether stronger prior initialization makes prior features causally useful.
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint04_prior_init_strict_probe_c10_r05`
+- path: `artifacts/results/query_driven_v2_checkpoint04_prior_init_diagnostic/prior_init_summary.json`
+
+Key results:
+- MLQDS QueryUsefulV1: `0.14892550519596737`
+- uniform QueryUsefulV1: `0.14223795796380634`
+- Douglas-Peucker QueryUsefulV1: `0.16362459837911367`
+- length: `0.7872785562747836`
+- prior features became influential but harmful.
+
+Decision:
+- Reject full-strength prior path.
+
+## Checkpoint 4.69 — Bounded Prior Residual Scale
+
+Status: completed
+
+Goal:
+- Bound the prior residual scale without returning to near-zero suppression.
+
+Changes:
+- Set prior residual scale initialization/reset to `0.25`.
+- Updated focused tests.
+
+Tests:
+- Focused prior-scale tests.
+- ruff, pyright, `git diff --check`.
+
+Experiment artifact:
+- path: not generated in this code checkpoint
+
+Key results:
+- Focused checks passed.
+
+Decision:
+- Continue to strict replay.
+
+## Checkpoint 4.70 — Bounded-Prior Strict Replay
+
+Status: completed; diagnostic failed
+
+Goal:
+- Test whether bounded prior scale recovers useful prior sensitivity.
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint04_bounded_prior_strict_probe_c10_r05`
+- path: `artifacts/results/query_driven_v2_checkpoint04_bounded_prior_diagnostic/bounded_prior_summary.json`
+
+Key results:
+- MLQDS QueryUsefulV1: `0.16008457877061275`
+- length: `0.7936343750367146`
+- prior ablations still improved score
+- lost to Douglas-Peucker
+
+Decision:
+- Stop scale guessing. Diagnose prior channels.
+
+## Checkpoint 4.71 — Per-Channel Prior Ablation Diagnostics
+
+Status: completed
+
+Goal:
+- Add optional per-channel prior ablation diagnostics.
+
+Changes:
+- Added `zero_query_prior_field_channels`.
+- Added optional per-channel prior ablation diagnostics under `learning_causality_summary.prior_channel_ablation_diagnostics`.
+- Added focused tests.
+
+Tests:
+- Focused prior-channel tests.
+- ruff, pyright, `git diff --check`.
+
+Experiment artifact:
+- path: not generated in this code checkpoint
+
+Key results:
+- Focused checks passed.
+
+Decision:
+- Continue to strict diagnostic replay.
+
+## Checkpoint 4.72 — Prior-Channel Diagnostic Replay
+
+Status: completed; diagnostic succeeded
+
+Goal:
+- Identify which prior channel causes harmful prior behavior.
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint04_prior_channel_diag_strict_probe_c10_r05`
+- path: `artifacts/results/query_driven_v2_checkpoint04_prior_channel_diag_diagnostic/prior_channel_summary.json`
+
+Key results:
+- Base MLQDS QueryUsefulV1: `0.16008457877061275`
+- zeroing `route_density_prior` alone improved QueryUsefulV1 to `0.16718745914649327`
+- other prior channels were neutral or slightly helpful
+
+Decision:
+- Remove `route_density_prior` from v2 model inputs while keeping it available for support diagnostics.
+
+## Checkpoint 4.73 — Exclude Route Density From V2 Model Input
+
+Status: completed
+
+Goal:
+- Exclude the harmful route-density channel from v2 model features.
+
+Changes:
+- Added `WORKLOAD_BLIND_RANGE_V2_MODEL_DISABLED_PRIOR_FIELDS = ("route_density_prior",)`.
+- Zeroed disabled prior channels in v2 feature construction.
+- Bumped v2 schema to `6`.
+- Added focused test proving route density remains in prior sampling but not v2 model features.
+
+Tests:
+- Focused route-density exclusion tests.
+- ruff, pyright, `git diff --check`.
+
+Experiment artifact:
+- path: not generated in this code checkpoint
+
+Key results:
+- Focused checks passed.
+
+Decision:
+- Continue to strict replay.
+
+## Checkpoint 4.74 — No-Route-Density Strict Replay
+
+Status: completed; best current candidate
+
+Goal:
+- Test whether route-density exclusion fixes prior causality and restores the DP comparison.
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint04_no_route_density_strict_probe_c10_r05`
+- path: `artifacts/results/query_driven_v2_checkpoint04_no_route_density_diagnostic/no_route_density_summary.json`
+
+Key results:
+- MLQDS QueryUsefulV1: `0.1669032451715525`
+- uniform QueryUsefulV1: `0.14223795796380634`
+- Douglas-Peucker QueryUsefulV1: `0.16362459837911367`
+- length: `0.7938149625265364`
+- prior/no-head deltas became positive but remained below material thresholds
+- gates failed: learning causality, global sanity
+
+Decision:
+- Keep route-density exclusion.
+- Continue from this candidate.
+
+## Checkpoint 4.75 — Restore Prior Scale After Route Removal
+
+Status: completed
+
+Goal:
+- Test a full prior residual scale after removing route density.
+
+Changes:
+- Temporarily set prior residual scale back to `1.0`.
+- Updated focused tests.
+
+Tests:
+- Focused prior-scale tests.
+- ruff, pyright, `git diff --check`.
+
+Experiment artifact:
+- path: not generated in this code checkpoint
+
+Key results:
+- Focused checks passed.
+
+Decision:
+- Continue to strict replay.
+
+## Checkpoint 4.76 — No-Route-Density Scale-1 Replay
+
+Status: completed; diagnostic failed
+
+Goal:
+- Test whether full prior scale works after route-density removal.
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint04_no_route_density_scale1_strict_probe_c10_r05`
+- path: `artifacts/results/query_driven_v2_checkpoint04_no_route_density_scale1_diagnostic/no_route_density_scale1_summary.json`
+
+Key results:
+- MLQDS QueryUsefulV1: `0.16109363670733973`
+- lost to Douglas-Peucker
+- shuffled-score causality failed by sign
+- length: `0.7939141083394758`
+
+Decision:
+- Reject scale `1.0`.
+
+## Checkpoint 4.77 — Revert Failed Prior Scale
+
+Status: completed
+
+Goal:
+- Restore the best current code candidate after failed scale test.
+
+Changes:
+- Reverted prior scale to `0.25`.
+- Reverted schema to `6`.
+
+Tests:
+- Focused prior-scale and route-density tests.
+- ruff, pyright, `git diff --check`.
+
+Experiment artifact:
+- path: not generated in this code checkpoint
+
+Key results:
+- Focused checks passed.
+
+Decision:
+- Continue from Checkpoint 4.74.
+
+## Checkpoint 4.78 — Semantic Prior-To-Head Residual
+
+Status: completed
+
+Goal:
+- Test a direct interpretable prior-to-head residual.
+
+Changes:
+- Temporarily added semantic direct prior-to-head residuals.
+- Kept route density at zero influence.
+
+Tests:
+- Focused prior-branch tests.
+- ruff, pyright, `git diff --check`.
+
+Experiment artifact:
+- path: not generated in this code checkpoint
+
+Key results:
+- Focused checks passed.
+
+Decision:
+- Continue to strict replay.
+
+## Checkpoint 4.79 — Semantic Prior Residual Strict Replay
+
+Status: completed; diagnostic failed
+
+Goal:
+- Test whether semantic prior residuals make causality material.
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint04_semantic_prior_residual_strict_probe_c10_r05`
+- path: `artifacts/results/query_driven_v2_checkpoint04_semantic_prior_residual_diagnostic/semantic_prior_residual_summary.json`
+
+Key results:
+- MLQDS QueryUsefulV1: `0.16054051959902663`
+- lost to Douglas-Peucker
+- training fit improved, but retained-mask result worsened
+- prior ablations became harmful again
+
+Decision:
+- Reject semantic prior residuals.
+
+## Checkpoint 4.80 — Revert Semantic Residual
+
+Status: completed
+
+Goal:
+- Remove the failed semantic residual path.
+
+Changes:
+- Removed direct prior-head residual code.
+- Restored schema `6`.
+
+Tests:
+- Focused prior/route-density tests.
+- ruff, pyright, `git diff --check`.
+
+Experiment artifact:
+- path: not generated in this code checkpoint
+
+Key results:
+- Focused checks passed.
+
+Decision:
+- Continue from Checkpoint 4.74.
+
+## Checkpoint 4.81 — Higher Point-Score Blend Diagnostic
+
+Status: completed; diagnostic failed
+
+Goal:
+- Test whether point scores are underweighted inside learned segments.
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint04_score_blend015_strict_probe_c10_r05`
+- path: `artifacts/results/query_driven_v2_checkpoint04_score_blend015_diagnostic/score_blend015_summary.json`
+
+Key results:
+- MLQDS QueryUsefulV1: `0.1581758366351451`
+- lost to Douglas-Peucker
+- length: `0.7943720026689473`
+- shuffled and untrained causality failed by sign
+
+Decision:
+- Reject `learned_segment_score_blend_weight=0.15`.
+- Continue from Checkpoint 4.74.
+
+## Checkpoint 4.82 — Commit-Prep Cleanup
+
+Status: completed
+
+Goal:
+- Prepare the current codebase work for a checkpointed git save.
+
+Changes:
+- Condensed this progress log from a long raw checkpoint journal into a short guide-compliant ledger.
+- Verified rejected scale-1, semantic-residual, and score-blend escalation paths are not active production code.
+- Kept the best current candidate active: route-density excluded from v2 model inputs, prior scale `0.25`, no direct prior-head residual.
+
+Tests:
+- `../.venv/bin/ruff check evaluation/baselines.py experiments/benchmark_report.py experiments/experiment_cli.py experiments/experiment_config.py experiments/experiment_data.py experiments/experiment_methods.py experiments/experiment_pipeline.py experiments/range_diagnostics.py experiments/run_ais_experiment.py experiments/run_inference.py models/workload_blind_range_v2.py queries/query_generator.py queries/workload_profiles.py simplification/learned_segment_budget.py simplification/mlqds_scoring.py tests/test_benchmark_runner.py tests/test_experiment_data.py tests/test_query_coverage_generation.py tests/test_query_driven_rework.py tests/test_torch_runtime_controls.py tests/test_training_does_not_collapse.py training/checkpoints.py training/model_features.py training/predictability_audit.py training/query_prior_fields.py training/query_useful_targets.py training/train_model.py training/training_epoch.py training/training_validation.py`
+- `../.venv/bin/python -m pyright evaluation/baselines.py experiments/benchmark_report.py experiments/experiment_cli.py experiments/experiment_config.py experiments/experiment_data.py experiments/experiment_methods.py experiments/experiment_pipeline.py experiments/range_diagnostics.py experiments/run_ais_experiment.py experiments/run_inference.py models/workload_blind_range_v2.py queries/query_generator.py queries/workload_profiles.py simplification/learned_segment_budget.py simplification/mlqds_scoring.py tests/test_benchmark_runner.py tests/test_experiment_data.py tests/test_query_coverage_generation.py tests/test_query_driven_rework.py tests/test_torch_runtime_controls.py tests/test_training_does_not_collapse.py training/checkpoints.py training/model_features.py training/predictability_audit.py training/query_prior_fields.py training/query_useful_targets.py training/train_model.py training/training_epoch.py training/training_validation.py`
+- `git diff --check`
+- `../.venv/bin/python -m pytest tests/test_query_driven_rework.py`
+- `../.venv/bin/python -m pytest tests/test_training_does_not_collapse.py tests/test_experiment_data.py tests/test_query_coverage_generation.py`
+- `../.venv/bin/python -m pytest tests/test_benchmark_runner.py tests/test_torch_runtime_controls.py`
+- `../.venv/bin/python -m pytest`
+
+Experiment artifact:
+- path: not generated in this checkpoint
+- command: no scientific probe was run; this was a cleanup and verification checkpoint.
+
+Key results:
+- ruff passed.
+- pyright passed.
+- `git diff --check` passed.
+- Focused pytest batches passed.
+- Full pytest passed: `408 passed, 1 warning`.
+
+Decision:
+- Codebase is ready for a checkpoint commit.
+- Remaining rework blockers after the save are learning-causality materiality and length preservation.
+
+## Checkpoint 4.83 — No-Length-Repair Causality Diagnostic
+
+Status: completed; diagnostic failed
+
+Goal:
+- Test whether the current query-free length-repair swaps are suppressing material learned-score causality.
+
+Changes:
+- No code changes.
+- Removed one aborted non-comparable artifact before rerunning with the same split geometry as Checkpoint 4.74.
+
+Tests:
+- Not run; this checkpoint was experiment-only.
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint04_no_length_repair_causality_diag_c10_r05`
+- command: strict synthetic single-cell matching Checkpoint 4.74 scale/seed/workload, with `learned_segment_length_repair_fraction=0.0`.
+
+Key results:
+- MLQDS QueryUsefulV1: `0.1759846099523811`
+- uniform QueryUsefulV1: `0.14223795796380634`
+- Douglas-Peucker QueryUsefulV1: `0.16362459837911367`
+- length: `0.6790996203798462`
+- learned-controlled slot fraction: `0.8461538461538461`
+- gates passed: workload stability, support overlap, predictability, prior-predictive alignment, target diffusion, workload signature
+- gates failed: learning causality, global sanity
+- causality passed for shuffled scores, untrained model, prior-field-only, and segment-budget-head ablation.
+- causality failed for shuffled prior fields, no query-prior features, and no behavior head.
+
+Decision:
+- Reject no-repair as a candidate: it destroys global sanity and still does not pass learning causality.
+- Do not increase workload/caps for this blocker; the strict cell already has healthy workload scale.
+- Next checkpoint should target either score-protected length filling as a query-free selector diagnostic, or a model/prior-path change that makes train-derived priors materially affect retained masks without reintroducing harmful route density.
+
+## Checkpoint 4.84 — Discovery Log Hygiene
+
+Status: completed
+
+Goal:
+- Make sure relevant extra discoveries are preserved in log and summary outputs.
+
+Changes:
+- Added a current extra-discoveries section near the top of this log.
+- Promoted the material length-repair knob, score-protected length frontier conflict, and per-ship-cap naming issue into durable notes.
+
+Tests:
+- `git diff --check`
+
+Experiment artifact:
+- path: not generated
+- command: no probe was run; this was documentation hygiene.
+
+Key results:
+- Relevant extra discoveries are now recorded in this log instead of only in chat summaries.
+
+Decision:
+- Continue future checkpoints from the Checkpoint 4.74 candidate and keep extra discoveries in both progress-log updates and final summaries.
+
+## Checkpoint 4.85-4.90 — Tooling, Cleanup, And Layout Audit
+
+Status: completed
+
+Goal:
+- Improve checkpoint-save hygiene before further redesign work by installing the
+  new tooling workflow, cleaning stale docs/code/tests, and recording the next
+  structural refactor order.
+
+Changes:
+- Reworked Makefiles and active commands around `uv --group dev`.
+- Added jq artifact filters, Rich run summaries, Hypothesis property tests,
+  pytest-regressions snapshots, yamllint, and property/regression test markers.
+- Condensed active docs, restored tooling-guide principles, and removed stale
+  claims that QueryUsefulV1 and `query_useful_v1_factorized` were future-only.
+- Removed unused compatibility shims and aliases, including stale training,
+  simplification, and query-useful target wrapper paths.
+- Renamed stale diagnostic/profile fields to current names such as
+  `profile_diagnostic_only`, `profile_note`, `selector_final_candidate`, and
+  `unspecified`.
+- Added guardrails for removed shims, active benchmark profile settings,
+  implemented profile choices, scalar-vs-QueryUseful target separation, and
+  renamed artifact fields.
+- Expanded `CODE_LAYOUT.md` into a top-down architecture map with ownership
+  boundaries, pressure points, and recommended extraction order.
+
+Tests:
+- `uv sync --group dev`
+- `uv lock --check`
+- `git diff --check`
+- `uv run --group dev -- yamllint .`
+- focused Ruff/Pyright checks on edited code and tests
+- property/regression tests and focused guardrail, benchmark, model-feature,
+  query-generation, and query-driven rework tests
+- full Pyright and full pytest runs
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was tooling, docs, cleanup, and
+  layout-audit work.
+
+Key results:
+- Full pytest progressed from `415 passed, 1 warning` to
+  `421 passed, 1 warning` across this cleanup range.
+- Full Pyright passed.
+- yamllint passed.
+- The initial full-Ruff target was still documented as blocked by existing lint
+  debt; that debt was not hidden.
+
+Extra discoveries:
+- Benchmark/Makefile defaults still pointed at legacy diagnostic artifact
+  families at this stage.
+- `workload_blind_range_v2.calibration_head` needed an explicit checkpoint
+  compatibility policy before removal could be considered.
+- `training/` depended upward on `experiments/` through config/runtime helpers;
+  neutral ownership was the correct fix.
+
+Decision:
+- Tooling, active docs, stale cleanup guardrails, and the layout audit were good
+  enough to checkpoint.
+- Continue with narrow structural refactors; no scientific success claim is
+  made.
+
+## Checkpoint 4.91-5.00 — Early Extractions And Save-Gate Disposition
+
+Status: completed
+
+Goal:
+- Execute the first safe extraction sequence from `CODE_LAYOUT.md` and resolve
+  cleanup discoveries that blocked a reliable save gate.
+
+Changes:
+- Extracted final-candidate gates, pure causality helpers, segment audits,
+  length diagnostics, selector diagnostics, and model-ablation helpers from the
+  old pipeline path.
+- Extracted benchmark table formatting, final-grid acceptance, shared benchmark
+  helpers, and runtime/history row helpers from the old benchmark report path.
+- Made `make lint` a scoped correctness gate, added `make lint-full`, and fixed
+  the broad Ruff debt so full lint passed.
+- Moved shared config into `config/` and torch runtime controls into `runtime/`,
+  removing the `training -> experiments` dependency.
+- Extracted public target-mode registries so CLI choices and guardrails no
+  longer imported the large target implementation.
+- Changed benchmark Makefile, runner, runtime, preflight, list-runs, and tmux
+  defaults away from legacy diagnostic artifact families.
+- Documented the `calibration_head` checkpoint-compatibility policy.
+
+Tests:
+- `make -C Range_QDS lint`
+- `make -C Range_QDS lint-full`
+- `make -C Range_QDS typecheck`
+- `make -C Range_QDS test`
+- `uv run --group dev -- yamllint .`
+- `git diff --check -- Range_QDS Makefile pyproject.toml`
+- focused Ruff/Pyright and unit/regression tests for each extracted module group
+- CLI/help checks and shell syntax checks for benchmark scripts
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was structural refactoring and
+  save-gate cleanup.
+
+Key results:
+- Full Ruff, full Pyright, yamllint, whitespace checks, shell syntax checks,
+  and full pytest passed by the end of the range.
+- Full pytest remained at `421 passed, 1 warning`.
+- The old pipeline dropped from about `4965` lines to about `2955` lines before
+  the later package restructure.
+- Benchmark defaults and active docs no longer pointed at legacy diagnostic
+  artifact families.
+
+Extra discoveries:
+- Selection-causality and broad artifact assembly were not clean early
+  extraction targets; forcing them then would have moved coupling rather than
+  reducing it.
+- `_row_from_run` was identified as the benchmark-report coupling point.
+- Full Ruff cleanup exposed real defects and risks, including stale imports,
+  closure binding risk, regex escaping issues, and script path-setup exceptions.
+
+Decision:
+- Save gates were made real: scoped lint, full lint, typecheck, YAML lint,
+  whitespace checks, and full tests passed.
+- No scientific success claim is made.
+
+## Checkpoint 5.01-5.06 — High-Level Structure And Core Component Splits
+
+Status: completed
+
+Goal:
+- Align the repository with the flow
+  `data -> queries -> training -> simplification -> evaluation -> benchmarking`,
+  consolidate artifacts under `Range_QDS`, and split large component modules
+  into direct owners without compatibility facades.
+
+Changes:
+- Removed the old `experiments/` package and split ownership into
+  `orchestration/` and `benchmarking/`.
+- Reorganized tests into `unit`, `integration`, `guardrails`, `property`, and
+  `regression` areas.
+- Removed the stale `turn_aware` model path after the file deletion, including
+  config choices, checkpoint-loading branches, feature-builder behavior, docs,
+  and tests.
+- Consolidated generated outputs under `Range_QDS/artifacts/`; root
+  `artifacts/` was removed and direct defaults became cwd-independent.
+- Split query generation into anchors, coverage/acceptance, profile planning,
+  signatures, and workload assembly.
+- Split benchmark reporting into report coordination, row fields, audit
+  extractors, metrics/status helpers, and paths.
+- Split learned segment-budget into allocation, length repair, diagnostics,
+  trace, constants, and public core orchestration.
+- Split scalar target-family construction out of the stale
+  `training.targets.legacy` name into family-specific modules.
+
+Tests:
+- `make -C Range_QDS lint`
+- `make -C Range_QDS lint-full`
+- `make -C Range_QDS typecheck`
+- `make -C Range_QDS test`
+- `uv run --group dev -- yamllint .`
+- `git diff --check -- Range_QDS pyproject.toml .gitignore`
+- focused Ruff/Pyright checks and focused tests for each moved component
+- CLI/help and import-smoke checks for new package owners
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was structural refactoring and
+  artifact-root cleanup.
+
+Key results:
+- Full pytest progressed from `420 passed, 1 warning` to
+  `424 passed, 1 warning`.
+- Full Ruff and full Pyright passed.
+- `Range_QDS/artifacts/` became the only active artifact root.
+- `queries/generation/workload.py` dropped to `638` lines, benchmark report to
+  `75` lines, and learned segment-budget core to `409` lines.
+
+Extra discoveries:
+- Deleting only `turn_aware_qds_model.py` would have left runtime-failing live
+  references; the whole dispatch/config/docs/test path had to be removed.
+- `Range_QDS/artifacts/README.md` had been ignored, so the artifact contract was
+  not trackable until ignore rules were fixed.
+- `training.targets.legacy` was active scalar target logic hidden behind a stale
+  name, not dead code.
+
+Decision:
+- The repository structure now matches the intended component flow.
+- No compatibility shims were left for moved packages, removed `turn_aware`, or
+  deleted target-family facades.
+- No scientific success claim is made.
+
+## Checkpoint 5.07-5.12 — Orchestration Pipeline Extraction
+
+Status: completed
+
+Goal:
+- Make `orchestration/experiment_pipeline.py` a readable coordinator by
+  extracting coherent single-run stages while preserving protocol ordering and
+  artifact fields.
+
+Changes:
+- Extracted selection-causality diagnostics, final summaries/gates, target
+  preparation, retained-mask freezing, retained-mask ablation freezing, and the
+  evaluation stage into direct orchestration owners.
+- Added focused tests for each extracted boundary and updated active
+  orchestration/layout docs.
+- Kept final metrics-dump assembly and simplified CSV export in the pipeline
+  because those are artifact-contract-sensitive.
+
+Tests:
+- `make -C Range_QDS lint`
+- `make -C Range_QDS lint-full`
+- `make -C Range_QDS typecheck`
+- `make -C Range_QDS test`
+- `uv run --group dev -- yamllint .`
+- `git diff --check -- Range_QDS pyproject.toml .gitignore`
+- focused Ruff/Pyright checks for each orchestration stage
+- focused tests for selection causality, final summaries, target preparation,
+  retained masks, retained-mask ablations, evaluation stage, and regressions
+- import-smoke checks for extracted stage APIs
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was structural refactoring.
+
+Key results:
+- Full pytest progressed from `425 passed, 1 warning` to
+  `438 passed, 1 warning`.
+- Full Ruff and full Pyright passed after each extraction.
+- `experiment_pipeline.py` dropped from about `3388` lines to `710` lines.
+- `retained_masks.py` was narrowed from `1177` lines to `296` after ablation
+  freezing moved into its own owner.
+
+Extra discoveries:
+- Retained-mask freezing was the correct protocol boundary because masks must
+  be frozen before eval query scoring.
+- `retained_mask_ablations.py` is still large and should get a local method
+  factory before more ablation variants are added.
+- The remaining pipeline pressure is metrics-dump/artifact assembly and
+  simplified CSV export, which should move only with exact field-name tests.
+
+Decision:
+- The single-run pipeline is now a coordinator with extracted stage owners.
+- No compatibility shims were introduced; the pipeline imports direct owners.
+- No scientific success claim is made.
+
+## Checkpoint 5.13-5.15 — Active Docs, Public APIs, Naming, And Test Guardrails
+
+Status: completed
+
+Goal:
+- Clean active documentation, stale/misleading code names, and stale/misleading
+  tests after the structural changes, then add guardrails for the cleanup
+  outcomes.
+
+Changes:
+- Updated active docs for the current artifact family, artifact ownership, and
+  current component ownership; condensed duplicated README prose while preserving
+  tooling principles.
+- Renamed learned segment-budget allocation terminology from ship-level wording
+  to trajectory-level wording, including `max_budget_share_per_trajectory`.
+- Promoted production-crossing orchestration helpers to public names and used
+  verb-led builder/evaluator names where noun names would shadow payloads.
+- Updated stale package docstrings that still described runtime/config modules
+  as experiment-owned.
+- Renamed the stale integration test file to
+  `test_pipeline_metrics_reporting.py` and replaced fake `"legacy"` unsupported
+  query fixtures with `"unsupported"`.
+- Added guardrails for the selector public keyword and for preventing production
+  orchestration modules from cross-importing private sibling helpers.
+
+Tests:
+- `make -C Range_QDS lint`
+- `make -C Range_QDS lint-full`
+- `make -C Range_QDS typecheck`
+- `make -C Range_QDS test`
+- `uv run --group dev -- yamllint .`
+- `git diff --check`
+- focused Ruff/Pyright and focused tests for docs-sensitive guardrails,
+  orchestration public APIs, selector naming, and renamed integration tests
+- `ruff format --check` on touched docs-adjacent code/test paths
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was documentation, code naming,
+  and test cleanup.
+
+Key results:
+- Full pytest progressed from `438 passed, 1 warning` to
+  `440 passed, 1 warning`.
+- Full Ruff, full Pyright, yamllint, format checks, and whitespace checks passed.
+- Search found no remaining repo references to `max_budget_share_per_ship`,
+  `ship_allocations`, or `max_per_ship` except the new negative API guardrail.
+- Search found no production cross-module private imports inside
+  `Range_QDS/orchestration`.
+
+Extra discoveries:
+- Several `legacy_*` names remain intentionally active in diagnostics, artifact
+  fields, CLI diagnostic profile IDs, and guardrail tests; removing them would
+  require a schema/profile migration.
+- `models/workload_blind_range_v2.py` still retains `calibration_head` for
+  checkpoint compatibility.
+- `test_query_driven_rework.py` is still an oversized omnibus test file and
+  should eventually split by orchestration subcomponent.
+- Some tests still import private helpers from lower-level packages, showing
+  those packages do not yet expose clean public testing seams for every behavior.
+
+Decision:
+- Active docs, public API names, code naming, and test guardrails are
+  checkpointed and verified.
+- No scientific success claim is made. No probe or final-grid evidence was
+  generated.
+
+## Checkpoint 5.16 — Real-Scale Diagnostic Slice Policy
+
+Status: completed
+
+Goal:
+- Clarify when a production-like benchmark slice is useful before the full
+  final-grid prerequisites pass.
+
+Changes:
+- Added a guide section that allows occasional real-scale exploratory
+  diagnostic slices for concrete scaling, instrumentation, runtime, or
+  tiny-probe-collapse questions.
+- Reaffirmed that these slices are not the full final grid, not acceptance
+  evidence, and must keep strict gates unchanged.
+
+Tests:
+- `git diff --check -- Range_QDS/docs/query-driven-rework-guide.md Range_QDS/docs/query-driven-rework-progress.md`
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was a protocol documentation
+  update.
+
+Key results:
+- The guide now distinguishes useful real-scale diagnostic slices from
+  forbidden full-grid "see what happens" runs.
+
+Decision:
+- Continue using real-scale slices only for named diagnostic questions.
+- Do not treat exploratory slice results as final success evidence.
