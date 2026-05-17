@@ -20,9 +20,9 @@ Environment overrides:
   PROFILE                      benchmark_runner profile. Default: range_workload_v1_workload_blind_v2.
   WORKLOADS                    benchmark_runner --workloads value. Default: range.
   CSV_PATH                     Cleaned CSV file/directory. Default: ../AISDATA/cleaned.
-  CACHE_DIR                    Cache directory.
+  CACHE_DIR                    Cache directory, relative to Range_QDS when not absolute.
   ARTIFACT_ROOT                Benchmark family directory. Default:
-                               artifacts/benchmarks/query_driven_workload_blind_v2.
+                               artifacts/benchmarks/query_driven_workload_blind_v2 relative to Range_QDS.
   SEEDS                        Comma-separated seeds for default plan. Default: 42,43,44.
   CHILD_EXTRA_ARGS             String passed as benchmark_runner --extra_args for
                                every default-plan run. Example:

@@ -18,9 +18,9 @@ Environment overrides:
   UV_GROUP                     uv dependency group. Default: dev.
   PROFILE                      benchmark_runner profile. Default: range_workload_v1_workload_blind_v2.
   CSV_PATH                     Cleaned CSV file/directory. Default: ../AISDATA/cleaned.
-  CACHE_DIR                    Cache directory.
+  CACHE_DIR                    Cache directory, relative to Range_QDS when not absolute.
   ARTIFACT_ROOT                Benchmark family directory. Default:
-                               artifacts/benchmarks/query_driven_workload_blind_v2.
+                               artifacts/benchmarks/query_driven_workload_blind_v2 relative to Range_QDS.
   RUN_ID                       Run directory name. Default: timestamped slug.
   RESULTS_DIR                  Exact benchmark run directory. Overrides
                                ARTIFACT_ROOT/RUN_ID when set.

@@ -10,9 +10,9 @@ Check local prerequisites before launching the query-driven workload-blind v2 ra
 Options:
   --session NAME       tmux session name. Default: qds-range-benchmark.
   --csv-path PATH      Cleaned CSV file/directory. Default: ../AISDATA/cleaned.
-  --cache-dir PATH     Cache directory. Default: artifacts/cache/query_driven_workload_blind_v2.
+  --cache-dir PATH     Cache directory relative to Range_QDS. Default: artifacts/cache/query_driven_workload_blind_v2.
   --artifact-root PATH Benchmark family root. Default:
-                       artifacts/benchmarks/query_driven_workload_blind_v2.
+                       artifacts/benchmarks/query_driven_workload_blind_v2 relative to Range_QDS.
   --uv CMD            uv executable. Default: uv.
   --uv-group NAME     uv dependency group. Default: dev.
   --min-free-gb N      Required free space on artifact filesystem. Default: 20.

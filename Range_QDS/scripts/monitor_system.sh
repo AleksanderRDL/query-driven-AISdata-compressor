@@ -9,7 +9,7 @@ Periodically append lightweight host/GPU telemetry to a log file.
 
 Options:
   --interval SECONDS   Sample interval. Default: 10.
-  --output PATH        Log path. Default: artifacts/benchmarks/system_monitor.log.
+  --output PATH        Log path. Default: artifacts/benchmarks/system_monitor.log relative to Range_QDS.
   --stop-file PATH     Stop after this file exists, after writing one final sample.
   --once               Write one sample and exit.
   -h, --help           Show this help.

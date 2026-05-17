@@ -48,6 +48,15 @@ from benchmarking.benchmark_runtime import (
 from benchmarking.benchmark_table import _format_report_table
 from data.trajectory_cache import load_or_build_ais_cache
 
+QDS_ARTIFACTS_DIR = Path(__file__).resolve().parents[1] / "artifacts"
+DEFAULT_RESULTS_DIR = (
+    QDS_ARTIFACTS_DIR
+    / "benchmarks"
+    / "query_driven_workload_blind_v2"
+    / "runs"
+    / "manual_benchmark"
+)
+
 
 def _warm_csv_caches(
     args: argparse.Namespace, data_sources: BenchmarkDataSources
@@ -166,7 +175,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--results_dir",
         type=str,
-        default="artifacts/benchmarks/query_driven_workload_blind_v2/runs/manual_benchmark",
+        default=str(DEFAULT_RESULTS_DIR),
     )
     parser.add_argument(
         "--run_id",

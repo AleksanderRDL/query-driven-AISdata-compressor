@@ -82,6 +82,6 @@ Use `uv sync --group dev` from the repo root.
 
 ## Output Policy
 
-Experiment and benchmark output should stay under `artifacts/` unless a run
-explicitly needs another local path. Source data belongs under `../AISDATA/`;
-model outputs do not.
+Run, cache, and benchmark output should stay under `Range_QDS/artifacts/`
+unless a run explicitly needs another local path. Source data belongs under
+`../AISDATA/`; model outputs do not.

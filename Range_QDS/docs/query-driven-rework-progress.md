@@ -1,7 +1,7 @@
 # Query-Driven Rework Progress
 
 This is the short checkpoint log required by `docs/query-driven-rework-guide.md`.
-Detailed stdout and raw metrics are kept in `artifacts/results/`.
+Detailed stdout and raw metrics are kept in `Range_QDS/artifacts/results/`.
 
 ## High-Value Summary
 
@@ -1706,5 +1706,104 @@ Decision:
   `data -> queries -> training -> simplification -> evaluation -> benchmarking`.
 - No compatibility shims were left for the moved packages or deleted
   `turn_aware` model.
+- No scientific success claim is made. No probe or final-grid evidence was
+  generated.
+
+## Checkpoint 5.02 — Artifact Root Consolidation
+
+Status: completed
+
+Hypothesis:
+- Root-level `artifacts/` is a stale output location after the package
+  restructure. Keeping generated outputs only under `Range_QDS/artifacts/`
+  should be possible by updating defaults, docs, ignore rules, and moving the
+  existing local root artifact tree without touching scientific logic.
+
+Expected files:
+- `.gitignore`
+- `pyproject.toml`
+- `Range_QDS/Makefile`
+- `Range_QDS/README.md`
+- `Range_QDS/artifacts/README.md`
+- `Range_QDS/benchmarking/README.md`
+- `Range_QDS/docs/dev-tooling-guide.md`
+- `Range_QDS/orchestration/experiment_cli.py`
+- `Range_QDS/benchmarking/benchmark_runner.py`
+- `Range_QDS/benchmarking/benchmark_runtime.py`
+- `Range_QDS/scripts/*.sh`
+- `Range_QDS/scripts/list_benchmark_runs.py`
+- focused benchmark tests
+
+Stop condition:
+- Stop once root `artifacts/` is gone, direct Python defaults resolve under
+  `Range_QDS/artifacts/`, active docs no longer describe root-level artifacts as
+  an output root, and static/test gates pass. No scientific probes or final-grid
+  runs.
+
+Changes:
+- Moved existing local `artifacts/cache`, `artifacts/results`, and
+  `artifacts/manual` into `Range_QDS/artifacts/` after confirming there were no
+  relative file conflicts.
+- Removed the root `artifacts/` directory.
+- Updated `.gitignore` so generated `Range_QDS/artifacts/*` stays ignored while
+  `Range_QDS/artifacts/README.md` can be tracked. Root `artifacts/` is no
+  longer hidden by gitignore.
+- Changed direct parser defaults for `orchestration.run_ais_experiment`,
+  `benchmarking.benchmark_runner`, `benchmarking.benchmark_runtime`, and
+  `scripts/list_benchmark_runs.py` to resolve to `Range_QDS/artifacts/`
+  independent of the caller's current working directory.
+- Updated `Range_QDS/Makefile` defaults and inspect targets so `RUN`,
+  `BENCHMARK_FAMILY`, and `BENCHMARK_CACHE` are repo-root paths under
+  `Range_QDS/artifacts/`, while tmux shell scripts still receive Range_QDS-local
+  paths.
+- Updated active artifact docs and examples to describe `Range_QDS/artifacts/`
+  as the only project artifact root.
+- Updated script help text to state that bare `artifacts/...` defaults are
+  relative to `Range_QDS`.
+
+Tests:
+- `uv run --group dev -- ruff check --fix Range_QDS/benchmarking Range_QDS/orchestration Range_QDS/scripts Range_QDS/tests`
+- `make -C Range_QDS lint`
+- `make -C Range_QDS lint-full`
+- `make -C Range_QDS typecheck`
+- `uv run --group dev -- pytest Range_QDS/tests/unit/benchmarking/test_benchmark_runner.py Range_QDS/tests/unit/benchmarking/test_benchmark_queue_plan.py Range_QDS/tests/guardrails/test_rework_guardrails.py -q`
+- `bash -n Range_QDS/scripts/benchmark_preflight.sh Range_QDS/scripts/run_range_benchmark_tmux.sh Range_QDS/scripts/run_benchmark_queue_tmux.sh Range_QDS/scripts/monitor_system.sh Range_QDS/scripts/clean_smoke_artifacts.sh`
+- `uv run --group dev -- yamllint .`
+- `git diff --check -- .gitignore Range_QDS pyproject.toml`
+- `make -C Range_QDS test`
+- Parser-default smoke check for `orchestration.run_ais_experiment`,
+  `benchmarking.benchmark_runner`, `benchmarking.benchmark_runtime`, and
+  `scripts/list_benchmark_runs.py`.
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was artifact-root cleanup.
+
+Key results:
+- Root `artifacts/` is absent.
+- The only artifact output root present is `Range_QDS/artifacts/`.
+- Direct Python parser defaults now resolve to absolute paths under
+  `/home/aleks_dev/dev_projects/P8/Range_QDS/artifacts`.
+- Scoped Ruff passed.
+- Full Ruff passed.
+- Full Pyright passed with `0 errors, 0 warnings, 0 informations`.
+- Focused benchmark/guardrail tests passed: `55 passed`.
+- Full pytest passed: `420 passed, 1 warning`.
+- yamllint and whitespace diff checks passed.
+
+Extra discoveries:
+- `Range_QDS/artifacts/README.md` was ignored before this checkpoint, so the
+  intended artifact contract was not actually trackable. The ignore rules now
+  match the desired ownership.
+- Previous direct module defaults were cwd-sensitive: running benchmark modules
+  from the repository root could write to root `artifacts/`, while tmux scripts
+  wrote to `Range_QDS/artifacts/` because they `cd` into `Range_QDS`. Direct
+  defaults are now cwd-independent.
+- Historical progress entries still contain old `artifacts/results/...` paths
+  from the time those runs were generated. The current progress-log header and
+  active docs now point at `Range_QDS/artifacts/`.
+
+Decision:
+- Artifact ownership is consolidated under `Range_QDS/artifacts/`.
 - No scientific success claim is made. No probe or final-grid evidence was
   generated.

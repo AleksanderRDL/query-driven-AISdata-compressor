@@ -14,10 +14,8 @@ AISDATA/cleaned/*
 local_hadoop/
 local_java/
 spark_temp/
-artifacts/
-!QDS/artifacts/
-QDS/artifacts/*
-!QDS/artifacts/README.md
+Range_QDS/artifacts/*
+!Range_QDS/artifacts/README.md
 QDS/src/models/saved_models/
 
 patch/

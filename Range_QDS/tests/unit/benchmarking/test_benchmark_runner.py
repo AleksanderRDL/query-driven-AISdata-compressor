@@ -1578,7 +1578,7 @@ def test_profile_args_use_csv_when_provided() -> None:
         train_csv_path=None,
         validation_csv_path=None,
         eval_csv_path=None,
-        cache_dir="artifacts/cache/benchmark",
+        cache_dir="Range_QDS/artifacts/cache/benchmark",
         refresh_cache=True,
         min_points_per_segment=4,
         max_points_per_segment=128,
@@ -1603,7 +1603,7 @@ def test_profile_args_use_csv_when_provided() -> None:
         "--max_trajectories",
         "8",
         "--cache_dir",
-        "artifacts/cache/benchmark",
+        "Range_QDS/artifacts/cache/benchmark",
         "--refresh_cache",
     ]
 
@@ -1614,7 +1614,7 @@ def test_profile_args_use_three_day_train_validation_eval_sources() -> None:
         train_csv_path="../AISDATA/cleaned/day1.csv",
         validation_csv_path="../AISDATA/cleaned/day2.csv",
         eval_csv_path="../AISDATA/cleaned/day3.csv",
-        cache_dir="artifacts/cache/benchmark",
+        cache_dir="Range_QDS/artifacts/cache/benchmark",
         refresh_cache=True,
         min_points_per_segment=4,
         max_points_per_segment=None,
@@ -1641,7 +1641,7 @@ def test_profile_args_use_three_day_train_validation_eval_sources() -> None:
         "--max_time_gap_seconds",
         "3600.0",
         "--cache_dir",
-        "artifacts/cache/benchmark",
+        "Range_QDS/artifacts/cache/benchmark",
     ]
 
 
@@ -1651,7 +1651,7 @@ def test_profile_args_support_workload_blind_profiles() -> None:
         train_csv_path="../AISDATA/cleaned/day1.csv",
         validation_csv_path="../AISDATA/cleaned/day2.csv",
         eval_csv_path="../AISDATA/cleaned/day3.csv",
-        cache_dir="artifacts/cache/benchmark",
+        cache_dir="Range_QDS/artifacts/cache/benchmark",
         refresh_cache=False,
         min_points_per_segment=4,
         max_points_per_segment=256,
@@ -1695,7 +1695,7 @@ def test_workload_aware_diagnostic_profile_uses_requested_training_shape() -> No
         train_csv_path="../AISDATA/cleaned/day1.csv",
         validation_csv_path="../AISDATA/cleaned/day2.csv",
         eval_csv_path="../AISDATA/cleaned/day3.csv",
-        cache_dir="artifacts/cache/benchmark",
+        cache_dir="Range_QDS/artifacts/cache/benchmark",
         refresh_cache=False,
         min_points_per_segment=4,
         max_points_per_segment=None,

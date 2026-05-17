@@ -10,7 +10,7 @@ TYPECHECK_PATHS ?= Range_QDS/benchmarking Range_QDS/config Range_QDS/data Range_
 TEST_PATHS ?= Range_QDS/tests
 LINT_PATHS ?= Range_QDS/benchmarking Range_QDS/config Range_QDS/data Range_QDS/evaluation Range_QDS/models Range_QDS/orchestration Range_QDS/queries Range_QDS/runtime Range_QDS/simplification Range_QDS/training Range_QDS/scripts Range_QDS/tests
 LINT_SELECT ?= F401,F821,F822,F823
-RUN ?= artifacts/results/latest/example_run.json
+RUN ?= Range_QDS/artifacts/results/latest/example_run.json
 
 RESULTS_DIR ?= Range_QDS/artifacts/results/smoke_synthetic
 CSV_RESULTS_DIR ?= Range_QDS/artifacts/results/smoke_cleaned_csv
@@ -25,8 +25,10 @@ BENCHMARK_PLAN_FILE ?=
 BENCHMARK_CONTINUE_ON_FAILURE ?= 0
 ATTACH ?=
 BENCHMARK_PROFILE ?= range_workload_v1_workload_blind_v2
-BENCHMARK_FAMILY ?= artifacts/benchmarks/query_driven_workload_blind_v2
-BENCHMARK_CACHE ?= artifacts/cache/query_driven_workload_blind_v2
+BENCHMARK_FAMILY ?= Range_QDS/artifacts/benchmarks/query_driven_workload_blind_v2
+BENCHMARK_CACHE ?= Range_QDS/artifacts/cache/query_driven_workload_blind_v2
+QDS_BENCHMARK_FAMILY := $(patsubst Range_QDS/%,%,$(BENCHMARK_FAMILY))
+QDS_BENCHMARK_CACHE := $(patsubst Range_QDS/%,%,$(BENCHMARK_CACHE))
 CONFIRM ?=
 
 .PHONY: help setup sync lock-check check-env lint lint-full lint-yaml test typecheck smoke smoke-csv benchmark-preflight benchmark-queue-preflight list-runs clean-smoke-artifacts range-benchmark-tmux range-benchmark-queue-tmux inspect-run inspect-gates inspect-scores inspect-causality inspect-generator inspect-predictability summarize-run test-property test-regression
@@ -133,40 +135,40 @@ smoke-csv:
 		--results_dir "$(CSV_RESULTS_DIR)"
 
 benchmark-preflight:
-	SESSION="$(BENCHMARK_SESSION)" UV="$(UV)" UV_GROUP="$(UV_GROUP)" ARTIFACT_ROOT="$(BENCHMARK_FAMILY)" CACHE_DIR="$(BENCHMARK_CACHE)" scripts/benchmark_preflight.sh
+	SESSION="$(BENCHMARK_SESSION)" UV="$(UV)" UV_GROUP="$(UV_GROUP)" ARTIFACT_ROOT="$(QDS_BENCHMARK_FAMILY)" CACHE_DIR="$(QDS_BENCHMARK_CACHE)" scripts/benchmark_preflight.sh
 
 benchmark-queue-preflight:
-	SESSION="$(BENCHMARK_QUEUE_SESSION)" UV="$(UV)" UV_GROUP="$(UV_GROUP)" ARTIFACT_ROOT="$(BENCHMARK_FAMILY)" CACHE_DIR="$(BENCHMARK_CACHE)" scripts/benchmark_preflight.sh
+	SESSION="$(BENCHMARK_QUEUE_SESSION)" UV="$(UV)" UV_GROUP="$(UV_GROUP)" ARTIFACT_ROOT="$(QDS_BENCHMARK_FAMILY)" CACHE_DIR="$(QDS_BENCHMARK_CACHE)" scripts/benchmark_preflight.sh
 
 list-runs:
-	$(UV_RUN) python Range_QDS/scripts/list_benchmark_runs.py --family "Range_QDS/$(BENCHMARK_FAMILY)"
+	$(UV_RUN) python Range_QDS/scripts/list_benchmark_runs.py --family "$(BENCHMARK_FAMILY)"
 
 clean-smoke-artifacts:
 	scripts/clean_smoke_artifacts.sh $(if $(CONFIRM),--yes,)
 
 range-benchmark-tmux:
-	SESSION="$(BENCHMARK_SESSION)" RUN_ID="$(BENCHMARK_RUN_ID)" ATTACH="$(ATTACH)" PROFILE="$(BENCHMARK_PROFILE)" UV="$(UV)" UV_GROUP="$(UV_GROUP)" ARTIFACT_ROOT="$(BENCHMARK_FAMILY)" CACHE_DIR="$(BENCHMARK_CACHE)" scripts/run_range_benchmark_tmux.sh
+	SESSION="$(BENCHMARK_SESSION)" RUN_ID="$(BENCHMARK_RUN_ID)" ATTACH="$(ATTACH)" PROFILE="$(BENCHMARK_PROFILE)" UV="$(UV)" UV_GROUP="$(UV_GROUP)" ARTIFACT_ROOT="$(QDS_BENCHMARK_FAMILY)" CACHE_DIR="$(QDS_BENCHMARK_CACHE)" scripts/run_range_benchmark_tmux.sh
 
 range-benchmark-queue-tmux:
-	SESSION="$(BENCHMARK_QUEUE_SESSION)" QUEUE_ID="$(BENCHMARK_QUEUE_ID)" ATTACH="$(ATTACH)" PROFILE="$(BENCHMARK_PROFILE)" SEEDS="$(BENCHMARK_SEEDS)" CHILD_EXTRA_ARGS="$(BENCHMARK_CHILD_EXTRA_ARGS)" PLAN_FILE="$(BENCHMARK_PLAN_FILE)" CONTINUE_ON_FAILURE="$(BENCHMARK_CONTINUE_ON_FAILURE)" UV="$(UV)" UV_GROUP="$(UV_GROUP)" ARTIFACT_ROOT="$(BENCHMARK_FAMILY)" CACHE_DIR="$(BENCHMARK_CACHE)" scripts/run_benchmark_queue_tmux.sh
+	SESSION="$(BENCHMARK_QUEUE_SESSION)" QUEUE_ID="$(BENCHMARK_QUEUE_ID)" ATTACH="$(ATTACH)" PROFILE="$(BENCHMARK_PROFILE)" SEEDS="$(BENCHMARK_SEEDS)" CHILD_EXTRA_ARGS="$(BENCHMARK_CHILD_EXTRA_ARGS)" PLAN_FILE="$(BENCHMARK_PLAN_FILE)" CONTINUE_ON_FAILURE="$(BENCHMARK_CONTINUE_ON_FAILURE)" UV="$(UV)" UV_GROUP="$(UV_GROUP)" ARTIFACT_ROOT="$(QDS_BENCHMARK_FAMILY)" CACHE_DIR="$(QDS_BENCHMARK_CACHE)" scripts/run_benchmark_queue_tmux.sh
 
 inspect-run:
-	jq -f scripts/jq/run_summary.jq $(RUN)
+	@run="$(RUN)"; case "$$run" in /*) qds_run="$$run" ;; Range_QDS/*) qds_run="$(REPO_ROOT)/$$run" ;; *) qds_run="$$run" ;; esac; jq -f scripts/jq/run_summary.jq "$$qds_run"
 
 inspect-gates:
-	jq -f scripts/jq/gates.jq $(RUN)
+	@run="$(RUN)"; case "$$run" in /*) qds_run="$$run" ;; Range_QDS/*) qds_run="$(REPO_ROOT)/$$run" ;; *) qds_run="$$run" ;; esac; jq -f scripts/jq/gates.jq "$$qds_run"
 
 inspect-scores:
-	jq -f scripts/jq/scores.jq $(RUN)
+	@run="$(RUN)"; case "$$run" in /*) qds_run="$$run" ;; Range_QDS/*) qds_run="$(REPO_ROOT)/$$run" ;; *) qds_run="$$run" ;; esac; jq -f scripts/jq/scores.jq "$$qds_run"
 
 inspect-causality:
-	jq -f scripts/jq/causality.jq $(RUN)
+	@run="$(RUN)"; case "$$run" in /*) qds_run="$$run" ;; Range_QDS/*) qds_run="$(REPO_ROOT)/$$run" ;; *) qds_run="$$run" ;; esac; jq -f scripts/jq/causality.jq "$$qds_run"
 
 inspect-generator:
-	jq -f scripts/jq/generator_health.jq $(RUN)
+	@run="$(RUN)"; case "$$run" in /*) qds_run="$$run" ;; Range_QDS/*) qds_run="$(REPO_ROOT)/$$run" ;; *) qds_run="$$run" ;; esac; jq -f scripts/jq/generator_health.jq "$$qds_run"
 
 inspect-predictability:
-	jq -f scripts/jq/predictability.jq $(RUN)
+	@run="$(RUN)"; case "$$run" in /*) qds_run="$$run" ;; Range_QDS/*) qds_run="$(REPO_ROOT)/$$run" ;; *) qds_run="$$run" ;; esac; jq -f scripts/jq/predictability.jq "$$qds_run"
 
 summarize-run:
 	@run="$(RUN)"; case "$$run" in /*|Range_QDS/*) root_run="$$run" ;; *) root_run="Range_QDS/$$run" ;; esac; cd $(REPO_ROOT) && $(UV) run $(UV_GROUP_FLAGS) -- python Range_QDS/scripts/summarize_run.py "$$root_run"

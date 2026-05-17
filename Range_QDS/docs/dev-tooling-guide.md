@@ -66,12 +66,12 @@ lint-full` runs the full Ruff rule set across active QDS packages.
 Use jq for quick JSON inspection:
 
 ```bash
-make inspect-run RUN=artifacts/results/<run>/example_run.json
-make inspect-gates RUN=artifacts/results/<run>/example_run.json
-make inspect-scores RUN=artifacts/results/<run>/example_run.json
-make inspect-causality RUN=artifacts/results/<run>/example_run.json
-make inspect-generator RUN=artifacts/results/<run>/example_run.json
-make inspect-predictability RUN=artifacts/results/<run>/example_run.json
+make inspect-run RUN=Range_QDS/artifacts/results/<run>/example_run.json
+make inspect-gates RUN=Range_QDS/artifacts/results/<run>/example_run.json
+make inspect-scores RUN=Range_QDS/artifacts/results/<run>/example_run.json
+make inspect-causality RUN=Range_QDS/artifacts/results/<run>/example_run.json
+make inspect-generator RUN=Range_QDS/artifacts/results/<run>/example_run.json
+make inspect-predictability RUN=Range_QDS/artifacts/results/<run>/example_run.json
 ```
 
 Reusable filters live in `scripts/jq/`:

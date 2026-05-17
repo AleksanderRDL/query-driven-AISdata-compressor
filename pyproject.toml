@@ -95,7 +95,7 @@ exclude = [
     ".venv",
     "**/__pycache__",
     "AISDATA",
-    "artifacts",
+    "Range_QDS/artifacts",
     "build",
     "dist",
     "spark_temp",

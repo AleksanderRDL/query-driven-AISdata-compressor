@@ -37,6 +37,9 @@ from runtime.torch_runtime import (
     apply_torch_runtime_settings,
 )
 
+QDS_ARTIFACTS_DIR = Path(__file__).resolve().parents[1] / "artifacts"
+DEFAULT_RESULTS_DIR = QDS_ARTIFACTS_DIR / "benchmarks" / "runtime"
+
 PHASE_DONE_RE = re.compile(r"^\[(?P<name>[^\]]+)\]\s+done in (?P<seconds>[0-9.]+)s")
 EPOCH_RE = re.compile(r"epoch\s+(?P<epoch>\d+)/(?P<total>\d+).*?\((?P<seconds>[0-9.]+)s\)")
 INFERENCE_STEP_RE = re.compile(
@@ -513,7 +516,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--results_dir",
         type=str,
-        default="artifacts/benchmarks/runtime",
+        default=str(DEFAULT_RESULTS_DIR),
         help="Directory for benchmark JSON, child stdout, and child run artifacts.",
     )
     parser.add_argument(

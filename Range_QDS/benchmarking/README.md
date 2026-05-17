@@ -23,7 +23,8 @@ uv run --group dev -- python -m benchmarking.benchmark_runtime --help
 
 The benchmark Makefile defaults use the active
 `range_workload_v1_workload_blind_v2` profile and the
-`query_driven_workload_blind_v2` artifact/cache families. Set
+`Range_QDS/artifacts/benchmarks/query_driven_workload_blind_v2` and
+`Range_QDS/artifacts/cache/query_driven_workload_blind_v2` families. Set
 `BENCHMARK_PROFILE`, `BENCHMARK_FAMILY`, and `BENCHMARK_CACHE` explicitly only
 for diagnostic profiles or separate artifact families.
 

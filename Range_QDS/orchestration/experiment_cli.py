@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 
 from config.experiment_config import (
     DEFAULT_BUDGET_LOSS_RATIOS,
@@ -16,6 +17,9 @@ from training.importance_labels import RANGE_LABEL_MODES
 from training.model_features import SUPPORTED_MODEL_TYPES
 from training.targets.modes import RANGE_TARGET_BALANCE_MODES, RANGE_TRAINING_TARGET_MODES
 from training.teacher_distillation import RANGE_TEACHER_DISTILLATION_MODES
+
+QDS_ARTIFACTS_DIR = Path(__file__).resolve().parents[1] / "artifacts"
+DEFAULT_RESULTS_DIR = QDS_ARTIFACTS_DIR / "results" / "latest"
 
 
 def _compression_ratio_list(value: str) -> list[float]:
@@ -588,7 +592,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--results_dir", type=str, default="results")
+    parser.add_argument("--results_dir", type=str, default=str(DEFAULT_RESULTS_DIR))
     parser.add_argument(
         "--early_stopping_patience",
         type=int,
