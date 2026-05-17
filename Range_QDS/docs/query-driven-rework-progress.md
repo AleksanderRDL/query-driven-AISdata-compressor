@@ -2505,3 +2505,89 @@ Decision:
   direct owner.
 - No scientific success claim is made. No probe or final-grid evidence was
   generated.
+
+## Checkpoint 5.11 — Retained Mask Ablation Freeze Extraction
+
+Status: completed
+
+Hypothesis:
+- Query-free retained-mask ablation construction can move out of
+  `orchestration/retained_masks.py` while primary/audit freeze mechanics and
+  selector-trace capture stay in `retained_masks.py`.
+
+Expected files:
+- `Range_QDS/orchestration/retained_mask_ablations.py`
+- `Range_QDS/orchestration/retained_masks.py`
+- focused retained-mask tests
+- `Range_QDS/orchestration/README.md`
+- `Range_QDS/CODE_LAYOUT.md`
+
+Stop condition:
+- Stop when `retained_masks.py` delegates ablation freeze construction to the
+  new owner, focused retained-mask checks pass, broad static/test gates pass,
+  docs/log are accurate, and no scientific probe or final grid has been run.
+
+Changes:
+- Added `orchestration/retained_mask_ablations.py` with
+  `RetainedMaskAblationOutputs` and `freeze_retained_mask_ablations`.
+- Moved pre-repair diagnostic freeze, no-geometry ablation, shuffled-score
+  ablation, no-segment-budget ablations, path-length-support diagnostics,
+  behavior-head ablation, untrained-model ablation, prior-only score freeze,
+  shuffled-prior freeze, zero-prior freeze, and per-prior-channel freezes out
+  of `retained_masks.py`.
+- Kept primary mask freezing, cache capture, selector-trace construction,
+  score-protected length diagnostics, and audit-ratio mask freezing in
+  `retained_masks.py`.
+- Added direct focused coverage for the new ablation owner while keeping the
+  retained-mask boundary tests.
+- Updated orchestration and layout docs so active documentation no longer says
+  `retained_masks.py` owns ablation construction.
+
+Tests:
+- `uv run --group dev -- ruff check --fix Range_QDS/orchestration/retained_masks.py Range_QDS/orchestration/retained_mask_ablations.py Range_QDS/tests/unit/orchestration/test_retained_masks.py`
+- `uv run --group dev -- pyright Range_QDS/orchestration/retained_masks.py Range_QDS/orchestration/retained_mask_ablations.py Range_QDS/tests/unit/orchestration/test_retained_masks.py`
+- `uv run --group dev -- pytest Range_QDS/tests/unit/orchestration/test_retained_masks.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py -q`
+- `make -C Range_QDS lint`
+- `make -C Range_QDS lint-full`
+- `make -C Range_QDS typecheck`
+- `make -C Range_QDS test`
+- `uv run --group dev -- yamllint .`
+- `git diff --check -- Range_QDS pyproject.toml .gitignore`
+- `uv run --group dev -- ruff format --check Range_QDS/orchestration/retained_masks.py Range_QDS/orchestration/retained_mask_ablations.py Range_QDS/tests/unit/orchestration/test_retained_masks.py`
+- Import smoke for `RetainedMaskFreezingOutputs`,
+  `freeze_workload_blind_retained_masks`, `RetainedMaskAblationOutputs`, and
+  `freeze_retained_mask_ablations`.
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was a structural refactor.
+
+Key results:
+- Focused Ruff passed.
+- Focused Pyright passed with `0 errors, 0 warnings, 0 informations`.
+- Focused retained-mask plus orchestration tests passed: `99 passed`.
+- Full Ruff passed.
+- Full Pyright passed with `0 errors, 0 warnings, 0 informations`.
+- Full pytest passed: `436 passed, 1 warning`.
+- yamllint, whitespace diff check, Ruff format check, and import smoke passed.
+- `retained_masks.py` is now `296` lines, down from `1177`.
+- `retained_mask_ablations.py` is `940` lines and owns query-free ablation
+  freeze construction.
+- `experiment_pipeline.py` remains `926` lines.
+
+Extra discoveries:
+- The ablation owner repeats MLQDS diagnostic-method construction arguments for
+  untrained, shuffled-prior, zero-prior, and channel ablation methods. A small
+  local factory is now justified before more variants are added.
+- `retained_masks.py` is now appropriately narrow: primary/audit freeze
+  mechanics, cache capture, and selector trace. The bloated part was ablation
+  construction, not freeze ordering.
+- `retained_mask_ablations.py` is still large. That is acceptable as a first
+  ownership split, but it should not absorb evaluation or artifact assembly.
+
+Decision:
+- Query-free ablation freeze ownership is split and verified.
+- No compatibility shim was introduced; `retained_masks.py` imports the direct
+  owner.
+- No scientific success claim is made. No probe or final-grid evidence was
+  generated.

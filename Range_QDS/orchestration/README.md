@@ -26,7 +26,8 @@ implementation checks.
 | `experiment_methods.py` | Evaluation method construction. |
 | `experiment_outputs.py` | Run artifact payloads and writers. |
 | `target_preparation.py` | Training-label preparation, target transforms, teacher distillation, and validation query caches. |
-| `retained_masks.py` | Workload-blind primary/audit retained-mask freezing and query-free ablation mask construction. |
+| `retained_masks.py` | Workload-blind primary/audit retained-mask freezing and selector-trace capture. |
+| `retained_mask_ablations.py` | Query-free retained-mask ablation construction and freeze diagnostics. |
 | `final_summary.py` | Final single-cell gate, final-claim, and causality summary assembly. |
 | `range_cache.py` / `workload_cache.py` | Run-local range label and workload caches. |
 | `range_diagnostics.py` | Range workload, learned-fill, and gate diagnostics. |

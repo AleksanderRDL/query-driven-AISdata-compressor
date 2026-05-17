@@ -62,7 +62,8 @@ approximate and should be treated as refactor signals, not automatic defects.
 | --- | --- | --- |
 | `orchestration/experiment_pipeline.py` | Still coordinates model training, evaluation, artifact assembly, and run output. It is no longer the owner of target prep, retained-mask freezing, selection causality, or final summary assembly. | Keep `run_experiment_pipeline` as the orchestrator; next extract matched-evaluation/audit evaluation prep only if focused tests preserve metric payloads and artifact field names. |
 | `orchestration/target_preparation.py` | Owns several target families plus teacher-distillation runtime in one large module. This is cleaner than keeping it in the pipeline, but it is not small. | Split by target-family dispatch only after behavior is stable; avoid moving target builders back into orchestration. |
-| `orchestration/retained_masks.py` | Owns primary/audit freeze ordering plus query-free ablation mask construction. This keeps workload-blind protocol ordering explicit, but the module is large. | Split ablation-freeze construction from primary/audit freeze only with tests covering frozen method names, mask diagnostics, and learning-causality artifact fields. |
+| `orchestration/retained_masks.py` | Owns primary/audit freeze ordering, score-cache capture, and selector-trace capture. | Keep it focused on protocol ordering; move only if primary/audit freeze mechanics grow beyond the current boundary. |
+| `orchestration/retained_mask_ablations.py` | Owns query-free causality ablation mask construction and freeze diagnostics. It still repeats MLQDS method construction arguments. | Add a small local MLQDS diagnostic-method factory before adding more ablation variants. |
 
 ## Refactor Rules
 
