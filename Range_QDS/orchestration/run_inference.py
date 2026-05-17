@@ -46,8 +46,8 @@ from orchestration.geojson_writers import (
     write_queries_geojson,
     write_simplified_csv,
 )
+from queries.generation.anchors import RANGE_ANCHOR_MODES
 from queries.generation.workload import (
-    RANGE_ANCHOR_MODES,
     RANGE_TIME_DOMAIN_MODES,
     generate_typed_query_workload,
 )

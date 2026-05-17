@@ -25,6 +25,7 @@ from orchestration.causality import (
     _retained_mask_comparison,
     _score_ablation_sensitivity,
 )
+from orchestration.final_summary import build_final_run_summaries
 from orchestration.gates import (
     _global_sanity_gate,
     _support_overlap_gate,
@@ -43,6 +44,7 @@ from orchestration.segment_audits import (
     _segment_oracle_allocation_audit,
     _target_segment_oracle_alignment_audit,
 )
+from orchestration.selection_causality import _selection_causality_diagnostics
 from orchestration.selector_diagnostics import (
     _learned_segment_frozen_method,
     _neutral_segment_scores_for_ablation,
@@ -50,13 +52,15 @@ from orchestration.selector_diagnostics import (
     _segment_score_quantile_bands_for_ablation,
     _segment_score_top_band_for_ablation,
 )
-from queries.generation.profiles import range_workload_profile
-from queries.generation.workload import (
-    _anchor_weights_for_family,
-    _make_range_query,
+from queries.generation.anchors import _anchor_weights_for_family
+from queries.generation.profile_planning import (
     _profile_query_plan,
     _profile_query_settings,
     _weighted_choice_with_deterministic_key,
+)
+from queries.generation.profiles import range_workload_profile
+from queries.generation.workload import (
+    _make_range_query,
     generate_typed_query_workload,
 )
 from queries.query_types import QUERY_TYPE_ID_RANGE
@@ -2497,6 +2501,199 @@ def test_learning_causality_summary_prefers_point_attribution_when_available() -
     assert summary["trajectories_with_at_least_one_learned_decision"] == 3
     assert summary["selector_trace_retained_mask_matches_primary"] is True
     assert summary["learned_slot_accounting_status"] == "point_attribution_available"
+
+
+def test_selection_causality_diagnostics_reports_unavailable_preconditions() -> None:
+    missing_split = _selection_causality_diagnostics(
+        trained=cast(Any, object()),
+        selection_points=None,
+        selection_boundaries=None,
+        selection_workload=None,
+        eval_workload_map={"range": 1.0},
+        selection_query_cache=None,
+        config=cast(Any, SimpleNamespace(model=SimpleNamespace(selector_type="temporal_hybrid"))),
+        seeds=SimpleNamespace(eval_query_seed=1),
+    )
+
+    wrong_selector = _selection_causality_diagnostics(
+        trained=cast(Any, object()),
+        selection_points=torch.zeros((2, 8), dtype=torch.float32),
+        selection_boundaries=[(0, 2)],
+        selection_workload=SimpleNamespace(typed_queries=[]),
+        eval_workload_map={"range": 1.0},
+        selection_query_cache=None,
+        config=cast(Any, SimpleNamespace(model=SimpleNamespace(selector_type="temporal_hybrid"))),
+        seeds=SimpleNamespace(eval_query_seed=1),
+    )
+
+    assert missing_split == {"available": False, "reason": "missing_selection_split"}
+    assert wrong_selector == {
+        "available": False,
+        "reason": "requires_learned_segment_budget_v1",
+    }
+
+
+def _final_summary_config(*, final_candidate: bool = True) -> SimpleNamespace:
+    return SimpleNamespace(
+        query=SimpleNamespace(
+            workload_profile_id="range_workload_v1" if final_candidate else "legacy_generator",
+            target_coverage=0.10,
+            range_max_coverage_overshoot=0.0075,
+            workload_stability_gate_mode="final",
+        ),
+        model=SimpleNamespace(
+            model_type="workload_blind_range_v2",
+            range_training_target_mode="query_useful_v1_factorized",
+            selector_type="learned_segment_budget_v1",
+            compression_ratio=0.10,
+            learned_segment_geometry_gain_weight=0.0,
+            learned_segment_score_blend_weight=0.05,
+            learned_segment_fairness_preallocation=True,
+            learned_segment_length_repair_fraction=0.6,
+            learned_segment_length_support_blend_weight=0.0,
+        ),
+    )
+
+
+def _final_summary_workload() -> SimpleNamespace:
+    return SimpleNamespace(
+        typed_queries=[{"type": "range", "params": {}} for _idx in range(8)],
+        coverage_fraction=0.10,
+        generation_diagnostics={
+            "query_generation": {
+                "workload_profile_id": "range_workload_v1",
+                "mode": "target_coverage",
+                "coverage_calibration_mode": "profile_sampled_query_count",
+                "query_count_mode": "calibrated_to_coverage",
+                "target_coverage": 0.10,
+                "coverage_guard_enabled": True,
+                "stop_reason": "target_coverage_reached",
+            },
+            "range_acceptance": {
+                "accepted": 8,
+                "attempts": 8,
+                "exhausted": False,
+                "rejected": 0,
+                "rejection_reasons": {},
+            },
+        },
+    )
+
+
+def _final_summary_metrics(score: float, *, range_score: float = 0.2) -> MethodEvaluation:
+    return MethodEvaluation(
+        aggregate_f1=0.0,
+        per_type_f1={},
+        query_useful_v1_score=score,
+        range_usefulness_score=range_score,
+        avg_length_preserved=0.9,
+        geometric_distortion={"avg_sed_km": 1.0},
+        range_audit={"endpoint_sanity": 1.0},
+    )
+
+
+def test_final_run_summaries_block_final_grid_until_benchmark_evidence() -> None:
+    workloads = [_final_summary_workload() for _idx in range(4)]
+    matched = {
+        "MLQDS": _final_summary_metrics(0.30),
+        "uniform": _final_summary_metrics(0.25),
+        "DouglasPeucker": _final_summary_metrics(0.20),
+    }
+
+    summaries = build_final_run_summaries(
+        config=cast(Any, _final_summary_config(final_candidate=True)),
+        trained=cast(
+            Any,
+            SimpleNamespace(
+                fit_diagnostics={},
+                target_diagnostics={},
+                feature_context={},
+            ),
+        ),
+        train_points=torch.zeros((3, 8), dtype=torch.float32),
+        test_points=torch.zeros((3, 8), dtype=torch.float32),
+        train_label_workloads=workloads,
+        eval_workload=_final_summary_workload(),
+        selection_workload=_final_summary_workload(),
+        matched=matched,
+        selector_budget_diagnostics={},
+        primary_selector_trace=None,
+        causality_ablation_evaluations={},
+        causality_ablation_mask_diagnostics={},
+        causal_ablation_freeze_failures={},
+        prior_sensitivity_diagnostics={},
+        prior_channel_ablation_diagnostics={},
+        head_ablation_sensitivity_diagnostics={},
+        selection_causality_diagnostics={"available": False, "reason": "not_run"},
+        segment_oracle_allocation_audit={},
+        target_segment_oracle_alignment_audit={},
+        segment_budget_head_ablation_mode="neutral_constant_segment_scores",
+        predictability_audit={
+            "available": True,
+            "gate_pass": True,
+            "prior_predictive_alignment_gate": {"gate_pass": True},
+        },
+        workload_distribution_comparison={
+            "workload_signature_gate": {"all_available": True, "all_pass": True}
+        },
+    )
+
+    assert summaries.final_candidate is True
+    assert summaries.final_claim_summary["primary_metric"] == "QueryUsefulV1"
+    assert summaries.final_claim_summary["final_success_allowed"] is False
+    assert "full_coverage_compression_grid" in summaries.final_claim_summary["blocking_gates"]
+    assert summaries.learning_causality_summary["final_success_allowed"] is False
+    assert summaries.diagnostic_summary["workload_stability_gate_available"] is True
+
+
+def test_final_run_summaries_reject_non_final_candidate_profile() -> None:
+    workloads = [_final_summary_workload() for _idx in range(4)]
+
+    summaries = build_final_run_summaries(
+        config=cast(Any, _final_summary_config(final_candidate=False)),
+        trained=cast(
+            Any,
+            SimpleNamespace(
+                fit_diagnostics={},
+                target_diagnostics={},
+                feature_context={},
+            ),
+        ),
+        train_points=torch.zeros((3, 8), dtype=torch.float32),
+        test_points=torch.zeros((3, 8), dtype=torch.float32),
+        train_label_workloads=workloads,
+        eval_workload=_final_summary_workload(),
+        selection_workload=None,
+        matched={
+            "MLQDS": _final_summary_metrics(0.30),
+            "uniform": _final_summary_metrics(0.25),
+        },
+        selector_budget_diagnostics={},
+        primary_selector_trace=None,
+        causality_ablation_evaluations={},
+        causality_ablation_mask_diagnostics={},
+        causal_ablation_freeze_failures={},
+        prior_sensitivity_diagnostics={},
+        prior_channel_ablation_diagnostics={},
+        head_ablation_sensitivity_diagnostics={},
+        selection_causality_diagnostics={"available": False, "reason": "not_run"},
+        segment_oracle_allocation_audit={},
+        target_segment_oracle_alignment_audit={},
+        segment_budget_head_ablation_mode="neutral_constant_segment_scores",
+        predictability_audit={},
+        workload_distribution_comparison={},
+    )
+
+    assert summaries.final_candidate is False
+    assert summaries.final_claim_summary == {
+        "primary_metric": None,
+        "status": "not_final_query_driven_candidate",
+        "final_success_allowed": False,
+        "reason": (
+            "Requires range_workload_v1, QueryUsefulV1 factorized target, "
+            "workload_blind_range_v2, and learned_segment_budget_v1."
+        ),
+    }
 
 
 def test_learning_causality_delta_gate_requires_material_ablation_loss() -> None:

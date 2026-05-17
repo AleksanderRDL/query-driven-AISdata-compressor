@@ -11,9 +11,7 @@ from benchmarking.benchmark_final_grid import (
     QUERY_DRIVEN_FINAL_COVERAGE_TARGETS,
     query_driven_final_grid_summary,
 )
-from benchmarking.benchmark_report import (
-    _row_from_run,
-)
+from benchmarking.reporting.row_fields import _row_from_run
 
 pytestmark = pytest.mark.regression
 

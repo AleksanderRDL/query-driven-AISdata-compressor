@@ -1,2 +1,1 @@
-"""Query workload generation, profiles, anchors, and acceptance helpers."""
-
+"""Range query generation, profiles, anchors, coverage, and signatures."""

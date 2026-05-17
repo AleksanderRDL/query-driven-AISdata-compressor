@@ -101,10 +101,17 @@ miss.
 Good targets:
 
 - `queries/generation/workload.py`
+- `queries/generation/anchors.py`
+- `queries/generation/coverage.py`
+- `queries/generation/profile_planning.py`
 - `queries/generation/profiles.py`
 - `training/query_prior_fields.py`
 - `training/model_features.py`
 - `simplification/learned_segment_budget/core.py`
+- `simplification/learned_segment_budget/allocation.py`
+- `simplification/learned_segment_budget/length_repair.py`
+- `simplification/learned_segment_budget/diagnostics.py`
+- `simplification/learned_segment_budget/trace.py`
 - `evaluation/query_useful_v1.py`
 - `evaluation/evaluate_methods.py`
 - `orchestration/range_diagnostics.py`

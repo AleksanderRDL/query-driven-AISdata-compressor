@@ -44,8 +44,9 @@ Operational tooling reference: `docs/dev-tooling-guide.md`.
 | Path | Owns |
 | --- | --- |
 | `queries/generation/` | Query workload generation, workload profiles, anchor policy, coverage guards, and signatures. |
-| `training/targets/` | Target mode registries, active QueryUsefulV1 labels, and legacy/scalar RangeUseful target builders. |
-| `simplification/learned_segment_budget/` | Learned segment-budget selector public API and implementation. |
+| `benchmarking/reporting/` | Benchmark row construction, metric helpers, audit extraction, and report path helpers. |
+| `training/targets/` | Target mode registries, active QueryUsefulV1 labels, shared scalar helpers, retained-frequency targets, structural/marginal targets, query-spine/residual targets, set-utility/local-swap targets, and aggregation. |
+| `simplification/learned_segment_budget/` | Learned segment-budget selector orchestration, allocation, length repair, diagnostics, and trace construction. |
 | `tests/unit/<component>/` | Component-scoped tests for data, queries, training, simplification, evaluation, orchestration, benchmarking, and runtime. |
 | `tests/integration/` | Cross-stage behavior tests. |
 | `tests/guardrails/` | Protocol and cleanup guardrails. |
@@ -59,11 +60,9 @@ approximate and should be treated as refactor signals, not automatic defects.
 
 | File | Current issue | Recommended split |
 | --- | --- | --- |
-| `orchestration/experiment_pipeline.py` | Still mixes orchestration, phase timing, selection-causality ablation freezing, artifact assembly, and run output. | Keep `run_experiment_pipeline` as the orchestrator; narrow `_selection_causality_diagnostics` before moving more logic. |
-| `training/targets/legacy.py` | Legacy RangeUseful/scalar target builders, set-utility diagnostics, local-swap targets, and aggregation paths still live together. | Split legacy/scalar diagnostics, set-utility targets, local-swap targets, and aggregation/balancing with focused target-family tests. |
-| `benchmarking/benchmark_report.py` | Child-run row flattening and audit extraction are still interleaved. | Extract narrow row-field builder clusters while preserving report field regression coverage. |
-| `simplification/learned_segment_budget/core.py` | Budget allocation, length repair, trace payloads, and diagnostics are still tightly packed. | Split allocation, length repair, diagnostics, and trace payload construction inside the package once selector behavior is stable. |
-| `queries/generation/workload.py` | Anchor weighting, profile planning, acceptance filtering, signature generation, and workload assembly share one module. | Split anchor sampling/profile planning from acceptance/signature diagnostics. |
+| `orchestration/experiment_pipeline.py` | Still coordinates model training, evaluation, artifact assembly, and run output. It is no longer the owner of target prep, retained-mask freezing, selection causality, or final summary assembly. | Keep `run_experiment_pipeline` as the orchestrator; next extract matched-evaluation/audit evaluation prep only if focused tests preserve metric payloads and artifact field names. |
+| `orchestration/target_preparation.py` | Owns several target families plus teacher-distillation runtime in one large module. This is cleaner than keeping it in the pipeline, but it is not small. | Split by target-family dispatch only after behavior is stable; avoid moving target builders back into orchestration. |
+| `orchestration/retained_masks.py` | Owns primary/audit freeze ordering plus query-free ablation mask construction. This keeps workload-blind protocol ordering explicit, but the module is large. | Split ablation-freeze construction from primary/audit freeze only with tests covering frozen method names, mask diagnostics, and learning-causality artifact fields. |
 
 ## Refactor Rules
 

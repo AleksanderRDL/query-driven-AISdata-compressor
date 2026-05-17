@@ -24,26 +24,24 @@ from benchmarking.benchmark_profiles import (
     benchmark_profile_args,
     benchmark_profile_settings,
 )
-from benchmarking.benchmark_report import (
-    MIN_MATCHED_LEARNED_SLOT_FRACTION_FOR_BLIND_CLAIM,
-    _query_floor_fields,
-)
 from benchmarking.benchmark_runner import (
     DEFAULT_WORKLOADS,
     PURE_WORKLOADS,
     BenchmarkDataSources,
-    _child_run_dir,
     _coverage_label_suffix,
-    _format_report_table,
     _parse_coverage_targets,
     _parse_name_list,
     _profile_args,
     _resolve_data_sources,
-    _row_from_run,
     _run_capture_streaming,
     _run_config,
     _runner_environment_metadata,
 )
+from benchmarking.benchmark_table import _format_report_table
+from benchmarking.reporting.audit_extractors import _query_floor_fields
+from benchmarking.reporting.metrics import MIN_MATCHED_LEARNED_SLOT_FRACTION_FOR_BLIND_CLAIM
+from benchmarking.reporting.paths import _child_run_dir
+from benchmarking.reporting.row_fields import _row_from_run
 from config.experiment_config import build_experiment_config
 from orchestration.experiment_workloads import resolve_workload_maps, validation_query_count
 

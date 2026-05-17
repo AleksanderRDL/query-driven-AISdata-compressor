@@ -12,7 +12,7 @@ from orchestration.workload_cache import (
     generate_typed_query_workload_for_config,
     workload_cache_name,
 )
-from queries.generation.workload import RANGE_ANCHOR_MODES
+from queries.generation.anchors import RANGE_ANCHOR_MODES
 from queries.workload import TypedQueryWorkload
 
 

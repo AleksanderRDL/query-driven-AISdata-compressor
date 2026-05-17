@@ -11,8 +11,12 @@ the supported training, evaluation, or benchmark contract.
 | --- | --- |
 | `workload.py` | `TypedQueryWorkload` container. |
 | `query_types.py` | Query IDs, pure workload validation, feature padding. |
-| `generation/workload.py` | Deterministic workload generation. |
+| `generation/workload.py` | Public workload generator and query assembly. |
+| `generation/anchors.py` | Anchor priors and weighted point sampling. |
+| `generation/profile_planning.py` | Deterministic profile family quota planning and per-query settings. |
+| `generation/coverage.py` | Point coverage masks, target normalization, and range acceptance filters. |
 | `generation/profiles.py` | Versioned product workload profiles, including `range_workload_v1`. |
+| `generation/signatures.py` | Range workload signature payload construction. |
 | `query_executor.py` | Range query execution. |
 | `range_geometry.py` | Shared range-box and geographic distance helpers. |
 | `workload_diagnostics.py` | Range workload quality and label diagnostics. |
@@ -29,8 +33,10 @@ Workloads are range-only for active rework runs, e.g. `{"range": 1.0}`.
 
 ## Generation
 
-`generate_typed_query_workload` returns the shared workload container used by
-training and evaluation.
+`generation/workload.py` exposes `generate_typed_query_workload` and keeps
+query assembly in one place. Anchor sampling, profile planning, coverage
+acceptance, and signature payload construction live in their direct owner
+modules under `queries/generation/`.
 
 Range generation controls:
 

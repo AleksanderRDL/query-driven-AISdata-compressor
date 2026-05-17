@@ -1807,3 +1807,701 @@ Decision:
 - Artifact ownership is consolidated under `Range_QDS/artifacts/`.
 - No scientific success claim is made. No probe or final-grid evidence was
   generated.
+
+## Checkpoint 5.03 — Query Generation Module Split
+
+Status: completed
+
+Hypothesis:
+- `queries/generation/workload.py` can stop owning anchor sampling, profile
+  planning, coverage acceptance, and workload-signature construction without
+  changing generator behavior.
+
+Expected files:
+- `Range_QDS/queries/generation/workload.py`
+- `Range_QDS/queries/generation/anchors.py`
+- `Range_QDS/queries/generation/coverage.py`
+- `Range_QDS/queries/generation/profile_planning.py`
+- `Range_QDS/queries/generation/signatures.py`
+- focused query-generation tests and active layout docs
+
+Stop condition:
+- Stop when the split compiles without compatibility facades, focused
+  query-generation tests pass, broad import gates pass, and no scientific probe
+  or final grid has been run.
+
+Changes:
+- Split anchor priors, sparse/dense weighting, family-specific anchor weights,
+  and large-weight-vector sampling into `queries/generation/anchors.py`.
+- Split coverage masks, coverage-target normalization, overshoot normalization,
+  rejection accounting, and acceptance filtering into
+  `queries/generation/coverage.py`.
+- Split deterministic profile family quotas and per-query profile settings into
+  `queries/generation/profile_planning.py`.
+- Split range workload signature construction and metadata family counts into
+  `queries/generation/signatures.py`.
+- Kept `queries/generation/workload.py` as the public workload generator and
+  query assembly owner.
+- Updated tests to import private helpers from their direct owner modules.
+- Updated active docs and `CODE_LAYOUT.md`; the old workload-module pressure
+  point is no longer listed.
+- Updated CLI/script imports so `RANGE_ANCHOR_MODES` comes from
+  `queries/generation/anchors.py` instead of `workload.py`.
+
+Tests:
+- `uv run --group dev -- ruff check Range_QDS/queries/generation Range_QDS/queries/coverage_estimator.py Range_QDS/orchestration/experiment_cli.py Range_QDS/orchestration/experiment_workloads.py Range_QDS/orchestration/run_inference.py Range_QDS/scripts/estimate_range_coverage.py Range_QDS/tests/property/test_workload_profile_properties.py Range_QDS/tests/unit/queries/test_weighted_sample_fallback.py Range_QDS/tests/unit/queries/test_query_coverage_generation.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
+- `uv run --group dev -- pyright Range_QDS/queries/generation Range_QDS/queries/coverage_estimator.py Range_QDS/orchestration/experiment_cli.py Range_QDS/orchestration/experiment_workloads.py Range_QDS/orchestration/run_inference.py Range_QDS/scripts/estimate_range_coverage.py Range_QDS/tests/property/test_workload_profile_properties.py Range_QDS/tests/unit/queries/test_weighted_sample_fallback.py Range_QDS/tests/unit/queries/test_query_coverage_generation.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
+- `uv run --group dev -- pytest Range_QDS/tests/property/test_workload_profile_properties.py Range_QDS/tests/unit/queries/test_weighted_sample_fallback.py Range_QDS/tests/unit/queries/test_query_coverage_generation.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/unit/orchestration/test_range_workload_diagnostics.py -q`
+- `make -C Range_QDS lint`
+- `make -C Range_QDS lint-full`
+- `make -C Range_QDS typecheck`
+- `make -C Range_QDS test`
+- `uv run --group dev -- yamllint .`
+- `git diff --check -- Range_QDS pyproject.toml .gitignore`
+- `uv run --group dev -- python -m orchestration.run_ais_experiment --help`
+- `uv run --group dev -- python -m orchestration.run_inference --help`
+- `uv run --group dev -- python Range_QDS/scripts/estimate_range_coverage.py --help`
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was a structural refactor.
+
+Key results:
+- Focused Ruff passed.
+- Focused Pyright passed with `0 errors, 0 warnings, 0 informations`.
+- Focused query-generation tests passed: `135 passed`.
+- Full Ruff passed.
+- Full Pyright passed with `0 errors, 0 warnings, 0 informations`.
+- Full pytest passed: `420 passed, 1 warning`.
+- yamllint, whitespace diff check, and CLI import-smoke checks passed.
+- `queries/generation/workload.py` is now `638` lines, down from about
+  `1338`; the moved owners are `anchors.py` (`240`), `coverage.py` (`187`),
+  `profile_planning.py` (`212`), and `signatures.py` (`102`).
+
+Extra discoveries:
+- The private `_weighted_choice` helper was dead code; the active deterministic
+  path uses `_weighted_choice_with_deterministic_key`, so the dead helper was
+  removed during the split.
+- Naming the profile-plan owner `diagnostics.py` would have been misleading.
+  `profile_planning.py` matches what the module actually owns.
+- Runtime CLIs were depending on `workload.py` for anchor-mode constants because
+  the module had become a grab bag. Those imports now point to the anchor owner.
+
+Decision:
+- Query generation ownership is split and verified.
+- No compatibility shim was left for moved private helpers or anchor-mode
+  constants.
+- No scientific success claim is made. No probe or final-grid evidence was
+  generated.
+
+## Checkpoint 5.04 — Benchmark Reporting Split
+
+Status: completed
+
+Hypothesis:
+- `benchmarking/benchmark_report.py` can stop owning row-field shaping,
+  metric/status helpers, audit extraction, and child-run paths without changing
+  benchmark report schema.
+
+Expected files:
+- `Range_QDS/benchmarking/benchmark_report.py`
+- `Range_QDS/benchmarking/reporting/*.py`
+- `Range_QDS/benchmarking/benchmark_runner.py`
+- benchmark report regression/unit tests and active layout docs
+
+Stop condition:
+- Stop when report construction compiles without compatibility facades,
+  benchmark report regression tests pass without schema drift, broad static and
+  test gates pass, and no scientific probe or final grid has been run.
+
+Changes:
+- Added `benchmarking/reporting/paths.py` for child-run output paths.
+- Added `benchmarking/reporting/metrics.py` for metric deltas, geometric
+  fields, single-cell status, and selector-claim evidence.
+- Added `benchmarking/reporting/audit_extractors.py` for run-JSON audit,
+  query-generation, range-acceptance, query-floor, and workload-distribution
+  row fields.
+- Added `benchmarking/reporting/row_fields.py` for child-run row construction.
+- Reduced `benchmarking/benchmark_report.py` to report artifact construction
+  and benchmark report file output.
+- Updated `benchmark_runner.py` to use the new report coordinator and direct
+  reporting owners.
+- Updated tests to import private helpers from their direct owner modules.
+- Updated `benchmarking/README.md` and `CODE_LAYOUT.md`; the old
+  `benchmark_report.py` pressure point is no longer listed.
+
+Tests:
+- `uv run --group dev -- ruff check Range_QDS/benchmarking/benchmark_report.py Range_QDS/benchmarking/benchmark_runner.py Range_QDS/benchmarking/reporting Range_QDS/tests/unit/benchmarking/test_benchmark_runner.py Range_QDS/tests/regression/test_benchmark_report_regression.py Range_QDS/tests/guardrails/test_rework_guardrails.py`
+- `uv run --group dev -- pyright Range_QDS/benchmarking/benchmark_report.py Range_QDS/benchmarking/benchmark_runner.py Range_QDS/benchmarking/reporting Range_QDS/tests/unit/benchmarking/test_benchmark_runner.py Range_QDS/tests/regression/test_benchmark_report_regression.py Range_QDS/tests/guardrails/test_rework_guardrails.py`
+- `uv run --group dev -- pytest Range_QDS/tests/regression/test_benchmark_report_regression.py Range_QDS/tests/unit/benchmarking/test_benchmark_runner.py Range_QDS/tests/guardrails/test_rework_guardrails.py -q`
+- `make -C Range_QDS lint`
+- `make -C Range_QDS lint-full`
+- `make -C Range_QDS typecheck`
+- `make -C Range_QDS test`
+- `uv run --group dev -- yamllint .`
+- `git diff --check -- Range_QDS pyproject.toml .gitignore`
+- `uv run --group dev -- python -m benchmarking.benchmark_runner --help`
+- Import smoke for `build_benchmark_report_artifact`,
+  `write_benchmark_report_files`, `_row_from_run`, and `_query_floor_fields`.
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was a structural refactor.
+
+Key results:
+- Focused Ruff passed.
+- Focused Pyright passed with `0 errors, 0 warnings, 0 informations`.
+- Focused benchmark report tests passed: `54 passed`.
+- Full Ruff passed.
+- Full Pyright passed with `0 errors, 0 warnings, 0 informations`.
+- Full pytest passed: `420 passed, 1 warning`.
+- yamllint, whitespace diff check, benchmark runner help, and import-smoke
+  checks passed.
+- `benchmarking/benchmark_report.py` is now `75` lines, down from `1577`.
+  Reporting owners are `row_fields.py` (`916`), `audit_extractors.py` (`531`),
+  `metrics.py` (`156`), and `paths.py` (`12`).
+
+Extra discoveries:
+- `benchmark_report.py` was not really a report coordinator; it was a
+  row-field and audit-extraction dump. The filename now matches the code role.
+- `benchmarking/reporting/row_fields.py` is still large, but it is now a pure
+  row-construction boundary with regression coverage. Further splitting should
+  be by stable row sections, not by arbitrary line count.
+- Regression snapshots did not change, which is the right outcome for this
+  checkpoint: structure changed, report schema did not.
+
+Decision:
+- Benchmark reporting ownership is split and verified.
+- No compatibility shim was left for old `benchmark_report.py` private helper
+  imports.
+- No scientific success claim is made. No probe or final-grid evidence was
+  generated.
+
+## Checkpoint 5.05 — Learned Segment-Budget Package Split
+
+Status: completed
+
+Hypothesis:
+- `simplification/learned_segment_budget/core.py` can stop owning allocation,
+  length repair, diagnostics, and trace construction without changing retained
+  masks, public imports, or trace payload fields.
+
+Expected files:
+- `Range_QDS/simplification/learned_segment_budget/core.py`
+- `Range_QDS/simplification/learned_segment_budget/allocation.py`
+- `Range_QDS/simplification/learned_segment_budget/length_repair.py`
+- `Range_QDS/simplification/learned_segment_budget/diagnostics.py`
+- `Range_QDS/simplification/learned_segment_budget/trace.py`
+- `Range_QDS/simplification/learned_segment_budget/constants.py`
+- focused simplification selector tests and active layout docs
+
+Stop condition:
+- Stop when public package imports remain stable, the split compiles without
+  private compatibility facades, focused selector tests pass, broad static and
+  test gates pass, and no scientific probe or final grid has been run.
+
+Changes:
+- Added `allocation.py` for total budgets, skeleton caps, segment rows,
+  segment score stats, segment allocation weights, and learned-slot allocation.
+- Added `length_repair.py` for candidate normalization, local distance, length
+  gain/loss scoring, spacing-aware point selection, length-fill, and repair
+  swaps.
+- Added `diagnostics.py` for entropy/count helpers, mask payloads,
+  segment-source attribution, geometry diagnostics, length preservation, and
+  allocation-vs-point-selection counterfactuals.
+- Added `trace.py` for JSON-serializable selector trace payload construction.
+- Added `constants.py` for selector schema versions and default weights.
+- Reduced `core.py` to public selector orchestration and diagnostics entrypoint
+  implementation.
+- Updated the package `__init__.py` so public imports still come from
+  `simplification.learned_segment_budget`.
+- Added focused simplification unit tests for public API stability, trace
+  accounting, length-repair attribution, and query-free segment-source
+  attribution.
+- Updated `simplification/README.md`, `docs/dev-tooling-guide.md`, and
+  `CODE_LAYOUT.md`; the old `learned_segment_budget/core.py` pressure point is
+  no longer listed.
+
+Tests:
+- `uv run --group dev -- ruff check Range_QDS/simplification/learned_segment_budget Range_QDS/tests/unit/simplification/test_learned_segment_budget.py Range_QDS/tests/property/test_learned_segment_selector_properties.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
+- `uv run --group dev -- pyright Range_QDS/simplification/learned_segment_budget Range_QDS/tests/property/test_learned_segment_selector_properties.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
+- `uv run --group dev -- pytest Range_QDS/tests/unit/simplification/test_learned_segment_budget.py Range_QDS/tests/property/test_learned_segment_selector_properties.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py -q`
+- `make -C Range_QDS lint`
+- `make -C Range_QDS lint-full`
+- `make -C Range_QDS typecheck`
+- `make -C Range_QDS test`
+- `uv run --group dev -- yamllint .`
+- `git diff --check -- Range_QDS pyproject.toml .gitignore`
+- Import smoke for the public `simplification.learned_segment_budget` API.
+- Tiny selector smoke for `simplify_with_learned_segment_budget_v1_with_trace`.
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was a structural refactor.
+
+Key results:
+- Focused Ruff passed.
+- Focused Pyright passed with `0 errors, 0 warnings, 0 informations`.
+- Focused selector tests passed: `96 passed`.
+- Full Ruff passed.
+- Full Pyright passed with `0 errors, 0 warnings, 0 informations`.
+- Full pytest passed: `423 passed, 1 warning`.
+- yamllint, whitespace diff check, public import smoke, and tiny selector smoke
+  checks passed.
+- `learned_segment_budget/core.py` is now `409` lines, down from `1550`.
+  Split owners are `diagnostics.py` (`513`), `length_repair.py` (`355`),
+  `allocation.py` (`220`), `trace.py` (`134`), and `constants.py` (`7`).
+
+Extra discoveries:
+- The selector package did need component-local tests. Previously, many
+  selector assertions lived under orchestration tests, which made the selector
+  harder to reason about independently.
+- `diagnostics.py` is now the largest file in this package, but it is a tighter
+  query-free diagnostic boundary than the former `core.py` mix. Further splits
+  should be by stable diagnostic payload section, not by line count alone.
+- Public constants are cleaner in `constants.py`; package-level imports remain
+  stable while `core.py` no longer owns unrelated defaults.
+
+Decision:
+- Learned segment-budget ownership is split and verified.
+- No compatibility shim was left for moved private helper imports.
+- No scientific success claim is made. No probe or final-grid evidence was
+  generated.
+
+## Checkpoint 5.06 — Scalar Target-Family Split
+
+Status: completed
+
+Hypothesis:
+- `training/targets/legacy.py` can be split by scalar target family without
+  changing generated labels, diagnostics, or downstream training behavior.
+
+Expected files:
+- `Range_QDS/training/targets/common.py`
+- `Range_QDS/training/targets/retained_frequency.py`
+- `Range_QDS/training/targets/structural.py`
+- `Range_QDS/training/targets/marginal_coverage.py`
+- `Range_QDS/training/targets/query_spine.py`
+- `Range_QDS/training/targets/query_residual.py`
+- `Range_QDS/training/targets/set_utility.py`
+- `Range_QDS/training/targets/local_swap.py`
+- `Range_QDS/training/targets/aggregation.py`
+- focused target tests and active layout docs
+
+Stop condition:
+- Stop when active imports use direct target-family owners, the old legacy
+  target module is removed with a guardrail, focused target tests pass, broad
+  static and test gates pass, and no scientific probe or final grid has been
+  run.
+
+Changes:
+- Removed `training/targets/legacy.py` instead of leaving a broad
+  compatibility facade.
+- Added `common.py` for scalar target scaling, budget weighting, temporal-base
+  masks, retained-frequency helpers, label aggregation, and trajectory balance.
+- Added `retained_frequency.py` for retained-frequency, global-budget, and
+  historical-prior scalar targets.
+- Added `structural.py`, `marginal_coverage.py`, `query_spine.py`, and
+  `query_residual.py` for their respective scalar target families.
+- Added `set_utility.py` and `local_swap.py` for train-query set-utility and
+  local-swap target builders.
+- Added `aggregation.py` for component, continuity, structural, global-budget,
+  marginal, and retained-frequency aggregate builders.
+- Updated orchestration, training, and tests to import direct owners.
+- Renamed `LEGACY_RANGE_TARGET_MODES` to `SCALAR_RANGE_TARGET_MODES`.
+- Split target-family tests out of the misleading teacher-distillation test
+  file into `tests/unit/training/targets/test_scalar_range_targets.py`.
+- Updated `training/README.md` and `CODE_LAYOUT.md` so active docs no longer
+  describe `targets/legacy.py`.
+
+Tests:
+- `uv run --group dev -- ruff check Range_QDS/training/targets Range_QDS/training/train_model.py Range_QDS/orchestration/experiment_pipeline.py Range_QDS/tests/unit/training/test_teacher_distillation.py Range_QDS/tests/unit/training/targets/test_scalar_range_targets.py Range_QDS/tests/unit/training/test_training_does_not_collapse.py Range_QDS/tests/guardrails/test_rework_guardrails.py`
+- `uv run --group dev -- pyright Range_QDS/training/targets Range_QDS/training/train_model.py Range_QDS/orchestration/experiment_pipeline.py Range_QDS/tests/unit/training/test_teacher_distillation.py Range_QDS/tests/unit/training/targets/test_scalar_range_targets.py Range_QDS/tests/unit/training/test_training_does_not_collapse.py Range_QDS/tests/guardrails/test_rework_guardrails.py`
+- `uv run --group dev -- pytest Range_QDS/tests/unit/training/test_teacher_distillation.py Range_QDS/tests/unit/training/targets/test_scalar_range_targets.py Range_QDS/tests/unit/training/test_training_does_not_collapse.py Range_QDS/tests/guardrails/test_rework_guardrails.py -q`
+- `make -C Range_QDS lint`
+- `make -C Range_QDS lint-full`
+- `make -C Range_QDS typecheck`
+- `make -C Range_QDS test`
+- `uv run --group dev -- yamllint .`
+- `git diff --check -- Range_QDS pyproject.toml .gitignore`
+- Import smoke for the direct scalar target-family owners and absence of
+  `training.targets.legacy`.
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was a structural refactor.
+
+Key results:
+- Focused Ruff passed.
+- Focused Pyright passed with `0 errors, 0 warnings, 0 informations`.
+- Focused target/guardrail tests passed: `84 passed, 1 warning`.
+- Full Ruff passed.
+- Full Pyright passed with `0 errors, 0 warnings, 0 informations`.
+- Full pytest passed: `424 passed, 1 warning`.
+- yamllint, whitespace diff check, and direct-owner import smoke passed.
+- The old `legacy.py` file was removed. New target-family owners are
+  `local_swap.py` (`776`), `aggregation.py` (`554`), `retained_frequency.py`
+  (`435`), `common.py` (`385`), `set_utility.py` (`348`),
+  `query_residual.py` (`312`), `structural.py` (`238`),
+  `query_spine.py` (`199`), and `marginal_coverage.py` (`183`).
+
+Extra discoveries:
+- `training.targets.legacy` was not a legacy boundary; it was active core
+  target logic hidden behind a stale name. Deleting it was cleaner than keeping
+  a facade.
+- `LEGACY_RANGE_TARGET_MODES` was also stale naming. The actual distinction is
+  scalar diagnostic modes versus the active QueryUsefulV1 factorized mode.
+- `test_teacher_distillation.py` was carrying most scalar target-family
+  coverage. Moving those tests under `tests/unit/training/targets/` makes the
+  target layer easier to reason about independently.
+- `local_swap.py` is the largest new target module because local-swap utility
+  and gain-cost labels share the same replacement action. Splitting it further
+  should wait until one of those paths changes independently.
+
+Decision:
+- Scalar target ownership is split and verified.
+- No compatibility shim was left for `training.targets.legacy`.
+- No scientific success claim is made. No probe or final-grid evidence was
+  generated.
+
+## Checkpoint 5.07 — Selection-Causality Extraction
+
+Status: completed
+
+Hypothesis:
+- Checkpoint-selection causality diagnostics can move out of
+  `orchestration/experiment_pipeline.py` without changing causality summary
+  fields, gate behavior, or retained-mask logic.
+
+Expected files:
+- `Range_QDS/orchestration/selection_causality.py`
+- `Range_QDS/orchestration/experiment_pipeline.py`
+- focused orchestration tests
+- `Range_QDS/orchestration/README.md`
+- `Range_QDS/CODE_LAYOUT.md`
+
+Stop condition:
+- Stop when `run_experiment_pipeline` imports the extracted helper, focused
+  orchestration checks pass, broad static/test gates pass, artifact-field docs
+  remain accurate, and no scientific probe or final grid has been run.
+
+Changes:
+- Added `orchestration/selection_causality.py` for the checkpoint-selection
+  ablation diagnostics previously implemented as
+  `_selection_causality_diagnostics` inside `experiment_pipeline.py`.
+- Kept `run_experiment_pipeline` as the single-run orchestrator and imported
+  the extracted helper instead of changing run flow.
+- Added focused coverage for unavailable selection-causality preconditions.
+- Updated orchestration and layout docs so active documentation no longer says
+  selection-causality freezing still lives in the pipeline.
+- Updated the current pressure point: `experiment_pipeline.py` still owns too
+  much final assembly work, but selection-causality is no longer part of that
+  pressure point.
+
+Tests:
+- `uv run --group dev -- ruff check --fix Range_QDS/orchestration/experiment_pipeline.py Range_QDS/orchestration/selection_causality.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
+- `uv run --group dev -- pyright Range_QDS/orchestration/experiment_pipeline.py Range_QDS/orchestration/selection_causality.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
+- `uv run --group dev -- pytest Range_QDS/tests/unit/orchestration/test_query_driven_rework.py -q`
+- `make -C Range_QDS lint`
+- `make -C Range_QDS lint-full`
+- `make -C Range_QDS typecheck`
+- `make -C Range_QDS test`
+- `uv run --group dev -- yamllint .`
+- `git diff --check -- Range_QDS pyproject.toml .gitignore`
+- Import smoke for `orchestration.experiment_pipeline` and
+  `orchestration.selection_causality`.
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was a structural refactor.
+
+Key results:
+- Focused Ruff passed.
+- Focused Pyright passed with `0 errors, 0 warnings, 0 informations`.
+- Focused orchestration tests passed: `93 passed`.
+- Full Ruff passed.
+- Full Pyright passed with `0 errors, 0 warnings, 0 informations`.
+- Full pytest passed: `425 passed, 1 warning`.
+- yamllint, whitespace diff check, Ruff format check, and import smoke passed.
+- `experiment_pipeline.py` is now `2870` lines, down from `3388`.
+- `selection_causality.py` is `552` lines and owns checkpoint-selection
+  causality ablation freezing/evaluation.
+
+Extra discoveries:
+- The extraction confirmed that selection-causality was already a coherent
+  subsystem. It depended on model ablations, selector diagnostics, prior-field
+  mutation, and frozen-mask evaluation, but not on the broader target-building
+  and artifact-writing state in `run_experiment_pipeline`.
+- `experiment_pipeline.py` remains too large. The next clean boundary is final
+  summary/gate/artifact assembly, not more target-family or selector work.
+- A direct absence assertion for `_selection_causality_diagnostics` on
+  `experiment_pipeline` would be wrong because the pipeline intentionally
+  imports the helper for orchestration. The useful structural invariant is that
+  the implementation now lives in `selection_causality.py`.
+
+Decision:
+- Selection-causality ownership is split and verified.
+- No compatibility shim was introduced; `experiment_pipeline.py` imports the
+  direct owner.
+- No scientific success claim is made. No probe or final-grid evidence was
+  generated.
+
+## Checkpoint 5.08 — Final Summary Assembly Extraction
+
+Status: completed
+
+Hypothesis:
+- Final single-cell gate and summary assembly can move out of
+  `orchestration/experiment_pipeline.py` without changing artifact fields or
+  final-claim semantics.
+
+Expected files:
+- `Range_QDS/orchestration/final_summary.py`
+- `Range_QDS/orchestration/experiment_pipeline.py`
+- focused orchestration and regression tests
+- `Range_QDS/orchestration/README.md`
+- `Range_QDS/CODE_LAYOUT.md`
+
+Stop condition:
+- Stop when `final_claim_summary`, `learning_causality_summary`, gate payloads,
+  and diagnostic-summary field names remain covered, focused checks pass, broad
+  static/test gates pass, and no scientific probe or final grid has been run.
+
+Changes:
+- Added `orchestration/final_summary.py` with `FinalRunSummaries` and
+  `build_final_run_summaries`.
+- Moved final-candidate detection, legacy RangeUseful summary construction,
+  learning-causality summary construction, single-cell blocking-gate
+  composition, final-claim summary construction, and diagnostic-summary
+  assembly out of `run_experiment_pipeline`.
+- Kept `metrics_dump` artifact assembly and result writing in the pipeline so
+  `run_experiment_pipeline` remains the run-level artifact coordinator.
+- Added focused tests for final-grid blocking and non-final candidate rejection
+  in `tests/unit/orchestration/test_query_driven_rework.py`.
+- Updated orchestration and layout docs. The remaining `experiment_pipeline.py`
+  pressure point is now target construction/training/evaluation/artifact
+  coordination, not final-claim gate assembly.
+
+Tests:
+- `uv run --group dev -- ruff check --fix Range_QDS/orchestration/final_summary.py Range_QDS/orchestration/experiment_pipeline.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
+- `uv run --group dev -- pyright Range_QDS/orchestration/final_summary.py Range_QDS/orchestration/experiment_pipeline.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
+- `uv run --group dev -- pytest Range_QDS/tests/regression/test_gate_summary_regression.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py -q`
+- `make -C Range_QDS lint`
+- `make -C Range_QDS lint-full`
+- `make -C Range_QDS typecheck`
+- `make -C Range_QDS test`
+- `uv run --group dev -- yamllint .`
+- `git diff --check -- Range_QDS pyproject.toml .gitignore`
+- Import smoke for `run_experiment_pipeline`, `FinalRunSummaries`, and
+  `build_final_run_summaries`.
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was a structural refactor.
+
+Key results:
+- Focused Ruff passed.
+- Focused Pyright passed with `0 errors, 0 warnings, 0 informations`.
+- Focused orchestration plus gate-summary regression tests passed:
+  `96 passed`.
+- Full Ruff passed.
+- Full Pyright passed with `0 errors, 0 warnings, 0 informations`.
+- Full pytest passed: `427 passed, 1 warning`.
+- yamllint, whitespace diff check, Ruff format check, and import smoke passed.
+- `experiment_pipeline.py` is now `2543` lines, down from `2870`.
+- `final_summary.py` is `428` lines and owns final single-cell gate and summary
+  assembly.
+
+Extra discoveries:
+- The final summary block was more coherent than the surrounding pipeline. It
+  depended on already-produced diagnostics and evaluations, but did not need to
+  own target construction, training, evaluation method setup, or artifact
+  writing.
+- Keeping `metrics_dump` construction in `experiment_pipeline.py` is cleaner
+  for now. Moving the entire artifact payload would drag many unrelated run
+  fields into `final_summary.py` and create a new grab bag.
+- `experiment_pipeline.py` still has one oversized orchestration function. The
+  next clean boundary is likely target construction and teacher-distillation
+  setup, but only if target diagnostics and training-label artifact fields can
+  be preserved with focused tests.
+
+Decision:
+- Final summary/gate ownership is split and verified.
+- No compatibility shim was introduced; `experiment_pipeline.py` imports the
+  direct owner.
+- No scientific success claim is made. No probe or final-grid evidence was
+  generated.
+
+## Checkpoint 5.09 — Target Preparation Extraction
+
+Status: completed
+
+Hypothesis:
+- Training-label preparation, target transforms, teacher-distillation setup,
+  selection query-cache prep, and selection geometry-score prep can move out of
+  `orchestration/experiment_pipeline.py` without changing artifact fields or
+  target behavior.
+
+Expected files:
+- `Range_QDS/orchestration/target_preparation.py`
+- `Range_QDS/orchestration/experiment_pipeline.py`
+- focused target-preparation tests
+- `Range_QDS/orchestration/README.md`
+- `Range_QDS/CODE_LAYOUT.md`
+
+Stop condition:
+- Stop when `run_experiment_pipeline` delegates target prep to the new owner,
+  focused target-prep checks pass, broad static/test gates pass, artifact-field
+  docs remain accurate, and no scientific probe or final grid has been run.
+
+Changes:
+- Added `orchestration/target_preparation.py` with `TargetPreparationOutputs`
+  and `prepare_training_targets`.
+- Moved range label-cache construction, target-mode dispatch,
+  teacher-distillation label construction, target balancing, selection
+  query-cache prep, and selection geometry-score prep out of
+  `run_experiment_pipeline`.
+- Kept the scalar `mlqds_range_geometry_blend` local in the pipeline because
+  eval-label preparation still needs it after model training.
+- Added focused unit tests for factorized target prep, selection-cache
+  ownership, invalid replicate aggregation, non-blind replicate rejection, and
+  target balancing without precomputed labels.
+- Updated orchestration and layout docs so the current pressure point is now
+  retained-mask freezing/evaluation prep/artifact coordination, not target
+  construction inside the pipeline.
+
+Tests:
+- `uv run --group dev -- ruff check --fix Range_QDS/orchestration/experiment_pipeline.py Range_QDS/orchestration/target_preparation.py Range_QDS/tests/unit/orchestration/test_target_preparation.py`
+- `uv run --group dev -- pyright Range_QDS/orchestration/experiment_pipeline.py Range_QDS/orchestration/target_preparation.py Range_QDS/tests/unit/orchestration/test_target_preparation.py`
+- `uv run --group dev -- pytest Range_QDS/tests/unit/orchestration/test_target_preparation.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py -q`
+- `make -C Range_QDS lint`
+- `make -C Range_QDS lint-full`
+- `make -C Range_QDS typecheck`
+- `make -C Range_QDS test`
+- `uv run --group dev -- yamllint .`
+- `git diff --check -- Range_QDS pyproject.toml .gitignore`
+- `uv run --group dev -- ruff format --check Range_QDS/orchestration/experiment_pipeline.py Range_QDS/orchestration/target_preparation.py Range_QDS/tests/unit/orchestration/test_target_preparation.py`
+- Import smoke for `run_experiment_pipeline`, `TargetPreparationOutputs`, and
+  `prepare_training_targets`.
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was a structural refactor.
+
+Key results:
+- Focused Ruff passed.
+- Focused Pyright passed with `0 errors, 0 warnings, 0 informations`.
+- Focused target-prep plus orchestration tests passed: `100 passed`.
+- Full Ruff passed.
+- Full Pyright passed with `0 errors, 0 warnings, 0 informations`.
+- Full pytest passed: `432 passed, 1 warning`.
+- yamllint, whitespace diff check, Ruff format check, and import smoke passed.
+- `experiment_pipeline.py` is now `1989` lines, down from `2543`.
+- `target_preparation.py` is `651` lines and owns target-preparation runtime.
+
+Extra discoveries:
+- Target preparation also owned validation query-cache setup and optional
+  selection geometry scores. Keeping those with target prep is defensible
+  because both feed training/checkpoint validation, but the module name should
+  be read as training preparation, not only label construction.
+- Teacher distillation is operationally heavy even though it is behaviorally
+  target preparation. If this grows, split teacher runtime from target dispatch
+  with tests around `teacher_distillation` artifact fields.
+- `target_preparation.py` is already large. That is better than hiding this
+  inside the run pipeline, but it should not become a second grab bag.
+
+Decision:
+- Target-preparation ownership is split and verified.
+- No compatibility shim was introduced; `experiment_pipeline.py` imports the
+  direct owner.
+- No scientific success claim is made. No probe or final-grid evidence was
+  generated.
+
+## Checkpoint 5.10 — Retained Mask Freezing Extraction
+
+Status: completed
+
+Hypothesis:
+- Workload-blind primary mask freezing, audit-ratio mask freezing, cached score
+  capture, selector-trace capture, and query-free ablation mask construction can
+  move out of `orchestration/experiment_pipeline.py` without changing protocol
+  ordering, retained masks, or artifact fields.
+
+Expected files:
+- `Range_QDS/orchestration/retained_masks.py`
+- `Range_QDS/orchestration/experiment_pipeline.py`
+- focused retained-mask tests
+- `Range_QDS/orchestration/README.md`
+- `Range_QDS/CODE_LAYOUT.md`
+
+Stop condition:
+- Stop when `run_experiment_pipeline` delegates workload-blind freeze work to
+  the new owner, focused retained-mask checks pass, broad static/test gates
+  pass, docs/log are accurate, and no scientific probe or final grid has been
+  run.
+
+Changes:
+- Added `orchestration/retained_masks.py` with
+  `RetainedMaskFreezingOutputs` and `freeze_workload_blind_retained_masks`.
+- Moved primary retained-mask freezing, score/raw/head/segment cache capture,
+  learned-selector trace capture, pre-repair diagnostic mask construction,
+  query-free causality ablation mask construction, prior/head sensitivity
+  freeze diagnostics, and audit-ratio mask freezing out of
+  `run_experiment_pipeline`.
+- Kept matched evaluation, eval query-cache prep, eval label prep, oracle and
+  learned-fill diagnostics, range compression audit evaluation, and artifact
+  writing in `experiment_pipeline.py`.
+- Added focused tests for non-blind no-op behavior, workload-blind primary
+  cache capture, audit-ratio frozen masks, and learned-selector trace capture.
+- Updated orchestration and layout docs. The current pressure point is now
+  evaluation/artifact coordination in `experiment_pipeline.py` plus the large
+  retained-mask freeze module.
+
+Tests:
+- `uv run --group dev -- ruff check --fix Range_QDS/orchestration/experiment_pipeline.py Range_QDS/orchestration/retained_masks.py Range_QDS/tests/unit/orchestration/test_retained_masks.py`
+- `uv run --group dev -- pyright Range_QDS/orchestration/experiment_pipeline.py Range_QDS/orchestration/retained_masks.py Range_QDS/tests/unit/orchestration/test_retained_masks.py`
+- `uv run --group dev -- pytest Range_QDS/tests/unit/orchestration/test_retained_masks.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py -q`
+- `make -C Range_QDS lint`
+- `make -C Range_QDS lint-full`
+- `make -C Range_QDS typecheck`
+- `make -C Range_QDS test`
+- `uv run --group dev -- yamllint .`
+- `git diff --check -- Range_QDS pyproject.toml .gitignore`
+- `uv run --group dev -- ruff format --check Range_QDS/orchestration/experiment_pipeline.py Range_QDS/orchestration/retained_masks.py Range_QDS/tests/unit/orchestration/test_retained_masks.py`
+- Import smoke for `run_experiment_pipeline`, `RetainedMaskFreezingOutputs`,
+  and `freeze_workload_blind_retained_masks`.
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was a structural refactor.
+
+Key results:
+- Focused Ruff passed.
+- Focused Pyright passed with `0 errors, 0 warnings, 0 informations`.
+- Focused retained-mask plus orchestration tests passed: `98 passed`.
+- Full Ruff passed.
+- Full Pyright passed with `0 errors, 0 warnings, 0 informations`.
+- Full pytest passed: `435 passed, 1 warning`.
+- yamllint, whitespace diff check, Ruff format check, and import smoke passed.
+- `experiment_pipeline.py` is now `926` lines, down from `1989`.
+- `retained_masks.py` is `1177` lines and owns workload-blind freeze ordering.
+
+Extra discoveries:
+- Retained-mask freezing was not a small operation. It also included most of
+  the query-free learning-causality freeze construction. Moving all of it was
+  the right protocol boundary because those masks must be frozen before eval
+  query scoring.
+- `retained_masks.py` is now the largest orchestration module. That is still
+  cleaner than hiding freeze ordering inside the run pipeline, but the next
+  targeted split should separate primary/audit freeze mechanics from ablation
+  freeze construction with artifact-field tests.
+- `experiment_pipeline.py` is finally small enough to read as a coordinator.
+  Its remaining structural work is matched-evaluation/audit-evaluation
+  assembly, not more target or freeze logic.
+
+Decision:
+- Retained-mask freeze ownership is split and verified.
+- No compatibility shim was introduced; `experiment_pipeline.py` imports the
+  direct owner.
+- No scientific success claim is made. No probe or final-grid evidence was
+  generated.

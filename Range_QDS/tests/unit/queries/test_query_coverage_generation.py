@@ -15,12 +15,12 @@ from queries.coverage_estimator import (
     estimate_range_coverage,
     sample_trajectories_by_stride,
 )
+from queries.generation.coverage import point_coverage_mask_for_query
+from queries.generation.signatures import _counts_from_metadata
 from queries.generation.workload import (
-    _counts_from_metadata,
     _dataset_bounds,
     _make_range_query,
     generate_typed_query_workload,
-    point_coverage_mask_for_query,
 )
 
 

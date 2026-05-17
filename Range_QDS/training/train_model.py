@@ -43,7 +43,7 @@ from training.query_prior_fields import (
     query_prior_field_metadata,
 )
 from training.scaler import FeatureScaler
-from training.targets.legacy import (
+from training.targets.common import (
     _apply_temporal_residual_labels,
     _scaled_training_target_for_type,
 )

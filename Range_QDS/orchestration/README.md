@@ -25,10 +25,13 @@ implementation checks.
 | `experiment_workloads.py` | Workload generation and workload-map resolution. |
 | `experiment_methods.py` | Evaluation method construction. |
 | `experiment_outputs.py` | Run artifact payloads and writers. |
+| `target_preparation.py` | Training-label preparation, target transforms, teacher distillation, and validation query caches. |
+| `retained_masks.py` | Workload-blind primary/audit retained-mask freezing and query-free ablation mask construction. |
+| `final_summary.py` | Final single-cell gate, final-claim, and causality summary assembly. |
 | `range_cache.py` / `workload_cache.py` | Run-local range label and workload caches. |
 | `range_diagnostics.py` | Range workload, learned-fill, and gate diagnostics. |
 | `gates.py` | Single-run final-candidate gate helpers. |
-| `causality.py` / `model_ablations.py` | Learning-causality and ablation diagnostics. |
+| `causality.py` / `model_ablations.py` / `selection_causality.py` | Learning-causality and ablation diagnostics. |
 | `segment_audits.py` / `length_diagnostics.py` / `selector_diagnostics.py` | Selector and geometry diagnostic helpers. |
 | `run_ais_experiment.py` | Main training/evaluation entry point. |
 | `run_inference.py` | Evaluate a saved checkpoint without retraining. |

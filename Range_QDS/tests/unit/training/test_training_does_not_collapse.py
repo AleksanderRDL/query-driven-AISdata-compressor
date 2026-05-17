@@ -27,7 +27,7 @@ from training.checkpoint_selection import (
 )
 from training.importance_labels import compute_typed_importance_labels
 from training.scaler import FeatureScaler
-from training.targets.legacy import _apply_temporal_residual_labels
+from training.targets.common import _apply_temporal_residual_labels
 from training.targets.query_useful_v1 import QUERY_USEFUL_V1_HEAD_NAMES
 from training.train_model import train_model
 from training.training_diagnostics import train_target_fit_diagnostics

@@ -10,7 +10,8 @@ from config.experiment_config import (
     DEFAULT_BUDGET_LOSS_TEMPERATURE,
     VALIDATION_SPLIT_MODES,
 )
-from queries.generation.workload import RANGE_ANCHOR_MODES, RANGE_TIME_DOMAIN_MODES
+from queries.generation.anchors import RANGE_ANCHOR_MODES
+from queries.generation.workload import RANGE_TIME_DOMAIN_MODES
 from runtime.torch_runtime import AMP_MODE_CHOICES, FLOAT32_MATMUL_PRECISION_CHOICES
 from simplification.mlqds_scoring import MLQDS_SCORE_MODES
 from training.importance_labels import RANGE_LABEL_MODES

@@ -38,7 +38,8 @@ for diagnostic profiles or separate artifact families.
 | `benchmark_inputs.py` | Data-source, workload, and environment resolution. |
 | `benchmark_process.py` | Child process execution and timing parsing. |
 | `benchmark_artifacts.py` | Family indexes, status files, README, CSV, and JSON writers. |
-| `benchmark_report.py` | Benchmark child-run row shaping and audit-field flattening. |
+| `benchmark_report.py` | Benchmark report artifact construction and file output. |
+| `reporting/` | Child-run row fields, metric helpers, audit extractors, and report paths. |
 | `benchmark_row_runtime.py` | Runtime, phase, epoch, and collapse-warning row helpers. |
 | `benchmark_table.py` | Markdown table formatting for benchmark summaries. |
 | `benchmark_final_grid.py` | Final-grid QueryUsefulV1 acceptance evidence. |

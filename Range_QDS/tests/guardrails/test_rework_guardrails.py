@@ -19,9 +19,9 @@ from benchmarking.benchmark_profiles import (
     benchmark_profile_args,
     benchmark_profile_settings,
 )
-from benchmarking.benchmark_report import _row_from_run
+from benchmarking.reporting.row_fields import _row_from_run
 from training.model_features import model_type_metadata
-from training.targets.modes import LEGACY_RANGE_TARGET_MODES
+from training.targets.modes import SCALAR_RANGE_TARGET_MODES
 from training.targets.query_useful_v1 import QUERY_USEFUL_V1_TARGET_MODES
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -31,6 +31,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
     "module_name",
     [
         "training.training_pipeline",
+        "training.targets.legacy",
         "simplification.selector_diagnostics",
         "simplification.legacy_temporal_hybrid",
     ],
@@ -117,10 +118,10 @@ def test_query_driven_v2_profile_is_final_candidate() -> None:
     assert args[args.index("--range_train_workload_replicates") + 1] == "4"
 
 
-def test_legacy_and_query_useful_target_modes_are_separated() -> None:
-    assert "retained_frequency" in LEGACY_RANGE_TARGET_MODES
-    assert "historical_prior_retained_frequency" in LEGACY_RANGE_TARGET_MODES
-    assert "query_useful_v1_factorized" not in LEGACY_RANGE_TARGET_MODES
+def test_scalar_and_query_useful_target_modes_are_separated() -> None:
+    assert "retained_frequency" in SCALAR_RANGE_TARGET_MODES
+    assert "historical_prior_retained_frequency" in SCALAR_RANGE_TARGET_MODES
+    assert "query_useful_v1_factorized" not in SCALAR_RANGE_TARGET_MODES
     assert QUERY_USEFUL_V1_TARGET_MODES == frozenset({"query_useful_v1_factorized"})
 
 

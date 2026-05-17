@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from training.targets.query_useful_v1 import QUERY_USEFUL_V1_TARGET_MODES
 
-LEGACY_RANGE_TARGET_MODES = frozenset(
+SCALAR_RANGE_TARGET_MODES = frozenset(
     {
         "point_value",
         "retained_frequency",

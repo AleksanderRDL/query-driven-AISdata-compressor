@@ -9,7 +9,12 @@ checkpoints, and persists model artifacts.
 | --- | --- |
 | `targets/query_useful_v1.py` | Factorized QueryUsefulV1 label construction. |
 | `targets/modes.py` | Public range target mode registries for CLI/config choices. |
-| `targets/legacy.py` | Legacy RangeUseful/scalar target transforms. |
+| `targets/common.py` | Shared scalar target scaling, budgeting, balancing, and temporal-base helpers. |
+| `targets/retained_frequency.py` | Retained-frequency, global-budget, and historical-prior scalar diagnostics. |
+| `targets/structural.py` / `targets/marginal_coverage.py` | Query-free structural and neighborhood-marginal scalar diagnostics. |
+| `targets/query_spine.py` / `targets/query_residual.py` | Train-query spine and residual-anchor scalar diagnostics. |
+| `targets/set_utility.py` / `targets/local_swap.py` | Train-query set-utility and local-swap scalar diagnostics. |
+| `targets/aggregation.py` | Multi-workload and component target aggregation. |
 | `query_prior_fields.py` | Train-only query-prior field construction and sampling. |
 | `model_features.py` | Query-free and query-conditioned point feature builders. |
 | `training_losses.py` | Budget, ranking, pointwise, and auxiliary losses. |
@@ -50,9 +55,9 @@ single-cell gates and the full final grid.
 
 `query_useful_v1_factorized` is the active target family. It predicts separate
 query-hit, behavior, replacement, segment-budget, and prior-related signals
-rather than one legacy scalar.
+rather than one scalar RangeUseful diagnostic.
 
-Legacy `range_training_target_mode` values are retained for diagnostics,
+Scalar `range_training_target_mode` values are retained for diagnostics,
 regression, and teacher runs. They are not final-success evidence:
 
 - `retained_frequency`
@@ -67,7 +72,8 @@ regression, and teacher runs. They are not final-success evidence:
 - `local_swap_gain_cost_frequency`
 - `historical_prior_retained_frequency`
 
-Use legacy modes only when the checkpoint hypothesis explicitly needs them.
+Use scalar diagnostic modes only when the checkpoint hypothesis explicitly
+needs them.
 
 ## Loss And Selection
 

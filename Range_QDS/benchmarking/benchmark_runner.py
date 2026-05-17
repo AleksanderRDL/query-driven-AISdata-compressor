@@ -12,17 +12,13 @@ from pathlib import Path
 from typing import Any
 
 from benchmarking.benchmark_artifacts import (
-    artifact_index,
     family_root,
-    format_artifact_readme,
     index_entry,
     utc_now,
-    write_csv,
     write_family_indexes,
     write_json,
     write_status,
 )
-from benchmarking.benchmark_final_grid import query_driven_final_grid_summary
 from benchmarking.benchmark_inputs import (
     DEFAULT_WORKLOADS,
     PURE_WORKLOADS,
@@ -38,14 +34,17 @@ from benchmarking.benchmark_profiles import (
     PROFILE_CHOICES,
     RANGE_WORKLOAD_V1_WORKLOAD_BLIND_V2_PROFILE,
 )
-from benchmarking.benchmark_report import _child_run_dir, _row_from_run
+from benchmarking.benchmark_report import (
+    build_benchmark_report_artifact,
+    write_benchmark_report_files,
+)
 from benchmarking.benchmark_runtime import (
     _git_metadata,
     _qds_root,
     _split_extra_args,
-    _write_text,
 )
-from benchmarking.benchmark_table import _format_report_table
+from benchmarking.reporting.paths import _child_run_dir
+from benchmarking.reporting.row_fields import _row_from_run
 from data.trajectory_cache import load_or_build_ais_cache
 
 QDS_ARTIFACTS_DIR = Path(__file__).resolve().parents[1] / "artifacts"
@@ -484,31 +483,29 @@ def main() -> None:
         )
         raise
 
-    artifact = {
-        "schema_version": 5,
-        "timestamp_utc": utc_now(),
-        "command": [sys.executable, "-m", "benchmarking.benchmark_runner", *sys.argv[1:]],
-        "run_id": run_id,
-        "artifact_root": str(results_dir),
-        "family_root": str(run_family_root),
-        "profile": args.profile,
-        "seed": int(args.seed),
-        "workloads": workloads,
-        "run_label": run_label,
-        "run_config": run_config,
-        "data_sources": {
+    artifact = build_benchmark_report_artifact(
+        timestamp_utc=utc_now(),
+        command=[sys.executable, "-m", "benchmarking.benchmark_runner", *sys.argv[1:]],
+        run_id=run_id,
+        results_dir=results_dir,
+        run_family_root=run_family_root,
+        profile=args.profile,
+        seed=int(args.seed),
+        workloads=workloads,
+        run_label=run_label,
+        run_config=run_config,
+        data_sources={
             "csv_path": data_sources.csv_path,
             "train_csv_path": data_sources.train_csv_path,
             "validation_csv_path": data_sources.validation_csv_path,
             "eval_csv_path": data_sources.eval_csv_path,
             "selected_cleaned_csv_files": list(data_sources.selected_cleaned_csv_files),
         },
-        "cache_warmup": cache_warmup,
-        "environment": environment,
-        "git": git,
-        "rows": rows,
-    }
-    artifact["query_driven_final_grid_summary"] = query_driven_final_grid_summary(rows, run_config)
+        cache_warmup=cache_warmup,
+        environment=environment,
+        git=git,
+        rows=rows,
+    )
     finished_at_utc = utc_now()
     status = "failed" if failures else "completed"
     status_payload = write_status(
@@ -522,12 +519,7 @@ def main() -> None:
         message=f"{failures} benchmark run(s) failed" if failures else "benchmark run completed",
     )
     artifact["run_status"] = status_payload
-    write_json(results_dir / "benchmark_report.json", artifact)
-    write_csv(results_dir / "benchmark_report.csv", rows)
-    _write_text(results_dir / "benchmark_report.md", _format_report_table(rows))
-    index = artifact_index(results_dir, artifact, rows)
-    write_json(results_dir / "artifact_index.json", index)
-    _write_text(results_dir / "README.md", format_artifact_readme(artifact, rows))
+    write_benchmark_report_files(results_dir, artifact, rows)
     write_family_indexes(
         run_family_root,
         index_entry(
