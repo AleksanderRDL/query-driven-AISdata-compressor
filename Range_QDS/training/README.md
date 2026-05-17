@@ -48,32 +48,19 @@ The acceptance contract is in
 | `checkpoint_score_variant` | `query_useful_v1` |
 | `checkpoint_selection_metric` | `uniform_gap` |
 
-These settings are necessary but not sufficient. Final claims still require all
-single-cell gates and the full final grid.
+These settings are necessary but not sufficient. Final claims still require the
+guide's single-cell and final-grid gates.
 
 ## Targets
 
-`query_useful_v1_factorized` is the active target family. It predicts separate
-query-hit, behavior, replacement, segment-budget, and prior-related signals
-rather than one scalar RangeUseful diagnostic.
+`query_useful_v1_factorized` is the active target family. It keeps query-hit,
+behavior, replacement, segment-budget, and prior-related signals separate
+instead of collapsing them into one RangeUseful scalar.
 
-Scalar `range_training_target_mode` values are retained for diagnostics,
-regression, and teacher runs. They are not final-success evidence:
-
-- `retained_frequency`
-- `global_budget_retained_frequency`
-- `marginal_coverage_frequency`
-- `structural_retained_frequency`
-- `component_retained_frequency`
-- `continuity_retained_frequency`
-- `query_spine_frequency`
-- `query_residual_frequency`
-- `set_utility_frequency`
-- `local_swap_gain_cost_frequency`
-- `historical_prior_retained_frequency`
-
-Use scalar diagnostic modes only when the checkpoint hypothesis explicitly
-needs them.
+Scalar `range_training_target_mode` values remain for diagnostics, regression,
+and teacher runs. They are registered in `targets/modes.py` and are not
+final-success evidence. Use them only when the checkpoint hypothesis explicitly
+needs that diagnostic path.
 
 ## Loss And Selection
 
@@ -93,36 +80,14 @@ needs them.
 diagnostic only. Final blind candidates must score without future eval query
 features.
 
-Workload-blind feature families:
-
-- `workload_blind_range`: compact query-free compatibility path.
-- `range_prior`: local trajectory context features.
-- `range_prior_clock_density`: adds query-free clock and current-day density
-  context.
-- `segment_context_range`: structural segment/context diagnostic scorer.
-- `workload_blind_range_v2`: active trainable QueryUsefulV1 candidate.
-
-Historical-prior paths:
-
-- `historical_prior`: query-free KNN diagnostic/teacher.
-- `historical_prior_mmsi`: KNN diagnostic with deterministic MMSI hash
-  features.
-- `historical_prior_student`: trainable model with KNN prior input.
-
-Historical-prior variants are workload-blind, but they must beat or explain
-the standalone KNN teacher before claiming learned value.
+`workload_blind_range_v2` is the active trainable QueryUsefulV1 candidate.
+Other workload-blind and historical-prior feature families remain diagnostic or
+compatibility paths; they must beat or explain their non-learned controls before
+claiming learned value.
 
 ## Runtime And Persistence
 
-Benchmark profiles commonly use:
-
-- `train_batch_size=64`
-- `inference_batch_size=64`
-- `query_chunk_size=2048`
-- `allow_tf32=True`
-- `amp_mode="bf16"`
-
-Direct CLI defaults are more conservative. Use `checkpoints.py` for save/load
-and `inference.py` for prediction. Checkpoints include model state, scaler
-stats, config, target diagnostics, epoch timing, and selected validation
-scores.
+Use `checkpoints.py` for save/load and `inference.py` for prediction.
+Checkpoints include model state, scaler stats, config, target diagnostics,
+epoch timing, and selected validation scores. Runtime defaults belong in config
+and benchmark profiles, not this README.

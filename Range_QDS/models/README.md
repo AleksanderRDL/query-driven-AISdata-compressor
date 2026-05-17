@@ -19,70 +19,26 @@ path such as `workload_blind_range_v2`.
 | `workload_blind_range_v2.py` | Trainable factorized query-driven workload-blind model with prior-field and local/segment context encoders. |
 | `../training/model_features.py` | Baseline, range-aware, and workload-blind point features. |
 
-## Flow
-
-```text
-point features -> point encoder -> positional encoding -> local transformer
-query features + query type IDs -> query encoder
-point states + query states -> chunked cross-attention -> score head
-```
-
-Workload-blind neural range models skip the query branch. With `num_layers=0`,
-they also skip positional encoding and the local transformer, reducing the path
-to point features -> point encoder -> score head.
-
-## Key Rules
+## Rules
 
 - Query-conditioned models need `query_type_ids`; workload-blind models ignore
   query tensors and query type IDs.
-- Current training paths use one pure workload per model and output one
-  score per point.
-- `query_chunk_size >= n_queries` gives exact one-chunk cross-attention;
-  smaller chunks are an approximation.
-- Query-conditioned attention is point-to-query and does not mix points across
-  trajectories. The workload-blind neural model can use a local trajectory
-  transformer, or skip it with `num_layers=0`.
-- Point features are 7 columns for baseline, 16 for range-aware, 17 for
-  the compact workload-blind path, 24 for `range_prior`,
-  28 for `range_prior_clock_density` and `segment_context_range`, 35 for
-  `workload_blind_range_v2`, and 23 for the historical-prior feature slice used
-  by `historical_prior` and `historical_prior_student`.
-  `historical_prior_mmsi` uses 27 columns by adding a deterministic query-free
-  MMSI hash to the historical-prior slice.
-- Query features are 12 padded columns from `pad_query_features`.
-
-## Rework Classification
-
-Legacy query-aware diagnostics:
-- `baseline`
-- `range_aware`
-
-Legacy workload-blind scalar scorers:
-- `workload_blind_range`
-- `range_prior`
-- `range_prior_clock_density`
-- `segment_context_range`
-
-Historical-prior diagnostics:
-- `historical_prior`
-- `historical_prior_mmsi`
-- `historical_prior_student`
-
-`historical_prior` and `historical_prior_mmsi` are KNN diagnostics/teachers and
-are not final learned-model success. `historical_prior_student` is trainable,
-but it requires an ablation against the standalone KNN prior before it can claim
-learned value. The current final-candidate model path is
-`workload_blind_range_v2`, but it is not accepted unless the workload stability,
-predictability, causality, global sanity, and full-grid gates pass.
-
-Current density/sparsity feature columns are current-split point-cloud context
-features. Do not call them train-derived query-prior fields.
+- Query-conditioned attention is diagnostic only for final workload-blind
+  claims.
+- `workload_blind_range_v2` is the active trainable candidate, but acceptance
+  still depends on the gates in `../docs/query-driven-rework-guide.md`.
+- Historical-prior models are KNN diagnostics or prior-assisted students. They
+  cannot claim learned value unless ablations beat or explain the standalone
+  KNN prior.
+- Current density/sparsity feature columns are current-split point-cloud
+  context features. Do not call them train-derived query-prior fields.
+- Feature dimensions are owned by `training/model_features.py`; update tests
+  there when changing model input shape.
 
 ## Checkpoint Compatibility
 
 `workload_blind_range_v2.calibration_head` is retained only as frozen
 checkpoint-state compatibility. It is not part of final score composition, and
-changing its weights must not affect factorized final scores. Removing it is a
-checkpoint-format decision: the loader would need an explicit migration or an
-allowed-unexpected-key policy for older saved states before the module can be
-deleted safely.
+changing its weights must not affect factorized final scores. Removing it
+requires an explicit checkpoint-loading migration or allowed-unexpected-key
+policy for older saved states.

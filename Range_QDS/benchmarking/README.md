@@ -21,12 +21,11 @@ uv run --group dev -- python -m benchmarking.benchmark_runner --help
 uv run --group dev -- python -m benchmarking.benchmark_runtime --help
 ```
 
-The benchmark Makefile defaults use the active
-`range_workload_v1_workload_blind_v2` profile and the
-`Range_QDS/artifacts/benchmarks/query_driven_workload_blind_v2` and
-`Range_QDS/artifacts/cache/query_driven_workload_blind_v2` families. Set
-`BENCHMARK_PROFILE`, `BENCHMARK_FAMILY`, and `BENCHMARK_CACHE` explicitly only
-for diagnostic profiles or separate artifact families.
+Default Make targets use the active `range_workload_v1_workload_blind_v2`
+profile and write under `Range_QDS/artifacts/benchmarks/query_driven_workload_blind_v2`
+and `Range_QDS/artifacts/cache/query_driven_workload_blind_v2`. Set
+`BENCHMARK_PROFILE`, `BENCHMARK_FAMILY`, and `BENCHMARK_CACHE` only for a
+diagnostic profile or a separate artifact family.
 
 ## Key Files
 
@@ -51,19 +50,12 @@ Current query-driven candidate profile:
 
 - `range_workload_v1_workload_blind_v2`
 
-This is the active QueryUsefulV1 workload-blind path. It is still blocked
-unless the guide-required workload stability, support, predictability,
-causality, global-sanity, and final-grid gates pass.
+This is the active QueryUsefulV1 workload-blind path. It is not accepted unless
+the guide-required workload stability, support, predictability, causality,
+global-sanity, and final-grid gates pass.
 
-Legacy diagnostic profiles remain useful for regression and teacher checks:
-
-- `range_workload_aware_diagnostic`
-- `range_workload_blind_expected_usefulness`
-- `range_workload_blind_retained_frequency`
-- `range_workload_blind_teacher_distill`
-
-Legacy profiles report diagnostic RangeUseful/scalar behavior and are not final
-acceptance evidence.
+Diagnostic profiles still exist in `benchmark_profiles.py` for regression,
+teacher, and scalar-target checks. They are not final acceptance evidence.
 
 Keep durable defaults in `benchmark_profiles.py`. Put one-off variations in
 queue rows or `BENCHMARK_CHILD_EXTRA_ARGS`, not in profile defaults.
@@ -92,6 +84,5 @@ Start with:
 - child `example_run.json`
 
 Artifact layout and cleanup rules live in
-[`../artifacts/README.md`](../artifacts/README.md). Use jq/Rich helpers from
-[`../docs/dev-tooling-guide.md`](../docs/dev-tooling-guide.md) for one-run
-inspection.
+[`../artifacts/README.md`](../artifacts/README.md). JSON inspection helpers
+live in [`../docs/dev-tooling-guide.md`](../docs/dev-tooling-guide.md).

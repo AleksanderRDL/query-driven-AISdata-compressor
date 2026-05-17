@@ -2682,3 +2682,69 @@ Decision:
   direct owner.
 - No scientific success claim is made. No probe or final-grid evidence was
   generated.
+
+## Checkpoint 5.13 — Active Documentation Cleanup
+
+Status: completed
+
+Goal:
+- Remove or update clearly stale active documentation after the structure
+  changes, then condense duplicated or low-value prose so the remaining docs are
+  easier to scan.
+
+Changes:
+- Updated `artifacts/README.md` so the example benchmark family and run ID use
+  the active `query_driven_workload_blind_v2` family instead of the old
+  `range_workload_aware_diagnostic` family.
+- Documented `artifacts/manual/` as generated run output, not maintained source
+  documentation.
+- Added explicit `docs/` and `artifacts/` ownership rows to `CODE_LAYOUT.md`.
+- Removed duplicated benchmark-default prose from the root README and kept the
+  benchmark details in `benchmarking/README.md`.
+- Condensed `benchmarking/README.md`, `models/README.md`, and
+  `training/README.md` to active ownership, current candidate paths, and
+  high-value rules instead of repeated protocol narrative.
+- Preserved the developer-tooling guide's tooling principles, Hypothesis
+  good/bad usage, pytest-regressions good/bad usage, behavioral guidance, and
+  risks.
+
+Tests:
+- `uv sync --group dev`
+- `uv lock --check`
+- `git diff --check`
+- `uv run --group dev -- yamllint .`
+- `make -C Range_QDS lint-yaml`
+- `uv run --group dev -- pytest Range_QDS/tests/property Range_QDS/tests/regression -q`
+- `uv run --group dev -- pytest Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/unit/benchmarking/test_benchmark_runner.py -q`
+- Active-doc stale-reference search over maintained docs, excluding generated
+  artifact markdown and historical progress-log entries.
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was a documentation cleanup.
+
+Key results:
+- Docs changed: `6` maintained docs.
+- Net doc diff for the edited files: `54 insertions`, `142 deletions`.
+- `models/README.md` is now `44` lines, down from `88`.
+- `training/README.md` is now `93` lines, down from `128`.
+- Property/regression tests passed: `7 passed`.
+- High-signal orchestration/benchmarking unit tests passed: `132 passed`.
+- `uv sync`, `uv lock --check`, whitespace diff check, yamllint, and
+  `make lint-yaml` passed.
+
+Extra discoveries:
+- `Range_QDS/artifacts/manual/` contains many generated historical/manual
+  markdown reports. They are useful artifacts, but they should be excluded from
+  source-documentation audits and search conclusions.
+- Historical progress-log entries intentionally contain old `experiments/`
+  paths, old test paths, and old artifact paths. Rewriting them would make the
+  chronology less honest; active docs are clean instead.
+- `models/README.md` was carrying feature-dimension details that are better
+  owned by `training/model_features.py` and its tests.
+
+Decision:
+- Active source documentation is cleaner and less repetitive.
+- Generated artifact markdown was not deleted in this checkpoint.
+- No scientific success claim is made. No probe or final-grid evidence was
+  generated.

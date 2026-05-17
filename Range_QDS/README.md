@@ -39,12 +39,6 @@ make list-runs
 make clean-smoke-artifacts CONFIRM=1
 ```
 
-The tmux benchmark Makefile defaults now use the active
-`range_workload_v1_workload_blind_v2` profile and the
-`query_driven_workload_blind_v2` artifact/cache families. Override
-`BENCHMARK_PROFILE`, `BENCHMARK_FAMILY`, and `BENCHMARK_CACHE` only when you
-intentionally need a diagnostic or separate artifact family.
-
 Direct CLI example:
 
 ```bash
@@ -67,7 +61,7 @@ uv run --group dev -- python -m orchestration.run_ais_experiment \
 | Code layout | [`CODE_LAYOUT.md`](CODE_LAYOUT.md) |
 | Single-run orchestration | [`orchestration/README.md`](orchestration/README.md) |
 | Benchmark profiles, queues, reports, artifact names | [`benchmarking/README.md`](benchmarking/README.md) |
-| Generated artifact layout and cleanup | [`artifacts/README.md`](artifacts/README.md) |
+| Artifact layout and cleanup | [`artifacts/README.md`](artifacts/README.md) |
 | Training labels, loss, checkpoint selection | [`training/README.md`](training/README.md) |
 | Query generation and execution | [`queries/README.md`](queries/README.md) |
 | Evaluation metrics and baselines | [`evaluation/README.md`](evaluation/README.md) |

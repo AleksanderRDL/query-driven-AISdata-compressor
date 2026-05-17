@@ -9,7 +9,7 @@ should be tracked.
 ```text
 Range_QDS/artifacts/
   benchmarks/
-    range_workload_aware_diagnostic/
+    query_driven_workload_blind_v2/
       latest_run.txt
       latest_queue.txt
       runs_index.csv
@@ -17,11 +17,15 @@ Range_QDS/artifacts/
       runs/<run_id>/
       queues/<queue_id>/
   cache/
+    query_driven_workload_blind_v2/
+  manual/
   results/
 ```
 
 - `benchmarks/`: comparable benchmark families and queue reports.
 - `cache/`: segmented trajectory caches, workload caches, and diagnostics.
+- `manual/`: local generated historical/manual reports. Treat markdown here as
+  run output, not maintained source documentation.
 - `results/`: smoke and manual single-run output.
 
 Start with the generated run-local `README.md`, `artifact_index.json`,
@@ -40,7 +44,7 @@ make clean-smoke-artifacts CONFIRM=1
 Use descriptive run IDs for comparable runs:
 
 ```bash
-ATTACH=0 BENCHMARK_RUN_ID=range_workload_aware_diagnostic_seed42_a make range-benchmark-tmux
+ATTACH=0 BENCHMARK_RUN_ID=query_driven_v2_seed42_a make range-benchmark-tmux
 ```
 
 ## Cleanup
@@ -52,7 +56,7 @@ Safe cleanup targets:
 - `Range_QDS/artifacts/benchmarks/*smoke*`
 - `Range_QDS/artifacts/benchmarks/*layout_smoke*`
 - smoke-only caches
-- stale workload-aware diagnostic caches after their report numbers are captured
+- stale diagnostic caches after their report numbers are captured
 
 Keep benchmark-family runs until their report rows have been reviewed or moved
 to an explicit archive.

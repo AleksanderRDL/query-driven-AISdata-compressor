@@ -37,6 +37,8 @@ Operational tooling reference: `docs/dev-tooling-guide.md`.
 | `orchestration/` | Single-run CLI parsing, data/workload assembly, pipeline wiring, artifact writing, and run-level diagnostics/gates. | Benchmark campaign policy, final-grid summaries, low-level model/query/selector primitives. |
 | `benchmarking/` | Benchmark profiles, benchmark runners, queues, reports, runtime benchmarks, family indexes, and final-grid summaries. | Single-run train/eval internals or low-level model/query/selector primitives. |
 | `scripts/` | Small operational tools over existing artifacts or profiles. | Scientific logic not already owned by packages above. |
+| `docs/` | Rework protocol, progress log, and developer tooling guidance. | Generated run reports or duplicated package API docs. |
+| `artifacts/` | Local generated caches, run outputs, benchmark families, and generated report markdown. | Maintained source documentation or importable code. |
 | `tests/` | Unit, integration, property, regression, and guardrail tests. | Production helpers used only to make tests pass. |
 
 ## Subpackage Layout
