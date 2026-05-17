@@ -11,15 +11,17 @@ import numpy as np
 import torch
 
 from queries.workload import TypedQueryWorkload
+from simplification.learned_segment_budget import (
+    blend_segment_support_scores,
+    simplify_with_learned_segment_budget_v1,
+)
 from simplification.mlqds_scoring import mlqds_simplification_scores, workload_type_head
-from simplification.learned_segment_budget import blend_segment_support_scores, simplify_with_learned_segment_budget_v1
 from simplification.simplify_trajectories import (
     evenly_spaced_indices,
     simplify_with_global_score_budget,
-    simplify_with_temporal_score_hybrid,
     simplify_with_scores,
+    simplify_with_temporal_score_hybrid,
 )
-from training.training_outputs import TrainingOutputs
 from training.inference import (
     _is_workload_blind_model,
     _model_point_dim,
@@ -29,6 +31,7 @@ from training.inference import (
 )
 from training.model_features import build_model_point_features_for_dim
 from training.query_useful_targets import QUERY_USEFUL_V1_HEAD_NAMES
+from training.training_outputs import TrainingOutputs
 
 
 class Method(Protocol):
@@ -103,7 +106,9 @@ class MLQDSMethod:
     _raw_pred_cache: torch.Tensor | None = field(default=None, init=False, repr=False)
     _head_logit_cache: torch.Tensor | None = field(default=None, init=False, repr=False)
     _segment_score_cache: torch.Tensor | None = field(default=None, init=False, repr=False)
-    _path_length_support_score_cache: torch.Tensor | None = field(default=None, init=False, repr=False)
+    _path_length_support_score_cache: torch.Tensor | None = field(
+        default=None, init=False, repr=False
+    )
     _selector_segment_score_cache: torch.Tensor | None = field(default=None, init=False, repr=False)
 
     def _current_score_cache_key(
@@ -152,7 +157,9 @@ class MLQDSMethod:
             float(self.rank_confidence_weight),
             float(self.range_geometry_blend),
             geometry_key,
-            tuple(int(mmsi) for mmsi in self.trajectory_mmsis) if self.trajectory_mmsis is not None else None,
+            tuple(int(mmsi) for mmsi in self.trajectory_mmsis)
+            if self.trajectory_mmsis is not None
+            else None,
             int(self.min_learned_swaps),
             str(self.selector_type),
             float(self.learned_segment_geometry_gain_weight),
@@ -199,7 +206,9 @@ class MLQDSMethod:
                 norm_queries = None
                 query_type_ids = None
             else:
-                norm_points, norm_queries = self.trained.scaler.transform(model_points, self.workload.query_features)
+                norm_points, norm_queries = self.trained.scaler.transform(
+                    model_points, self.workload.query_features
+                )
                 query_type_ids = self.workload.type_ids
             device = (
                 torch.device(self.inference_device)
@@ -235,13 +244,19 @@ class MLQDSMethod:
                 self._path_length_support_score_cache = None
                 self._selector_segment_score_cache = None
                 try:
-                    segment_head_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("segment_budget_target")
+                    segment_head_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index(
+                        "segment_budget_target"
+                    )
                 except ValueError:
                     segment_head_idx = -1
                 if segment_head_idx >= 0 and int(head_logits.shape[-1]) > segment_head_idx:
-                    self._segment_score_cache = head_logits[:, segment_head_idx].detach().cpu().float()
+                    self._segment_score_cache = (
+                        head_logits[:, segment_head_idx].detach().cpu().float()
+                    )
                 try:
-                    path_length_head_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("path_length_support_target")
+                    path_length_head_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index(
+                        "path_length_support_target"
+                    )
                 except ValueError:
                     path_length_head_idx = -1
                 if path_length_head_idx >= 0 and int(head_logits.shape[-1]) > path_length_head_idx:
@@ -251,7 +266,9 @@ class MLQDSMethod:
                 self._selector_segment_score_cache = blend_segment_support_scores(
                     segment_scores=self._segment_score_cache,
                     path_length_support_scores=self._path_length_support_score_cache,
-                    path_length_support_weight=float(self.learned_segment_length_support_blend_weight),
+                    path_length_support_weight=float(
+                        self.learned_segment_length_support_blend_weight
+                    ),
                 )
             else:
                 self._head_logit_cache = None
@@ -342,7 +359,9 @@ class UniformTemporalMethod:
             point_count = end - start
             if point_count <= 0:
                 continue
-            keep_count = max(2, int(torch.ceil(torch.tensor(float(compression_ratio) * point_count)).item()))
+            keep_count = max(
+                2, int(torch.ceil(torch.tensor(float(compression_ratio) * point_count)).item())
+            )
             keep_count = min(keep_count, point_count)
             local_indices = evenly_spaced_indices(point_count, keep_count, points.device)
             retained[start + local_indices] = True
@@ -437,7 +456,9 @@ class DouglasPeuckerMethod:
         start_point = xy[start]
         end_point = xy[end]
         segment_vector = end_point - start_point
-        segment_norm_sq = float(segment_vector[0] * segment_vector[0] + segment_vector[1] * segment_vector[1])
+        segment_norm_sq = float(
+            segment_vector[0] * segment_vector[0] + segment_vector[1] * segment_vector[1]
+        )
         interior_points = xy[start + 1 : end]
         if segment_norm_sq < 1e-12:
             distances = np.linalg.norm(interior_points - start_point, axis=1)
@@ -464,7 +485,9 @@ class DouglasPeuckerMethod:
 
         # Negative-distance heap so largest perp pops first.
         heap: list[tuple[float, int, int, int]] = []
-        split_idx, perpendicular_distance = self._farthest_in_segment(traj_xy_np, 0, point_count - 1)
+        split_idx, perpendicular_distance = self._farthest_in_segment(
+            traj_xy_np, 0, point_count - 1
+        )
         if split_idx >= 0:
             heapq.heappush(heap, (-perpendicular_distance, split_idx, 0, point_count - 1))
 
@@ -497,7 +520,7 @@ class DouglasPeuckerMethod:
             point_count = int(end - start)
             if point_count <= 0:
                 continue
-            keep_count = max(2, int(math.ceil(ratio * point_count)))
+            keep_count = max(2, math.ceil(ratio * point_count))
             keep_count = min(keep_count, point_count)
             trajectory_mask = self._dp_retained_mask(xy_np[start:end], keep_count)
             retained[start:end] = torch.from_numpy(trajectory_mask).to(retained.device)

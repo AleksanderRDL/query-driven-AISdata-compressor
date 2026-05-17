@@ -9,9 +9,8 @@ def _range_focused_results(results: dict[str, MethodEvaluation]) -> bool:
     """Return true when a result table represents a pure range workload."""
     saw_range = False
     for metrics in results.values():
-        if (
-            int(metrics.range_audit.get("range_query_count", 0) or 0) > 0
-            or set(metrics.per_type_f1) <= {"range"} and "range" in metrics.per_type_f1
+        if int(metrics.range_audit.get("range_query_count", 0) or 0) > 0 or (
+            set(metrics.per_type_f1) <= {"range"} and "range" in metrics.per_type_f1
         ):
             saw_range = True
         for qtype, value in metrics.per_type_f1.items():
@@ -60,7 +59,11 @@ def print_method_comparison_table(results: dict[str, MethodEvaluation]) -> str:
     type_rows: tuple[str, ...] = () if range_focused else ("range",)
     for name, metrics in results.items():
         primary = _range_point_metric(metrics) if range_focused else float(metrics.aggregate_f1)
-        secondary = _range_usefulness_metric(metrics) if range_focused else float(metrics.aggregate_combined_f1)
+        secondary = (
+            _range_usefulness_metric(metrics)
+            if range_focused
+            else float(metrics.aggregate_combined_f1)
+        )
         entry_exit = float(metrics.range_entry_exit_f1)
         lines.append(
             f"{name:<{col1}}"

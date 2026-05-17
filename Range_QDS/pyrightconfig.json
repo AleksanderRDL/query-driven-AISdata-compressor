@@ -1,10 +1,12 @@
 {
   "include": [
+    "config",
     "data",
     "evaluation",
     "experiments",
     "models",
     "queries",
+    "runtime",
     "simplification",
     "training",
     "scripts",

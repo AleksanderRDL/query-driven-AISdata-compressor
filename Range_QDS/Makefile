@@ -6,9 +6,10 @@ UV_GROUP ?= dev
 UV_GROUP_FLAGS ?= --group $(UV_GROUP)
 UV_RUN := cd $(REPO_ROOT) && $(UV) run $(UV_GROUP_FLAGS) --
 
-TYPECHECK_PATHS ?= Range_QDS/data Range_QDS/evaluation Range_QDS/experiments Range_QDS/models Range_QDS/queries Range_QDS/simplification Range_QDS/training Range_QDS/scripts Range_QDS/tests
+TYPECHECK_PATHS ?= Range_QDS/config Range_QDS/data Range_QDS/evaluation Range_QDS/experiments Range_QDS/models Range_QDS/queries Range_QDS/runtime Range_QDS/simplification Range_QDS/training Range_QDS/scripts Range_QDS/tests
 TEST_PATHS ?= Range_QDS/tests
-LINT_PATHS ?= Range_QDS/data Range_QDS/evaluation Range_QDS/experiments Range_QDS/models Range_QDS/queries Range_QDS/simplification Range_QDS/training Range_QDS/scripts Range_QDS/tests
+LINT_PATHS ?= Range_QDS/config Range_QDS/data Range_QDS/evaluation Range_QDS/experiments Range_QDS/models Range_QDS/queries Range_QDS/runtime Range_QDS/simplification Range_QDS/training Range_QDS/scripts Range_QDS/tests
+LINT_SELECT ?= F401,F821,F822,F823
 RUN ?= artifacts/results/latest/example_run.json
 
 RESULTS_DIR ?= Range_QDS/artifacts/results/smoke_synthetic
@@ -23,12 +24,12 @@ BENCHMARK_CHILD_EXTRA_ARGS ?=
 BENCHMARK_PLAN_FILE ?=
 BENCHMARK_CONTINUE_ON_FAILURE ?= 0
 ATTACH ?=
-BENCHMARK_PROFILE ?= range_workload_aware_diagnostic
-BENCHMARK_FAMILY ?= artifacts/benchmarks/legacy_range_workload_aware_diagnostic
-BENCHMARK_CACHE ?= artifacts/cache/legacy_range_workload_aware_diagnostic
+BENCHMARK_PROFILE ?= range_workload_v1_workload_blind_v2
+BENCHMARK_FAMILY ?= artifacts/benchmarks/query_driven_workload_blind_v2
+BENCHMARK_CACHE ?= artifacts/cache/query_driven_workload_blind_v2
 CONFIRM ?=
 
-.PHONY: help setup sync lock-check check-env lint lint-yaml test typecheck smoke smoke-csv benchmark-preflight benchmark-queue-preflight list-runs clean-smoke-artifacts range-benchmark-tmux range-benchmark-queue-tmux inspect-run inspect-gates inspect-scores inspect-causality inspect-generator inspect-predictability summarize-run test-property test-regression
+.PHONY: help setup sync lock-check check-env lint lint-full lint-yaml test typecheck smoke smoke-csv benchmark-preflight benchmark-queue-preflight list-runs clean-smoke-artifacts range-benchmark-tmux range-benchmark-queue-tmux inspect-run inspect-gates inspect-scores inspect-causality inspect-generator inspect-predictability summarize-run test-property test-regression
 
 help:
 	@echo "Targets:"
@@ -36,7 +37,8 @@ help:
 	@echo "  sync        Sync the uv environment with dependency group $(UV_GROUP)"
 	@echo "  lock-check  Verify uv.lock is current"
 	@echo "  check-env   Print uv/Python/package versions and run pip check"
-	@echo "  lint        Run Ruff correctness lint"
+	@echo "  lint        Run scoped Ruff correctness lint using LINT_SELECT"
+	@echo "  lint-full   Run full Ruff lint across active QDS packages"
 	@echo "  lint-yaml   Run yamllint on repository YAML files"
 	@echo "  test        Run the QDS pytest suite"
 	@echo "  typecheck   Run Pyright on TYPECHECK_PATHS"
@@ -46,7 +48,7 @@ help:
 	@echo "  benchmark-queue-preflight  Check prerequisites using BENCHMARK_QUEUE_SESSION"
 	@echo "  list-runs   List benchmark runs from BENCHMARK_FAMILY"
 	@echo "  clean-smoke-artifacts  Dry-run smoke artifact cleanup; set CONFIRM=1 to delete"
-	@echo "  range-benchmark-tmux  Launch the range workload-aware diagnostic benchmark in tmux with monitoring"
+	@echo "  range-benchmark-tmux  Launch the query-driven workload-blind v2 benchmark in tmux with monitoring"
 	@echo "  range-benchmark-queue-tmux  Launch a sequential multi-seed range benchmark queue in tmux"
 	@echo "  inspect-run  Print compact jq run summary from RUN"
 	@echo "  inspect-gates  Print jq gate diagnostics from RUN"
@@ -62,6 +64,7 @@ help:
 	@echo "  UV=$(UV)"
 	@echo "  UV_GROUP=$(UV_GROUP)"
 	@echo "  TYPECHECK_PATHS=$(TYPECHECK_PATHS)"
+	@echo "  LINT_SELECT=$(LINT_SELECT)"
 	@echo "  RUN=$(RUN)"
 	@echo "  CLEANED_CSV=$(CLEANED_CSV)"
 	@echo "  BENCHMARK_SESSION=$(BENCHMARK_SESSION)"
@@ -92,6 +95,9 @@ check-env:
 	$(UV_RUN) python -c 'from importlib.metadata import version; import numpy, pandas, pyarrow, pyright, pyspark, pytest, torch; print("torch", torch.__version__); print("numpy", numpy.__version__); print("pandas", pandas.__version__); print("pyarrow", pyarrow.__version__); print("pyspark", pyspark.__version__); print("python-dotenv", version("python-dotenv")); print("psycopg", version("psycopg")); print("pytest", pytest.__version__); print("pyright", pyright.__version__); print("ruff", version("ruff"))'
 
 lint:
+	$(UV_RUN) ruff check --select $(LINT_SELECT) $(LINT_PATHS)
+
+lint-full:
 	$(UV_RUN) ruff check $(LINT_PATHS)
 
 lint-yaml:

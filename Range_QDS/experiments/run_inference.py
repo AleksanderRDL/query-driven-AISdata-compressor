@@ -7,10 +7,10 @@ performed, so this is safe for a local CPU/GPU machine.
 Example, from repository root:
 
     uv run --group dev -- python -m experiments.run_inference \
-        --checkpoint Range_QDS/artifacts/benchmarks/range_workload_aware_diagnostic/runs/<run_id>/range_workload_aware_diagnostic/benchmark_model.pt \
+        --checkpoint Range_QDS/artifacts/benchmarks/query_driven_workload_blind_v2/runs/<run_id>/range_workload_v1_workload_blind_v2/benchmark_model.pt \
         --csv_path AISDATA/cleaned/<cleaned-ais-file.csv> \
         --n_queries 512 \
-        --results_dir Range_QDS/artifacts/benchmarks/inference_range_workload_aware_diagnostic
+        --results_dir Range_QDS/artifacts/benchmarks/inference_range_workload_v1_workload_blind_v2
 
 Run this from the repository root so the project package resolves through uv.
 """
@@ -46,18 +46,18 @@ from experiments.geojson_writers import (
     write_queries_geojson,
     write_simplified_csv,
 )
-from experiments.torch_runtime import (
+from queries.query_generator import (
+    RANGE_ANCHOR_MODES,
+    RANGE_TIME_DOMAIN_MODES,
+    generate_typed_query_workload,
+)
+from runtime.torch_runtime import (
     AMP_MODE_CHOICES,
     FLOAT32_MATMUL_PRECISION_CHOICES,
     amp_runtime_snapshot,
     apply_torch_runtime_settings,
     normalize_amp_mode,
     torch_runtime_snapshot,
-)
-from queries.query_generator import (
-    RANGE_ANCHOR_MODES,
-    RANGE_TIME_DOMAIN_MODES,
-    generate_typed_query_workload,
 )
 from simplification.mlqds_scoring import workload_type_head
 from training.checkpoints import load_checkpoint
@@ -159,7 +159,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Override compression ratio. Default: use value saved in checkpoint.",
     )
     p.add_argument("--seed", type=int, default=42, help="Seed for query generation.")
-    p.add_argument("--results_dir", type=str, default="results/inference", help="Where to write tables / metrics.")
+    p.add_argument(
+        "--results_dir",
+        type=str,
+        default="results/inference",
+        help="Where to write tables / metrics.",
+    )
     p.add_argument(
         "--save_queries_dir",
         type=str,
@@ -251,7 +256,9 @@ def main() -> None:
     artifacts = load_checkpoint(args.checkpoint)
     saved_cfg = artifacts.config
     saved_workload = artifacts.workload_type or saved_cfg.query.workload
-    precision = args.float32_matmul_precision or str(getattr(saved_cfg.model, "float32_matmul_precision", "highest"))
+    precision = args.float32_matmul_precision or str(
+        getattr(saved_cfg.model, "float32_matmul_precision", "highest")
+    )
     allow_tf32 = (
         bool(args.allow_tf32)
         if args.allow_tf32 is not None
@@ -284,9 +291,14 @@ def main() -> None:
     eval_workload_type = _resolve_eval_workload(args.workload, saved_workload)
     eval_workload_map = {eval_workload_type: 1.0}
     compression_ratio = (
-        float(args.compression_ratio) if args.compression_ratio is not None else float(saved_cfg.model.compression_ratio)
+        float(args.compression_ratio)
+        if args.compression_ratio is not None
+        else float(saved_cfg.model.compression_ratio)
     )
-    print(f"[eval-config] workload={eval_workload_type}  compression_ratio={compression_ratio}", flush=True)
+    print(
+        f"[eval-config] workload={eval_workload_type}  compression_ratio={compression_ratio}",
+        flush=True,
+    )
 
     t0 = time.perf_counter()
     print(f"[load-data] reading CSV: {args.csv_path}", flush=True)
@@ -329,7 +341,10 @@ def main() -> None:
         trajectories = trajectories[: args.max_trajectories]
         trajectory_mmsis = trajectory_mmsis[: args.max_trajectories]
         print(f"[load-data] capped trajectories to {args.max_trajectories}", flush=True)
-    print(f"[load-data] {len(trajectories)} trajectories in {time.perf_counter() - t0:.2f}s", flush=True)
+    print(
+        f"[load-data] {len(trajectories)} trajectories in {time.perf_counter() - t0:.2f}s",
+        flush=True,
+    )
 
     dataset = TrajectoryDataset(trajectories)
     points = dataset.get_all_points()
@@ -386,13 +401,17 @@ def main() -> None:
     range_geometry_blend = float(getattr(saved_cfg.model, "mlqds_range_geometry_blend", 0.0))
     if range_geometry_blend > 0.0:
         if eval_workload_type != "range":
-            raise ValueError("Saved model requests range geometry blend, but inference workload is not range.")
+            raise ValueError(
+                "Saved model requests range geometry blend, but inference workload is not range."
+            )
         labels, _labelled_mask = compute_typed_importance_labels(
             points=points,
             boundaries=boundaries,
             typed_queries=workload.typed_queries,
             range_label_mode=str(getattr(saved_cfg.model, "range_label_mode", "usefulness")),
-            range_boundary_prior_weight=float(getattr(saved_cfg.model, "range_boundary_prior_weight", 0.0)),
+            range_boundary_prior_weight=float(
+                getattr(saved_cfg.model, "range_boundary_prior_weight", 0.0)
+            ),
         )
         _, range_type_id = workload_type_head(eval_workload_type)
         range_geometry_scores = labels[:, range_type_id].float()
@@ -405,7 +424,9 @@ def main() -> None:
             workload_type=eval_workload_type,
             score_mode=str(getattr(saved_cfg.model, "mlqds_score_mode", "rank")),
             score_temperature=float(getattr(saved_cfg.model, "mlqds_score_temperature", 1.0)),
-            rank_confidence_weight=float(getattr(saved_cfg.model, "mlqds_rank_confidence_weight", 0.15)),
+            rank_confidence_weight=float(
+                getattr(saved_cfg.model, "mlqds_rank_confidence_weight", 0.15)
+            ),
             temporal_fraction=float(getattr(saved_cfg.model, "mlqds_temporal_fraction", 0.50)),
             diversity_bonus=float(getattr(saved_cfg.model, "mlqds_diversity_bonus", 0.0)),
             hybrid_mode=str(getattr(saved_cfg.model, "mlqds_hybrid_mode", "fill")),
@@ -425,7 +446,9 @@ def main() -> None:
             learned_segment_length_support_blend_weight=float(
                 getattr(saved_cfg.model, "learned_segment_length_support_blend_weight", 0.0)
             ),
-            stratified_center_weight=float(getattr(saved_cfg.model, "mlqds_stratified_center_weight", 0.0)),
+            stratified_center_weight=float(
+                getattr(saved_cfg.model, "mlqds_stratified_center_weight", 0.0)
+            ),
             min_learned_swaps=int(getattr(saved_cfg.model, "mlqds_min_learned_swaps", 0)),
             range_geometry_blend=range_geometry_blend,
             range_geometry_scores=range_geometry_scores,
@@ -465,7 +488,9 @@ def main() -> None:
     range_usefulness_table = print_range_usefulness_table(results)
     print("\nMatched-workload table (inference on new CSV)")
     print(table)
-    print("\nGeometric-distortion table (lower is better; SED = time-synchronous, PED = perpendicular, in km)")
+    print(
+        "\nGeometric-distortion table (lower is better; SED = time-synchronous, PED = perpendicular, in km)"
+    )
     print(geometric_table)
     print("\nRange-usefulness audit table")
     print(range_usefulness_table)
@@ -473,8 +498,12 @@ def main() -> None:
     out_dir = Path(args.results_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "matched_table.txt").write_text(table + "\n", encoding="utf-8")
-    (out_dir / "geometric_distortion_table.txt").write_text(geometric_table + "\n", encoding="utf-8")
-    (out_dir / "range_usefulness_table.txt").write_text(range_usefulness_table + "\n", encoding="utf-8")
+    (out_dir / "geometric_distortion_table.txt").write_text(
+        geometric_table + "\n", encoding="utf-8"
+    )
+    (out_dir / "range_usefulness_table.txt").write_text(
+        range_usefulness_table + "\n", encoding="utf-8"
+    )
 
     dump = {
         "checkpoint": str(args.checkpoint),
@@ -552,17 +581,27 @@ def main() -> None:
     t0 = time.perf_counter()
     print("[trajectory-length-loss] starting...", flush=True)
     try:
-        report_trajectory_length_loss(points, boundaries, mlqds_mask, top_k=25, trajectory_mmsis=trajectory_mmsis)
+        report_trajectory_length_loss(
+            points, boundaries, mlqds_mask, top_k=25, trajectory_mmsis=trajectory_mmsis
+        )
     finally:
         print(f"[trajectory-length-loss] done in {time.perf_counter() - t0:.2f}s", flush=True)
 
     if args.save_simplified_dir:
         out_dir_simp = Path(args.save_simplified_dir)
         out_dir_simp.mkdir(parents=True, exist_ok=True)
-        write_simplified_csv(str(out_dir_simp / "ML_simplified.csv"), points, boundaries, mlqds_mask, trajectory_mmsis=trajectory_mmsis)
+        write_simplified_csv(
+            str(out_dir_simp / "ML_simplified.csv"),
+            points,
+            boundaries,
+            mlqds_mask,
+            trajectory_mmsis=trajectory_mmsis,
+        )
         print(f"[write] simplified CSV -> {out_dir_simp / 'ML_simplified.csv'}", flush=True)
-        for ref_name, csv_name in (("uniform", "uniform_simplified.csv"),
-                                   ("DouglasPeucker", "DP_simplified.csv")):
+        for ref_name, csv_name in (
+            ("uniform", "uniform_simplified.csv"),
+            ("DouglasPeucker", "DP_simplified.csv"),
+        ):
             ref_eval = results.get(ref_name)
             if ref_eval is not None and ref_eval.retained_mask is not None:
                 write_simplified_csv(

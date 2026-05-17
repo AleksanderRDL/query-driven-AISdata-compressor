@@ -51,7 +51,10 @@ def _join_csv_path_list(paths: tuple[str, ...]) -> str | None:
     """Serialize explicit train CSV paths for child CLI forwarding."""
     return ",".join(paths) if paths else None
 
-def _parse_name_list(raw: str | None, *, allowed: tuple[str, ...] | set[str], arg_name: str) -> list[str]:
+
+def _parse_name_list(
+    raw: str | None, *, allowed: tuple[str, ...] | set[str], arg_name: str
+) -> list[str]:
     """Parse a comma-separated list and validate all names."""
     allowed_set = set(allowed)
     values = [item.strip().lower() for item in raw.split(",")] if raw else list(allowed)
@@ -64,6 +67,7 @@ def _parse_name_list(raw: str | None, *, allowed: tuple[str, ...] | set[str], ar
         raise ValueError(f"{arg_name} must contain at least one value.")
     return values
 
+
 def _runner_environment_metadata() -> dict[str, Any]:
     """Return parent-process environment metadata with explicit runtime scope."""
     environment = _environment_metadata("off")
@@ -75,6 +79,7 @@ def _runner_environment_metadata() -> dict[str, Any]:
         "rows[*].child_torch_runtime and in each child example_run.json."
     )
     return environment
+
 
 def _cleaned_csv_files(path: str | Path) -> list[Path]:
     """Return sorted cleaned CSV files for a file or directory input."""
@@ -90,6 +95,7 @@ def _cleaned_csv_files(path: str | Path) -> list[Path]:
         raise ValueError(f"No cleaned CSV files found in directory: {source}")
     return files
 
+
 def _assert_distinct_csv_sources(named_paths: Mapping[str, str | None]) -> None:
     """Reject duplicate train/validation/eval CSV paths to prevent split leakage."""
     seen: dict[Path, str] = {}
@@ -103,17 +109,24 @@ def _assert_distinct_csv_sources(named_paths: Mapping[str, str | None]) -> None:
             )
         seen[resolved] = label
 
+
 def _resolve_data_sources(args: argparse.Namespace) -> BenchmarkDataSources:
     """Resolve benchmark CSV inputs, using three cleaned days for directory inputs."""
-    has_explicit_sources = bool(args.train_csv_path or args.validation_csv_path or args.eval_csv_path)
+    has_explicit_sources = bool(
+        args.train_csv_path or args.validation_csv_path or args.eval_csv_path
+    )
     if has_explicit_sources:
         train_paths = split_csv_path_list(args.train_csv_path)
         if not train_paths or not args.eval_csv_path:
             raise ValueError("--train_csv_path and --eval_csv_path must be supplied together.")
         if args.csv_path:
-            raise ValueError("--csv_path cannot be combined with explicit train/validation/eval CSV paths.")
+            raise ValueError(
+                "--csv_path cannot be combined with explicit train/validation/eval CSV paths."
+            )
         train_paths = tuple(str(Path(path)) for path in train_paths)
-        validation_paths = tuple(str(Path(path)) for path in split_csv_path_list(args.validation_csv_path))
+        validation_paths = tuple(
+            str(Path(path)) for path in split_csv_path_list(args.validation_csv_path)
+        )
         eval_paths = tuple(str(Path(path)) for path in split_csv_path_list(args.eval_csv_path))
         if not eval_paths:
             raise ValueError("--train_csv_path and --eval_csv_path must be supplied together.")
@@ -151,9 +164,13 @@ def _resolve_data_sources(args: argparse.Namespace) -> BenchmarkDataSources:
     files = _cleaned_csv_files(args.csv_path)
     if source_path.is_dir():
         if len(files) < MIN_REALISTIC_CSV_DAYS:
-            raise ValueError(f"Expected at least {MIN_REALISTIC_CSV_DAYS} cleaned CSV files in {args.csv_path}.")
+            raise ValueError(
+                f"Expected at least {MIN_REALISTIC_CSV_DAYS} cleaned CSV files in {args.csv_path}."
+            )
         selected = tuple(str(path) for path in files[:MIN_REALISTIC_CSV_DAYS])
-        _assert_distinct_csv_sources({"train": selected[0], "validation": selected[1], "eval": selected[2]})
+        _assert_distinct_csv_sources(
+            {"train": selected[0], "validation": selected[1], "eval": selected[2]}
+        )
         return BenchmarkDataSources(
             train_csv_path=selected[0],
             validation_csv_path=selected[1],
@@ -161,8 +178,11 @@ def _resolve_data_sources(args: argparse.Namespace) -> BenchmarkDataSources:
             selected_cleaned_csv_files=selected,
         )
     if len(files) == 1:
-        return BenchmarkDataSources(csv_path=str(files[0]), selected_cleaned_csv_files=(str(files[0]),))
+        return BenchmarkDataSources(
+            csv_path=str(files[0]), selected_cleaned_csv_files=(str(files[0]),)
+        )
     raise ValueError(f"Expected a cleaned CSV file or directory: {args.csv_path}")
+
 
 def _profile_args(
     profile: str,
@@ -189,9 +209,7 @@ def _profile_args(
     elif data_sources.csv_path:
         profile_args = ["--csv_path", data_sources.csv_path, *child_profile_args]
     else:
-        raise ValueError(
-            f"{profile} requires --csv_path or --train_csv_path/--eval_csv_path."
-        )
+        raise ValueError(f"{profile} requires --csv_path or --train_csv_path/--eval_csv_path.")
 
     if data_sources.csv_sources:
         profile_args += ["--min_points_per_segment", str(args.min_points_per_segment)]
@@ -207,6 +225,7 @@ def _profile_args(
         if args.refresh_cache and include_refresh_cache:
             profile_args.append("--refresh_cache")
     return profile_args
+
 
 def _profile_settings(profile: str) -> dict[str, ProfileSetting]:
     """Return compact profile settings recorded in run_config.json."""

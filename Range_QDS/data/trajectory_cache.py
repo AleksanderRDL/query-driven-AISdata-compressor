@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import hashlib
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -75,7 +75,9 @@ def _cache_key(source: dict[str, Any], config: AISLoadConfig) -> str:
     return f"{stem}_{digest}"
 
 
-def _manifest_matches(manifest: dict[str, Any], source: dict[str, Any], config: AISLoadConfig) -> bool:
+def _manifest_matches(
+    manifest: dict[str, Any], source: dict[str, Any], config: AISLoadConfig
+) -> bool:
     """Validate manifest identity before reading cached rows."""
     return (
         int(manifest.get("schema_version", -1)) == CACHE_SCHEMA_VERSION
@@ -202,7 +204,9 @@ def load_or_build_ais_cache(
         return_mmsis=True,
         return_audit=True,
     )
-    manifest_path, parquet_path = _write_cache(cache_root, source, config, trajectories, mmsis, audit)
+    manifest_path, parquet_path = _write_cache(
+        cache_root, source, config, trajectories, mmsis, audit
+    )
     return AISCacheResult(
         trajectories=trajectories,
         mmsis=mmsis,

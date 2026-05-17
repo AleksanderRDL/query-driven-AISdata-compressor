@@ -10,6 +10,7 @@ checkpoints, and persists model artifacts.
 | `query_useful_targets.py` | Factorized QueryUsefulV1 label construction. |
 | `query_prior_fields.py` | Train-only query-prior field construction and sampling. |
 | `model_features.py` | Query-free and query-conditioned point feature builders. |
+| `target_modes.py` | Public range target mode registries for CLI/config choices. |
 | `training_targets.py` | Legacy RangeUseful/scalar target transforms. |
 | `training_losses.py` | Budget, ranking, pointwise, and auxiliary losses. |
 | `training_validation.py` | Validation scoring and checkpoint selection support. |

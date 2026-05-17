@@ -57,10 +57,15 @@ def _raw_predictions_without_factorized_head(
         model.eval()
         with torch.no_grad():
             logits = head_logits.detach().to(model_device).unsqueeze(0)
-            pred = compose_fn(
-                logits,
-                disabled_head_names=(str(disabled_head_name),),
-            ).reshape(-1).detach().cpu()
+            pred = (
+                compose_fn(
+                    logits,
+                    disabled_head_names=(str(disabled_head_name),),
+                )
+                .reshape(-1)
+                .detach()
+                .cpu()
+            )
     finally:
         model.train(original_training)
     return pred

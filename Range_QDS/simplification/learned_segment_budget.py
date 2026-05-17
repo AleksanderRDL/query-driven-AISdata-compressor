@@ -46,7 +46,7 @@ def _total_budget(boundaries: list[tuple[int, int]], compression_ratio: float) -
         count = int(end - start)
         if count <= 0:
             continue
-        total += min(count, max(2, int(math.ceil(ratio * count))))
+        total += min(count, max(2, math.ceil(ratio * count)))
     return total
 
 
@@ -83,7 +83,7 @@ def _segment_rows(
                 local_segment = scores[seg_start:seg_end].float()
                 top_count = min(
                     int(local_segment.numel()),
-                    max(1, int(math.ceil(0.20 * int(local_segment.numel())))),
+                    max(1, math.ceil(0.20 * int(local_segment.numel()))),
                 )
                 segment_score = float(torch.topk(local_segment, k=top_count).values.mean().item())
                 segment_score_source = "point_score_top20_mean"
@@ -91,13 +91,15 @@ def _segment_rows(
                 local_segment = segment_values[seg_start:seg_end].float()
                 head_top_count = min(
                     int(local_segment.numel()),
-                    max(1, int(math.ceil(0.20 * int(local_segment.numel())))),
+                    max(1, math.ceil(0.20 * int(local_segment.numel()))),
                 )
-                segment_score = float(torch.topk(local_segment, k=head_top_count).values.mean().item())
+                segment_score = float(
+                    torch.topk(local_segment, k=head_top_count).values.mean().item()
+                )
                 segment_score_source = "segment_budget_head_top20_mean"
             rows.append(
                 {
-                    "segment_index": int(len(rows)),
+                    "segment_index": len(rows),
                     "trajectory_id": int(trajectory_id),
                     "start": int(seg_start),
                     "end": int(seg_end),
@@ -126,7 +128,7 @@ def _entropy(counts: list[int]) -> tuple[float, float]:
 
 def _trajectory_counts(mask: torch.Tensor, boundaries: list[tuple[int, int]]) -> list[int]:
     """Count selected points per trajectory."""
-    return [int(mask[int(start):int(end)].sum().item()) for start, end in boundaries]
+    return [int(mask[int(start) : int(end)].sum().item()) for start, end in boundaries]
 
 
 def _mask_indices_payload(mask: torch.Tensor | None) -> dict[str, Any]:
@@ -146,7 +148,7 @@ def _mask_indices_payload(mask: torch.Tensor | None) -> dict[str, Any]:
         "available": True,
         "diagnostic_only": True,
         "query_free": True,
-        "retained_count": int(len(indices)),
+        "retained_count": len(indices),
         "indices": indices,
     }
 
@@ -218,7 +220,9 @@ def _segment_source_attribution(
         learned_count = int(masks["learned"][start:end].sum().item())
         fallback_count = int(masks["fallback"][start:end].sum().item())
         length_repair_count = int(masks["length_repair"][start:end].sum().item())
-        unattributed_count = int((masks["retained"][start:end] & ~attributed[start:end]).sum().item())
+        unattributed_count = int(
+            (masks["retained"][start:end] & ~attributed[start:end]).sum().item()
+        )
         allocation_count = int(segment_allocations.get(allocation_order_index, 0))
         summary_counts["retained"] += retained_count
         summary_counts["skeleton"] += skeleton_count
@@ -265,7 +269,7 @@ def _segment_source_attribution(
         "diagnostic_only": True,
         "query_free": True,
         "description": "Per-segment retained-point attribution by selector source before eval-query scoring.",
-        "segment_count": int(len(rows)),
+        "segment_count": len(rows),
         "summary": {
             "retained_count_total": int(summary_counts["retained"]),
             "skeleton_count_total": int(summary_counts["skeleton"]),
@@ -295,7 +299,10 @@ def _polyline_length_km(points: torch.Tensor) -> float:
     lon_rad = torch.deg2rad(lons)
     dlat = lat_rad[1:] - lat_rad[:-1]
     dlon = lon_rad[1:] - lon_rad[:-1]
-    a = torch.sin(dlat / 2.0) ** 2 + torch.cos(lat_rad[:-1]) * torch.cos(lat_rad[1:]) * torch.sin(dlon / 2.0) ** 2
+    a = (
+        torch.sin(dlat / 2.0) ** 2
+        + torch.cos(lat_rad[:-1]) * torch.cos(lat_rad[1:]) * torch.sin(dlon / 2.0) ** 2
+    )
     c = 2.0 * torch.atan2(torch.sqrt(a), torch.sqrt(torch.clamp(1.0 - a, min=1e-9)))
     return float((6371.0 * c).sum().item())
 
@@ -308,8 +315,8 @@ def _quantile(values: list[float], q: float) -> float | None:
     if len(ordered) == 1:
         return ordered[0]
     position = max(0.0, min(1.0, float(q))) * float(len(ordered) - 1)
-    lower = int(math.floor(position))
-    upper = int(math.ceil(position))
+    lower = math.floor(position)
+    upper = math.ceil(position)
     if lower == upper:
         return ordered[lower]
     fraction = position - float(lower)
@@ -422,31 +429,42 @@ def _selector_geometry_diagnostics(
 
     worst = sorted(
         trajectory_rows,
-        key=lambda row: (float(row["retained_length_preservation"]), -float(row["original_length_km"])),
+        key=lambda row: (
+            float(row["retained_length_preservation"]),
+            -float(row["original_length_km"]),
+        ),
     )[:5]
     retained_preservation = float(total_retained_km / total_original_km)
     skeleton_preservation = float(total_skeleton_km / total_original_km)
     skeleton_plus_learned_preservation = float(total_skeleton_plus_learned_km / total_original_km)
     return {
         "available": True,
-        "trajectory_count": int(len(trajectory_rows)),
+        "trajectory_count": len(trajectory_rows),
         "total_original_length_km": float(total_original_km),
         "retained_length_km": float(total_retained_km),
         "retained_length_preservation": retained_preservation,
         "skeleton_length_preservation": skeleton_preservation,
         "skeleton_plus_learned_length_preservation": skeleton_plus_learned_preservation,
         "fallback_with_skeleton_length_preservation": float(total_fallback_km / total_original_km),
-        "learned_length_gain_over_skeleton": float(skeleton_plus_learned_preservation - skeleton_preservation),
-        "fallback_length_gain_over_skeleton": float(total_fallback_km / total_original_km - skeleton_preservation),
+        "learned_length_gain_over_skeleton": float(
+            skeleton_plus_learned_preservation - skeleton_preservation
+        ),
+        "fallback_length_gain_over_skeleton": float(
+            total_fallback_km / total_original_km - skeleton_preservation
+        ),
         "trajectory_length_preservation_min": _quantile(preservation_values, 0.0),
         "trajectory_length_preservation_p10": _quantile(preservation_values, 0.10),
         "trajectory_length_preservation_p50": _quantile(preservation_values, 0.50),
         "trajectory_length_preservation_p90": _quantile(preservation_values, 0.90),
-        "trajectory_length_preservation_below_0_8_count": int(sum(value < 0.80 for value in preservation_values)),
+        "trajectory_length_preservation_below_0_8_count": int(
+            sum(value < 0.80 for value in preservation_values)
+        ),
         "trajectory_length_preservation_below_0_8_fraction": float(
             sum(value < 0.80 for value in preservation_values) / max(1, len(preservation_values))
         ),
-        "trajectory_length_preservation_below_0_5_count": int(sum(value < 0.50 for value in preservation_values)),
+        "trajectory_length_preservation_below_0_5_count": int(
+            sum(value < 0.50 for value in preservation_values)
+        ),
         "trajectory_max_retained_index_gap_p50": _quantile(max_gap_values, 0.50),
         "trajectory_max_retained_index_gap_p90": _quantile(max_gap_values, 0.90),
         "trajectory_max_retained_index_gap_max": _quantile(max_gap_values, 1.0),
@@ -521,7 +539,9 @@ def _fill_missing_by_length_gain(
             if not bool(finite.any().item()):
                 break
             retained_indices = torch.where(local_retained)[0]
-            gain_scores = _length_gain_scores(points_cpu[start_i:end_i], retained_indices, candidate_scores)
+            gain_scores = _length_gain_scores(
+                points_cpu[start_i:end_i], retained_indices, candidate_scores
+            )
             positive_gain = finite & (gain_scores > 1e-9)
             if not bool(positive_gain.any().item()):
                 break
@@ -558,7 +578,9 @@ def _allocation_point_selection_diagnostics(
     if points is None or int(points.shape[0]) != int(scores.numel()) or not segment_allocations:
         return {"available": False, "reason": "missing_points_or_allocations"}
 
-    primary_length = _mask_length_preservation(points=points, mask=primary_retained, boundaries=boundaries)
+    primary_length = _mask_length_preservation(
+        points=points, mask=primary_retained, boundaries=boundaries
+    )
     if primary_length is None:
         return {"available": False, "reason": "length_preservation_unavailable"}
 
@@ -586,7 +608,9 @@ def _allocation_point_selection_diagnostics(
             continue
         trajectory_scores[segment_local_start:segment_local_end] = scores_cpu[start:end]
         existing = torch.where(length_only_retained[trajectory_start:trajectory_end])[0]
-        min_spacing = int(math.floor(float(end - start) * float(min_temporal_spacing_fraction_within_segment)))
+        min_spacing = math.floor(
+            float(end - start) * float(min_temporal_spacing_fraction_within_segment)
+        )
         selected = _select_with_spacing(
             trajectory_scores,
             int(keep_count),
@@ -629,7 +653,9 @@ def _allocation_point_selection_diagnostics(
         "same_allocation_length_only_point_selection_preservation": float(length_only_preservation),
         "same_allocation_length_only_delta": float(length_only_preservation - primary_length),
         "length_gate_target": float(gate_target),
-        "same_allocation_length_only_gate_would_pass": bool(length_only_preservation >= gate_target),
+        "same_allocation_length_only_gate_would_pass": bool(
+            length_only_preservation >= gate_target
+        ),
         "component_diagnosis": (
             "point_selection_can_clear_length_with_current_allocation"
             if length_only_preservation >= gate_target
@@ -651,9 +677,7 @@ def _segment_score_stats(segment_rows: list[dict[str, Any]]) -> dict[str, float 
         }
     values = torch.tensor(
         [
-            float(row.get("score", 0.0))
-            if math.isfinite(float(row.get("score", 0.0)))
-            else 0.0
+            float(row.get("score", 0.0)) if math.isfinite(float(row.get("score", 0.0))) else 0.0
             for row in segment_rows
         ],
         dtype=torch.float32,
@@ -673,9 +697,7 @@ def _segment_allocation_weights(segment_rows: list[dict[str, Any]]) -> list[floa
     if not segment_rows:
         return []
     raw_scores = [
-        float(row.get("score", 0.0))
-        if math.isfinite(float(row.get("score", 0.0)))
-        else 0.0
+        float(row.get("score", 0.0)) if math.isfinite(float(row.get("score", 0.0))) else 0.0
         for row in segment_rows
     ]
     min_score = min(raw_scores)
@@ -683,10 +705,7 @@ def _segment_allocation_weights(segment_rows: list[dict[str, Any]]) -> list[floa
     span = max_score - min_score
     if span <= 1e-12:
         return [1.0 for _row in segment_rows]
-    return [
-        SEGMENT_ALLOCATION_WEIGHT_FLOOR + ((score - min_score) / span)
-        for score in raw_scores
-    ]
+    return [SEGMENT_ALLOCATION_WEIGHT_FLOOR + ((score - min_score) / span) for score in raw_scores]
 
 
 def _allocate_segment_budgets(
@@ -703,10 +722,12 @@ def _allocate_segment_budgets(
     if remaining <= 0 or not segment_rows:
         return {}
     valid_trajectory_count = sum(1 for start, end in boundaries if int(end - start) > 0)
-    share_cap = int(math.ceil(float(budget) * max(0.01, min(1.0, float(max_budget_share_per_ship)))))
-    fair_share_cap = int(math.ceil(float(budget) / float(max(1, valid_trajectory_count))))
+    share_cap = math.ceil(float(budget) * max(0.01, min(1.0, float(max_budget_share_per_ship))))
+    fair_share_cap = math.ceil(float(budget) / float(max(1, valid_trajectory_count)))
     max_per_ship = max(1, share_cap, fair_share_cap)
-    ship_allocations = {idx: int(retained[start:end].sum().item()) for idx, (start, end) in enumerate(boundaries)}
+    ship_allocations = {
+        idx: int(retained[start:end].sum().item()) for idx, (start, end) in enumerate(boundaries)
+    }
     segment_allocations: dict[int, int] = {}
     weights = _segment_allocation_weights(segment_rows)
     remaining_slots = int(remaining)
@@ -714,10 +735,7 @@ def _allocate_segment_budgets(
     # Trajectories with enough total learned budget should not be reduced to
     # endpoints-only retention. This is query-free sanity structure, so expose
     # it as a switch and as a diagnostic ablation rather than hiding it.
-    if (
-        fairness_preallocation_enabled
-        and remaining_slots >= max(1, valid_trajectory_count)
-    ):
+    if fairness_preallocation_enabled and remaining_slots >= max(1, valid_trajectory_count):
         trajectory_best_rows: dict[int, tuple[float, int, int]] = {}
         for segment_idx, row in enumerate(segment_rows):
             trajectory_id = int(row["trajectory_id"])
@@ -740,7 +758,11 @@ def _allocate_segment_budgets(
                 continue
             start = int(row["start"])
             end = int(row["end"])
-            capacity = int(row["length"]) - int(retained[start:end].sum().item()) - int(segment_allocations.get(segment_idx, 0))
+            capacity = (
+                int(row["length"])
+                - int(retained[start:end].sum().item())
+                - int(segment_allocations.get(segment_idx, 0))
+            )
             if capacity <= 0:
                 continue
             segment_allocations[segment_idx] = int(segment_allocations.get(segment_idx, 0)) + 1
@@ -794,7 +816,9 @@ def _normalize_candidate_values(values: torch.Tensor, finite: torch.Tensor) -> t
     return out
 
 
-def _local_distance_km(local_points: torch.Tensor, left_idx: torch.Tensor, right_idx: torch.Tensor) -> torch.Tensor:
+def _local_distance_km(
+    local_points: torch.Tensor, left_idx: torch.Tensor, right_idx: torch.Tensor
+) -> torch.Tensor:
     """Return approximate lat/lon distance in km for local index pairs."""
     left = local_points[left_idx.long()]
     right = local_points[right_idx.long()]
@@ -817,7 +841,9 @@ def _length_gain_scores(
     if local_points is None or int(local_points.shape[0]) != int(candidate_scores.numel()):
         return torch.zeros_like(candidate_scores.float())
     finite = torch.isfinite(candidate_scores)
-    retained_sorted = retained_indices.to(device=candidate_scores.device, dtype=torch.long).unique(sorted=True)
+    retained_sorted = retained_indices.to(device=candidate_scores.device, dtype=torch.long).unique(
+        sorted=True
+    )
     if int(retained_sorted.numel()) < 2 or not bool(finite.any().item()):
         return torch.zeros_like(candidate_scores.float())
     candidate_idx = torch.arange(int(candidate_scores.numel()), device=candidate_scores.device)
@@ -831,10 +857,9 @@ def _length_gain_scores(
     left_idx = retained_sorted[valid_pos - 1]
     right_idx = retained_sorted[valid_pos]
     local_points_device = local_points.to(device=candidate_scores.device)
-    via_candidate = (
-        _local_distance_km(local_points_device, left_idx, valid_idx)
-        + _local_distance_km(local_points_device, valid_idx, right_idx)
-    )
+    via_candidate = _local_distance_km(
+        local_points_device, left_idx, valid_idx
+    ) + _local_distance_km(local_points_device, valid_idx, right_idx)
     shortcut = _local_distance_km(local_points_device, left_idx, right_idx)
     gains[valid] = torch.clamp(via_candidate - shortcut, min=0.0)
     return gains
@@ -857,7 +882,9 @@ def _length_loss_scores(
     removable = removable_indices.to(device=retained_sorted.device, dtype=torch.long)
     pos = torch.searchsorted(retained_sorted, removable)
     valid = (pos > 0) & (pos < int(retained_sorted.numel()) - 1)
-    losses = torch.full((int(removable.numel()),), float("inf"), dtype=torch.float32, device=retained_sorted.device)
+    losses = torch.full(
+        (int(removable.numel()),), float("inf"), dtype=torch.float32, device=retained_sorted.device
+    )
     if not bool(valid.any().item()):
         return losses.cpu()
     valid_removable = removable[valid]
@@ -865,10 +892,9 @@ def _length_loss_scores(
     left_idx = retained_sorted[valid_pos - 1]
     right_idx = retained_sorted[valid_pos + 1]
     local_points_device = local_points.to(device=retained_sorted.device)
-    via_removed = (
-        _local_distance_km(local_points_device, left_idx, valid_removable)
-        + _local_distance_km(local_points_device, valid_removable, right_idx)
-    )
+    via_removed = _local_distance_km(
+        local_points_device, left_idx, valid_removable
+    ) + _local_distance_km(local_points_device, valid_removable, right_idx)
     shortcut = _local_distance_km(local_points_device, left_idx, right_idx)
     losses[valid] = torch.clamp(via_removed - shortcut, min=0.0)
     return losses.cpu()
@@ -886,7 +912,11 @@ def _apply_length_repair_swaps(
     repair_fraction: float,
 ) -> int:
     """Swap a bounded share of learned slots toward query-free path-length gain."""
-    if points is None or int(points.shape[0]) != int(scores.numel()) or float(repair_fraction) <= 0.0:
+    if (
+        points is None
+        or int(points.shape[0]) != int(scores.numel())
+        or float(repair_fraction) <= 0.0
+    ):
         return 0
     fraction = max(0.0, min(1.0, float(repair_fraction)))
     total_swaps = 0
@@ -904,7 +934,7 @@ def _apply_length_repair_swaps(
         local_repair = length_repair_mask[start_i:end_i].detach().cpu().bool().clone()
         local_removable = local_learned | local_fallback
         removable_count = int(local_removable.sum().item())
-        max_swaps = min(removable_count, int(math.ceil(fraction * float(removable_count))))
+        max_swaps = min(removable_count, math.ceil(fraction * float(removable_count)))
         if max_swaps <= 0:
             continue
         local_scores = scores_cpu[start_i:end_i]
@@ -945,7 +975,9 @@ def _apply_length_repair_swaps(
                 break
             removable_scores = local_scores[removable_indices].float()
             normalized_loss = _normalize_candidate_values(removal_losses, finite_removable)
-            normalized_removable_score = _normalize_candidate_values(removable_scores, finite_removable)
+            normalized_removable_score = _normalize_candidate_values(
+                removable_scores, finite_removable
+            )
             removal_key = (1.0 - normalized_loss) + 0.10 * (1.0 - normalized_removable_score)
             removal_key[~finite_removable] = -float("inf")
             remove_choice = deterministic_topk_with_jitter(
@@ -956,7 +988,10 @@ def _apply_length_repair_swaps(
             if int(remove_choice.numel()) <= 0:
                 break
             remove_idx = int(removable_indices[int(remove_choice[0].item())].item())
-            if float(gain_scores[add_idx].item()) <= float(removal_losses[int(remove_choice[0].item())].item()) + 1e-9:
+            if (
+                float(gain_scores[add_idx].item())
+                <= float(removal_losses[int(remove_choice[0].item())].item()) + 1e-9
+            ):
                 break
 
             local_retained[remove_idx] = False
@@ -1034,13 +1069,19 @@ def _selector_trace(
         "unattributed_retained_count": unattributed_count,
         "trajectory_count": int(valid_trajectory_count),
         "trajectories_with_at_least_one_learned_decision": int(trajectories_with_learned),
-        "trajectories_with_zero_learned_decisions": int(max(0, valid_trajectory_count - trajectories_with_learned)),
+        "trajectories_with_zero_learned_decisions": int(
+            max(0, valid_trajectory_count - trajectories_with_learned)
+        ),
         "trajectory_learned_decision_counts": trajectory_learned_counts,
         "trajectory_skeleton_counts": _trajectory_counts(skeleton_mask, boundaries),
         "trajectory_fallback_counts": _trajectory_counts(fallback_mask, boundaries),
         "segments_considered_count": int(segment_count),
-        "segments_with_learned_budget": int(sum(1 for count in segment_allocations.values() if int(count) > 0)),
-        "segment_budget_allocation_count": int(sum(int(count) for count in segment_allocations.values())),
+        "segments_with_learned_budget": int(
+            sum(1 for count in segment_allocations.values() if int(count) > 0)
+        ),
+        "segment_budget_allocation_count": int(
+            sum(int(count) for count in segment_allocations.values())
+        ),
         "segment_budget_entropy": entropy,
         "segment_budget_entropy_normalized": entropy_normalized,
         "segment_score_source": str(segment_score_source),
@@ -1101,7 +1142,9 @@ def _select_with_spacing(
         return torch.empty((0,), dtype=torch.long, device=local_scores.device)
     candidate_scores = local_scores.clone()
     if int(existing_indices.numel()) > 0:
-        candidate_scores[existing_indices.to(device=local_scores.device, dtype=torch.long)] = -float("inf")
+        candidate_scores[
+            existing_indices.to(device=local_scores.device, dtype=torch.long)
+        ] = -float("inf")
     selected: list[torch.Tensor] = []
     retained_indices = existing_indices.to(device=local_scores.device, dtype=torch.long)
     spacing = max(0, int(min_spacing))
@@ -1112,13 +1155,17 @@ def _select_with_spacing(
         segment_weight = max(0.0, min(1.0, float(segment_score_weight)))
         score_for_selection = candidate_scores.clone()
         if segment_aux_scores is not None and segment_weight > 0.0:
-            segment_scores = segment_aux_scores.to(device=candidate_scores.device, dtype=torch.float32).clone()
+            segment_scores = segment_aux_scores.to(
+                device=candidate_scores.device, dtype=torch.float32
+            ).clone()
             segment_scores[~finite] = -float("inf")
             segment_finite = torch.isfinite(segment_scores)
             if bool(segment_finite.any().item()):
                 point_scores_norm = _normalize_candidate_values(score_for_selection, finite)
                 segment_scores_norm = _normalize_candidate_values(segment_scores, segment_finite)
-                blended = (1.0 - segment_weight) * point_scores_norm + segment_weight * segment_scores_norm
+                blended = (
+                    1.0 - segment_weight
+                ) * point_scores_norm + segment_weight * segment_scores_norm
                 blended[~finite] = -float("inf")
                 score_for_selection = blended
 
@@ -1133,7 +1180,9 @@ def _select_with_spacing(
             break
         idx = int(choice[0].item())
         selected.append(choice)
-        retained_indices = torch.cat([retained_indices, choice.to(dtype=torch.long)]).unique(sorted=True)
+        retained_indices = torch.cat([retained_indices, choice.to(dtype=torch.long)]).unique(
+            sorted=True
+        )
         left = max(0, idx - spacing)
         right = min(int(candidate_scores.numel()), idx + spacing + 1)
         candidate_scores[left:right] = -float("inf")
@@ -1208,7 +1257,7 @@ def simplify_with_learned_segment_budget_v1_with_trace(
         )
         return retained, trace
     budget = min(point_total, _total_budget(boundaries, compression_ratio))
-    skeleton_cap = int(math.floor(float(budget) * _max_skeleton_fraction(compression_ratio)))
+    skeleton_cap = math.floor(float(budget) * _max_skeleton_fraction(compression_ratio))
 
     skeleton_count = 0
     skeleton_candidates: list[tuple[float, int, int]] = []
@@ -1216,7 +1265,7 @@ def simplify_with_learned_segment_budget_v1_with_trace(
         count = int(end - start)
         if count <= 0:
             continue
-        local_budget = min(count, max(2, int(math.ceil(float(compression_ratio) * count))))
+        local_budget = min(count, max(2, math.ceil(float(compression_ratio) * count)))
         if local_budget >= 2:
             for point_idx in (int(start), int(end - 1)):
                 if not retained[point_idx]:
@@ -1225,9 +1274,13 @@ def simplify_with_learned_segment_budget_v1_with_trace(
                     skeleton_count += 1
         else:
             mid = int(start + count // 2)
-            candidates = torch.tensor([int(start), mid, int(end - 1)], dtype=torch.long, device=scores.device).unique()
+            candidates = torch.tensor(
+                [int(start), mid, int(end - 1)], dtype=torch.long, device=scores.device
+            ).unique()
             best = candidates[torch.argmax(scores[candidates].float())]
-            skeleton_candidates.append((float(scores[best].item()), trajectory_id, int(best.item())))
+            skeleton_candidates.append(
+                (float(scores[best].item()), trajectory_id, int(best.item()))
+            )
     optional_skeleton_slots = max(0, int(skeleton_cap) - int(skeleton_count))
     if optional_skeleton_slots > 0 and skeleton_candidates:
         skeleton_candidates.sort(key=lambda item: (item[0], -item[2]), reverse=True)
@@ -1318,12 +1371,16 @@ def simplify_with_learned_segment_budget_v1_with_trace(
         trajectory_scores[segment_local_start:segment_local_end] = scores[start:end].float()
         local_retained = retained[trajectory_start:trajectory_end]
         existing = torch.where(local_retained)[0]
-        min_spacing = int(math.floor(float(end - start) * float(min_temporal_spacing_fraction_within_segment)))
+        min_spacing = math.floor(
+            float(end - start) * float(min_temporal_spacing_fraction_within_segment)
+        )
         segment_aux_scores = None
         segment_score_weight = 0.0
         if point_segment_scores is not None:
             segment_aux_scores = torch.full_like(trajectory_scores, -float("inf"))
-            segment_aux_scores[segment_local_start:segment_local_end] = point_segment_scores[start:end].to(
+            segment_aux_scores[segment_local_start:segment_local_end] = point_segment_scores[
+                start:end
+            ].to(
                 device=trajectory_scores.device,
                 dtype=torch.float32,
             )
@@ -1340,7 +1397,9 @@ def simplify_with_learned_segment_budget_v1_with_trace(
             local_points=None if points is None else points[trajectory_start:trajectory_end],
             geometry_gain_weight=float(geometry_gain_weight),
             segment_aux_scores=segment_aux_scores,
-            segment_score_weight=float(segment_score_weight) if point_segment_scores is not None else 0.0,
+            segment_score_weight=float(segment_score_weight)
+            if point_segment_scores is not None
+            else 0.0,
         )
         absolute_selected = trajectory_start + selected
         new_selected = absolute_selected[~retained[absolute_selected]]
@@ -1350,9 +1409,13 @@ def simplify_with_learned_segment_budget_v1_with_trace(
     if int(retained.sum().item()) < budget:
         candidate_scores = scores.float().clone()
         candidate_scores[retained] = -float("inf")
-        missing = min(budget - int(retained.sum().item()), int(torch.isfinite(candidate_scores).sum().item()))
+        missing = min(
+            budget - int(retained.sum().item()), int(torch.isfinite(candidate_scores).sum().item())
+        )
         if missing > 0:
-            fallback_selected = deterministic_topk_with_jitter(candidate_scores, missing, point_total + 31337)
+            fallback_selected = deterministic_topk_with_jitter(
+                candidate_scores, missing, point_total + 31337
+            )
             retained[fallback_selected] = True
             fallback_mask[fallback_selected] = True
     pre_repair_retained_for_diagnostic = retained.detach().cpu().bool().clone()
@@ -1369,7 +1432,9 @@ def simplify_with_learned_segment_budget_v1_with_trace(
         skeleton_retained=skeleton_retained_for_diagnostic,
         primary_retained=pre_repair_retained_for_diagnostic,
         budget=budget,
-        min_temporal_spacing_fraction_within_segment=float(min_temporal_spacing_fraction_within_segment),
+        min_temporal_spacing_fraction_within_segment=float(
+            min_temporal_spacing_fraction_within_segment
+        ),
     )
     pre_repair_source_attribution = _segment_source_attribution(
         segment_rows=segment_rows,
@@ -1465,7 +1530,7 @@ def learned_segment_budget_diagnostics(
     trajectory_count = sum(1 for start, end in boundaries if int(end - start) > 0)
     for ratio in compression_ratios:
         budget = _total_budget(boundaries, float(ratio))
-        skeleton_cap = int(math.floor(float(budget) * _max_skeleton_fraction(float(ratio))))
+        skeleton_cap = math.floor(float(budget) * _max_skeleton_fraction(float(ratio)))
         learned_slots = max(0, int(budget) - int(skeleton_cap))
         rows.append(
             {

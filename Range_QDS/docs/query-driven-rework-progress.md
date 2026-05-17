@@ -1486,3 +1486,118 @@ Extra discoveries:
 Decision:
 - Benchmark runtime row extraction is safe to save.
 - Continue with one narrow row-field cluster at a time if staying in `benchmark_report.py`; do not extract `_row_from_run` wholesale.
+
+## Checkpoint 5.00 — Extra Discovery Disposition
+
+Status: completed
+
+Hypothesis:
+- Extra discoveries from Checkpoint 4.85 onward can be resolved enough for a
+  checkpoint save by fixing the remaining tooling defaults, eliminating the
+  full-Ruff debt, and moving shared config/runtime ownership out of
+  `experiments/`.
+
+Expected files:
+- `Makefile`
+- `Range_QDS/Makefile`
+- `Range_QDS/README.md`
+- `Range_QDS/CODE_LAYOUT.md`
+- `Range_QDS/config/`
+- `Range_QDS/docs/dev-tooling-guide.md`
+- `Range_QDS/experiments/README.md`
+- `Range_QDS/experiments/benchmark_runner.py`
+- `Range_QDS/experiments/benchmark_runtime.py`
+- `Range_QDS/experiments/run_inference.py`
+- `Range_QDS/runtime/`
+- `Range_QDS/training/target_modes.py`
+- `Range_QDS/models/README.md`
+- `Range_QDS/scripts/benchmark_preflight.sh`
+- `Range_QDS/scripts/run_range_benchmark_tmux.sh`
+- `Range_QDS/scripts/run_benchmark_queue_tmux.sh`
+- `Range_QDS/scripts/list_benchmark_runs.py`
+- `Range_QDS/docs/query-driven-rework-progress.md`
+- `pyproject.toml`
+
+Stop condition:
+- Stop before scientific probes or final-grid evidence. This checkpoint is a
+  codebase save/cleanup checkpoint, not a learning-evidence checkpoint.
+
+Changes:
+- Made `make lint` an intentionally scoped Ruff correctness gate using `LINT_SELECT=F401,F821,F822,F823`.
+- Added `make lint-full` at root and `Range_QDS/`, then fixed the broad Ruff
+  debt so the full target now passes.
+- Added `config/` for shared experiment config dataclasses and moved
+  `experiments/experiment_config.py` there without leaving an experiment
+  compatibility facade.
+- Added `runtime/` for shared torch runtime controls and moved
+  `experiments/torch_runtime.py` there without leaving an experiment
+  compatibility facade.
+- Updated `pyproject.toml`, `pyrightconfig.json`, `CODE_LAYOUT.md`, package
+  READMEs, imports, and tests for the new `config/` and `runtime/` ownership.
+- Removed the `training -> experiments` config/runtime dependency; `training/`
+  no longer imports `experiments.*`.
+- Extracted public target-mode registries to `training/target_modes.py` so CLI
+  choices and guardrails do not import the large legacy target-builder module.
+- Changed benchmark Makefile defaults to the active `range_workload_v1_workload_blind_v2` profile and `query_driven_workload_blind_v2` artifact/cache families.
+- Changed tmux launcher, queue launcher, preflight, list-runs, direct
+  `benchmark_runner.py`, and direct `benchmark_runtime.py` defaults away from
+  legacy diagnostic artifact families.
+- Updated active README/experiments docs so they no longer warn that Makefile defaults are legacy diagnostic paths.
+- Updated the `run_inference.py` example checkpoint/results paths to the query-driven workload-blind v2 artifact family.
+- Added explicit `workload_blind_range_v2.calibration_head` checkpoint-compatibility policy to `models/README.md`: it stays frozen/ignored until a loader migration or allowed-unexpected-key policy exists for older states.
+
+Disposition of extra discoveries:
+- Fixed now: `make lint-full` is no longer a known-failing target.
+- Fixed now: benchmark launcher/list/direct-runner/runtime defaults no longer point at legacy diagnostic artifact families.
+- Fixed now: calibration-head compatibility has an explicit removal policy instead of being an undocumented cleanup guess.
+- Fixed now: shared config/runtime ownership no longer makes `training/` depend upward on `experiments/`.
+- Fixed now: target-mode registry imports are separated from the large legacy target implementation.
+- Already resolved by later checkpoints: gate, pure causality helper, segment audit, length diagnostic, selector diagnostic, model ablation, table, final-grid, and runtime-row extraction discoveries from 4.91-4.99.
+
+Tests:
+- `make -C Range_QDS lint`
+- `make -C Range_QDS lint-full`
+- `make -C Range_QDS typecheck`
+- `make -C Range_QDS test`
+- `bash -n Range_QDS/scripts/benchmark_preflight.sh Range_QDS/scripts/run_range_benchmark_tmux.sh Range_QDS/scripts/run_benchmark_queue_tmux.sh`
+- `uv run --group dev -- yamllint .`
+- `git diff --check -- Range_QDS Makefile pyproject.toml`
+- `uv run --group dev -- python -m experiments.benchmark_runner --help`
+- `uv run --group dev -- python -m experiments.benchmark_runtime --help`
+- `uv run --group dev -- python Range_QDS/scripts/list_benchmark_runs.py --help`
+- `uv run --group dev -- pytest Range_QDS/tests/test_rework_guardrails.py Range_QDS/tests/test_model_features.py::test_workload_blind_range_v2_checkpoint_accepts_missing_prior_feature_encoder Range_QDS/tests/test_query_driven_rework.py::test_factorized_head_ablation_uses_neutral_multiplicative_heads -q`
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was tooling/documentation/disposition cleanup.
+
+Key results:
+- Scoped `make lint` now passes and is a reliable checkpoint save gate.
+- Full Ruff now passes across `Range_QDS/config`, active QDS packages,
+  `Range_QDS/runtime`, scripts, and tests.
+- Full Pyright passed.
+- Full pytest passed: `421 passed, 1 warning`.
+- Shell syntax checks passed.
+- yamllint passed.
+- Focused guardrail/checkpoint-compatibility tests passed: `17 passed`.
+- `list_benchmark_runs.py --help` now reports `artifacts/benchmarks/query_driven_workload_blind_v2` as the default family.
+- `benchmark_runner.py` and `benchmark_runtime.py` import and expose CLI help
+  successfully after their defaults and imports were changed.
+
+Extra discoveries:
+- Full Ruff cleanup had real findings, not only style churn: import sorting
+  exposed stale test imports, B023 closure binding risk in query generation,
+  regex escaping in tests, and E402 path-setup exceptions in operational
+  scripts.
+- Moving config/runtime exposed two hidden Pyright issues: dynamic
+  `latency_ms` and `query_prior_field` attributes needed explicit casts rather
+  than relying on unchecked mutation.
+- `training_targets.py` is still large, but public mode ownership is now
+  separated. The remaining work there is target-family extraction, not basic
+  registry cleanup.
+
+Decision:
+- The codebase is in a better checkpoint-save state: full lint, full
+  typecheck, YAML lint, whitespace checks, and full tests pass.
+- No scientific success claim is made. No probe or final-grid evidence was
+  generated.

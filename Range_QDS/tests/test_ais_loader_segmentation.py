@@ -42,7 +42,10 @@ def test_load_ais_csv_splits_mmsi_tracks_on_time_gaps(tmp_path: Path) -> None:
     assert len(trajectories) == 2
     assert mmsis == [100, 100]
     assert [int(traj.shape[0]) for traj in trajectories] == [3, 3]
-    assert all(float(traj[0, 5].item()) == 1.0 and float(traj[-1, 6].item()) == 1.0 for traj in trajectories)
+    assert all(
+        float(traj[0, 5].item()) == 1.0 and float(traj[-1, 6].item()) == 1.0
+        for traj in trajectories
+    )
     assert audit.time_gap_over_threshold_count == 1
     assert audit.dropped_short_segments == 1
     assert audit.output_segment_count == 2

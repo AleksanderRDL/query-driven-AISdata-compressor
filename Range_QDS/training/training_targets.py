@@ -9,8 +9,8 @@ import torch
 from evaluation.evaluate_methods import score_range_usefulness
 from evaluation.query_cache import EvaluationQueryCache
 from evaluation.range_usefulness import RANGE_USEFULNESS_WEIGHTS
-from queries.range_geometry import points_in_range_box, segment_box_bracket_indices
 from queries.query_types import QUERY_TYPE_ID_RANGE
+from queries.range_geometry import points_in_range_box, segment_box_bracket_indices
 from simplification.simplify_trajectories import (
     deterministic_topk_with_jitter,
     evenly_spaced_indices,
@@ -22,43 +22,9 @@ from training.model_features import (
     HISTORICAL_PRIOR_DENSITY_DIM,
     build_historical_prior_point_features,
 )
+from training.target_modes import RANGE_TARGET_BALANCE_MODES
 from training.training_losses import _safe_quantile
 
-LEGACY_RANGE_TARGET_MODES = frozenset(
-    {
-        "point_value",
-        "retained_frequency",
-        "global_budget_retained_frequency",
-        "historical_prior_retained_frequency",
-        "structural_retained_frequency",
-        "component_retained_frequency",
-        "continuity_retained_frequency",
-        "marginal_coverage_frequency",
-        "query_spine_frequency",
-        "query_residual_frequency",
-        "set_utility_frequency",
-        "local_swap_utility_frequency",
-        "local_swap_gain_cost_frequency",
-    }
-)
-QUERY_USEFUL_V1_TARGET_MODES = frozenset({"query_useful_v1_factorized"})
-RANGE_TRAINING_TARGET_MODES = (
-    "point_value",
-    "retained_frequency",
-    "global_budget_retained_frequency",
-    "historical_prior_retained_frequency",
-    "structural_retained_frequency",
-    "component_retained_frequency",
-    "continuity_retained_frequency",
-    "marginal_coverage_frequency",
-    "query_spine_frequency",
-    "query_residual_frequency",
-    "set_utility_frequency",
-    "local_swap_utility_frequency",
-    "local_swap_gain_cost_frequency",
-    "query_useful_v1_factorized",
-)
-RANGE_TARGET_BALANCE_MODES = ("none", "trajectory_unit_mass")
 RANGE_CONTINUITY_TARGET_WEIGHTS = {
     "range_entry_exit_f1": 0.22,
     "range_crossing_f1": 0.16,
@@ -89,6 +55,7 @@ def _scaled_training_target_for_type(
     scale = _safe_quantile(labels[positive, type_idx].detach(), 0.95).clamp(min=1e-6)
     return torch.clamp(target / scale, 0.0, 1.0)
 
+
 def _apply_temporal_residual_labels(
     labels: torch.Tensor,
     labelled_mask: torch.Tensor,
@@ -106,8 +73,10 @@ def _apply_temporal_residual_labels(
         point_count = int(end - start)
         if point_count <= 0:
             continue
-        k_total = min(point_count, max(2, int(math.ceil(float(compression_ratio) * point_count))))
-        k_base = 0 if base_fraction <= 0.0 else min(k_total, max(2, int(math.ceil(k_total * base_fraction))))
+        k_total = min(point_count, max(2, math.ceil(float(compression_ratio) * point_count)))
+        k_base = (
+            0 if base_fraction <= 0.0 else min(k_total, max(2, math.ceil(k_total * base_fraction)))
+        )
         base_idx = evenly_spaced_indices(point_count, k_base, labels.device)
         base_mask[start + base_idx] = True
 
@@ -198,7 +167,9 @@ def aggregate_range_label_sets(
         "labelled_point_count": int((label_count > 0).sum().item()),
         "positive_label_count": positive_count,
         "positive_label_fraction": float(positive_count / max(1, int(aggregated.shape[0]))),
-        "positive_label_mass": float(aggregated[positive, type_idx].sum().item()) if positive_count > 0 else 0.0,
+        "positive_label_mass": float(aggregated[positive, type_idx].sum().item())
+        if positive_count > 0
+        else 0.0,
     }
     return aggregated, aggregated_mask, diagnostics
 
@@ -229,12 +200,16 @@ def balance_range_training_target_by_trajectory(
     before_mass = float(target[positive].sum().item()) if bool(positive.any().item()) else 0.0
     before_count = int(positive.sum().item())
     if balance_mode == "none":
-        return labels, labelled_mask, {
-            "enabled": False,
-            "mode": "none",
-            "positive_label_count": before_count,
-            "positive_label_mass": before_mass,
-        }
+        return (
+            labels,
+            labelled_mask,
+            {
+                "enabled": False,
+                "mode": "none",
+                "positive_label_count": before_count,
+                "positive_label_mass": before_mass,
+            },
+        )
 
     balanced = labels.clone()
     balanced_target = balanced[:, type_idx].float()
@@ -278,8 +253,12 @@ def balance_range_training_target_by_trajectory(
     if int(mass_tensor.numel()) > 0:
         diagnostics.update(
             {
-                "trajectory_positive_mass_p50_before_balance": float(torch.quantile(mass_tensor, 0.50).item()),
-                "trajectory_positive_mass_p90_before_balance": float(torch.quantile(mass_tensor, 0.90).item()),
+                "trajectory_positive_mass_p50_before_balance": float(
+                    torch.quantile(mass_tensor, 0.50).item()
+                ),
+                "trajectory_positive_mass_p90_before_balance": float(
+                    torch.quantile(mass_tensor, 0.90).item()
+                ),
                 "trajectory_positive_mass_max_before_balance": float(mass_tensor.max().item()),
             }
         )
@@ -310,7 +289,7 @@ def range_retained_frequency_training_labels(
     retained_frequency = torch.zeros_like(source_scores)
     used = 0
     used_weight = 0.0
-    for ratio, budget_weight in zip(ratios, budget_weights):
+    for ratio, budget_weight in zip(ratios, budget_weights, strict=False):
         mask = simplify_with_temporal_score_hybrid(
             source_scores,
             boundaries,
@@ -318,10 +297,14 @@ def range_retained_frequency_training_labels(
             temporal_fraction=float(getattr(model_config, "mlqds_temporal_fraction", 0.0)),
             diversity_bonus=float(getattr(model_config, "mlqds_diversity_bonus", 0.0)),
             hybrid_mode=str(getattr(model_config, "mlqds_hybrid_mode", "fill")),
-            stratified_center_weight=float(getattr(model_config, "mlqds_stratified_center_weight", 0.0)),
+            stratified_center_weight=float(
+                getattr(model_config, "mlqds_stratified_center_weight", 0.0)
+            ),
             min_learned_swaps=int(getattr(model_config, "mlqds_min_learned_swaps", 0)),
         )
-        retained_frequency += float(budget_weight) * (mask & source_positive).to(dtype=retained_frequency.dtype)
+        retained_frequency += float(budget_weight) * (mask & source_positive).to(
+            dtype=retained_frequency.dtype
+        )
         used += 1
         used_weight += float(budget_weight)
     if used_weight > 1e-12:
@@ -343,11 +326,15 @@ def range_retained_frequency_training_labels(
         "source": "range_training_labels",
         "budget_loss_ratios": list(ratios),
         "budget_weights": list(budget_weights),
-        "budget_weight_power": float(getattr(model_config, "range_target_budget_weight_power", 0.0) or 0.0),
+        "budget_weight_power": float(
+            getattr(model_config, "range_target_budget_weight_power", 0.0) or 0.0
+        ),
         "labelled_point_count": int(transformed.shape[0]),
         "positive_label_count": positive_count,
         "positive_label_fraction": float(positive_count / max(1, int(transformed.shape[0]))),
-        "positive_label_mass": float(transformed[positive, type_idx].sum().item()) if positive_count > 0 else 0.0,
+        "positive_label_mass": float(transformed[positive, type_idx].sum().item())
+        if positive_count > 0
+        else 0.0,
         "mlqds_temporal_fraction": float(getattr(model_config, "mlqds_temporal_fraction", 0.0)),
         "mlqds_hybrid_mode": str(getattr(model_config, "mlqds_hybrid_mode", "fill")),
     }
@@ -366,7 +353,9 @@ def _global_budget_retained_frequency_from_scores(
     retained_frequency = torch.zeros_like(source_scores, dtype=torch.float32)
     used = 0
     used_weight = 0.0
-    for ratio, budget_weight in zip(ratios, _target_budget_weights(model_config, ratios)):
+    for ratio, budget_weight in zip(
+        ratios, _target_budget_weights(model_config, ratios), strict=False
+    ):
         mask = simplify_with_global_score_budget(
             source_scores,
             boundaries,
@@ -427,11 +416,15 @@ def range_global_budget_retained_frequency_training_labels(
         "source": "range_training_labels_global_budget",
         "budget_loss_ratios": list(ratios),
         "budget_weights": list(budget_weights),
-        "budget_weight_power": float(getattr(model_config, "range_target_budget_weight_power", 0.0) or 0.0),
+        "budget_weight_power": float(
+            getattr(model_config, "range_target_budget_weight_power", 0.0) or 0.0
+        ),
         "labelled_point_count": int(transformed.shape[0]),
         "positive_label_count": positive_count,
         "positive_label_fraction": float(positive_count / max(1, int(transformed.shape[0]))),
-        "positive_label_mass": float(transformed[positive, type_idx].sum().item()) if positive_count > 0 else 0.0,
+        "positive_label_mass": float(transformed[positive, type_idx].sum().item())
+        if positive_count > 0
+        else 0.0,
         "global_budget_frequency_budget_count": int(used),
         "global_budget_min_points_per_trajectory": 2,
     }
@@ -457,7 +450,7 @@ def _historical_prior_support_mask(
         point_count = int(end - start)
         if point_count <= 0:
             continue
-        keep_count = min(point_count, max(1, int(math.ceil(ratio * point_count))))
+        keep_count = min(point_count, max(1, math.ceil(ratio * point_count)))
         if keep_count >= point_count:
             support_mask[start:end] = True
             continue
@@ -513,7 +506,9 @@ def _historical_prior_teacher_scores(
 
     features = _minmax_scale_feature_matrix(build_historical_prior_point_features(points))
     weighted_features = _weight_historical_prior_features(features, model_config)
-    support_ratio = min(1.0, max(0.0, float(getattr(model_config, "historical_prior_support_ratio", 1.0))))
+    support_ratio = min(
+        1.0, max(0.0, float(getattr(model_config, "historical_prior_support_ratio", 1.0)))
+    )
     support_mask = _historical_prior_support_mask(targets, boundaries, support_ratio)
     if not bool(support_mask.any().item()):
         raise ValueError("historical_prior_support_ratio removed every teacher support point.")
@@ -536,7 +531,9 @@ def _historical_prior_teacher_scores(
     chunk_size = max(1, min(max(1, int(getattr(model_config, "query_chunk_size", 1024))), 1024))
     scores = torch.empty((int(points.shape[0]),), dtype=torch.float32, device=points.device)
 
-    all_indices = torch.arange(int(points.shape[0]), dtype=support_indices.dtype, device=points.device)
+    all_indices = torch.arange(
+        int(points.shape[0]), dtype=support_indices.dtype, device=points.device
+    )
     support_indices = support_indices.to(device=points.device)
     support_features = support_features.to(device=points.device)
     support_targets = support_targets.to(device=points.device)
@@ -549,7 +546,9 @@ def _historical_prior_teacher_scores(
             distances = distances.masked_fill(same_point, float("inf"))
         nearest_distances, nearest_idx = torch.topk(distances, k=k, largest=False, dim=1)
         finite = torch.isfinite(nearest_distances)
-        weights = torch.where(finite, 1.0 / (nearest_distances + 1e-4), torch.zeros_like(nearest_distances))
+        weights = torch.where(
+            finite, 1.0 / (nearest_distances + 1e-4), torch.zeros_like(nearest_distances)
+        )
         denom = weights.sum(dim=1)
         local_scores = (weights * support_targets[nearest_idx]).sum(dim=1) / denom.clamp(min=1e-9)
         fallback = targets[start:end].float().clamp(0.0, 1.0)
@@ -563,7 +562,9 @@ def _historical_prior_teacher_scores(
         "historical_prior_support_pre_min_count": int(pre_min_support_count),
         "historical_prior_min_target": float(min_target),
         "historical_prior_stored_support_count": int(support_count),
-        "historical_prior_stored_support_fraction": float(support_count / max(1, int(points.shape[0]))),
+        "historical_prior_stored_support_fraction": float(
+            support_count / max(1, int(points.shape[0]))
+        ),
         "historical_prior_clock_weight": float(
             getattr(model_config, "historical_prior_clock_weight", 0.0)
         ),
@@ -581,8 +582,12 @@ def _historical_prior_teacher_scores(
     if bool(positive.any().item()):
         diagnostics.update(
             {
-                "historical_prior_teacher_score_p50": float(_safe_quantile(scores[positive], 0.50).item()),
-                "historical_prior_teacher_score_p95": float(_safe_quantile(scores[positive], 0.95).item()),
+                "historical_prior_teacher_score_p50": float(
+                    _safe_quantile(scores[positive], 0.50).item()
+                ),
+                "historical_prior_teacher_score_p95": float(
+                    _safe_quantile(scores[positive], 0.95).item()
+                ),
             }
         )
     return scores, diagnostics
@@ -648,11 +653,15 @@ def range_historical_prior_retained_frequency_training_labels(
         "source": "range_retained_frequency_leave_one_out_historical_prior_teacher",
         "budget_loss_ratios": list(ratios),
         "budget_weights": list(_target_budget_weights(model_config, ratios)),
-        "budget_weight_power": float(getattr(model_config, "range_target_budget_weight_power", 0.0) or 0.0),
+        "budget_weight_power": float(
+            getattr(model_config, "range_target_budget_weight_power", 0.0) or 0.0
+        ),
         "labelled_point_count": int(transformed.shape[0]),
         "positive_label_count": positive_count,
         "positive_label_fraction": float(positive_count / max(1, int(transformed.shape[0]))),
-        "positive_label_mass": float(transformed[positive, type_idx].sum().item()) if positive_count > 0 else 0.0,
+        "positive_label_mass": float(transformed[positive, type_idx].sum().item())
+        if positive_count > 0
+        else 0.0,
         "teacher_retained_frequency_budget_count": int(used),
         "base_retained_frequency_positive_label_count": int(
             _numeric_diagnostic(base_diagnostics, "positive_label_count")
@@ -684,7 +693,9 @@ def _retained_frequency_from_scores(
     retained_frequency = torch.zeros_like(source_scores, dtype=torch.float32)
     used = 0
     used_weight = 0.0
-    for ratio, budget_weight in zip(ratios, _target_budget_weights(model_config, ratios)):
+    for ratio, budget_weight in zip(
+        ratios, _target_budget_weights(model_config, ratios), strict=False
+    ):
         mask = simplify_with_temporal_score_hybrid(
             source_scores,
             boundaries,
@@ -692,10 +703,14 @@ def _retained_frequency_from_scores(
             temporal_fraction=float(getattr(model_config, "mlqds_temporal_fraction", 0.0)),
             diversity_bonus=float(getattr(model_config, "mlqds_diversity_bonus", 0.0)),
             hybrid_mode=str(getattr(model_config, "mlqds_hybrid_mode", "fill")),
-            stratified_center_weight=float(getattr(model_config, "mlqds_stratified_center_weight", 0.0)),
+            stratified_center_weight=float(
+                getattr(model_config, "mlqds_stratified_center_weight", 0.0)
+            ),
             min_learned_swaps=int(getattr(model_config, "mlqds_min_learned_swaps", 0)),
         )
-        retained_frequency += float(budget_weight) * (mask & source_positive).to(dtype=retained_frequency.dtype)
+        retained_frequency += float(budget_weight) * (mask & source_positive).to(
+            dtype=retained_frequency.dtype
+        )
         used += 1
         used_weight += float(budget_weight)
     if used_weight > 1e-12:
@@ -714,13 +729,13 @@ def _temporal_retained_frequency(
     budget_weights = weights or tuple(1.0 / float(len(ratios)) for _ratio in ratios)
     used = 0
     used_weight = 0.0
-    for ratio, budget_weight in zip(ratios, budget_weights):
+    for ratio, budget_weight in zip(ratios, budget_weights, strict=False):
         retained = torch.zeros_like(scores, dtype=torch.bool)
         for start, end in boundaries:
             point_count = int(end - start)
             if point_count <= 0:
                 continue
-            keep_count = min(point_count, max(2, int(math.ceil(float(ratio) * point_count))))
+            keep_count = min(point_count, max(2, math.ceil(float(ratio) * point_count)))
             local_indices = evenly_spaced_indices(point_count, keep_count, scores.device)
             retained[start + local_indices] = True
         retained_frequency += float(budget_weight) * retained.to(dtype=retained_frequency.dtype)
@@ -738,7 +753,9 @@ def _apply_temporal_target_blend(
     ratios: tuple[float, ...],
 ) -> tuple[torch.Tensor, dict[str, object]]:
     """Blend query-blind temporal anchor frequency into a retained-frequency target."""
-    blend = max(0.0, min(1.0, float(getattr(model_config, "range_temporal_target_blend", 0.0) or 0.0)))
+    blend = max(
+        0.0, min(1.0, float(getattr(model_config, "range_temporal_target_blend", 0.0) or 0.0))
+    )
     diagnostics: dict[str, object] = {"temporal_target_blend": float(blend)}
     if blend <= 0.0:
         return retained_frequency, diagnostics
@@ -756,7 +773,9 @@ def _apply_temporal_target_blend(
             "temporal_target_budget_count": int(used),
             "temporal_target_positive_label_count": int(positive.sum().item()),
             "temporal_target_positive_label_mass": (
-                float(temporal_frequency[positive].sum().item()) if bool(positive.any().item()) else 0.0
+                float(temporal_frequency[positive].sum().item())
+                if bool(positive.any().item())
+                else 0.0
             ),
         }
     )
@@ -818,7 +837,11 @@ def _query_free_structural_scores(
         if count >= 3:
             midpoint = 0.5 * (coords_norm[:-2] + coords_norm[2:])
             uniqueness[1:-1] = torch.linalg.vector_norm(coords_norm[1:-1] - midpoint, dim=1)
-            endpoint_value = float(uniqueness[1:-1].max().item()) if bool((uniqueness[1:-1] > 0).any().item()) else 1.0
+            endpoint_value = (
+                float(uniqueness[1:-1].max().item())
+                if bool((uniqueness[1:-1] > 0).any().item())
+                else 1.0
+            )
         else:
             endpoint_value = 1.0
         uniqueness[0] = endpoint_value
@@ -907,7 +930,9 @@ def range_structural_retained_frequency_training_labels(
         raise ValueError("points and labels must have the same point count.")
 
     ratios = _target_budget_ratios(model_config)
-    blend = max(0.0, min(1.0, float(getattr(model_config, "range_structural_target_blend", 0.25) or 0.0)))
+    blend = max(
+        0.0, min(1.0, float(getattr(model_config, "range_structural_target_blend", 0.25) or 0.0))
+    )
     label_scores = labels[:, type_idx].float().clamp(0.0, 1.0)
     structural_scores, structural_diagnostics = _query_free_structural_scores(points, boundaries)
     source_mode = str(getattr(model_config, "range_structural_target_source_mode", "blend")).lower()
@@ -950,21 +975,29 @@ def range_structural_retained_frequency_training_labels(
         "source": "range_training_labels_plus_query_free_structural_scores",
         "budget_loss_ratios": list(ratios),
         "budget_weights": list(_target_budget_weights(model_config, ratios)),
-        "budget_weight_power": float(getattr(model_config, "range_target_budget_weight_power", 0.0) or 0.0),
+        "budget_weight_power": float(
+            getattr(model_config, "range_target_budget_weight_power", 0.0) or 0.0
+        ),
         "structural_target_blend": float(blend),
         "structural_target_source_mode": source_mode,
         "labelled_point_count": int(transformed.shape[0]),
         "positive_label_count": positive_count,
         "positive_label_fraction": float(positive_count / max(1, int(transformed.shape[0]))),
-        "positive_label_mass": float(transformed[positive, type_idx].sum().item()) if positive_count > 0 else 0.0,
+        "positive_label_mass": float(transformed[positive, type_idx].sum().item())
+        if positive_count > 0
+        else 0.0,
         "source_positive_label_count": int(source_positive.sum().item()),
         "source_positive_label_mass": (
-            float(source_scores[source_positive].sum().item()) if bool(source_positive.any().item()) else 0.0
+            float(source_scores[source_positive].sum().item())
+            if bool(source_positive.any().item())
+            else 0.0
         ),
         "base_retained_frequency_budget_count": int(base_used),
         "base_retained_frequency_positive_label_count": int(base_positive.sum().item()),
         "base_retained_frequency_positive_label_mass": (
-            float(base_frequency[base_positive].sum().item()) if bool(base_positive.any().item()) else 0.0
+            float(base_frequency[base_positive].sum().item())
+            if bool(base_positive.any().item())
+            else 0.0
         ),
         "teacher_retained_frequency_budget_count": int(used),
         "mlqds_temporal_fraction": float(getattr(model_config, "mlqds_temporal_fraction", 0.0)),
@@ -1012,24 +1045,28 @@ def _marginal_coverage_mask_from_scores(
     workloads a set-aware target without passing queries into the model.
     """
     retained = torch.zeros_like(source_scores, dtype=torch.bool)
-    radius_scale = max(0.0, float(getattr(model_config, "range_marginal_target_radius_scale", 0.50) or 0.0))
+    radius_scale = max(
+        0.0, float(getattr(model_config, "range_marginal_target_radius_scale", 0.50) or 0.0)
+    )
     base_fraction = min(1.0, max(0.0, float(getattr(model_config, "mlqds_temporal_fraction", 0.0))))
     for trajectory_id, (start, end) in enumerate(boundaries):
         point_count = int(end - start)
         if point_count <= 0:
             continue
-        total_keep_count = min(point_count, max(2, int(math.ceil(float(ratio) * point_count))))
+        total_keep_count = min(point_count, max(2, math.ceil(float(ratio) * point_count)))
         local_scores = source_scores[start:end].float().clamp(min=0.0)
         selected = torch.zeros((point_count,), dtype=torch.bool, device=source_scores.device)
         base_keep_count = 0
         if base_fraction > 0.0:
-            base_keep_count = min(total_keep_count, max(2, int(math.ceil(total_keep_count * base_fraction))))
+            base_keep_count = min(
+                total_keep_count, max(2, math.ceil(total_keep_count * base_fraction))
+            )
         base_indices = evenly_spaced_indices(point_count, base_keep_count, source_scores.device)
         if base_indices.numel() > 0:
             selected[base_indices] = True
 
         expected_spacing = float(point_count) / float(max(1, total_keep_count))
-        radius = max(0, int(math.ceil(radius_scale * expected_spacing)))
+        radius = max(0, math.ceil(radius_scale * expected_spacing))
         uncovered = local_scores.clone()
         for index in base_indices.detach().cpu().tolist():
             _erase_local_window(uncovered, int(index), radius)
@@ -1044,7 +1081,11 @@ def _marginal_coverage_mask_from_scores(
             if not bool((gains[available] > 1e-12).any().item()):
                 if bool(selected.any().item()):
                     selected_positions = torch.where(selected)[0].float()
-                    gains = torch.abs(positions.unsqueeze(1) - selected_positions.unsqueeze(0)).min(dim=1).values
+                    gains = (
+                        torch.abs(positions.unsqueeze(1) - selected_positions.unsqueeze(0))
+                        .min(dim=1)
+                        .values
+                    )
                 else:
                     gains = torch.ones_like(gains)
             gains = gains + 1e-3 * local_scores
@@ -1083,7 +1124,7 @@ def range_marginal_coverage_training_labels(
     retained_frequency = torch.zeros_like(source_scores)
     used = 0
     used_weight = 0.0
-    for ratio, budget_weight in zip(ratios, budget_weights):
+    for ratio, budget_weight in zip(ratios, budget_weights, strict=False):
         mask = _marginal_coverage_mask_from_scores(
             source_scores=source_scores,
             boundaries=boundaries,
@@ -1113,11 +1154,15 @@ def range_marginal_coverage_training_labels(
         "source": "range_training_labels",
         "budget_loss_ratios": list(ratios),
         "budget_weights": list(budget_weights),
-        "budget_weight_power": float(getattr(model_config, "range_target_budget_weight_power", 0.0) or 0.0),
+        "budget_weight_power": float(
+            getattr(model_config, "range_target_budget_weight_power", 0.0) or 0.0
+        ),
         "labelled_point_count": int(transformed.shape[0]),
         "positive_label_count": positive_count,
         "positive_label_fraction": float(positive_count / max(1, int(transformed.shape[0]))),
-        "positive_label_mass": float(transformed[positive, type_idx].sum().item()) if positive_count > 0 else 0.0,
+        "positive_label_mass": float(transformed[positive, type_idx].sum().item())
+        if positive_count > 0
+        else 0.0,
         "marginal_target_radius_scale": float(
             getattr(model_config, "range_marginal_target_radius_scale", 0.50) or 0.0
         ),
@@ -1145,7 +1190,9 @@ def _range_query_spine_scores(
     point features only at compression time.
     """
     source_scores = torch.zeros((points.shape[0],), dtype=torch.float32, device=points.device)
-    spine_fraction = max(0.0, min(1.0, float(getattr(model_config, "range_query_spine_fraction", 0.10) or 0.0)))
+    spine_fraction = max(
+        0.0, min(1.0, float(getattr(model_config, "range_query_spine_fraction", 0.10) or 0.0))
+    )
     if spine_fraction <= 0.0:
         raise ValueError("range_query_spine_fraction must be positive for query_spine_frequency.")
     mass_mode = str(getattr(model_config, "range_query_spine_mass_mode", "hit_group")).lower()
@@ -1176,7 +1223,7 @@ def _range_query_spine_scores(
             if local_count <= 0:
                 continue
             hit_group_count += 1
-            spine_count = min(local_count, max(1, int(math.ceil(spine_fraction * local_count))))
+            spine_count = min(local_count, max(1, math.ceil(spine_fraction * local_count)))
             if local_count >= 2:
                 spine_count = max(2, spine_count)
             local_spine_offsets = evenly_spaced_indices(local_count, spine_count, points.device)
@@ -1184,7 +1231,7 @@ def _range_query_spine_scores(
 
             if points.shape[1] > 7 and local_count >= 3:
                 turn_scores = points[start + local_offsets, 7].float().clamp(min=0.0)
-                turn_count = min(local_count, max(1, int(math.ceil(turn_fraction * spine_count))))
+                turn_count = min(local_count, max(1, math.ceil(turn_fraction * spine_count)))
                 if bool((turn_scores > 0.0).any().item()):
                     turn_local = deterministic_topk_with_jitter(
                         turn_scores,
@@ -1192,7 +1239,9 @@ def _range_query_spine_scores(
                         trajectory_id=(query_index + 1) * 10007 + trajectory_id,
                     )
                     turn_offsets = local_offsets[turn_local]
-                    selected_offsets = torch.unique(torch.cat([selected_offsets, turn_offsets]), sorted=True)
+                    selected_offsets = torch.unique(
+                        torch.cat([selected_offsets, turn_offsets]), sorted=True
+                    )
                     selected_turn_anchor_count += int(turn_offsets.numel())
 
             global_indices = start + selected_offsets
@@ -1286,11 +1335,15 @@ def range_query_spine_frequency_training_labels(
         "source": "range_query_temporal_spines",
         "budget_loss_ratios": list(ratios),
         "budget_weights": list(_target_budget_weights(model_config, ratios)),
-        "budget_weight_power": float(getattr(model_config, "range_target_budget_weight_power", 0.0) or 0.0),
+        "budget_weight_power": float(
+            getattr(model_config, "range_target_budget_weight_power", 0.0) or 0.0
+        ),
         "labelled_point_count": int(transformed.shape[0]),
         "positive_label_count": positive_count,
         "positive_label_fraction": float(positive_count / max(1, int(transformed.shape[0]))),
-        "positive_label_mass": float(transformed[positive, type_idx].sum().item()) if positive_count > 0 else 0.0,
+        "positive_label_mass": float(transformed[positive, type_idx].sum().item())
+        if positive_count > 0
+        else 0.0,
         "mlqds_temporal_fraction": float(getattr(model_config, "mlqds_temporal_fraction", 0.0)),
         "mlqds_hybrid_mode": str(getattr(model_config, "mlqds_hybrid_mode", "fill")),
     }
@@ -1320,8 +1373,8 @@ def _temporal_base_mask_for_ratio(
         point_count = int(end - start)
         if point_count <= 0:
             continue
-        keep_count = min(point_count, max(2, int(math.ceil(total_ratio * point_count))))
-        base_count = min(keep_count, max(2, int(math.ceil(keep_count * base_fraction))))
+        keep_count = min(point_count, max(2, math.ceil(total_ratio * point_count)))
+        base_count = min(keep_count, max(2, math.ceil(keep_count * base_fraction)))
         base_indices = evenly_spaced_indices(point_count, base_count, device)
         base_mask[start + base_indices] = True
     return base_mask
@@ -1344,9 +1397,7 @@ def _query_residual_priority_positions(
 
     def add_positions(positions: list[int] | torch.Tensor) -> None:
         raw_positions = (
-            positions.detach().cpu().tolist()
-            if isinstance(positions, torch.Tensor)
-            else positions
+            positions.detach().cpu().tolist() if isinstance(positions, torch.Tensor) else positions
         )
         for value in raw_positions:
             pos = int(value)
@@ -1385,7 +1436,7 @@ def _query_residual_priority_positions(
         add_positions([count // 2])
 
     if points.shape[1] > 7 and count >= 3:
-        turn_count = min(count, max(1, int(math.ceil(0.25 * float(max(1, query_keep_count))))))
+        turn_count = min(count, max(1, math.ceil(0.25 * float(max(1, query_keep_count)))))
         turn_scores = points[global_indices, 7].float().clamp(min=0.0)
         if bool((turn_scores > 0.0).any().item()):
             turn_positions = deterministic_topk_with_jitter(
@@ -1417,9 +1468,13 @@ def _range_query_residual_scores(
     n_points = int(points.shape[0])
     target = torch.zeros((n_points,), dtype=torch.float32, device=points.device)
     temporal_fraction = float(getattr(model_config, "mlqds_temporal_fraction", 0.0))
-    multiplier = max(0.0, float(getattr(model_config, "range_query_residual_multiplier", 1.0) or 0.0))
+    multiplier = max(
+        0.0, float(getattr(model_config, "range_query_residual_multiplier", 1.0) or 0.0)
+    )
     if multiplier <= 0.0:
-        raise ValueError("range_query_residual_multiplier must be positive for query_residual_frequency.")
+        raise ValueError(
+            "range_query_residual_multiplier must be positive for query_residual_frequency."
+        )
     mass_mode = str(getattr(model_config, "range_query_residual_mass_mode", "query")).lower()
     if mass_mode not in {"query", "point"}:
         raise ValueError("range_query_residual_mass_mode must be 'query' or 'point'.")
@@ -1448,7 +1503,7 @@ def _range_query_residual_scores(
             "query_residual_mass_mode": mass_mode,
         }
 
-    for ratio, budget_weight in zip(ratios, budget_weights):
+    for ratio, budget_weight in zip(ratios, budget_weights, strict=False):
         ratio_value = min(1.0, max(0.0, float(ratio)))
         if ratio_value <= 0.0:
             continue
@@ -1484,7 +1539,7 @@ def _range_query_residual_scores(
                 local_base = base_mask[local_global]
                 query_keep_count = min(
                     count,
-                    max(1, int(math.ceil(float(multiplier) * ratio_value * float(count)))),
+                    max(1, math.ceil(float(multiplier) * ratio_value * float(count))),
                 )
                 if count >= 2:
                     query_keep_count = max(2, query_keep_count)
@@ -1531,7 +1586,9 @@ def _range_query_residual_scores(
                 "selected_residual_count": int(budget_selected_residual_count),
                 "positive_label_count": int(positive.sum().item()),
                 "positive_label_mass": (
-                    float(budget_scores[positive].sum().item()) if bool(positive.any().item()) else 0.0
+                    float(budget_scores[positive].sum().item())
+                    if bool(positive.any().item())
+                    else 0.0
                 ),
             }
         )
@@ -1600,11 +1657,15 @@ def range_query_residual_frequency_training_labels(
         "source": "range_query_residual_anchors",
         "budget_loss_ratios": list(ratios),
         "budget_weights": list(_target_budget_weights(model_config, ratios)),
-        "budget_weight_power": float(getattr(model_config, "range_target_budget_weight_power", 0.0) or 0.0),
+        "budget_weight_power": float(
+            getattr(model_config, "range_target_budget_weight_power", 0.0) or 0.0
+        ),
         "labelled_point_count": int(transformed.shape[0]),
         "positive_label_count": positive_count,
         "positive_label_fraction": float(positive_count / max(1, int(transformed.shape[0]))),
-        "positive_label_mass": float(transformed[positive, type_idx].sum().item()) if positive_count > 0 else 0.0,
+        "positive_label_mass": float(transformed[positive, type_idx].sum().item())
+        if positive_count > 0
+        else 0.0,
         "mlqds_temporal_fraction": float(getattr(model_config, "mlqds_temporal_fraction", 0.0)),
         "mlqds_hybrid_mode": str(getattr(model_config, "mlqds_hybrid_mode", "fill")),
     }
@@ -1628,7 +1689,9 @@ def _range_set_utility_candidates(
         return torch.empty((0,), dtype=torch.long, device=points.device)
     range_mask = points_in_range_box(points, params)
     in_box = torch.where(range_mask)[0].to(dtype=torch.long)
-    crossing = segment_box_bracket_indices(points, boundaries, params).to(device=points.device, dtype=torch.long)
+    crossing = segment_box_bracket_indices(points, boundaries, params).to(
+        device=points.device, dtype=torch.long
+    )
     if in_box.numel() == 0 and crossing.numel() == 0:
         return torch.empty((0,), dtype=torch.long, device=points.device)
     candidates = torch.unique(torch.cat([in_box, crossing]), sorted=True)
@@ -1649,7 +1712,9 @@ def _range_set_utility_candidates(
     )
     spaced_count = max(0, candidate_limit - top_count)
     spaced_local = evenly_spaced_indices(int(candidates.numel()), spaced_count, points.device)
-    limited = torch.unique(torch.cat([candidates[top_local], candidates[spaced_local]]), sorted=True)
+    limited = torch.unique(
+        torch.cat([candidates[top_local], candidates[spaced_local]]), sorted=True
+    )
     if int(limited.numel()) > candidate_limit:
         limited_scores = labels[limited, type_idx].float().clamp(min=0.0)
         keep_local = deterministic_topk_with_jitter(
@@ -1713,7 +1778,7 @@ def _range_set_utility_scores(
     total_gain_mass = 0.0
     per_budget: list[dict[str, object]] = []
 
-    for ratio, budget_weight in zip(ratios, budget_weights):
+    for ratio, budget_weight in zip(ratios, budget_weights, strict=False):
         ratio_value = min(1.0, max(0.0, float(ratio)))
         if ratio_value <= 0.0:
             continue
@@ -1742,7 +1807,7 @@ def _range_set_utility_scores(
                 continue
             desired_count = min(
                 hit_count,
-                max(1, int(math.ceil(multiplier * ratio_value * float(hit_count)))),
+                max(1, math.ceil(multiplier * ratio_value * float(hit_count))),
             )
             if hit_count >= 2:
                 desired_count = max(2, desired_count)
@@ -1776,7 +1841,9 @@ def _range_set_utility_scores(
                     query_cache=query_cache,
                 )["range_usefulness_score"]
             )
-            gains = torch.zeros((int(candidates.numel()),), dtype=torch.float32, device=points.device)
+            gains = torch.zeros(
+                (int(candidates.numel()),), dtype=torch.float32, device=points.device
+            )
             for candidate_pos, candidate_idx_tensor in enumerate(candidates):
                 candidate_idx = int(candidate_idx_tensor.item())
                 retained[candidate_idx] = True
@@ -1842,7 +1909,9 @@ def _range_set_utility_scores(
                 "selected_gain_mass": float(budget_gain_mass),
                 "positive_label_count": int(positive.sum().item()),
                 "positive_label_mass": (
-                    float(budget_scores[positive].sum().item()) if bool(positive.any().item()) else 0.0
+                    float(budget_scores[positive].sum().item())
+                    if bool(positive.any().item())
+                    else 0.0
                 ),
             }
         )
@@ -1915,11 +1984,15 @@ def range_set_utility_frequency_training_labels(
         "source": "range_train_query_marginal_usefulness_gain",
         "budget_loss_ratios": list(ratios),
         "budget_weights": list(_target_budget_weights(model_config, ratios)),
-        "budget_weight_power": float(getattr(model_config, "range_target_budget_weight_power", 0.0) or 0.0),
+        "budget_weight_power": float(
+            getattr(model_config, "range_target_budget_weight_power", 0.0) or 0.0
+        ),
         "labelled_point_count": int(transformed.shape[0]),
         "positive_label_count": positive_count,
         "positive_label_fraction": float(positive_count / max(1, int(transformed.shape[0]))),
-        "positive_label_mass": float(transformed[positive, type_idx].sum().item()) if positive_count > 0 else 0.0,
+        "positive_label_mass": float(transformed[positive, type_idx].sum().item())
+        if positive_count > 0
+        else 0.0,
         "mlqds_temporal_fraction": float(getattr(model_config, "mlqds_temporal_fraction", 0.0)),
         "mlqds_hybrid_mode": str(getattr(model_config, "mlqds_hybrid_mode", "fill")),
     }
@@ -1948,10 +2021,10 @@ def _local_swap_base_plan(
         if point_count <= 0:
             removable_by_trajectory.append(torch.empty((0,), dtype=torch.long, device=device))
             continue
-        keep_count = min(point_count, max(2, int(math.ceil(float(ratio) * point_count))))
+        keep_count = min(point_count, max(2, math.ceil(float(ratio) * point_count)))
         base_indices = evenly_spaced_indices(point_count, keep_count, device)
         base_mask[start + base_indices] = True
-        protected_count = min(keep_count, max(2, int(math.ceil(keep_count * base_fraction))))
+        protected_count = min(keep_count, max(2, math.ceil(keep_count * base_fraction)))
         swap_count = min(keep_count - protected_count, point_count - keep_count)
         removable_local = base_indices[(base_indices != 0) & (base_indices != point_count - 1)]
         swap_count = min(max(0, int(swap_count)), int(removable_local.numel()))
@@ -2005,7 +2078,9 @@ def _range_local_swap_utility_scores(
     temporal_fraction = float(getattr(model_config, "mlqds_temporal_fraction", 0.0))
     multiplier = max(0.0, float(getattr(model_config, "range_set_utility_multiplier", 1.0) or 0.0))
     if multiplier <= 0.0:
-        raise ValueError("range_set_utility_multiplier must be positive for local_swap_utility_frequency.")
+        raise ValueError(
+            "range_set_utility_multiplier must be positive for local_swap_utility_frequency."
+        )
     mass_mode = str(getattr(model_config, "range_set_utility_mass_mode", "gain")).lower()
     if mass_mode not in {"gain", "point", "query"}:
         raise ValueError("range_set_utility_mass_mode must be 'gain', 'point', or 'query'.")
@@ -2036,7 +2111,7 @@ def _range_local_swap_utility_scores(
     total_gain_mass = 0.0
     per_budget: list[dict[str, object]] = []
 
-    for ratio, budget_weight in zip(ratios, budget_weights):
+    for ratio, budget_weight in zip(ratios, budget_weights, strict=False):
         ratio_value = min(1.0, max(0.0, float(ratio)))
         if ratio_value <= 0.0:
             continue
@@ -2143,7 +2218,7 @@ def _range_local_swap_utility_scores(
                 continue
             desired_count = min(
                 positive_gain_count,
-                max(1, int(math.ceil(multiplier * ratio_value * float(hit_count)))),
+                max(1, math.ceil(multiplier * ratio_value * float(hit_count))),
                 int(swap_capacity),
             )
             positive_local = torch.where(positive_gain)[0]
@@ -2167,7 +2242,9 @@ def _range_local_swap_utility_scores(
             elif mass_mode == "point":
                 budget_scores[selected_indices] += 1.0
             else:
-                budget_scores[selected_indices] += 1.0 / float(max(1, int(selected_indices.numel())))
+                budget_scores[selected_indices] += 1.0 / float(
+                    max(1, int(selected_indices.numel()))
+                )
 
         budget_scores = budget_scores / float(range_query_count)
         target += float(budget_weight) * budget_scores
@@ -2190,7 +2267,9 @@ def _range_local_swap_utility_scores(
                 "selected_gain_mass": float(budget_gain_mass),
                 "positive_label_count": int(positive.sum().item()),
                 "positive_label_mass": (
-                    float(budget_scores[positive].sum().item()) if bool(positive.any().item()) else 0.0
+                    float(budget_scores[positive].sum().item())
+                    if bool(positive.any().item())
+                    else 0.0
                 ),
             }
         )
@@ -2263,11 +2342,15 @@ def range_local_swap_utility_frequency_training_labels(
         "source": "range_train_query_local_swap_usefulness_gain",
         "budget_loss_ratios": list(ratios),
         "budget_weights": list(_target_budget_weights(model_config, ratios)),
-        "budget_weight_power": float(getattr(model_config, "range_target_budget_weight_power", 0.0) or 0.0),
+        "budget_weight_power": float(
+            getattr(model_config, "range_target_budget_weight_power", 0.0) or 0.0
+        ),
         "labelled_point_count": int(transformed.shape[0]),
         "positive_label_count": positive_count,
         "positive_label_fraction": float(positive_count / max(1, int(transformed.shape[0]))),
-        "positive_label_mass": float(transformed[positive, type_idx].sum().item()) if positive_count > 0 else 0.0,
+        "positive_label_mass": float(transformed[positive, type_idx].sum().item())
+        if positive_count > 0
+        else 0.0,
         "mlqds_temporal_fraction": float(getattr(model_config, "mlqds_temporal_fraction", 0.0)),
         "mlqds_hybrid_mode": str(getattr(model_config, "mlqds_hybrid_mode", "fill")),
     }
@@ -2298,14 +2381,18 @@ def _range_local_swap_gain_cost_scores(
     """
     hybrid_mode = str(getattr(model_config, "mlqds_hybrid_mode", "fill")).lower()
     if hybrid_mode != "local_delta_swap":
-        raise ValueError("local_swap_gain_cost_frequency requires mlqds_hybrid_mode='local_delta_swap'.")
+        raise ValueError(
+            "local_swap_gain_cost_frequency requires mlqds_hybrid_mode='local_delta_swap'."
+        )
 
     n_points = int(points.shape[0])
     target = torch.zeros((n_points,), dtype=torch.float32, device=points.device)
     temporal_fraction = float(getattr(model_config, "mlqds_temporal_fraction", 0.0))
     multiplier = max(0.0, float(getattr(model_config, "range_set_utility_multiplier", 1.0) or 0.0))
     if multiplier <= 0.0:
-        raise ValueError("range_set_utility_multiplier must be positive for local_swap_gain_cost_frequency.")
+        raise ValueError(
+            "range_set_utility_multiplier must be positive for local_swap_gain_cost_frequency."
+        )
     mass_mode = str(getattr(model_config, "range_set_utility_mass_mode", "gain")).lower()
     if mass_mode not in {"gain", "point", "query"}:
         raise ValueError("range_set_utility_mass_mode must be 'gain', 'point', or 'query'.")
@@ -2337,7 +2424,7 @@ def _range_local_swap_gain_cost_scores(
     total_removal_cost_mass = 0.0
     per_budget: list[dict[str, object]] = []
 
-    for ratio, budget_weight in zip(ratios, budget_weights):
+    for ratio, budget_weight in zip(ratios, budget_weights, strict=False):
         ratio_value = min(1.0, max(0.0, float(ratio)))
         if ratio_value <= 0.0:
             continue
@@ -2450,7 +2537,9 @@ def _range_local_swap_gain_cost_scores(
                 candidate_value = max(0.0, replacement_score - removal_score)
                 removal_cost = removal_cost_cache[remove_idx]
                 net_gain = replacement_score - base_score
-                scored_records.append((candidate_idx, remove_idx, net_gain, candidate_value, removal_cost))
+                scored_records.append(
+                    (candidate_idx, remove_idx, net_gain, candidate_value, removal_cost)
+                )
 
             budget_scored_candidate_count += len(scored_records)
             if not scored_records:
@@ -2467,7 +2556,7 @@ def _range_local_swap_gain_cost_scores(
                 continue
             desired_count = min(
                 positive_net_gain_count,
-                max(1, int(math.ceil(multiplier * ratio_value * float(hit_count)))),
+                max(1, math.ceil(multiplier * ratio_value * float(hit_count))),
                 int(swap_capacity),
             )
             positive_local = torch.where(positive_net_gain)[0]
@@ -2479,7 +2568,9 @@ def _range_local_swap_gain_cost_scores(
             tie_jitter = 1e-6 * torch.sin(
                 tie_positions * 12.9898 + float((query_index + 1) * 9176 + int(ratio_value * 10000))
             )
-            ordered_positive = positive_local[torch.argsort(net_gains[positive_local] + tie_jitter, descending=True)]
+            ordered_positive = positive_local[
+                torch.argsort(net_gains[positive_local] + tie_jitter, descending=True)
+            ]
 
             selected_records: list[tuple[int, int, float, float, float]] = []
             used_removals: set[int] = set()
@@ -2499,7 +2590,13 @@ def _range_local_swap_gain_cost_scores(
             budget_selected_count += selected_count
             selected_candidate_value_mass = sum(float(record[3]) for record in selected_records)
             selected_removal_cost_by_idx: dict[int, float] = {}
-            for _candidate_idx, remove_idx, _net_gain, _candidate_value, removal_cost in selected_records:
+            for (
+                _candidate_idx,
+                remove_idx,
+                _net_gain,
+                _candidate_value,
+                removal_cost,
+            ) in selected_records:
                 selected_removal_cost_by_idx[int(remove_idx)] = max(
                     selected_removal_cost_by_idx.get(int(remove_idx), 0.0),
                     float(removal_cost),
@@ -2509,12 +2606,24 @@ def _range_local_swap_gain_cost_scores(
             budget_removal_cost_mass += selected_removal_cost_mass
 
             if mass_mode == "gain":
-                for candidate_idx, _remove_idx, _net_gain, candidate_value, _removal_cost in selected_records:
+                for (
+                    candidate_idx,
+                    _remove_idx,
+                    _net_gain,
+                    candidate_value,
+                    _removal_cost,
+                ) in selected_records:
                     budget_scores[int(candidate_idx)] += float(candidate_value)
                 for remove_idx, removal_cost in selected_removal_cost_by_idx.items():
                     budget_scores[int(remove_idx)] += float(removal_cost)
             elif mass_mode == "point":
-                for candidate_idx, _remove_idx, _net_gain, _candidate_value, _removal_cost in selected_records:
+                for (
+                    candidate_idx,
+                    _remove_idx,
+                    _net_gain,
+                    _candidate_value,
+                    _removal_cost,
+                ) in selected_records:
                     budget_scores[int(candidate_idx)] += 1.0
                 for remove_idx, removal_cost in selected_removal_cost_by_idx.items():
                     if removal_cost > 0.0:
@@ -2522,7 +2631,13 @@ def _range_local_swap_gain_cost_scores(
             else:
                 candidate_mass = 1.0 / float(max(1, selected_count))
                 removal_mass = 1.0 / float(max(1, len(selected_removal_cost_by_idx)))
-                for candidate_idx, _remove_idx, _net_gain, _candidate_value, _removal_cost in selected_records:
+                for (
+                    candidate_idx,
+                    _remove_idx,
+                    _net_gain,
+                    _candidate_value,
+                    _removal_cost,
+                ) in selected_records:
                     budget_scores[int(candidate_idx)] += candidate_mass
                 for remove_idx, removal_cost in selected_removal_cost_by_idx.items():
                     if removal_cost > 0.0:
@@ -2551,7 +2666,9 @@ def _range_local_swap_gain_cost_scores(
                 "selected_removal_cost_mass": float(budget_removal_cost_mass),
                 "positive_label_count": int(positive.sum().item()),
                 "positive_label_mass": (
-                    float(budget_scores[positive].sum().item()) if bool(positive.any().item()) else 0.0
+                    float(budget_scores[positive].sum().item())
+                    if bool(positive.any().item())
+                    else 0.0
                 ),
             }
         )
@@ -2625,11 +2742,15 @@ def range_local_swap_gain_cost_frequency_training_labels(
         "source": "range_train_query_local_swap_candidate_value_and_removal_cost",
         "budget_loss_ratios": list(ratios),
         "budget_weights": list(_target_budget_weights(model_config, ratios)),
-        "budget_weight_power": float(getattr(model_config, "range_target_budget_weight_power", 0.0) or 0.0),
+        "budget_weight_power": float(
+            getattr(model_config, "range_target_budget_weight_power", 0.0) or 0.0
+        ),
         "labelled_point_count": int(transformed.shape[0]),
         "positive_label_count": positive_count,
         "positive_label_fraction": float(positive_count / max(1, int(transformed.shape[0]))),
-        "positive_label_mass": float(transformed[positive, type_idx].sum().item()) if positive_count > 0 else 0.0,
+        "positive_label_mass": float(transformed[positive, type_idx].sum().item())
+        if positive_count > 0
+        else 0.0,
         "mlqds_temporal_fraction": float(getattr(model_config, "mlqds_temporal_fraction", 0.0)),
         "mlqds_hybrid_mode": str(getattr(model_config, "mlqds_hybrid_mode", "fill")),
     }
@@ -2671,10 +2792,16 @@ def range_component_retained_frequency_training_labels(
         if component is None:
             continue
         if component.shape != labels.shape:
-            raise ValueError(f"component {component_name!r} has shape {tuple(component.shape)}, expected {tuple(labels.shape)}.")
+            raise ValueError(
+                f"component {component_name!r} has shape {tuple(component.shape)}, expected {tuple(labels.shape)}."
+            )
         source_scores = component[:, type_idx].float().clamp(min=0.0)
         source_positive = source_scores > 0.0
-        source_mass = float(source_scores[source_positive].sum().item()) if bool(source_positive.any().item()) else 0.0
+        source_mass = (
+            float(source_scores[source_positive].sum().item())
+            if bool(source_positive.any().item())
+            else 0.0
+        )
         if source_mass <= 1e-12:
             per_component[component_name] = {
                 "source_positive_label_count": 0,
@@ -2699,16 +2826,22 @@ def range_component_retained_frequency_training_labels(
             "source_positive_label_mass": source_mass,
             "target_positive_label_count": int(target_positive.sum().item()),
             "target_positive_label_mass": (
-                float(retained_frequency[target_positive].sum().item()) if bool(target_positive.any().item()) else 0.0
+                float(retained_frequency[target_positive].sum().item())
+                if bool(target_positive.any().item())
+                else 0.0
             ),
             "weight": weight,
             "used": True,
         }
 
     if available_weight <= 1e-12:
-        raise ValueError("component_retained_frequency target found no positive component label mass.")
+        raise ValueError(
+            "component_retained_frequency target found no positive component label mass."
+        )
     component_target = (component_target / float(available_weight)).clamp(0.0, 1.0)
-    component_blend = max(0.0, min(1.0, float(getattr(model_config, "range_component_target_blend", 1.0))))
+    component_blend = max(
+        0.0, min(1.0, float(getattr(model_config, "range_component_target_blend", 1.0)))
+    )
     base_retained_frequency = None
     if component_blend < 1.0:
         base_retained_frequency, _used = _retained_frequency_from_scores(
@@ -2718,8 +2851,7 @@ def range_component_retained_frequency_training_labels(
             ratios=ratios,
         )
         component_target = (
-            (1.0 - component_blend) * base_retained_frequency
-            + component_blend * component_target
+            (1.0 - component_blend) * base_retained_frequency + component_blend * component_target
         ).clamp(0.0, 1.0)
     component_target, temporal_blend_diagnostics = _apply_temporal_target_blend(
         retained_frequency=component_target,
@@ -2739,15 +2871,21 @@ def range_component_retained_frequency_training_labels(
         "source": source,
         "budget_loss_ratios": list(ratios),
         "budget_weights": list(budget_weights),
-        "budget_weight_power": float(getattr(model_config, "range_target_budget_weight_power", 0.0) or 0.0),
+        "budget_weight_power": float(
+            getattr(model_config, "range_target_budget_weight_power", 0.0) or 0.0
+        ),
         "labelled_point_count": int(transformed.shape[0]),
         "positive_label_count": positive_count,
         "positive_label_fraction": float(positive_count / max(1, int(transformed.shape[0]))),
-        "positive_label_mass": float(transformed[positive, type_idx].sum().item()) if positive_count > 0 else 0.0,
+        "positive_label_mass": float(transformed[positive, type_idx].sum().item())
+        if positive_count > 0
+        else 0.0,
         "available_component_weight": float(available_weight),
         "component_target_blend": float(component_blend),
         "base_retained_frequency_positive_label_count": (
-            int((base_retained_frequency > 0.0).sum().item()) if base_retained_frequency is not None else None
+            int((base_retained_frequency > 0.0).sum().item())
+            if base_retained_frequency is not None
+            else None
         ),
         "component_diagnostics": per_component,
         "mlqds_temporal_fraction": float(getattr(model_config, "mlqds_temporal_fraction", 0.0)),
@@ -2788,7 +2926,9 @@ def aggregate_range_component_label_sets(
     """Aggregate raw range labels and their component-specific label streams."""
     if len(component_label_sets) != len(label_sets):
         raise ValueError("component_label_sets must have the same length as label_sets.")
-    if not component_label_sets or any(component_labels is None for component_labels in component_label_sets):
+    if not component_label_sets or any(
+        component_labels is None for component_labels in component_label_sets
+    ):
         raise ValueError("all component_label_sets entries must be present.")
 
     aggregated, aggregated_mask, diagnostics = aggregate_range_label_sets(
@@ -2801,7 +2941,9 @@ def aggregate_range_component_label_sets(
     component_diagnostics: dict[str, object] = {}
     for component_name in RANGE_USEFULNESS_WEIGHTS:
         component_sets: list[tuple[torch.Tensor, torch.Tensor]] = []
-        for (labels, labelled_mask), component_labels in zip(label_sets, component_label_sets):
+        for (labels, labelled_mask), component_labels in zip(
+            label_sets, component_label_sets, strict=False
+        ):
             if component_labels is None:
                 raise RuntimeError("all component_label_sets entries must be present.")
             component = component_labels.get(component_name)
@@ -2835,21 +2977,27 @@ def aggregate_range_component_retained_frequency_training_labels(
     """Average component-retained targets over independent train workloads."""
     if len(component_label_sets) != len(label_sets):
         raise ValueError("component_label_sets must have the same length as label_sets.")
-    if not component_label_sets or any(component_labels is None for component_labels in component_label_sets):
+    if not component_label_sets or any(
+        component_labels is None for component_labels in component_label_sets
+    ):
         raise ValueError("all component_label_sets entries must be present.")
 
     transformed_sets: list[tuple[torch.Tensor, torch.Tensor]] = []
     per_replicate: list[dict[str, object]] = []
-    for (labels, labelled_mask), component_labels in zip(label_sets, component_label_sets):
+    for (labels, labelled_mask), component_labels in zip(
+        label_sets, component_label_sets, strict=False
+    ):
         if component_labels is None:
             raise RuntimeError("all component_label_sets entries must be present.")
-        transformed, transformed_mask, diagnostics = range_component_retained_frequency_training_labels(
-            labels=labels,
-            labelled_mask=labelled_mask,
-            component_labels=component_labels,
-            boundaries=boundaries,
-            model_config=model_config,
-            type_idx=type_idx,
+        transformed, transformed_mask, diagnostics = (
+            range_component_retained_frequency_training_labels(
+                labels=labels,
+                labelled_mask=labelled_mask,
+                component_labels=component_labels,
+                boundaries=boundaries,
+                model_config=model_config,
+                type_idx=type_idx,
+            )
         )
         transformed_sets.append((transformed, transformed_mask))
         per_replicate.append(diagnostics)
@@ -2863,9 +3011,15 @@ def aggregate_range_component_retained_frequency_training_labels(
         {
             "mode": "component_retained_frequency",
             "budget_loss_ratios": list(_target_budget_ratios(model_config)),
-            "budget_weights": list(_target_budget_weights(model_config, _target_budget_ratios(model_config))),
-            "budget_weight_power": float(getattr(model_config, "range_target_budget_weight_power", 0.0) or 0.0),
-            "component_target_blend": float(getattr(model_config, "range_component_target_blend", 1.0)),
+            "budget_weights": list(
+                _target_budget_weights(model_config, _target_budget_ratios(model_config))
+            ),
+            "budget_weight_power": float(
+                getattr(model_config, "range_target_budget_weight_power", 0.0) or 0.0
+            ),
+            "component_target_blend": float(
+                getattr(model_config, "range_component_target_blend", 1.0)
+            ),
             "mlqds_temporal_fraction": float(getattr(model_config, "mlqds_temporal_fraction", 0.0)),
             "mlqds_hybrid_mode": str(getattr(model_config, "mlqds_hybrid_mode", "fill")),
             "per_replicate": per_replicate,
@@ -2884,21 +3038,27 @@ def aggregate_range_continuity_retained_frequency_training_labels(
     """Average continuity-retained targets over independent train workloads."""
     if len(component_label_sets) != len(label_sets):
         raise ValueError("component_label_sets must have the same length as label_sets.")
-    if not component_label_sets or any(component_labels is None for component_labels in component_label_sets):
+    if not component_label_sets or any(
+        component_labels is None for component_labels in component_label_sets
+    ):
         raise ValueError("all component_label_sets entries must be present.")
 
     transformed_sets: list[tuple[torch.Tensor, torch.Tensor]] = []
     per_replicate: list[dict[str, object]] = []
-    for (labels, labelled_mask), component_labels in zip(label_sets, component_label_sets):
+    for (labels, labelled_mask), component_labels in zip(
+        label_sets, component_label_sets, strict=False
+    ):
         if component_labels is None:
             raise RuntimeError("all component_label_sets entries must be present.")
-        transformed, transformed_mask, diagnostics = range_continuity_retained_frequency_training_labels(
-            labels=labels,
-            labelled_mask=labelled_mask,
-            component_labels=component_labels,
-            boundaries=boundaries,
-            model_config=model_config,
-            type_idx=type_idx,
+        transformed, transformed_mask, diagnostics = (
+            range_continuity_retained_frequency_training_labels(
+                labels=labels,
+                labelled_mask=labelled_mask,
+                component_labels=component_labels,
+                boundaries=boundaries,
+                model_config=model_config,
+                type_idx=type_idx,
+            )
         )
         transformed_sets.append((transformed, transformed_mask))
         per_replicate.append(diagnostics)
@@ -2912,9 +3072,15 @@ def aggregate_range_continuity_retained_frequency_training_labels(
         {
             "mode": "continuity_retained_frequency",
             "budget_loss_ratios": list(_target_budget_ratios(model_config)),
-            "budget_weights": list(_target_budget_weights(model_config, _target_budget_ratios(model_config))),
-            "budget_weight_power": float(getattr(model_config, "range_target_budget_weight_power", 0.0) or 0.0),
-            "component_target_blend": float(getattr(model_config, "range_component_target_blend", 1.0)),
+            "budget_weights": list(
+                _target_budget_weights(model_config, _target_budget_ratios(model_config))
+            ),
+            "budget_weight_power": float(
+                getattr(model_config, "range_target_budget_weight_power", 0.0) or 0.0
+            ),
+            "component_target_blend": float(
+                getattr(model_config, "range_component_target_blend", 1.0)
+            ),
             "continuity_component_weights": dict(RANGE_CONTINUITY_TARGET_WEIGHTS),
             "mlqds_temporal_fraction": float(getattr(model_config, "mlqds_temporal_fraction", 0.0)),
             "mlqds_hybrid_mode": str(getattr(model_config, "mlqds_hybrid_mode", "fill")),
@@ -2935,13 +3101,15 @@ def aggregate_range_structural_retained_frequency_training_labels(
     transformed_sets: list[tuple[torch.Tensor, torch.Tensor]] = []
     per_replicate: list[dict[str, object]] = []
     for labels, labelled_mask in label_sets:
-        transformed, transformed_mask, diagnostics = range_structural_retained_frequency_training_labels(
-            labels=labels,
-            labelled_mask=labelled_mask,
-            points=points,
-            boundaries=boundaries,
-            model_config=model_config,
-            type_idx=type_idx,
+        transformed, transformed_mask, diagnostics = (
+            range_structural_retained_frequency_training_labels(
+                labels=labels,
+                labelled_mask=labelled_mask,
+                points=points,
+                boundaries=boundaries,
+                model_config=model_config,
+                type_idx=type_idx,
+            )
         )
         transformed_sets.append((transformed, transformed_mask))
         per_replicate.append(diagnostics)
@@ -2955,10 +3123,20 @@ def aggregate_range_structural_retained_frequency_training_labels(
         {
             "mode": "structural_retained_frequency",
             "budget_loss_ratios": list(_target_budget_ratios(model_config)),
-            "budget_weights": list(_target_budget_weights(model_config, _target_budget_ratios(model_config))),
-            "budget_weight_power": float(getattr(model_config, "range_target_budget_weight_power", 0.0) or 0.0),
+            "budget_weights": list(
+                _target_budget_weights(model_config, _target_budget_ratios(model_config))
+            ),
+            "budget_weight_power": float(
+                getattr(model_config, "range_target_budget_weight_power", 0.0) or 0.0
+            ),
             "structural_target_blend": float(
-                max(0.0, min(1.0, float(getattr(model_config, "range_structural_target_blend", 0.25) or 0.0)))
+                max(
+                    0.0,
+                    min(
+                        1.0,
+                        float(getattr(model_config, "range_structural_target_blend", 0.25) or 0.0),
+                    ),
+                )
             ),
             "structural_target_source_mode": str(
                 getattr(model_config, "range_structural_target_source_mode", "blend")
@@ -3000,8 +3178,12 @@ def aggregate_range_retained_frequency_training_labels(
         {
             "mode": "retained_frequency",
             "budget_loss_ratios": list(_target_budget_ratios(model_config)),
-            "budget_weights": list(_target_budget_weights(model_config, _target_budget_ratios(model_config))),
-            "budget_weight_power": float(getattr(model_config, "range_target_budget_weight_power", 0.0) or 0.0),
+            "budget_weights": list(
+                _target_budget_weights(model_config, _target_budget_ratios(model_config))
+            ),
+            "budget_weight_power": float(
+                getattr(model_config, "range_target_budget_weight_power", 0.0) or 0.0
+            ),
             "mlqds_temporal_fraction": float(getattr(model_config, "mlqds_temporal_fraction", 0.0)),
             "mlqds_hybrid_mode": str(getattr(model_config, "mlqds_hybrid_mode", "fill")),
             "per_replicate": per_replicate,
@@ -3020,12 +3202,14 @@ def aggregate_range_global_budget_retained_frequency_training_labels(
     transformed_sets: list[tuple[torch.Tensor, torch.Tensor]] = []
     per_replicate: list[dict[str, object]] = []
     for labels, labelled_mask in label_sets:
-        transformed, transformed_mask, diagnostics = range_global_budget_retained_frequency_training_labels(
-            labels=labels,
-            labelled_mask=labelled_mask,
-            boundaries=boundaries,
-            model_config=model_config,
-            type_idx=type_idx,
+        transformed, transformed_mask, diagnostics = (
+            range_global_budget_retained_frequency_training_labels(
+                labels=labels,
+                labelled_mask=labelled_mask,
+                boundaries=boundaries,
+                model_config=model_config,
+                type_idx=type_idx,
+            )
         )
         transformed_sets.append((transformed, transformed_mask))
         per_replicate.append(diagnostics)
@@ -3039,8 +3223,12 @@ def aggregate_range_global_budget_retained_frequency_training_labels(
         {
             "mode": "global_budget_retained_frequency",
             "budget_loss_ratios": list(_target_budget_ratios(model_config)),
-            "budget_weights": list(_target_budget_weights(model_config, _target_budget_ratios(model_config))),
-            "budget_weight_power": float(getattr(model_config, "range_target_budget_weight_power", 0.0) or 0.0),
+            "budget_weights": list(
+                _target_budget_weights(model_config, _target_budget_ratios(model_config))
+            ),
+            "budget_weight_power": float(
+                getattr(model_config, "range_target_budget_weight_power", 0.0) or 0.0
+            ),
             "global_budget_min_points_per_trajectory": 2,
             "per_replicate": per_replicate,
         }
@@ -3077,8 +3265,12 @@ def aggregate_range_marginal_coverage_training_labels(
         {
             "mode": "marginal_coverage_frequency",
             "budget_loss_ratios": list(_target_budget_ratios(model_config)),
-            "budget_weights": list(_target_budget_weights(model_config, _target_budget_ratios(model_config))),
-            "budget_weight_power": float(getattr(model_config, "range_target_budget_weight_power", 0.0) or 0.0),
+            "budget_weights": list(
+                _target_budget_weights(model_config, _target_budget_ratios(model_config))
+            ),
+            "budget_weight_power": float(
+                getattr(model_config, "range_target_budget_weight_power", 0.0) or 0.0
+            ),
             "marginal_target_radius_scale": float(
                 getattr(model_config, "range_marginal_target_radius_scale", 0.50) or 0.0
             ),

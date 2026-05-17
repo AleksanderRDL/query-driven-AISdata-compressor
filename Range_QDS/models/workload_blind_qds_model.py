@@ -163,12 +163,16 @@ class SegmentContextRangeQDSModel(CachedSinusoidalPositionalEncodingMixin, nn.Mo
 
     def _segment_tokens(self, h: torch.Tensor, valid_mask: torch.Tensor) -> torch.Tensor:
         """Pool point states into fixed trajectory-order segment summaries."""
-        batch, length, _embed = h.shape
+        _batch, length, _embed = h.shape
         segment_count = min(self.segment_count, max(1, int(length)))
         positions = torch.arange(length, device=h.device)
-        segment_ids = torch.clamp((positions * segment_count) // max(1, length), max=segment_count - 1)
+        segment_ids = torch.clamp(
+            (positions * segment_count) // max(1, length), max=segment_count - 1
+        )
         valid_f = valid_mask.to(dtype=h.dtype)
-        global_mean = (h * valid_f.unsqueeze(-1)).sum(dim=1) / valid_f.sum(dim=1).clamp(min=1.0).unsqueeze(-1)
+        global_mean = (h * valid_f.unsqueeze(-1)).sum(dim=1) / valid_f.sum(dim=1).clamp(
+            min=1.0
+        ).unsqueeze(-1)
 
         segments: list[torch.Tensor] = []
         for segment_id in range(segment_count):
@@ -187,17 +191,18 @@ class SegmentContextRangeQDSModel(CachedSinusoidalPositionalEncodingMixin, nn.Mo
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Return local uniqueness and globality scalars per point."""
         valid_f = valid_mask.to(dtype=h.dtype)
-        global_mean = (h * valid_f.unsqueeze(-1)).sum(dim=1) / valid_f.sum(dim=1).clamp(min=1.0).unsqueeze(-1)
+        global_mean = (h * valid_f.unsqueeze(-1)).sum(dim=1) / valid_f.sum(dim=1).clamp(
+            min=1.0
+        ).unsqueeze(-1)
 
         prev_h = torch.cat([h[:, :1], h[:, :-1]], dim=1)
         next_h = torch.cat([h[:, 1:], h[:, -1:]], dim=1)
         prev_valid = torch.cat([torch.zeros_like(valid_mask[:, :1]), valid_mask[:, :-1]], dim=1)
         next_valid = torch.cat([valid_mask[:, 1:], torch.zeros_like(valid_mask[:, -1:])], dim=1)
         neighbor_weight = prev_valid.to(dtype=h.dtype) + next_valid.to(dtype=h.dtype)
-        neighbor_sum = (
-            prev_h * prev_valid.to(dtype=h.dtype).unsqueeze(-1)
-            + next_h * next_valid.to(dtype=h.dtype).unsqueeze(-1)
-        )
+        neighbor_sum = prev_h * prev_valid.to(dtype=h.dtype).unsqueeze(-1) + next_h * next_valid.to(
+            dtype=h.dtype
+        ).unsqueeze(-1)
         neighbor_mean = neighbor_sum / neighbor_weight.clamp(min=1.0).unsqueeze(-1)
         neighbor_mean = torch.where((neighbor_weight > 0).unsqueeze(-1), neighbor_mean, h)
 

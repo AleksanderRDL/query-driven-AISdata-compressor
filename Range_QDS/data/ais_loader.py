@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
 import math
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Literal, overload, cast
+from typing import Any, Literal, cast, overload
 
 import pandas as pd
 import torch
@@ -119,7 +119,7 @@ def _safe_int(value: Any) -> int:
     """Convert MMSI-like values to stable integer IDs for downstream writers."""
     try:
         return int(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return 0
 
 
@@ -254,7 +254,7 @@ def load_ais_csv(
         raise FileNotFoundError(f"CSV path does not exist: {csv_path}")
 
     df = pd.read_csv(path, low_memory=False)
-    rows_loaded = int(len(df))
+    rows_loaded = len(df)
     df.columns = [str(c).lstrip("#").strip() for c in df.columns]
     mmsi_col = _resolve_col(df, ["mmsi", "ship_id", "vessel_id"])
     lat_col = _resolve_col(df, ["lat", "latitude"])
@@ -321,12 +321,20 @@ def load_ais_csv(
             if len(seg) < int(config.min_points_per_segment):
                 dropped_short_segments += 1
                 continue
-            if config.max_points_per_segment is not None and len(seg) > int(config.max_points_per_segment):
-                idx = torch.linspace(0, len(seg) - 1, steps=int(config.max_points_per_segment)).long().tolist()
+            if config.max_points_per_segment is not None and len(seg) > int(
+                config.max_points_per_segment
+            ):
+                idx = (
+                    torch.linspace(0, len(seg) - 1, steps=int(config.max_points_per_segment))
+                    .long()
+                    .tolist()
+                )
                 seg = seg.iloc[idx]
                 downsampled_segments += 1
 
-            trajectories.append(_trajectory_tensor_from_group(seg, lat_col, lon_col, speed_col, heading_col))
+            trajectories.append(
+                _trajectory_tensor_from_group(seg, lat_col, lon_col, speed_col, heading_col)
+            )
             mmsis.append(_safe_int(mmsi_val))
             segment_lengths.append(float(len(seg)))
 
@@ -339,7 +347,7 @@ def load_ais_csv(
     if not trajectories:
         raise ValueError("No valid trajectories found in CSV.")
 
-    rows_after_cleaning = int(len(df))
+    rows_after_cleaning = len(df)
     audit = AISLoadAudit(
         source_path=str(path),
         rows_loaded=rows_loaded,
@@ -352,7 +360,7 @@ def load_ais_csv(
         invalid_heading_rows=int(invalid_heading.sum()),
         duplicate_timestamp_rows=duplicate_timestamp_rows,
         input_mmsi_count=int(cast(pd.Series, df[mmsi_col]).nunique()),
-        output_segment_count=int(len(trajectories)),
+        output_segment_count=len(trajectories),
         output_point_count=int(sum(t.shape[0] for t in trajectories)),
         dropped_short_segments=int(dropped_short_segments),
         downsampled_segments=int(downsampled_segments),
@@ -400,10 +408,20 @@ def generate_synthetic_ais_data(
 
         if family_count > 0:
             family_idx = ship_idx % family_count
-            start_lat = float(family_lat[family_idx].item()) + 0.004 * torch.randn(1, generator=g).item()
-            start_lon = float(family_lon[family_idx].item()) + 0.004 * torch.randn(1, generator=g).item()
-            drift_lat = float(family_drift_lat[family_idx].item()) + 0.0005 * torch.randn(1, generator=g).item()
-            drift_lon = float(family_drift_lon[family_idx].item()) + 0.0005 * torch.randn(1, generator=g).item()
+            start_lat = (
+                float(family_lat[family_idx].item()) + 0.004 * torch.randn(1, generator=g).item()
+            )
+            start_lon = (
+                float(family_lon[family_idx].item()) + 0.004 * torch.randn(1, generator=g).item()
+            )
+            drift_lat = (
+                float(family_drift_lat[family_idx].item())
+                + 0.0005 * torch.randn(1, generator=g).item()
+            )
+            drift_lon = (
+                float(family_drift_lon[family_idx].item())
+                + 0.0005 * torch.randn(1, generator=g).item()
+            )
             phase = 0.20 * torch.randn(1, generator=g).item()
         else:
             start_lat = 30.0 + 20.0 * torch.rand(1, generator=g).item()
@@ -417,10 +435,19 @@ def generate_synthetic_ais_data(
         lon_noise = 0.002 * torch.randn(n_points_per_ship, generator=g)
 
         lat = start_lat + drift_lat * torch.arange(n_points_per_ship) + 0.05 * wave + lat_noise
-        lon = start_lon + drift_lon * torch.arange(n_points_per_ship) + 0.05 * torch.cos(wave) + lon_noise
+        lon = (
+            start_lon
+            + drift_lon * torch.arange(n_points_per_ship)
+            + 0.05 * torch.cos(wave)
+            + lon_noise
+        )
 
         speed = 8.0 + 4.0 * torch.rand(n_points_per_ship, generator=g)
-        heading = (torch.atan2(torch.diff(lat, prepend=lat[:1]), torch.diff(lon, prepend=lon[:1])) * 180.0 / math.pi) % 360.0
+        heading = (
+            torch.atan2(torch.diff(lat, prepend=lat[:1]), torch.diff(lon, prepend=lon[:1]))
+            * 180.0
+            / math.pi
+        ) % 360.0
 
         is_start = torch.zeros(n_points_per_ship, dtype=torch.float32)
         is_end = torch.zeros(n_points_per_ship, dtype=torch.float32)

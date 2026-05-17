@@ -25,7 +25,10 @@ class BenchmarkChildResult:
     timings: dict[str, Any]
     elapsed_seconds: float
 
-def _append_stdout_tail(tail_chunks: deque[str], tail_chars: int, line: str, max_chars: int) -> tuple[int, bool]:
+
+def _append_stdout_tail(
+    tail_chunks: deque[str], tail_chars: int, line: str, max_chars: int
+) -> tuple[int, bool]:
     """Append a line to the retained stdout tail and trim old chunks past max_chars."""
     if max_chars <= 0:
         return 0, True
@@ -50,6 +53,7 @@ def _append_stdout_tail(tail_chunks: deque[str], tail_chars: int, line: str, max
             tail_chars -= overflow
             break
     return tail_chars, truncated
+
 
 def _append_timing_line(timings: dict[str, list[dict[str, Any]]], line: str) -> None:
     """Parse one child stdout line into the benchmark timing accumulator."""
@@ -83,6 +87,7 @@ def _append_timing_line(timings: dict[str, list[dict[str, Any]]], line: str) -> 
             }
         )
 
+
 def _run_capture_streaming(
     command: list[str],
     cwd: Path,
@@ -114,7 +119,9 @@ def _run_capture_streaming(
             if proc.stdout is None:
                 raise RuntimeError("benchmark child stdout pipe was not created.")
             for line in proc.stdout:
-                tail_chars, line_truncated = _append_stdout_tail(tail_chunks, tail_chars, line, max_stdout_chars)
+                tail_chars, line_truncated = _append_stdout_tail(
+                    tail_chunks, tail_chars, line, max_stdout_chars
+                )
                 stdout_truncated = stdout_truncated or line_truncated
                 _append_timing_line(timings, line)
                 log.write(line)

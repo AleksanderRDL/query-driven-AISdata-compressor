@@ -52,7 +52,11 @@ def torch_autocast_context(device: torch.device | str, amp_mode: str):
 def amp_runtime_snapshot(amp_mode: str, device: torch.device | str | None = None) -> dict[str, Any]:
     """Return effective AMP/autocast metadata for a requested mode/device."""
     mode = normalize_amp_mode(amp_mode)
-    device_type = torch.device(device).type if device is not None else ("cuda" if torch.cuda.is_available() else "cpu")
+    device_type = (
+        torch.device(device).type
+        if device is not None
+        else ("cuda" if torch.cuda.is_available() else "cpu")
+    )
     dtype = autocast_dtype_for_mode(mode)
     enabled = dtype is not None and device_type == "cuda"
     return {

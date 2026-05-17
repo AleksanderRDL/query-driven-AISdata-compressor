@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Collection
 import copy
+from collections.abc import Collection
 from typing import Any
 
 import torch
@@ -70,10 +70,19 @@ def zero_query_prior_field_channels(
     return zeroed
 
 
-def _bounds(points: torch.Tensor, typed_queries: list[dict[str, Any]] | None = None) -> dict[str, float]:
+def _bounds(
+    points: torch.Tensor, typed_queries: list[dict[str, Any]] | None = None
+) -> dict[str, float]:
     """Return train/query extent used for stable cross-day prior sampling."""
     if int(points.numel()) == 0:
-        bounds = {"t_min": 0.0, "t_max": 1.0, "lat_min": 0.0, "lat_max": 1.0, "lon_min": 0.0, "lon_max": 1.0}
+        bounds = {
+            "t_min": 0.0,
+            "t_max": 1.0,
+            "lat_min": 0.0,
+            "lat_max": 1.0,
+            "lon_min": 0.0,
+            "lon_max": 1.0,
+        }
     else:
         bounds = {
             "t_min": float(points[:, 0].min().item()),
@@ -94,12 +103,14 @@ def _bounds(points: torch.Tensor, typed_queries: list[dict[str, Any]] | None = N
             bounds["lat_max"] = max(bounds["lat_max"], float(params["lat_max"]))
             bounds["lon_min"] = min(bounds["lon_min"], float(params["lon_min"]))
             bounds["lon_max"] = max(bounds["lon_max"], float(params["lon_max"]))
-        except (KeyError, TypeError, ValueError):
+        except KeyError, TypeError, ValueError:
             continue
     return bounds
 
 
-def _spatial_bins(points: torch.Tensor, extent: dict[str, float], grid_bins: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+def _spatial_bins(
+    points: torch.Tensor, extent: dict[str, float], grid_bins: int
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Return lat/lon/cell ids under the fixed training extent."""
     bins = max(1, int(grid_bins))
     lat_span = max(1e-9, float(extent["lat_max"]) - float(extent["lat_min"]))
@@ -130,7 +141,9 @@ def _aggregate_point_values_to_grid(
     cell_count: int,
 ) -> torch.Tensor:
     """Average per-point values by spatial grid cell."""
-    sums = torch.bincount(cell_ids.detach().cpu(), weights=values.detach().cpu().float(), minlength=cell_count)
+    sums = torch.bincount(
+        cell_ids.detach().cpu(), weights=values.detach().cpu().float(), minlength=cell_count
+    )
     counts = torch.bincount(cell_ids.detach().cpu(), minlength=cell_count).float()
     return (sums / counts.clamp(min=1.0)).to(dtype=torch.float32)
 
@@ -164,7 +177,11 @@ def _aggregate_point_values_to_spacetime_grid(
     total = int(cell_count) * max(1, int(time_bins))
     sums = torch.bincount(ids, weights=values.detach().cpu().float(), minlength=total)
     counts = torch.bincount(ids, minlength=total).float()
-    return (sums / counts.clamp(min=1.0)).to(dtype=torch.float32).reshape(max(1, int(time_bins)), int(cell_count))
+    return (
+        (sums / counts.clamp(min=1.0))
+        .to(dtype=torch.float32)
+        .reshape(max(1, int(time_bins)), int(cell_count))
+    )
 
 
 def _interval_overlap_mask(edges: torch.Tensor, lower: float, upper: float) -> torch.Tensor:
@@ -202,15 +219,25 @@ def _query_box_prior_grids(
     spacetime = torch.zeros((clock_bins, bins, bins), dtype=torch.float32)
     if not range_queries:
         return spatial.reshape(bins * bins), spacetime.reshape(clock_bins, bins * bins)
-    lat_edges = torch.linspace(float(extent["lat_min"]), float(extent["lat_max"]), steps=bins + 1, dtype=torch.float32)
-    lon_edges = torch.linspace(float(extent["lon_min"]), float(extent["lon_max"]), steps=bins + 1, dtype=torch.float32)
+    lat_edges = torch.linspace(
+        float(extent["lat_min"]), float(extent["lat_max"]), steps=bins + 1, dtype=torch.float32
+    )
+    lon_edges = torch.linspace(
+        float(extent["lon_min"]), float(extent["lon_max"]), steps=bins + 1, dtype=torch.float32
+    )
     for query in range_queries:
         params = query.get("params") or {}
         try:
-            lat_mask = _interval_overlap_mask(lat_edges, float(params["lat_min"]), float(params["lat_max"]))
-            lon_mask = _interval_overlap_mask(lon_edges, float(params["lon_min"]), float(params["lon_max"]))
-            time_mask = _clock_overlap_mask(clock_bins, float(params["t_start"]), float(params["t_end"]))
-        except (KeyError, TypeError, ValueError):
+            lat_mask = _interval_overlap_mask(
+                lat_edges, float(params["lat_min"]), float(params["lat_max"])
+            )
+            lon_mask = _interval_overlap_mask(
+                lon_edges, float(params["lon_min"]), float(params["lon_max"])
+            )
+            time_mask = _clock_overlap_mask(
+                clock_bins, float(params["t_start"]), float(params["t_end"])
+            )
+        except KeyError, TypeError, ValueError:
             continue
         spatial_mask = lat_mask[:, None] & lon_mask[None, :]
         spatial += spatial_mask.float()
@@ -232,16 +259,14 @@ def _canonical_out_of_extent_sampling(mode: str | None) -> str:
     return normalized
 
 
-def _smooth_spacetime_grid(values: torch.Tensor, grid_bins: int, time_bins: int, passes: int) -> torch.Tensor:
+def _smooth_spacetime_grid(
+    values: torch.Tensor, grid_bins: int, time_bins: int, passes: int
+) -> torch.Tensor:
     """Smooth every time slice of a spatial-temporal grid."""
     bins = max(1, int(grid_bins))
     clock_bins = max(1, int(time_bins))
     smooth_passes = max(0, int(passes))
-    if (
-        bins <= 1
-        or smooth_passes <= 0
-        or values.shape != (clock_bins, bins * bins)
-    ):
+    if bins <= 1 or smooth_passes <= 0 or values.shape != (clock_bins, bins * bins):
         return values.to(dtype=torch.float32)
     smoothed = [
         _smooth_spatial_grid(values[time_idx], bins, smooth_passes)
@@ -288,7 +313,9 @@ def build_train_query_prior_fields(
 ) -> dict[str, Any]:
     """Build query-prior fields from training points and training queries only."""
     out_of_extent_sampling = _canonical_out_of_extent_sampling(out_of_extent_sampling)
-    range_queries = [query for query in typed_queries if str(query.get("type", "")).lower() == "range"]
+    range_queries = [
+        query for query in typed_queries if str(query.get("type", "")).lower() == "range"
+    ]
     extent = _bounds(points, range_queries)
     bins = max(1, int(grid_bins))
     clock_bins = max(1, int(time_bins))
@@ -307,7 +334,9 @@ def build_train_query_prior_fields(
         boundary_idx = _boundary_indices(mask, boundaries)
         if int(boundary_idx.numel()) > 0:
             boundary_hits[boundary_idx] += 1.0
-        crossing_idx = segment_box_bracket_indices(points_cpu, boundaries, query["params"]).to(device=points.device)
+        crossing_idx = segment_box_bracket_indices(points_cpu, boundaries, query["params"]).to(
+            device=points.device
+        )
         if int(crossing_idx.numel()) > 0:
             crossing_hits[crossing_idx] += 1.0
 
@@ -316,7 +345,9 @@ def build_train_query_prior_fields(
     boundary_probability = (boundary_hits / query_count).clamp(0.0, 1.0)
     crossing_probability = (crossing_hits / query_count).clamp(0.0, 1.0)
     if behavior_values is not None and int(behavior_values.numel()) == point_count:
-        behavior_values = behavior_values.reshape(point_count).float().clamp(0.0, 1.0).to(device=points.device)
+        behavior_values = (
+            behavior_values.reshape(point_count).float().clamp(0.0, 1.0).to(device=points.device)
+        )
     elif labels is not None and labels.ndim == 2 and labels.shape[0] == point_count:
         behavior_values = (
             labels[:, 0].float().clamp(0.0, 1.0)
@@ -362,7 +393,9 @@ def build_train_query_prior_fields(
         bins,
         smooth_passes,
     )
-    route_density_grid = _smooth_spatial_grid(route_density.to(dtype=torch.float32), bins, smooth_passes)
+    route_density_grid = _smooth_spatial_grid(
+        route_density.to(dtype=torch.float32), bins, smooth_passes
+    )
 
     return {
         "schema_version": int(QUERY_PRIOR_FIELD_SCHEMA_VERSION),
@@ -389,28 +422,40 @@ def build_train_query_prior_fields(
         "behavior_utility_prior": behavior_grid,
         "route_density_prior": route_density_grid,
         "diagnostics": {
-            "train_query_count": int(len(range_queries)),
+            "train_query_count": len(range_queries),
             "train_point_count": point_count,
             "smoothing_passes": int(smooth_passes),
             "spatial_query_field_source": "train_query_box_density",
             "raw_nonzero_spatial_query_cells": int((raw_spatial_query_grid > 0.0).sum().item()),
             "nonzero_spatial_query_cells": int((spatial_query_grid > 0.0).sum().item()),
             "raw_nonzero_point_hit_cells": int((raw_point_hit_grid > 0.0).sum().item()),
-            "raw_nonzero_spatiotemporal_query_cells": int((raw_spatiotemporal_query_grid > 0.0).sum().item()),
-            "nonzero_spatiotemporal_query_cells": int((spatiotemporal_query_grid > 0.0).sum().item()),
+            "raw_nonzero_spatiotemporal_query_cells": int(
+                (raw_spatiotemporal_query_grid > 0.0).sum().item()
+            ),
+            "nonzero_spatiotemporal_query_cells": int(
+                (spatiotemporal_query_grid > 0.0).sum().item()
+            ),
             "contains_eval_queries": False,
         },
     }
 
 
-def sample_query_prior_fields(points: torch.Tensor, prior_field: dict[str, Any] | None) -> torch.Tensor:
+def sample_query_prior_fields(
+    points: torch.Tensor, prior_field: dict[str, Any] | None
+) -> torch.Tensor:
     """Sample train-derived prior fields at point coordinates and clock bins."""
     if prior_field is None:
-        return torch.zeros((int(points.shape[0]), len(QUERY_PRIOR_FIELD_NAMES)), dtype=torch.float32, device=points.device)
+        return torch.zeros(
+            (int(points.shape[0]), len(QUERY_PRIOR_FIELD_NAMES)),
+            dtype=torch.float32,
+            device=points.device,
+        )
     bins = int(prior_field.get("grid_bins", 64))
     time_bins = int(prior_field.get("time_bins", 24))
     extent = dict(prior_field.get("extent") or _bounds(points))
-    out_of_extent_sampling = _canonical_out_of_extent_sampling(prior_field.get("out_of_extent_sampling", "zero"))
+    out_of_extent_sampling = _canonical_out_of_extent_sampling(
+        prior_field.get("out_of_extent_sampling", "zero")
+    )
     sampling_points = points.detach()
     if out_of_extent_sampling == "nearest":
         sampling_points = points.detach().clone()
@@ -424,7 +469,9 @@ def sample_query_prior_fields(points: torch.Tensor, prior_field: dict[str, Any] 
             min=float(extent["lon_min"]),
             max=float(extent["lon_max"]),
         )
-    _lat_bin, _lon_bin, cell_ids = _spatial_bins(sampling_points.to(dtype=torch.float32), extent, bins)
+    _lat_bin, _lon_bin, cell_ids = _spatial_bins(
+        sampling_points.to(dtype=torch.float32), extent, bins
+    )
     time_ids = _time_bins(points, time_bins)
     cell_ids_cpu = cell_ids.detach().cpu().long()
     time_ids_cpu = time_ids.detach().cpu().long()

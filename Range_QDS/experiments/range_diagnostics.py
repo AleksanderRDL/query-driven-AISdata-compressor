@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import torch
 
+from config.experiment_config import ExperimentConfig
 from evaluation.baselines import DouglasPeuckerMethod, Method, OracleMethod, UniformTemporalMethod
 from evaluation.evaluate_methods import score_retained_mask
 from evaluation.metrics import MethodEvaluation
 from evaluation.query_cache import EvaluationQueryCache
-from experiments.experiment_config import ExperimentConfig
 from experiments.range_cache import (
     RangeRuntimeCache,
     ensure_range_runtime_labels,
@@ -59,7 +60,11 @@ def _range_signal_diagnostics(
         }
 
     component_labels: dict[str, torch.Tensor] | None = None
-    if runtime_cache is not None and runtime_cache.labels is not None and runtime_cache.labelled_mask is not None:
+    if (
+        runtime_cache is not None
+        and runtime_cache.labels is not None
+        and runtime_cache.labelled_mask is not None
+    ):
         labels = runtime_cache.labels
         labelled_mask = runtime_cache.labelled_mask
         component_labels = runtime_cache.component_labels
@@ -105,13 +110,17 @@ def _range_signal_diagnostics(
         }
 
     baseline_names = ["uniform", "DouglasPeucker"]
-    best_baseline = max(baseline_names, key=lambda name: method_scores.get(name, {}).get("range_f1", 0.0))
+    best_baseline = max(
+        baseline_names, key=lambda name: method_scores.get(name, {}).get("range_f1", 0.0)
+    )
     best_baseline_range_f1 = float(method_scores[best_baseline]["range_f1"])
     oracle_range_f1 = float(method_scores.get("Oracle", {}).get("range_f1", 0.0))
     normalized_map = sum(float(v) for v in workload_map.values())
-    range_weight = float(workload_map.get("range", 0.0)) / normalized_map if normalized_map > 0.0 else 0.0
+    range_weight = (
+        float(workload_map.get("range", 0.0)) / normalized_map if normalized_map > 0.0 else 0.0
+    )
     return {
-        "range_query_count": int(len(range_queries)),
+        "range_query_count": len(range_queries),
         "range_workload_weight": float(range_weight),
         "range_boundary_prior_weight": float(range_boundary_prior_weight),
         "range_boundary_prior_enabled": bool(float(range_boundary_prior_weight) > 0.0),
@@ -126,6 +135,7 @@ def _range_signal_diagnostics(
         "oracle_range_f1": oracle_range_f1,
         "oracle_gap_over_best_baseline": float(oracle_range_f1 - best_baseline_range_f1),
     }
+
 
 def _range_workload_diagnostics(
     label: str,
@@ -201,7 +211,9 @@ def _range_workload_diagnostics(
         compression_ratio=config.model.compression_ratio,
         seed=seed,
         range_label_mode=str(getattr(config.model, "range_label_mode", "usefulness")),
-        range_boundary_prior_weight=float(getattr(config.model, "range_boundary_prior_weight", 0.0)),
+        range_boundary_prior_weight=float(
+            getattr(config.model, "range_boundary_prior_weight", 0.0)
+        ),
         runtime_cache=runtime_cache,
         cache_typed_queries=workload.typed_queries if is_pure_range_workload else None,
     )
@@ -220,6 +232,7 @@ def _range_workload_diagnostics(
         runtime_cache=runtime_cache,
     )
     return summary, rows
+
 
 def _print_range_diagnostics_summary(range_diagnostics_summary: dict[str, Any]) -> None:
     """Print compact range diagnostics for each split."""
@@ -240,14 +253,19 @@ def _print_range_diagnostics_summary(range_diagnostics_summary: dict[str, Any]) 
             flush=True,
         )
 
+
 def _print_range_distribution_comparison(workload_distribution_comparison: dict[str, Any]) -> None:
     """Print compact train/selection-vs-eval workload distribution deltas."""
     for label, delta in workload_distribution_comparison["deltas_vs_eval"].items():
         coverage_delta = delta.get("coverage_fraction_minus_eval")
         point_p50_delta = delta.get("point_hit_count_p50_minus_eval")
         traj_p50_delta = delta.get("trajectory_hit_count_p50_minus_eval")
-        coverage_text = f"{coverage_delta:+.4f}" if isinstance(coverage_delta, (int, float)) else "n/a"
-        point_text = f"{point_p50_delta:+.2f}" if isinstance(point_p50_delta, (int, float)) else "n/a"
+        coverage_text = (
+            f"{coverage_delta:+.4f}" if isinstance(coverage_delta, (int, float)) else "n/a"
+        )
+        point_text = (
+            f"{point_p50_delta:+.2f}" if isinstance(point_p50_delta, (int, float)) else "n/a"
+        )
         traj_text = f"{traj_p50_delta:+.2f}" if isinstance(traj_p50_delta, (int, float)) else "n/a"
         print(
             f"  {label}_vs_eval: "
@@ -257,12 +275,15 @@ def _print_range_distribution_comparison(workload_distribution_comparison: dict[
             flush=True,
         )
 
+
 def _compact_range_workload_summary(summary: dict[str, Any]) -> dict[str, Any]:
     """Extract comparable workload-shape fields from verbose diagnostics."""
     range_summary = summary.get("range", {}) if isinstance(summary, dict) else {}
     range_signal = summary.get("range_signal", {}) if isinstance(summary, dict) else {}
     generation = summary.get("generation", {}) if isinstance(summary, dict) else {}
-    workload_signature = generation.get("workload_signature", {}) if isinstance(generation, dict) else {}
+    workload_signature = (
+        generation.get("workload_signature", {}) if isinstance(generation, dict) else {}
+    )
     fields = (
         "range_query_count",
         "coverage_fraction",
@@ -283,7 +304,9 @@ def _compact_range_workload_summary(summary: dict[str, Any]) -> dict[str, Any]:
     compact = {field: range_summary.get(field) for field in fields}
     compact["oracle_gap_over_best_baseline"] = range_signal.get("oracle_gap_over_best_baseline")
     compact["best_baseline"] = range_signal.get("best_baseline")
-    compact["workload_signature"] = workload_signature if isinstance(workload_signature, dict) else {}
+    compact["workload_signature"] = (
+        workload_signature if isinstance(workload_signature, dict) else {}
+    )
     return compact
 
 
@@ -349,11 +372,18 @@ def _ks_distance(left: object, right: object) -> float | None:
     return float(max_distance)
 
 
-def _workload_signature_gate_for_pair(train_like: dict[str, Any], eval_like: dict[str, Any]) -> dict[str, Any]:
+def _workload_signature_gate_for_pair(
+    train_like: dict[str, Any], eval_like: dict[str, Any]
+) -> dict[str, Any]:
     """Compare profile signatures against guide defaults."""
     train_sig = train_like.get("workload_signature", {})
     eval_sig = eval_like.get("workload_signature", {})
-    if not isinstance(train_sig, dict) or not isinstance(eval_sig, dict) or not train_sig or not eval_sig:
+    if (
+        not isinstance(train_sig, dict)
+        or not isinstance(eval_sig, dict)
+        or not train_sig
+        or not eval_sig
+    ):
         return {
             "gate_available": False,
             "gate_pass": False,
@@ -377,7 +407,9 @@ def _workload_signature_gate_for_pair(train_like: dict[str, Any], eval_like: dic
     if eval_query_count < min_signature_query_count:
         count_failed.append("eval_signature_query_count_below_min")
     query_count_delta = abs(train_query_count - eval_query_count)
-    query_count_relative_delta = query_count_delta / float(max(train_query_count, eval_query_count, 1))
+    query_count_relative_delta = query_count_delta / float(
+        max(train_query_count, eval_query_count, 1)
+    )
     if query_count_relative_delta > thresholds["query_count_relative_delta_max"]:
         count_failed.append("query_count_mismatch")
     train_profile = str(train_sig.get("profile_id", ""))
@@ -467,11 +499,15 @@ def _workload_signature_gate_for_pair(train_like: dict[str, Any], eval_like: dic
             thresholds["broad_query_rate_max"],
         ),
     }
-    failed = [
-        name
-        for name, (value, threshold) in checks.items()
-        if not isinstance(value, (int, float)) or float(value) > float(threshold)
-    ] + count_failed + profile_failed
+    failed = (
+        [
+            name
+            for name, (value, threshold) in checks.items()
+            if not isinstance(value, (int, float)) or float(value) > float(threshold)
+        ]
+        + count_failed
+        + profile_failed
+    )
     return {
         "gate_available": True,
         "gate_pass": not failed,
@@ -492,7 +528,9 @@ def _workload_signature_gate_for_pair(train_like: dict[str, Any], eval_like: dic
 
 def _range_workload_distribution_comparison(summaries: dict[str, Any]) -> dict[str, Any]:
     """Compare train/selection workload shape against final eval workload shape."""
-    compact = {label: _compact_range_workload_summary(summary) for label, summary in summaries.items()}
+    compact = {
+        label: _compact_range_workload_summary(summary) for label, summary in summaries.items()
+    }
     eval_summary = compact.get("eval", {})
     numeric_fields = (
         "range_query_count",
@@ -530,16 +568,21 @@ def _range_workload_distribution_comparison(summaries: dict[str, Any]) -> dict[s
         "deltas_vs_eval": deltas,
         "workload_signature_gate": {
             "schema_version": 1,
-            "all_available": all(bool(row.get("gate_available")) for row in signature_gates.values()),
-            "all_pass": bool(signature_gates) and all(bool(row.get("gate_pass")) for row in signature_gates.values()),
+            "all_available": all(
+                bool(row.get("gate_available")) for row in signature_gates.values()
+            ),
+            "all_pass": bool(signature_gates)
+            and all(bool(row.get("gate_pass")) for row in signature_gates.values()),
             "pairs": signature_gates,
         },
     }
+
 
 def _range_audit_ratios(config: ExperimentConfig) -> list[float]:
     """Return configured multi-budget range-audit ratios, deduped and sorted."""
     raw = getattr(config.model, "range_audit_compression_ratios", []) or []
     return sorted({float(value) for value in raw if 0.0 < float(value) <= 1.0})
+
 
 def _evaluation_metrics_payload(metrics: MethodEvaluation) -> dict[str, Any]:
     """Serialize method metrics with explicit range fields."""
@@ -579,7 +622,10 @@ def _evaluation_metrics_payload(metrics: MethodEvaluation) -> dict[str, Any]:
         "range_audit": metrics.range_audit,
     }
 
-def _target_budget_row(target_diagnostics: dict[str, Any], compression_ratio: float) -> dict[str, Any]:
+
+def _target_budget_row(
+    target_diagnostics: dict[str, Any], compression_ratio: float
+) -> dict[str, Any]:
     """Return target-diagnostics row closest to the run compression ratio."""
     rows = target_diagnostics.get("budget_rows") or []
     if not isinstance(rows, list) or not rows:
@@ -594,7 +640,7 @@ def _target_budget_row(target_diagnostics: dict[str, Any], compression_ratio: fl
             continue
         try:
             ratio = float(raw_ratio)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             continue
         distance = abs(ratio - float(compression_ratio))
         if distance < best_distance:
@@ -602,11 +648,13 @@ def _target_budget_row(target_diagnostics: dict[str, Any], compression_ratio: fl
             best_row = row
     return best_row
 
+
 def _optional_delta(left: float | None, right: float | None) -> float | None:
     """Return ``left - right`` when both values are present."""
     if left is None or right is None:
         return None
     return float(left) - float(right)
+
 
 def _metric_value(metrics: MethodEvaluation | None, field_name: str) -> float | None:
     """Read one float field from optional method metrics."""
@@ -614,6 +662,7 @@ def _metric_value(metrics: MethodEvaluation | None, field_name: str) -> float | 
         return None
     value = getattr(metrics, field_name)
     return float(value) if value is not None else None
+
 
 def _range_learned_fill_summary(
     *,
@@ -634,8 +683,7 @@ def _range_learned_fill_summary(
     oracle_point = _metric_value(oracle_fill, "range_point_f1")
 
     train_signal = (
-        range_diagnostics_summary.get("train", {})
-        .get("range_signal", {})
+        range_diagnostics_summary.get("train", {}).get("range_signal", {})
         if isinstance(range_diagnostics_summary, dict)
         else {}
     )
@@ -652,7 +700,9 @@ def _range_learned_fill_summary(
         "temporal_random_fill_range_usefulness_score": random_usefulness,
         "temporal_oracle_fill_range_usefulness_score": oracle_usefulness,
         "mlqds_vs_temporal_random_fill_range_usefulness": usefulness_delta,
-        "temporal_oracle_fill_gap_range_usefulness": _optional_delta(oracle_usefulness, mlqds_usefulness),
+        "temporal_oracle_fill_gap_range_usefulness": _optional_delta(
+            oracle_usefulness, mlqds_usefulness
+        ),
         "mlqds_range_point_f1": mlqds_point,
         "temporal_random_fill_range_point_f1": random_point,
         "temporal_oracle_fill_range_point_f1": oracle_point,
@@ -661,7 +711,9 @@ def _range_learned_fill_summary(
         "learned_fill_beats_temporal_random_usefulness": (
             bool(usefulness_delta > 0.0) if usefulness_delta is not None else None
         ),
-        "learned_fill_beats_temporal_random_point_f1": bool(point_delta > 0.0) if point_delta is not None else None,
+        "learned_fill_beats_temporal_random_point_f1": bool(point_delta > 0.0)
+        if point_delta is not None
+        else None,
         "oracle_notes": {
             "temporal_oracle_fill_kind": "temporal_base_plus_additive_label_fill",
             "exact_optimum": False,
@@ -674,16 +726,24 @@ def _range_learned_fill_summary(
             train_labels.get("positive_label_mass") if isinstance(train_labels, dict) else None
         ),
         "train_label_component_mass_basis": (
-            train_labels.get("component_label_mass_basis") if isinstance(train_labels, dict) else None
+            train_labels.get("component_label_mass_basis")
+            if isinstance(train_labels, dict)
+            else None
         ),
         "train_label_component_mass_fraction": (
-            train_labels.get("component_positive_label_mass_fraction", {}) if isinstance(train_labels, dict) else {}
+            train_labels.get("component_positive_label_mass_fraction", {})
+            if isinstance(train_labels, dict)
+            else {}
         ),
         "target_budget_row": target_row,
         "target_positive_label_mass": training_target_diagnostics.get("positive_label_mass"),
         "target_budget_ratio": target_row.get("total_budget_ratio"),
         "target_effective_fill_budget_ratio": target_row.get("effective_fill_budget_ratio"),
-        "target_temporal_base_label_mass_fraction": target_row.get("temporal_base_label_mass_fraction"),
+        "target_temporal_base_label_mass_fraction": target_row.get(
+            "temporal_base_label_mass_fraction"
+        ),
         "target_residual_label_mass_fraction": target_row.get("residual_label_mass_fraction"),
-        "target_residual_positive_label_fraction": target_row.get("residual_positive_label_fraction"),
+        "target_residual_positive_label_fraction": target_row.get(
+            "residual_positive_label_fraction"
+        ),
     }

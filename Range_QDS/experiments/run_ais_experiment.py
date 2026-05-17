@@ -5,13 +5,13 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
+from config.experiment_config import build_experiment_config
 from data.ais_loader import generate_synthetic_ais_data, load_ais_csv
 from data.trajectory_cache import load_or_build_ais_cache
 from experiments.cli_utils import normalized_gap_arg, split_csv_path_list
 from experiments.experiment_cli import build_parser
-from experiments.experiment_config import build_experiment_config
 from experiments.experiment_pipeline import run_experiment_pipeline
-from experiments.torch_runtime import apply_torch_runtime_settings
+from runtime.torch_runtime import apply_torch_runtime_settings
 
 
 def _split_max_segments(args, split: str) -> int | None:
@@ -69,7 +69,9 @@ def _assert_distinct_csv_sources(
             continue
         resolved = Path(value).resolve()
         if resolved in seen:
-            raise ValueError(f"{label} CSV path must be distinct from {seen[resolved]} CSV path: {value}")
+            raise ValueError(
+                f"{label} CSV path must be distinct from {seen[resolved]} CSV path: {value}"
+            )
         seen[resolved] = label
 
 
@@ -288,7 +290,8 @@ def main() -> None:
 
     coverage_msg = (
         f"  query_coverage={args.query_coverage}  max_queries={args.max_queries}"
-        if args.query_coverage is not None else ""
+        if args.query_coverage is not None
+        else ""
     )
     print(
         f"[config] model={args.model_type}  workload={args.workload}  epochs={args.epochs}  "
@@ -440,11 +443,13 @@ def main() -> None:
         for source_index, train_path in enumerate(train_paths):
             train_label = "train" if len(train_paths) == 1 else f"train[{source_index}]"
             print(f"[load-data] reading {train_label} CSV: {train_path}", flush=True)
-            train_part, train_part_mmsis, _train_audit, train_audit_payload = _load_csv_trajectories(
-                train_label,
-                train_path,
-                args,
-                {**load_kwargs, "max_segments": _split_max_segments(args, "train")},
+            train_part, train_part_mmsis, _train_audit, train_audit_payload = (
+                _load_csv_trajectories(
+                    train_label,
+                    train_path,
+                    args,
+                    {**load_kwargs, "max_segments": _split_max_segments(args, "train")},
+                )
             )
             train_trajectories_parts.extend(train_part)
             train_source_ids_parts.extend([source_index] * len(train_part))
@@ -471,13 +476,17 @@ def main() -> None:
             validation_trajectories_parts = []
             validation_audit_payloads = []
             for source_index, validation_path in enumerate(validation_paths):
-                validation_label = "validation" if len(validation_paths) == 1 else f"validation[{source_index}]"
+                validation_label = (
+                    "validation" if len(validation_paths) == 1 else f"validation[{source_index}]"
+                )
                 print(f"[load-data] reading {validation_label} CSV: {validation_path}", flush=True)
-                validation_part, _validation_mmsis, _validation_audit, validation_part_payload = _load_csv_trajectories(
-                    validation_label,
-                    validation_path,
-                    args,
-                    {**load_kwargs, "max_segments": _split_max_segments(args, "validation")},
+                validation_part, _validation_mmsis, _validation_audit, validation_part_payload = (
+                    _load_csv_trajectories(
+                        validation_label,
+                        validation_path,
+                        args,
+                        {**load_kwargs, "max_segments": _split_max_segments(args, "validation")},
+                    )
                 )
                 validation_trajectories_parts.extend(validation_part)
                 validation_part_payload["source_index"] = source_index
@@ -562,7 +571,10 @@ def main() -> None:
             route_families=config.data.synthetic_route_families,
         )
     if eval_trajectories is None:
-        print(f"[load-data] {len(trajectories)} trajectories loaded in {time.perf_counter() - t0:.2f}s", flush=True)
+        print(
+            f"[load-data] {len(trajectories)} trajectories loaded in {time.perf_counter() - t0:.2f}s",
+            flush=True,
+        )
     else:
         validation_part = (
             f" validation={len(validation_trajectories)}"
@@ -597,7 +609,9 @@ def main() -> None:
 
     print("\nMatched-workload table")
     print(out.matched_table)
-    print("\nGeometric-distortion table (lower is better; SED = time-synchronous, PED = perpendicular, in km)")
+    print(
+        "\nGeometric-distortion table (lower is better; SED = time-synchronous, PED = perpendicular, in km)"
+    )
     print(out.geometric_table)
     print("\nDistribution-shift table")
     print(out.shift_table)

@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 import experiments.benchmark_runner as benchmark_runner
+from config.experiment_config import build_experiment_config
 from experiments.benchmark_artifacts import index_entry, write_family_indexes
 from experiments.benchmark_final_grid import query_driven_final_grid_summary
 from experiments.benchmark_process import BenchmarkChildResult
@@ -19,6 +20,7 @@ from experiments.benchmark_profiles import (
     BLIND_EXPECTED_USEFULNESS_PROFILE,
     BLIND_RETAINED_FREQUENCY_PROFILE,
     BLIND_TEACHER_DISTILL_PROFILE,
+    DEFAULT_PROFILE,
     RANGE_BLIND_COVERAGE_MIN_QUERY_FLOOR,
     benchmark_profile_args,
     benchmark_profile_settings,
@@ -28,7 +30,6 @@ from experiments.benchmark_report import (
     _query_floor_fields,
 )
 from experiments.benchmark_runner import (
-    DEFAULT_PROFILE,
     DEFAULT_WORKLOADS,
     PURE_WORKLOADS,
     BenchmarkDataSources,
@@ -44,7 +45,6 @@ from experiments.benchmark_runner import (
     _run_config,
     _runner_environment_metadata,
 )
-from experiments.experiment_config import build_experiment_config
 from experiments.experiment_workloads import resolve_workload_maps, validation_query_count
 
 

@@ -34,7 +34,9 @@ def _training_target_diagnostics(
     n_points = int(labels.shape[0])
     labelled_count = int(active.sum().item())
     positive_count = int(positive.sum().item())
-    total_positive_label_mass = float(values[positive].sum().item()) if bool(positive.any().item()) else 0.0
+    total_positive_label_mass = (
+        float(values[positive].sum().item()) if bool(positive.any().item()) else 0.0
+    )
     diagnostics: dict[str, Any] = {
         "workload_type_id": int(workload_type_id),
         "range_training_target_mode": target_mode,
@@ -80,9 +82,13 @@ def _training_target_diagnostics(
         candidate_count = int(candidate.sum().item())
         residual_labelled_count = int(residual_labelled.sum().item())
         residual_positive_count = int(residual_positive.sum().item())
-        base_label_mass = float(values[base_positive].sum().item()) if bool(base_positive.any().item()) else 0.0
+        base_label_mass = (
+            float(values[base_positive].sum().item()) if bool(base_positive.any().item()) else 0.0
+        )
         residual_label_mass = (
-            float(values[residual_positive].sum().item()) if bool(residual_positive.any().item()) else 0.0
+            float(values[residual_positive].sum().item())
+            if bool(residual_positive.any().item())
+            else 0.0
         )
         rows.append(
             {
@@ -95,7 +101,9 @@ def _training_target_diagnostics(
                 "base_positive_label_count": int(base_positive.sum().item()),
                 "residual_labelled_point_count": residual_labelled_count,
                 "residual_positive_label_count": residual_positive_count,
-                "residual_positive_label_fraction": float(residual_positive_count / max(1, residual_labelled_count)),
+                "residual_positive_label_fraction": float(
+                    residual_positive_count / max(1, residual_labelled_count)
+                ),
                 "temporal_base_label_mass": base_label_mass,
                 "residual_label_mass": residual_label_mass,
                 "temporal_base_label_mass_fraction": float(
@@ -108,6 +116,7 @@ def _training_target_diagnostics(
         )
     diagnostics["budget_rows"] = rows
     return diagnostics
+
 
 def _discriminative_sample(
     pred: torch.Tensor,
@@ -125,10 +134,14 @@ def _discriminative_sample(
     target_count = target.numel()
     if target_count <= 2 * n_each:
         return pred, target
-    quartiles = _safe_quantile(target, torch.tensor([0.25, 0.75], dtype=torch.float32, device=target.device))
+    quartiles = _safe_quantile(
+        target, torch.tensor([0.25, 0.75], dtype=torch.float32, device=target.device)
+    )
     bottom_quantile_indices = torch.where(target <= quartiles[0])[0]
     top_quantile_indices = torch.where(target >= quartiles[1])[0]
-    bottom_sample_order = torch.randperm(bottom_quantile_indices.numel(), generator=generator)[:n_each]
+    bottom_sample_order = torch.randperm(bottom_quantile_indices.numel(), generator=generator)[
+        :n_each
+    ]
     top_sample_order = torch.randperm(top_quantile_indices.numel(), generator=generator)[:n_each]
     sampled_indices = torch.cat(
         [
@@ -159,7 +172,10 @@ def _fit_budget_ratios(model_config: object) -> tuple[float, ...]:
     """Return budget ratios for train-target fit diagnostics."""
     raw: list[float] = []
     raw.extend(float(value) for value in (getattr(model_config, "budget_loss_ratios", None) or []))
-    raw.extend(float(value) for value in (getattr(model_config, "range_audit_compression_ratios", None) or []))
+    raw.extend(
+        float(value)
+        for value in (getattr(model_config, "range_audit_compression_ratios", None) or [])
+    )
     raw.append(float(getattr(model_config, "compression_ratio", 0.05)))
     ratios = sorted({float(value) for value in raw if 0.0 < float(value) <= 1.0})
     return tuple(ratios) if ratios else (0.05,)
@@ -177,7 +193,9 @@ def _uniform_mask_for_ratio(
         local_count = int(end - start)
         if local_count <= 0:
             continue
-        keep_count = min(local_count, max(2, int(torch.ceil(torch.tensor(float(ratio) * local_count)).item())))
+        keep_count = min(
+            local_count, max(2, int(torch.ceil(torch.tensor(float(ratio) * local_count)).item()))
+        )
         local_indices = evenly_spaced_indices(local_count, keep_count, device)
         retained[int(start) + local_indices] = True
     return retained
@@ -196,7 +214,9 @@ def _ideal_target_mask_for_ratio(
         local_count = int(end - start)
         if local_count <= 0:
             continue
-        keep_count = min(local_count, max(2, int(torch.ceil(torch.tensor(float(ratio) * local_count)).item())))
+        keep_count = min(
+            local_count, max(2, int(torch.ceil(torch.tensor(float(ratio) * local_count)).item()))
+        )
         local_scores = sortable[int(start) : int(end)]
         finite = torch.isfinite(local_scores)
         if not bool(finite.any().item()):
@@ -209,7 +229,9 @@ def _ideal_target_mask_for_ratio(
     return retained
 
 
-def _target_mass(target: torch.Tensor, labelled_mask: torch.Tensor, retained_mask: torch.Tensor) -> float:
+def _target_mass(
+    target: torch.Tensor, labelled_mask: torch.Tensor, retained_mask: torch.Tensor
+) -> float:
     """Return positive target mass captured by a retained mask."""
     active = labelled_mask.bool() & retained_mask.bool()
     if not bool(active.any().item()):
@@ -278,14 +300,22 @@ def train_target_fit_diagnostics(
             hybrid_mode=str(getattr(model_config, "mlqds_hybrid_mode", "fill")),
             score_mode=str(getattr(model_config, "mlqds_score_mode", "rank")),
             score_temperature=float(getattr(model_config, "mlqds_score_temperature", 1.0)),
-            rank_confidence_weight=float(getattr(model_config, "mlqds_rank_confidence_weight", 0.15)),
+            rank_confidence_weight=float(
+                getattr(model_config, "mlqds_rank_confidence_weight", 0.15)
+            ),
             range_geometry_scores=None,
             range_geometry_blend=0.0,
-            stratified_center_weight=float(getattr(model_config, "mlqds_stratified_center_weight", 0.0)),
+            stratified_center_weight=float(
+                getattr(model_config, "mlqds_stratified_center_weight", 0.0)
+            ),
             min_learned_swaps=int(getattr(model_config, "mlqds_min_learned_swaps", 0)),
         ).cpu()
-        uniform_mask = _uniform_mask_for_ratio(point_count, boundaries, float(ratio), target_cpu.device)
-        ideal_mask = _ideal_target_mask_for_ratio(target_cpu, labelled_cpu, boundaries, float(ratio))
+        uniform_mask = _uniform_mask_for_ratio(
+            point_count, boundaries, float(ratio), target_cpu.device
+        )
+        ideal_mask = _ideal_target_mask_for_ratio(
+            target_cpu, labelled_cpu, boundaries, float(ratio)
+        )
         mlqds_mass = _target_mass(target_cpu, labelled_cpu, mlqds_mask)
         uniform_mass = _target_mass(target_cpu, labelled_cpu, uniform_mask)
         ideal_mass = _target_mass(target_cpu, labelled_cpu, ideal_mask)
@@ -300,11 +330,14 @@ def train_target_fit_diagnostics(
             "mlqds_vs_uniform_target_mass": mlqds_mass - uniform_mass,
             "mlqds_target_recall": float(mlqds_mass / max(ideal_mass, 1e-12)),
             "uniform_target_recall": float(uniform_mass / max(ideal_mass, 1e-12)),
-            "mlqds_vs_uniform_target_recall": float((mlqds_mass - uniform_mass) / max(ideal_mass, 1e-12)),
+            "mlqds_vs_uniform_target_recall": float(
+                (mlqds_mass - uniform_mass) / max(ideal_mass, 1e-12)
+            ),
             "mlqds_positive_retained": mlqds_positive_retained,
             "uniform_positive_retained": uniform_positive_retained,
             "ideal_positive_retained": ideal_positive_retained,
-            "mlqds_vs_uniform_positive_retained": mlqds_positive_retained - uniform_positive_retained,
+            "mlqds_vs_uniform_positive_retained": mlqds_positive_retained
+            - uniform_positive_retained,
             "ideal_overlap_fraction": float(
                 int((mlqds_mask & ideal_mask).sum().item()) / max(1, int(ideal_mask.sum().item()))
             ),
@@ -315,7 +348,11 @@ def train_target_fit_diagnostics(
         rows.append(row)
 
     matched_ratio = float(getattr(model_config, "compression_ratio", 0.05))
-    matched_row = min(rows, key=lambda row: abs(float(row["compression_ratio"]) - matched_ratio)) if rows else {}
+    matched_row = (
+        min(rows, key=lambda row: abs(float(row["compression_ratio"]) - matched_ratio))
+        if rows
+        else {}
+    )
     low_rows = [row for row in rows if float(row["compression_ratio"]) <= 0.05 + 1e-12]
     return {
         "enabled": True,
@@ -327,14 +364,19 @@ def train_target_fit_diagnostics(
         "positive_label_fraction": float(positive_count / max(1, int(labelled_cpu.sum().item()))),
         "positive_label_mass": target_mass_total,
         "prediction_std": float(pred_cpu.std(unbiased=False).item()) if point_count > 0 else 0.0,
-        "selector_score_std": float(selector_scores.std(unbiased=False).item()) if point_count > 0 else 0.0,
+        "selector_score_std": float(selector_scores.std(unbiased=False).item())
+        if point_count > 0
+        else 0.0,
         "score_target_kendall_tau": float(tau),
         "matched_compression_ratio": float(matched_row.get("compression_ratio", matched_ratio)),
         "matched_mlqds_target_recall": matched_row.get("mlqds_target_recall"),
         "matched_uniform_target_recall": matched_row.get("uniform_target_recall"),
         "matched_mlqds_vs_uniform_target_recall": matched_row.get("mlqds_vs_uniform_target_recall"),
         "low_budget_mean_mlqds_vs_uniform_target_recall": (
-            float(sum(float(row["mlqds_vs_uniform_target_recall"]) for row in low_rows) / len(low_rows))
+            float(
+                sum(float(row["mlqds_vs_uniform_target_recall"]) for row in low_rows)
+                / len(low_rows)
+            )
             if low_rows
             else None
         ),

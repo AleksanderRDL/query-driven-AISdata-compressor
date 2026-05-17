@@ -8,13 +8,14 @@ from pathlib import Path
 import pytest
 import torch
 
+from config.experiment_config import build_experiment_config
 from data.ais_loader import generate_synthetic_ais_data
-from experiments.experiment_config import build_experiment_config
-from queries.workload import TypedQueryWorkload
-from experiments.range_cache import RangeRuntimeCache, prepare_range_label_cache as _prepare_range_label_cache
+from experiments.range_cache import RangeRuntimeCache
+from experiments.range_cache import prepare_range_label_cache as _prepare_range_label_cache
 from experiments.range_diagnostics import _range_workload_diagnostics
 from queries.query_generator import generate_typed_query_workload
 from queries.query_types import QUERY_TYPE_ID_RANGE, pad_query_features
+from queries.workload import TypedQueryWorkload
 from queries.workload_diagnostics import (
     compute_range_label_diagnostics,
     compute_range_workload_diagnostics,
@@ -39,7 +40,9 @@ def _points_and_boundaries() -> tuple[torch.Tensor, list[tuple[int, int]]]:
     return points, [(0, 3), (3, 5)]
 
 
-def _range_query(lat_min: float, lat_max: float, lon_min: float, lon_max: float, t_start: float, t_end: float) -> dict:
+def _range_query(
+    lat_min: float, lat_max: float, lon_min: float, lon_max: float, t_start: float, t_end: float
+) -> dict:
     return {
         "type": "range",
         "params": {
@@ -208,7 +211,10 @@ def test_fixed_count_range_acceptance_retries_rejected_candidates() -> None:
     trajectories = [cluster]
     for idx in range(10):
         trajectories.append(
-            torch.tensor([[float(idx), 1.0 + 0.5 * float(idx), 1.0 + 0.5 * float(idx), 1.0]], dtype=torch.float32)
+            torch.tensor(
+                [[float(idx), 1.0 + 0.5 * float(idx), 1.0 + 0.5 * float(idx), 1.0]],
+                dtype=torch.float32,
+            )
         )
 
     workload = generate_typed_query_workload(
@@ -444,31 +450,37 @@ def test_ship_balanced_range_label_cache_keeps_component_labels(tmp_path: Path) 
     )
 
     first_cache = RangeRuntimeCache()
-    assert _prepare_range_label_cache(
-        cache_label="eval",
-        points=points,
-        boundaries=boundaries,
-        workload=workload,
-        workload_map={"range": 1.0},
-        config=cfg,
-        seed=123,
-        runtime_cache=first_cache,
-        range_boundary_prior_weight=0.0,
-    ) is not None
+    assert (
+        _prepare_range_label_cache(
+            cache_label="eval",
+            points=points,
+            boundaries=boundaries,
+            workload=workload,
+            workload_map={"range": 1.0},
+            config=cfg,
+            seed=123,
+            runtime_cache=first_cache,
+            range_boundary_prior_weight=0.0,
+        )
+        is not None
+    )
     assert first_cache.component_labels is not None
 
     second_cache = RangeRuntimeCache()
-    assert _prepare_range_label_cache(
-        cache_label="eval",
-        points=points,
-        boundaries=boundaries,
-        workload=workload,
-        workload_map={"range": 1.0},
-        config=cfg,
-        seed=123,
-        runtime_cache=second_cache,
-        range_boundary_prior_weight=0.0,
-    ) is not None
+    assert (
+        _prepare_range_label_cache(
+            cache_label="eval",
+            points=points,
+            boundaries=boundaries,
+            workload=workload,
+            workload_map={"range": 1.0},
+            config=cfg,
+            seed=123,
+            runtime_cache=second_cache,
+            range_boundary_prior_weight=0.0,
+        )
+        is not None
+    )
     assert second_cache.component_labels is not None
 
 

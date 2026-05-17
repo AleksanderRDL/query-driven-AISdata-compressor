@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from experiments.experiment_config import build_experiment_config
+from config.experiment_config import build_experiment_config
 from experiments.experiment_pipeline import run_experiment_pipeline
 
 
@@ -49,7 +49,10 @@ def test_pipeline_reports_f1_scores(synthetic_dataset, tmp_path) -> None:
     assert "mlqds_vs_temporal_random_fill_range_usefulness" in learned_fill_summary
     assert "target_residual_label_mass_fraction" in learned_fill_summary
     assert "train_label_component_mass_fraction" in learned_fill_summary
-    assert out.metrics_dump["oracle_diagnostic"]["retained_mask_constructor"] == "per_trajectory_topk_with_endpoints"
+    assert (
+        out.metrics_dump["oracle_diagnostic"]["retained_mask_constructor"]
+        == "per_trajectory_topk_with_endpoints"
+    )
 
     # F1 is higher-is-better, so callers should rank with max(), not min().
     scores = [float(metrics["aggregate_f1"]) for metrics in out.metrics_dump["matched"].values()]

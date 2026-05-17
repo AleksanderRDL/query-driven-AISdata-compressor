@@ -15,20 +15,24 @@ from typing import Any
 import torch
 
 
-def _bbox_polygon(lon_min: float, lat_min: float, lon_max: float, lat_max: float) -> list[list[list[float]]]:
+def _bbox_polygon(
+    lon_min: float, lat_min: float, lon_max: float, lat_max: float
+) -> list[list[list[float]]]:
     """Build a closed-ring rectangle polygon in GeoJSON [lon, lat] order."""
-    return [[
-        [lon_min, lat_min],
-        [lon_max, lat_min],
-        [lon_max, lat_max],
-        [lon_min, lat_max],
-        [lon_min, lat_min],
-    ]]
+    return [
+        [
+            [lon_min, lat_min],
+            [lon_max, lat_min],
+            [lon_max, lat_max],
+            [lon_min, lat_max],
+            [lon_min, lat_min],
+        ]
+    ]
 
 
 def _seconds_to_hhmm(seconds: float) -> str:
     """Convert seconds-since-midnight to 'HH:MM' string."""
-    total = int(round(seconds)) % 86400
+    total = round(seconds) % 86400
     return f"{total // 3600:02d}:{(total % 3600) // 60:02d}"
 
 
@@ -40,9 +44,13 @@ def _query_to_feature(query: dict[str, Any]) -> dict[str, Any]:
     query_type = str(query["type"]).lower()
     params = query["params"]
     if query_type == "range":
-        coords = _bbox_polygon(params["lon_min"], params["lat_min"], params["lon_max"], params["lat_max"])
+        coords = _bbox_polygon(
+            params["lon_min"], params["lat_min"], params["lon_max"], params["lat_max"]
+        )
     else:
-        raise ValueError(f"Only range queries are supported for GeoJSON export; got query type: {query_type}")
+        raise ValueError(
+            f"Only range queries are supported for GeoJSON export; got query type: {query_type}"
+        )
     geometry = {"type": "Polygon", "coordinates": coords}
     properties: dict[str, Any] = {
         "query_type": query_type,
@@ -116,13 +124,17 @@ def write_simplified_csv(
                     f"{float(retained_point[4]):.2f}\n"
                 )
                 retained_row_count += 1
-    print(f"  wrote {retained_row_count} retained points across "
-          f"{int(mask_np.reshape(-1).sum())} samples to {output_path}", flush=True)
+    print(
+        f"  wrote {retained_row_count} retained points across "
+        f"{int(mask_np.reshape(-1).sum())} samples to {output_path}",
+        flush=True,
+    )
 
 
 def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Great-circle distance in km between two lat/lon pairs."""
     import math
+
     earth_radius_km = 6371.0
     lat1_rad, lat2_rad = math.radians(lat1), math.radians(lat2)
     delta_lat_rad = math.radians(lat2 - lat1)
@@ -134,7 +146,7 @@ def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return 2 * earth_radius_km * math.asin(min(1.0, math.sqrt(haversine_term)))
 
 
-def _trajectory_length_km(lat_lon: "torch.Tensor") -> float:
+def _trajectory_length_km(lat_lon: torch.Tensor) -> float:
     """Sum haversine distances between consecutive (lat, lon) rows."""
     point_count = lat_lon.shape[0]
     if point_count < 2:
@@ -199,7 +211,9 @@ def report_trajectory_length_loss(
             if trajectory_mmsis is not None and trajectory_idx < len(trajectory_mmsis)
             else trajectory_idx
         )
-        length_rows.append((int(display_id), original_length_km, simplified_length_km, length_loss, kept, removed))
+        length_rows.append(
+            (int(display_id), original_length_km, simplified_length_km, length_loss, kept, removed)
+        )
 
     if not length_rows:
         print("  [length-loss] no trajectories with >=2 points, skipping.", flush=True)

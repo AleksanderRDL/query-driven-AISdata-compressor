@@ -9,7 +9,7 @@ from typing import Any
 
 import torch
 
-from experiments.experiment_config import ExperimentConfig
+from config.experiment_config import ExperimentConfig
 from queries.query_generator import generate_typed_query_workload
 from queries.workload import TypedQueryWorkload
 
@@ -68,8 +68,12 @@ def _workload_cache_payload(
     """Build the canonical workload-cache key payload."""
     query_config = config.query
     effective_range_anchor_mode = range_anchor_mode or query_config.range_anchor_mode
-    effective_range_spatial_km = query_config.range_spatial_km if range_spatial_km is None else range_spatial_km
-    effective_range_time_hours = query_config.range_time_hours if range_time_hours is None else range_time_hours
+    effective_range_spatial_km = (
+        query_config.range_spatial_km if range_spatial_km is None else range_spatial_km
+    )
+    effective_range_time_hours = (
+        query_config.range_time_hours if range_time_hours is None else range_time_hours
+    )
     return {
         "schema_version": WORKLOAD_CACHE_SCHEMA_VERSION,
         "points_sha256": tensor_cache_digest(points),
@@ -142,10 +146,16 @@ def generate_typed_query_workload_for_config(
     """Generate a typed workload from config, expanding to target coverage up to max_queries."""
     query_config = config.query
     effective_range_anchor_mode = range_anchor_mode or query_config.range_anchor_mode
-    effective_range_spatial_km = query_config.range_spatial_km if range_spatial_km is None else range_spatial_km
-    effective_range_time_hours = query_config.range_time_hours if range_time_hours is None else range_time_hours
+    effective_range_spatial_km = (
+        query_config.range_spatial_km if range_spatial_km is None else range_spatial_km
+    )
+    effective_range_time_hours = (
+        query_config.range_time_hours if range_time_hours is None else range_time_hours
+    )
     points_for_cache = points if points is not None else torch.cat(trajectories, dim=0)
-    boundaries_for_cache = boundaries if boundaries is not None else trajectory_boundaries_for_cache(trajectories)
+    boundaries_for_cache = (
+        boundaries if boundaries is not None else trajectory_boundaries_for_cache(trajectories)
+    )
     cache_root = _workload_cache_root(config)
     cache_path: Path | None = None
     cache_key: str | None = None
@@ -167,11 +177,18 @@ def generate_typed_query_workload_for_config(
         if cache_path.exists() and not config.data.refresh_cache:
             try:
                 cached = json.loads(cache_path.read_text(encoding="utf-8"))
-                if cached.get("schema_version") == WORKLOAD_CACHE_SCHEMA_VERSION and cached.get("key") == cache_key:
+                if (
+                    cached.get("schema_version") == WORKLOAD_CACHE_SCHEMA_VERSION
+                    and cached.get("key") == cache_key
+                ):
                     workload = TypedQueryWorkload.from_dict(cached["workload"])
-                    return _attach_workload_cache_info(workload, hit=True, path=cache_path, key=cache_key)
+                    return _attach_workload_cache_info(
+                        workload, hit=True, path=cache_path, key=cache_key
+                    )
             except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
-                print(f"  WARNING: ignoring unreadable workload cache {cache_path}: {exc}", flush=True)
+                print(
+                    f"  WARNING: ignoring unreadable workload cache {cache_path}: {exc}", flush=True
+                )
 
     workload = generate_typed_query_workload(
         trajectories=trajectories,
@@ -207,7 +224,9 @@ def generate_typed_query_workload_for_config(
                 "workload": workload.to_dict(),
             }
             cache_path.write_text(json.dumps(cache_payload, indent=2), encoding="utf-8")
-            workload = _attach_workload_cache_info(workload, hit=False, path=cache_path, key=cache_key)
+            workload = _attach_workload_cache_info(
+                workload, hit=False, path=cache_path, key=cache_key
+            )
         except OSError as exc:
             print(f"  WARNING: could not write workload cache {cache_path}: {exc}", flush=True)
     return workload

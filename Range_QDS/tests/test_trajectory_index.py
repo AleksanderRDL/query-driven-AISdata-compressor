@@ -22,7 +22,9 @@ def test_boundaries_and_split_round_trip() -> None:
     boundaries = boundaries_from_trajectories(trajectories)
 
     assert boundaries == [(0, 2), (2, 3)]
-    assert [part.tolist() for part in split_by_boundaries(torch.cat(trajectories, dim=0), boundaries)] == [
+    assert [
+        part.tolist() for part in split_by_boundaries(torch.cat(trajectories, dim=0), boundaries)
+    ] == [
         [[1.0], [2.0]],
         [[3.0]],
     ]

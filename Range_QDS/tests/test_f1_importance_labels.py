@@ -255,7 +255,10 @@ def test_range_usefulness_component_labels_sum_to_training_labels() -> None:
     )
 
     component_sum = torch.stack(
-        [component_labels[name][:, QUERY_TYPE_ID_RANGE] for name in RANGE_USEFULNESS_LABEL_COMPONENTS]
+        [
+            component_labels[name][:, QUERY_TYPE_ID_RANGE]
+            for name in RANGE_USEFULNESS_LABEL_COMPONENTS
+        ]
     ).sum(dim=0)
     assert bool(labelled_mask[:, QUERY_TYPE_ID_RANGE].all().item())
     assert torch.allclose(labels[:, QUERY_TYPE_ID_RANGE], component_sum)
@@ -304,7 +307,10 @@ def test_range_usefulness_balanced_component_mass_matches_audit_weights() -> Non
     }
     total_mass = sum(masses.values())
     component_sum = torch.stack(
-        [component_labels[name][:, QUERY_TYPE_ID_RANGE] for name in RANGE_USEFULNESS_LABEL_COMPONENTS]
+        [
+            component_labels[name][:, QUERY_TYPE_ID_RANGE]
+            for name in RANGE_USEFULNESS_LABEL_COMPONENTS
+        ]
     ).sum(dim=0)
 
     assert bool(labelled_mask[:, QUERY_TYPE_ID_RANGE].all().item())
@@ -382,17 +388,21 @@ def test_range_usefulness_ship_balanced_labels_reduce_dense_ship_dominance() -> 
         }
     ]
 
-    _default_labels, _default_mask, default_components = compute_typed_importance_labels_with_range_components(
-        points,
-        boundaries,
-        queries,
-        range_label_mode="usefulness",
+    _default_labels, _default_mask, default_components = (
+        compute_typed_importance_labels_with_range_components(
+            points,
+            boundaries,
+            queries,
+            range_label_mode="usefulness",
+        )
     )
-    _balanced_labels, balanced_mask, balanced_components = compute_typed_importance_labels_with_range_components(
-        points,
-        boundaries,
-        queries,
-        range_label_mode="usefulness_ship_balanced",
+    _balanced_labels, balanced_mask, balanced_components = (
+        compute_typed_importance_labels_with_range_components(
+            points,
+            boundaries,
+            queries,
+            range_label_mode="usefulness_ship_balanced",
+        )
     )
 
     default_point = default_components["range_point_f1"][:, QUERY_TYPE_ID_RANGE]
@@ -430,7 +440,9 @@ def test_range_usefulness_labels_include_between_sample_crossing_brackets() -> N
         }
     ]
 
-    point_labels, _ = compute_typed_importance_labels(points, [(0, 2)], queries, range_label_mode="point_f1")
+    point_labels, _ = compute_typed_importance_labels(
+        points, [(0, 2)], queries, range_label_mode="point_f1"
+    )
     useful_labels, labelled_mask = compute_typed_importance_labels(
         points,
         [(0, 2)],

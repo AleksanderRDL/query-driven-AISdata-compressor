@@ -1,10 +1,13 @@
 import pytest
 import torch
 
-from experiments.experiment_config import build_experiment_config
-from models.historical_prior_qds_model import HistoricalPriorRangeQDSModel, HistoricalPriorStudentRangeQDSModel
-from models.workload_blind_range_v2 import WorkloadBlindRangeV2Model
+from config.experiment_config import build_experiment_config
+from models.historical_prior_qds_model import (
+    HistoricalPriorRangeQDSModel,
+    HistoricalPriorStudentRangeQDSModel,
+)
 from models.workload_blind_qds_model import SegmentContextRangeQDSModel
+from models.workload_blind_range_v2 import WorkloadBlindRangeV2Model
 from queries.query_types import pad_query_features
 from queries.workload import TypedQueryWorkload
 from training.checkpoints import ModelArtifacts, load_checkpoint, save_checkpoint
@@ -19,8 +22,8 @@ from training.model_features import (
     RANGE_PRIOR_CLOCK_DENSITY_POINT_DIM,
     SUPPORTED_MODEL_TYPES,
     WORKLOAD_BLIND_POINT_DIM,
-    WORKLOAD_BLIND_RANGE_V2_POINT_DIM,
     WORKLOAD_BLIND_RANGE_V2_ABSOLUTE_DIM,
+    WORKLOAD_BLIND_RANGE_V2_POINT_DIM,
     WORKLOAD_BLIND_RANGE_V2_PRIOR_DIM,
     build_model_point_features,
     build_model_point_features_for_dim,
@@ -86,12 +89,18 @@ def test_model_feature_modes_keep_expected_base_dimensions() -> None:
 
     assert build_model_point_features(points, workload, "baseline").shape == (2, 7)
     assert build_model_point_features(points, workload, "turn_aware").shape == (2, 8)
-    assert build_model_point_features(points, workload, "workload_blind_range").shape == (2, WORKLOAD_BLIND_POINT_DIM)
+    assert build_model_point_features(points, workload, "workload_blind_range").shape == (
+        2,
+        WORKLOAD_BLIND_POINT_DIM,
+    )
     assert build_model_point_features(points, workload, "workload_blind_range_v2").shape == (
         2,
         WORKLOAD_BLIND_RANGE_V2_POINT_DIM,
     )
-    assert build_model_point_features(points, workload, "range_prior").shape == (2, CONTEXT_WORKLOAD_BLIND_POINT_DIM)
+    assert build_model_point_features(points, workload, "range_prior").shape == (
+        2,
+        CONTEXT_WORKLOAD_BLIND_POINT_DIM,
+    )
     assert build_model_point_features(points, workload, "range_prior_clock_density").shape == (
         2,
         RANGE_PRIOR_CLOCK_DENSITY_POINT_DIM,
@@ -100,7 +109,10 @@ def test_model_feature_modes_keep_expected_base_dimensions() -> None:
         2,
         RANGE_PRIOR_CLOCK_DENSITY_POINT_DIM,
     )
-    assert build_model_point_features(points, workload, "historical_prior").shape == (2, HISTORICAL_PRIOR_POINT_DIM)
+    assert build_model_point_features(points, workload, "historical_prior").shape == (
+        2,
+        HISTORICAL_PRIOR_POINT_DIM,
+    )
     assert build_model_point_features(
         points,
         workload,
@@ -179,11 +191,17 @@ def test_workload_blind_range_v2_absolute_features_without_prior_are_day_invaria
     features = build_model_point_features(points, workload, "workload_blind_range_v2")
     shifted_features = build_model_point_features(shifted, workload, "workload_blind_range_v2")
 
-    assert torch.allclose(features[:, absolute_start:absolute_end], shifted_features[:, absolute_start:absolute_end])
+    assert torch.allclose(
+        features[:, absolute_start:absolute_end], shifted_features[:, absolute_start:absolute_end]
+    )
     prior_start = absolute_end
     prior_end = prior_start + WORKLOAD_BLIND_RANGE_V2_PRIOR_DIM
-    assert torch.allclose(features[:, prior_start:prior_end], shifted_features[:, prior_start:prior_end])
-    assert torch.allclose(features[:, prior_start:prior_end], torch.zeros_like(features[:, prior_start:prior_end]))
+    assert torch.allclose(
+        features[:, prior_start:prior_end], shifted_features[:, prior_start:prior_end]
+    )
+    assert torch.allclose(
+        features[:, prior_start:prior_end], torch.zeros_like(features[:, prior_start:prior_end])
+    )
 
 
 def test_workload_blind_base_feature_dim_stays_supported() -> None:
@@ -193,9 +211,15 @@ def test_workload_blind_base_feature_dim_stays_supported() -> None:
     workload = _range_workload()
 
     base_features = build_model_point_features_for_dim(points, workload, WORKLOAD_BLIND_POINT_DIM)
-    current_features = build_model_point_features_for_dim(points, workload, WORKLOAD_BLIND_POINT_DIM)
-    context_features = build_model_point_features_for_dim(points, workload, CONTEXT_WORKLOAD_BLIND_POINT_DIM)
-    prior_features = build_model_point_features_for_dim(points, workload, RANGE_PRIOR_CLOCK_DENSITY_POINT_DIM)
+    current_features = build_model_point_features_for_dim(
+        points, workload, WORKLOAD_BLIND_POINT_DIM
+    )
+    context_features = build_model_point_features_for_dim(
+        points, workload, CONTEXT_WORKLOAD_BLIND_POINT_DIM
+    )
+    prior_features = build_model_point_features_for_dim(
+        points, workload, RANGE_PRIOR_CLOCK_DENSITY_POINT_DIM
+    )
 
     assert base_features.shape == (4, WORKLOAD_BLIND_POINT_DIM)
     assert current_features.shape == (4, WORKLOAD_BLIND_POINT_DIM)
@@ -243,7 +267,10 @@ def test_range_prior_clock_density_adds_query_free_clock_and_density_features() 
     assert features.shape == (4, RANGE_PRIOR_CLOCK_DENSITY_POINT_DIM)
     assert torch.isfinite(features).all()
     assert torch.allclose(features[:, :CONTEXT_WORKLOAD_BLIND_POINT_DIM], context)
-    assert torch.allclose(build_query_free_point_features_for_dim(points, RANGE_PRIOR_CLOCK_DENSITY_POINT_DIM), features)
+    assert torch.allclose(
+        build_query_free_point_features_for_dim(points, RANGE_PRIOR_CLOCK_DENSITY_POINT_DIM),
+        features,
+    )
     assert features[0, CONTEXT_WORKLOAD_BLIND_POINT_DIM].item() == pytest.approx(0.0)
     assert features[1, CONTEXT_WORKLOAD_BLIND_POINT_DIM].item() == pytest.approx(1.0)
     assert features[2, CONTEXT_WORKLOAD_BLIND_POINT_DIM + 1].item() == pytest.approx(-1.0)
@@ -268,8 +295,18 @@ def test_segment_context_model_ignores_queries_and_round_trips_checkpoint(tmp_pa
 
     model.eval()
     with torch.no_grad():
-        scores_a = model(points, queries=query_a, query_type_ids=torch.zeros((3,), dtype=torch.long), padding_mask=padding_mask)
-        scores_b = model(points, queries=query_b, query_type_ids=torch.ones((5,), dtype=torch.long), padding_mask=padding_mask)
+        scores_a = model(
+            points,
+            queries=query_a,
+            query_type_ids=torch.zeros((3,), dtype=torch.long),
+            padding_mask=padding_mask,
+        )
+        scores_b = model(
+            points,
+            queries=query_b,
+            query_type_ids=torch.ones((5,), dtype=torch.long),
+            padding_mask=padding_mask,
+        )
 
     assert scores_a.shape == (2, 6)
     assert torch.isfinite(scores_a).all()
@@ -293,7 +330,9 @@ def test_segment_context_model_ignores_queries_and_round_trips_checkpoint(tmp_pa
 
     loaded = load_checkpoint(str(checkpoint))
     with torch.no_grad():
-        loaded_scores = loaded.model(points, queries=query_a, query_type_ids=None, padding_mask=padding_mask)
+        loaded_scores = loaded.model(
+            points, queries=query_a, query_type_ids=None, padding_mask=padding_mask
+        )
 
     assert loaded.config.model.model_type == "segment_context_range"
     assert torch.allclose(scores_a, loaded_scores)
@@ -402,16 +441,24 @@ def test_historical_prior_features_include_spatial_density_and_route_context_sha
     )
 
     features = build_model_point_features(points, workload, "historical_prior")
-    route_context = build_model_point_features_for_dim(points, workload, HISTORICAL_PRIOR_ROUTE_CONTEXT_POINT_DIM)
-    density_features = build_model_point_features_for_dim(points, workload, HISTORICAL_PRIOR_DENSITY_POINT_DIM)
+    route_context = build_model_point_features_for_dim(
+        points, workload, HISTORICAL_PRIOR_ROUTE_CONTEXT_POINT_DIM
+    )
+    density_features = build_model_point_features_for_dim(
+        points, workload, HISTORICAL_PRIOR_DENSITY_POINT_DIM
+    )
 
     assert route_context.shape == (4, HISTORICAL_PRIOR_ROUTE_CONTEXT_POINT_DIM)
     assert density_features.shape == (4, HISTORICAL_PRIOR_DENSITY_POINT_DIM)
     assert features.shape == (4, HISTORICAL_PRIOR_POINT_DIM)
     assert torch.allclose(features[:, :HISTORICAL_PRIOR_ROUTE_CONTEXT_POINT_DIM], route_context)
-    assert torch.allclose(density_features[:, :HISTORICAL_PRIOR_ROUTE_CONTEXT_POINT_DIM], route_context)
+    assert torch.allclose(
+        density_features[:, :HISTORICAL_PRIOR_ROUTE_CONTEXT_POINT_DIM], route_context
+    )
     assert torch.allclose(density_features[:, -2:], features[:, -2:])
-    assert torch.allclose(build_query_free_point_features_for_dim(points, HISTORICAL_PRIOR_POINT_DIM), features)
+    assert torch.allclose(
+        build_query_free_point_features_for_dim(points, HISTORICAL_PRIOR_POINT_DIM), features
+    )
     assert features[0, HISTORICAL_PRIOR_ROUTE_CONTEXT_POINT_DIM].item() == pytest.approx(0.0)
     assert features[1, HISTORICAL_PRIOR_ROUTE_CONTEXT_POINT_DIM].item() == pytest.approx(1.0)
     assert features[2, HISTORICAL_PRIOR_ROUTE_CONTEXT_POINT_DIM + 1].item() == pytest.approx(-1.0)
@@ -540,7 +587,9 @@ def test_historical_prior_source_mean_downweights_one_source_matches() -> None:
     assert source_mean_score == pytest.approx(0.5)
 
 
-def test_historical_prior_windowed_predict_uses_pointwise_fast_path(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_historical_prior_windowed_predict_uses_pointwise_fast_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     model = HistoricalPriorRangeQDSModel(point_dim=2, query_dim=1, historical_prior_k=1)
     prior_features = torch.tensor([[0.0, 0.0], [1.0, 1.0], [0.5, 0.5]], dtype=torch.float32)
     prior_targets = torch.tensor([0.1, 0.9, 0.6], dtype=torch.float32)
@@ -688,7 +737,9 @@ def test_historical_prior_mmsi_weight_changes_identity_dimension_distance() -> N
 
 
 def test_forward_predict_supports_historical_query_free_feature_dims() -> None:
-    model = HistoricalPriorRangeQDSModel(point_dim=HISTORICAL_PRIOR_POINT_DIM, query_dim=1, historical_prior_k=1)
+    model = HistoricalPriorRangeQDSModel(
+        point_dim=HISTORICAL_PRIOR_POINT_DIM, query_dim=1, historical_prior_k=1
+    )
     points = torch.tensor(
         [
             [0.0, 0.0, 0.0, 5.0, 0.0, 1.0, 0.0, 0.0],

@@ -5,11 +5,10 @@ from __future__ import annotations
 
 import argparse
 import csv
-from datetime import datetime, timezone
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-
 
 IndexRow = dict[str, str]
 
@@ -45,7 +44,7 @@ DEFAULT_INDEX_FIELDS: list[str] = [
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _family_root(results_dir: Path) -> Path:
@@ -81,7 +80,9 @@ def _load_index_rows(csv_path: Path) -> tuple[list[str], list[IndexRow]]:
         fieldnames = list(reader.fieldnames or DEFAULT_INDEX_FIELDS)
         rows: list[IndexRow] = []
         for raw_row in reader:
-            rows.append({key: _index_value(value) for key, value in raw_row.items() if key is not None})
+            rows.append(
+                {key: _index_value(value) for key, value in raw_row.items() if key is not None}
+            )
     return fieldnames, rows
 
 
@@ -99,7 +100,9 @@ def _index_row_for_run(rows: list[IndexRow], run_id: str, results_dir: Path) -> 
 
 def _mark_status(status_file: Path, exit_status: int, message: str) -> dict[str, Any]:
     payload = _load_json(status_file)
-    if payload.get("status") in {"completed", "failed", "interrupted"} and payload.get("finished_at_utc"):
+    if payload.get("status") in {"completed", "failed", "interrupted"} and payload.get(
+        "finished_at_utc"
+    ):
         return payload
 
     results_dir = status_file.parent

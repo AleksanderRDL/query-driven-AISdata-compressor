@@ -4,18 +4,18 @@ from __future__ import annotations
 
 import argparse
 
-from experiments.experiment_config import (
+from config.experiment_config import (
     DEFAULT_BUDGET_LOSS_RATIOS,
     DEFAULT_BUDGET_LOSS_TEMPERATURE,
     VALIDATION_SPLIT_MODES,
 )
-from experiments.torch_runtime import AMP_MODE_CHOICES, FLOAT32_MATMUL_PRECISION_CHOICES
 from queries.query_generator import RANGE_ANCHOR_MODES, RANGE_TIME_DOMAIN_MODES
+from runtime.torch_runtime import AMP_MODE_CHOICES, FLOAT32_MATMUL_PRECISION_CHOICES
 from simplification.mlqds_scoring import MLQDS_SCORE_MODES
 from training.importance_labels import RANGE_LABEL_MODES
 from training.model_features import SUPPORTED_MODEL_TYPES
+from training.target_modes import RANGE_TARGET_BALANCE_MODES, RANGE_TRAINING_TARGET_MODES
 from training.teacher_distillation import RANGE_TEACHER_DISTILLATION_MODES
-from training.training_targets import RANGE_TARGET_BALANCE_MODES, RANGE_TRAINING_TARGET_MODES
 
 
 def _compression_ratio_list(value: str) -> list[float]:
@@ -68,7 +68,9 @@ def _range_train_footprint_list(value: str) -> list[str]:
             spatial_km = float(parts[0])
             time_hours = float(parts[1])
         except ValueError as exc:
-            raise argparse.ArgumentTypeError("range train footprint values must be numeric.") from exc
+            raise argparse.ArgumentTypeError(
+                "range train footprint values must be numeric."
+            ) from exc
         if spatial_km <= 0.0 or time_hours <= 0.0:
             raise argparse.ArgumentTypeError("range train footprint values must be positive.")
         footprints.append(f"{spatial_km:g}:{time_hours:g}")
@@ -405,14 +407,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--epochs", type=int, default=6)
     parser.add_argument("--lr", type=float, default=5e-4)
     parser.add_argument("--embed_dim", type=int, default=64, help="Transformer hidden dimension.")
-    parser.add_argument("--num_heads", type=int, default=4, help="Number of transformer attention heads.")
+    parser.add_argument(
+        "--num_heads", type=int, default=4, help="Number of transformer attention heads."
+    )
     parser.add_argument(
         "--num_layers",
         type=int,
         default=3,
         help="Number of transformer encoder layers. For workload-blind models, 0 uses an MLP-only scorer.",
     )
-    parser.add_argument("--dropout", type=float, default=0.1, help="Dropout probability used by the model.")
+    parser.add_argument(
+        "--dropout", type=float, default=0.1, help="Dropout probability used by the model."
+    )
     parser.add_argument(
         "--ranking_pairs_per_type",
         type=int,
@@ -711,7 +717,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--mlqds_hybrid_mode",
         type=str,
         default="fill",
-        choices=["fill", "swap", "local_swap", "local_delta_swap", "stratified", "global_fill", "global_budget"],
+        choices=[
+            "fill",
+            "swap",
+            "local_swap",
+            "local_delta_swap",
+            "stratified",
+            "global_fill",
+            "global_budget",
+        ],
         help=(
             "How temporal scaffolding and learned scores are combined. "
             "'fill' reserves part of the budget for a temporal spine, then fills the rest. "

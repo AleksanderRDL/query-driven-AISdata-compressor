@@ -45,7 +45,9 @@ def _score_table(run: dict[str, Any]) -> Table:
     table.add_column("Method")
     table.add_column("Score", justify="right")
     table.add_row("MLQDS", _format_float(_nested(run, "matched", "MLQDS", "query_useful_v1_score")))
-    table.add_row("uniform", _format_float(_nested(run, "matched", "uniform", "query_useful_v1_score")))
+    table.add_row(
+        "uniform", _format_float(_nested(run, "matched", "uniform", "query_useful_v1_score"))
+    )
     table.add_row(
         "DouglasPeucker",
         _format_float(_nested(run, "matched", "DouglasPeucker", "query_useful_v1_score")),
@@ -77,7 +79,9 @@ def _gate_table(run: dict[str, Any]) -> Table:
         (
             "prior_alignment",
             _nested(run, "predictability_audit", "prior_predictive_alignment_gate", "gate_pass"),
-            _nested(run, "predictability_audit", "prior_predictive_alignment_gate", "failed_checks"),
+            _nested(
+                run, "predictability_audit", "prior_predictive_alignment_gate", "failed_checks"
+            ),
         ),
         (
             "target_diffusion",
@@ -87,7 +91,9 @@ def _gate_table(run: dict[str, Any]) -> Table:
         (
             "workload_signature",
             _nested(run, "workload_distribution_comparison", "workload_signature_gate", "all_pass"),
-            _nested(run, "workload_distribution_comparison", "workload_signature_gate", "failed_pairs"),
+            _nested(
+                run, "workload_distribution_comparison", "workload_signature_gate", "failed_pairs"
+            ),
         ),
         (
             "learning_causality",
@@ -122,7 +128,10 @@ def _causality_table(run: dict[str, Any]) -> Table:
         ("no_query_prior", summary.get("no_query_prior_field_ablation_delta")),
         ("no_behavior_head", summary.get("no_behavior_head_ablation_delta")),
         ("no_segment_budget_head", summary.get("no_segment_budget_head_ablation_delta")),
-        ("no_fairness_preallocation", summary.get("no_trajectory_fairness_preallocation_ablation_delta")),
+        (
+            "no_fairness_preallocation",
+            summary.get("no_trajectory_fairness_preallocation_ablation_delta"),
+        ),
     ]
     for name, value in rows:
         table.add_row(name, _format_float(value))

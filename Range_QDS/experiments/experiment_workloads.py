@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import torch
 
-from experiments.experiment_config import ExperimentConfig, SeedBundle
+from config.experiment_config import ExperimentConfig, SeedBundle
 from experiments.workload_cache import (
     coverage_name,
     generate_typed_query_workload_for_config,
@@ -30,8 +30,7 @@ class ExperimentWorkloads:
 def workload_name(workload_map: dict[str, float]) -> str:
     """Build compact string name for a pure workload map."""
     return ",".join(
-        f"{query_type}={weight:.1f}"
-        for query_type, weight in sorted(workload_map.items())
+        f"{query_type}={weight:.1f}" for query_type, weight in sorted(workload_map.items())
     )
 
 
@@ -66,7 +65,9 @@ def _training_anchor_modes(config: ExperimentConfig) -> list[str]:
         modes = [str(getattr(config.query, "range_anchor_mode", "mixed_density")).strip().lower()]
     invalid = [mode for mode in modes if mode not in RANGE_ANCHOR_MODES]
     if invalid:
-        raise ValueError(f"range_train_anchor_modes must contain only {RANGE_ANCHOR_MODES}; got {invalid}.")
+        raise ValueError(
+            f"range_train_anchor_modes must contain only {RANGE_ANCHOR_MODES}; got {invalid}."
+        )
     return modes
 
 
@@ -132,7 +133,9 @@ def generate_experiment_workloads(
     for replicate_index in range(1, train_replicates):
         replicate_seed = int(seeds.train_query_seed + 1009 * replicate_index)
         replicate_anchor_mode = train_anchor_modes[replicate_index % len(train_anchor_modes)]
-        replicate_spatial_km, replicate_time_hours = train_footprints[replicate_index % len(train_footprints)]
+        replicate_spatial_km, replicate_time_hours = train_footprints[
+            replicate_index % len(train_footprints)
+        ]
         replicate_workload = generate_typed_query_workload_for_config(
             trajectories=train_traj,
             n_queries=config.query.n_queries,
@@ -212,7 +215,9 @@ def _print_coverage_warnings(
     overshoot = getattr(config.query, "range_max_coverage_overshoot", None)
     upper_tolerance = _normalized_coverage_tolerance(overshoot, default=0.05)
     upper_limit = target + upper_tolerance
-    workloads_to_check = [(f"train_r{idx}", workload) for idx, workload in enumerate(train_workloads)]
+    workloads_to_check = [
+        (f"train_r{idx}", workload) for idx, workload in enumerate(train_workloads)
+    ]
     workloads_to_check.append(("eval", eval_workload))
     if selection_workload is not None:
         workloads_to_check.append(("selection", selection_workload))
@@ -239,13 +244,17 @@ def _workload_keyword_to_map(keyword: str | None) -> dict[str, float] | None:
         return None
     k = keyword.strip().lower()
     if k in {"mixed", "local_mixed", "global_mixed"}:
-        raise ValueError(f"workload='{k}' is no longer supported; only range workloads are supported.")
+        raise ValueError(
+            f"workload='{k}' is no longer supported; only range workloads are supported."
+        )
     if k == "range":
         return {k: 1.0}
     raise ValueError(f"workload='{k}' is no longer supported; only range workloads are supported.")
 
 
-def resolve_workload_maps(workload_keyword: str | None = None) -> tuple[dict[str, float], dict[str, float]]:
+def resolve_workload_maps(
+    workload_keyword: str | None = None,
+) -> tuple[dict[str, float], dict[str, float]]:
     """Return identical pure train/eval workload maps for one model run."""
     keyword_map = _workload_keyword_to_map(workload_keyword)
     workload_map = keyword_map if keyword_map is not None else {"range": 1.0}

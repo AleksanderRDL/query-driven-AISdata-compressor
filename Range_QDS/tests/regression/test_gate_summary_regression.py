@@ -24,7 +24,9 @@ def _normalize_run_for_regression(run: dict[str, Any]) -> dict[str, Any]:
         },
         "config": {
             "model_type": (run.get("config") or {}).get("model", {}).get("model_type"),
-            "workload_profile_id": (run.get("config") or {}).get("query", {}).get("workload_profile_id"),
+            "workload_profile_id": (run.get("config") or {})
+            .get("query", {})
+            .get("workload_profile_id"),
             "selector_type": (run.get("config") or {}).get("model", {}).get("selector_type"),
         },
     }

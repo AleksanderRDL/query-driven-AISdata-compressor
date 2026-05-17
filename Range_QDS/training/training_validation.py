@@ -8,18 +8,21 @@ from typing import Any, cast
 
 import torch
 
+from config.experiment_config import ModelConfig
 from evaluation.baselines import UniformTemporalMethod
 from evaluation.evaluate_methods import score_range_usefulness, score_retained_mask
 from evaluation.metrics import compute_geometric_distortion, compute_length_preservation
 from evaluation.query_useful_v1 import query_useful_v1_from_range_audit
-from experiments.experiment_config import ModelConfig
-from experiments.torch_runtime import normalize_amp_mode
 from queries.query_types import single_workload_type
 from queries.workload import TypedQueryWorkload
+from runtime.torch_runtime import normalize_amp_mode
 from simplification.learned_segment_budget import blend_segment_support_scores
 from simplification.mlqds_scoring import simplify_mlqds_predictions
-from training.inference import _is_workload_blind_model, _model_point_dim
-from training.inference import windowed_predict_with_heads
+from training.inference import (
+    _is_workload_blind_model,
+    _model_point_dim,
+    windowed_predict_with_heads,
+)
 from training.model_features import build_model_point_features_for_dim
 from training.query_useful_targets import QUERY_USEFUL_V1_HEAD_NAMES, build_query_useful_v1_targets
 from training.scaler import FeatureScaler
@@ -29,7 +32,9 @@ from training.training_setup import _pure_query_type_id
 PredictWorkloadLogits = Callable[..., torch.Tensor]
 
 
-def _validation_endpoint_sanity(retained_mask: torch.Tensor, boundaries: list[tuple[int, int]]) -> float:
+def _validation_endpoint_sanity(
+    retained_mask: torch.Tensor, boundaries: list[tuple[int, int]]
+) -> float:
     """Return fraction of eligible trajectories whose endpoints are retained."""
     retained = retained_mask.detach().cpu().bool()
     eligible = 0
@@ -85,12 +90,16 @@ def _validation_global_sanity_metrics(
     else:
         sed_ratio = float(avg_sed / uniform_avg_sed)
     return {
-        "avg_length_preserved": float(compute_length_preservation(points, boundaries, retained_mask)),
+        "avg_length_preserved": float(
+            compute_length_preservation(points, boundaries, retained_mask)
+        ),
         "endpoint_sanity": _validation_endpoint_sanity(retained_mask, boundaries),
         "avg_sed_km": avg_sed,
         "uniform_avg_sed_km": uniform_avg_sed,
         "avg_sed_ratio_vs_uniform": sed_ratio,
-        "avg_sed_ratio_vs_uniform_max": _validation_sed_ratio_threshold(float(model_config.compression_ratio)),
+        "avg_sed_ratio_vs_uniform_max": _validation_sed_ratio_threshold(
+            float(model_config.compression_ratio)
+        ),
     }
 
 
@@ -111,9 +120,11 @@ def _validation_query_useful_selection_score(
     )
     endpoint_penalty = max(0.0, 1.0 - float(sanity.get("endpoint_sanity", 1.0)))
     total_penalty = (
-        float(getattr(model_config, "validation_global_sanity_penalty_weight", 0.10)) * length_penalty
+        float(getattr(model_config, "validation_global_sanity_penalty_weight", 0.10))
+        * length_penalty
         + float(getattr(model_config, "validation_sed_penalty_weight", 0.05)) * sed_penalty
-        + float(getattr(model_config, "validation_endpoint_penalty_weight", 0.10)) * endpoint_penalty
+        + float(getattr(model_config, "validation_endpoint_penalty_weight", 0.10))
+        * endpoint_penalty
     )
     return float(raw_query_useful_v1 - total_penalty)
 
@@ -124,7 +135,10 @@ def _validation_global_sanity_penalty(
     model_config: ModelConfig,
 ) -> float:
     """Return the validation-only global-sanity penalty magnitude."""
-    return float(raw_query_useful_v1 - _validation_query_useful_selection_score(raw_query_useful_v1, sanity, model_config))
+    return float(
+        raw_query_useful_v1
+        - _validation_query_useful_selection_score(raw_query_useful_v1, sanity, model_config)
+    )
 
 
 def _predict_workload_logits_with_heads(
@@ -192,7 +206,9 @@ def _predict_workload_logits(
     return scores
 
 
-def _validation_segment_scores_from_head_logits(head_logits: torch.Tensor | None) -> torch.Tensor | None:
+def _validation_segment_scores_from_head_logits(
+    head_logits: torch.Tensor | None,
+) -> torch.Tensor | None:
     """Return the segment-budget head scores used by learned-segment validation selection."""
     if head_logits is None:
         return None
@@ -205,7 +221,9 @@ def _validation_segment_scores_from_head_logits(head_logits: torch.Tensor | None
     return head_logits[:, segment_head_idx].detach().cpu().float()
 
 
-def _validation_path_length_support_scores_from_head_logits(head_logits: torch.Tensor | None) -> torch.Tensor | None:
+def _validation_path_length_support_scores_from_head_logits(
+    head_logits: torch.Tensor | None,
+) -> torch.Tensor | None:
     """Return the path-length support head scores used by optional selector blending."""
     if head_logits is None:
         return None
@@ -257,7 +275,9 @@ def _validation_factorized_target_fit_metrics(
             metrics[f"head_{head_name}_target_fit_available"] = 0.0
             continue
         scores = probabilities[:, head_idx][valid].float()
-        head_targets = targets.head_targets[:, head_idx].detach().cpu().float().clamp(0.0, 1.0)[valid]
+        head_targets = (
+            targets.head_targets[:, head_idx].detach().cpu().float().clamp(0.0, 1.0)[valid]
+        )
         sampled_scores, sampled_targets = _discriminative_sample(
             scores,
             head_targets,
@@ -271,7 +291,9 @@ def _validation_factorized_target_fit_metrics(
         ideal_mass = float(head_targets[ideal].sum().item())
         metrics[f"head_{head_name}_target_fit_available"] = 1.0
         metrics[f"head_{head_name}_tau"] = float(_kendall_tau(sampled_scores, sampled_targets))
-        metrics[f"head_{head_name}_top5_mass_recall"] = float(selected_mass / max(ideal_mass, 1e-12))
+        metrics[f"head_{head_name}_top5_mass_recall"] = float(
+            selected_mass / max(ideal_mass, 1e-12)
+        )
         metrics[f"head_{head_name}_prediction_std"] = (
             float(scores.std(unbiased=False).item()) if int(scores.numel()) > 1 else 0.0
         )
@@ -288,12 +310,20 @@ def _validation_factorized_target_fit_metrics(
             seg_end = min(int(end), int(seg_start) + size)
             if seg_end <= seg_start:
                 continue
-            local_valid = targets.head_mask[seg_start:seg_end, segment_head_idx].detach().cpu().bool()
+            local_valid = (
+                targets.head_mask[seg_start:seg_end, segment_head_idx].detach().cpu().bool()
+            )
             if not bool(local_valid.any().item()):
                 continue
-            segment_scores.append(probabilities[seg_start:seg_end, segment_head_idx][local_valid].mean())
+            segment_scores.append(
+                probabilities[seg_start:seg_end, segment_head_idx][local_valid].mean()
+            )
             segment_targets.append(
-                targets.head_targets[seg_start:seg_end, segment_head_idx].detach().cpu().float()[local_valid].mean()
+                targets.head_targets[seg_start:seg_end, segment_head_idx]
+                .detach()
+                .cpu()
+                .float()[local_valid]
+                .mean()
             )
     if segment_scores:
         pooled_scores = torch.stack(segment_scores).float()
@@ -332,7 +362,9 @@ def _validation_selector_segment_scores(
     return blend_segment_support_scores(
         segment_scores=segment_scores,
         path_length_support_scores=path_length_support_scores,
-        path_length_support_weight=float(getattr(model_config, "learned_segment_length_support_blend_weight", 0.0)),
+        path_length_support_weight=float(
+            getattr(model_config, "learned_segment_length_support_blend_weight", 0.0)
+        ),
     )
 
 
@@ -358,10 +390,15 @@ def _validation_raw_predictions_without_factorized_head(
         model.eval()
         with torch.no_grad():
             logits = head_logits.detach().to(model_device).unsqueeze(0)
-            return compose_fn(
-                logits,
-                disabled_head_names=(str(disabled_head_name),),
-            ).reshape(-1).detach().cpu()
+            return (
+                compose_fn(
+                    logits,
+                    disabled_head_names=(str(disabled_head_name),),
+                )
+                .reshape(-1)
+                .detach()
+                .cpu()
+            )
     finally:
         model.train(original_training)
 
@@ -391,14 +428,20 @@ def _validation_retained_mask_from_scores(
         rank_confidence_weight=float(getattr(model_config, "mlqds_rank_confidence_weight", 0.15)),
         range_geometry_scores=range_geometry_scores,
         range_geometry_blend=float(getattr(model_config, "mlqds_range_geometry_blend", 0.0)),
-        stratified_center_weight=float(getattr(model_config, "mlqds_stratified_center_weight", 0.0)),
+        stratified_center_weight=float(
+            getattr(model_config, "mlqds_stratified_center_weight", 0.0)
+        ),
         min_learned_swaps=int(getattr(model_config, "mlqds_min_learned_swaps", 0)),
         selector_type=str(getattr(model_config, "selector_type", "temporal_hybrid")),
         segment_scores=segment_scores,
         segment_point_scores=segment_point_scores,
         points=points,
-        learned_segment_geometry_gain_weight=float(getattr(model_config, "learned_segment_geometry_gain_weight", 0.12)),
-        learned_segment_score_blend_weight=float(getattr(model_config, "learned_segment_score_blend_weight", 0.05)),
+        learned_segment_geometry_gain_weight=float(
+            getattr(model_config, "learned_segment_geometry_gain_weight", 0.12)
+        ),
+        learned_segment_score_blend_weight=float(
+            getattr(model_config, "learned_segment_score_blend_weight", 0.05)
+        ),
         learned_segment_fairness_preallocation=bool(
             getattr(model_config, "learned_segment_fairness_preallocation", True)
         ),
@@ -478,16 +521,20 @@ def _validation_causality_ablation_metrics(
             segment_point_scores=segment_budget_scores,
             points=points,
         )
-        no_behavior_score, _no_behavior_audit, _no_behavior_sanity = _validation_query_useful_score_for_mask(
-            points=points,
-            boundaries=boundaries,
-            retained_mask=no_behavior_mask,
-            workload=workload,
-            query_cache=query_cache,
-            model_config=model_config,
+        no_behavior_score, _no_behavior_audit, _no_behavior_sanity = (
+            _validation_query_useful_score_for_mask(
+                points=points,
+                boundaries=boundaries,
+                retained_mask=no_behavior_mask,
+                workload=workload,
+                query_cache=query_cache,
+                model_config=model_config,
+            )
         )
         metrics["no_behavior_query_useful_v1"] = no_behavior_score
-        metrics["no_behavior_query_useful_delta"] = float(primary_query_useful_score - no_behavior_score)
+        metrics["no_behavior_query_useful_delta"] = float(
+            primary_query_useful_score - no_behavior_score
+        )
 
     if segment_budget_scores is not None:
         no_segment_scores = _validation_selector_segment_scores(
@@ -502,19 +549,25 @@ def _validation_causality_ablation_metrics(
             model_config=model_config,
             range_geometry_scores=range_geometry_scores,
             segment_scores=no_segment_scores,
-            segment_point_scores=_neutral_validation_segment_scores_for_ablation(segment_budget_scores),
+            segment_point_scores=_neutral_validation_segment_scores_for_ablation(
+                segment_budget_scores
+            ),
             points=points,
         )
-        no_segment_score, _no_segment_audit, _no_segment_sanity = _validation_query_useful_score_for_mask(
-            points=points,
-            boundaries=boundaries,
-            retained_mask=no_segment_mask,
-            workload=workload,
-            query_cache=query_cache,
-            model_config=model_config,
+        no_segment_score, _no_segment_audit, _no_segment_sanity = (
+            _validation_query_useful_score_for_mask(
+                points=points,
+                boundaries=boundaries,
+                retained_mask=no_segment_mask,
+                workload=workload,
+                query_cache=query_cache,
+                model_config=model_config,
+            )
         )
         metrics["no_segment_budget_query_useful_v1"] = no_segment_score
-        metrics["no_segment_budget_query_useful_delta"] = float(primary_query_useful_score - no_segment_score)
+        metrics["no_segment_budget_query_useful_delta"] = float(
+            primary_query_useful_score - no_segment_score
+        )
 
     return metrics
 
@@ -557,7 +610,9 @@ def _validation_checkpoint_scores(
             device=device,
         )
     segment_budget_scores = _validation_segment_scores_from_head_logits(head_logits)
-    path_length_support_scores = _validation_path_length_support_scores_from_head_logits(head_logits)
+    path_length_support_scores = _validation_path_length_support_scores_from_head_logits(
+        head_logits
+    )
     validation_factorized_fit_metrics = _validation_factorized_target_fit_metrics(
         head_logits=head_logits,
         points=points,

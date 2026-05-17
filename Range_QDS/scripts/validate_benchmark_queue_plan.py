@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Validate queued benchmark child args before launching tmux."""
 
+# ruff: noqa: E402
+
 from __future__ import annotations
 
 import argparse

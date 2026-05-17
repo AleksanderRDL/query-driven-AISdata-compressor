@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
-import torch
 import pytest
+import torch
 
-from experiments.experiment_config import ModelConfig
+from config.experiment_config import ModelConfig
 from models.trajectory_qds_model import TrajectoryQDSModel
 from queries.query_types import pad_query_features
 from queries.workload import TypedQueryWorkload
 from training.scaler import FeatureScaler
 from training.teacher_distillation import build_range_teacher_config, distill_range_teacher_labels
+from training.training_outputs import TrainingOutputs
 from training.training_targets import (
     aggregate_range_component_label_sets,
     aggregate_range_component_retained_frequency_training_labels,
@@ -27,14 +28,13 @@ from training.training_targets import (
     range_historical_prior_retained_frequency_training_labels,
     range_local_swap_gain_cost_frequency_training_labels,
     range_local_swap_utility_frequency_training_labels,
-    range_query_residual_frequency_training_labels,
-    range_set_utility_frequency_training_labels,
-    range_query_spine_frequency_training_labels,
     range_marginal_coverage_training_labels,
+    range_query_residual_frequency_training_labels,
+    range_query_spine_frequency_training_labels,
     range_retained_frequency_training_labels,
+    range_set_utility_frequency_training_labels,
     range_structural_retained_frequency_training_labels,
 )
-from training.training_outputs import TrainingOutputs
 
 
 def _toy_points() -> torch.Tensor:
@@ -66,7 +66,9 @@ def _toy_workload() -> TypedQueryWorkload:
         }
     ]
     query_features, type_ids = pad_query_features(queries)
-    return TypedQueryWorkload(query_features=query_features, typed_queries=queries, type_ids=type_ids)
+    return TypedQueryWorkload(
+        query_features=query_features, typed_queries=queries, type_ids=type_ids
+    )
 
 
 def _diag_number(diagnostics: dict[str, object], key: str) -> float:
@@ -208,11 +210,13 @@ def test_global_budget_retained_frequency_uses_database_level_competition() -> N
         mlqds_temporal_fraction=0.0,
     )
 
-    transformed, transformed_mask, diagnostics = range_global_budget_retained_frequency_training_labels(
-        labels=labels,
-        labelled_mask=labelled_mask,
-        boundaries=[(0, 4), (4, 8)],
-        model_config=config,
+    transformed, transformed_mask, diagnostics = (
+        range_global_budget_retained_frequency_training_labels(
+            labels=labels,
+            labelled_mask=labelled_mask,
+            boundaries=[(0, 4), (4, 8)],
+            model_config=config,
+        )
     )
 
     assert transformed_mask[:, 0].all()
@@ -236,10 +240,12 @@ def test_global_budget_retained_frequency_aggregates_replicates_after_selection(
         mlqds_temporal_fraction=0.0,
     )
 
-    transformed, transformed_mask, diagnostics = aggregate_range_global_budget_retained_frequency_training_labels(
-        label_sets=[(first, labelled_mask), (second, labelled_mask)],
-        boundaries=[(0, 4), (4, 8)],
-        model_config=config,
+    transformed, transformed_mask, diagnostics = (
+        aggregate_range_global_budget_retained_frequency_training_labels(
+            label_sets=[(first, labelled_mask), (second, labelled_mask)],
+            boundaries=[(0, 4), (4, 8)],
+            model_config=config,
+        )
     )
 
     assert transformed_mask[:, 0].all()
@@ -287,12 +293,14 @@ def test_structural_retained_frequency_blends_query_free_shape_scores() -> None:
         mlqds_temporal_fraction=0.0,
     )
 
-    transformed, transformed_mask, diagnostics = range_structural_retained_frequency_training_labels(
-        labels=labels,
-        labelled_mask=labelled_mask,
-        points=bent,
-        boundaries=[(0, bent.shape[0])],
-        model_config=config,
+    transformed, transformed_mask, diagnostics = (
+        range_structural_retained_frequency_training_labels(
+            labels=labels,
+            labelled_mask=labelled_mask,
+            points=bent,
+            boundaries=[(0, bent.shape[0])],
+            model_config=config,
+        )
     )
 
     assert transformed_mask[:, 0].all()
@@ -318,12 +326,14 @@ def test_structural_retained_frequency_boost_preserves_label_support() -> None:
         mlqds_temporal_fraction=0.0,
     )
 
-    transformed, _transformed_mask, diagnostics = range_structural_retained_frequency_training_labels(
-        labels=labels,
-        labelled_mask=labelled_mask,
-        points=bent,
-        boundaries=[(0, bent.shape[0])],
-        model_config=config,
+    transformed, _transformed_mask, diagnostics = (
+        range_structural_retained_frequency_training_labels(
+            labels=labels,
+            labelled_mask=labelled_mask,
+            points=bent,
+            boundaries=[(0, bent.shape[0])],
+            model_config=config,
+        )
     )
 
     assert diagnostics["structural_target_source_mode"] == "boost"
@@ -346,11 +356,13 @@ def test_aggregate_structural_retained_frequency_averages_replicates() -> None:
         mlqds_temporal_fraction=0.0,
     )
 
-    transformed, transformed_mask, diagnostics = aggregate_range_structural_retained_frequency_training_labels(
-        label_sets=[(labels_a, mask), (labels_b, mask)],
-        points=points,
-        boundaries=[(0, points.shape[0])],
-        model_config=config,
+    transformed, transformed_mask, diagnostics = (
+        aggregate_range_structural_retained_frequency_training_labels(
+            label_sets=[(labels_a, mask), (labels_b, mask)],
+            points=points,
+            boundaries=[(0, points.shape[0])],
+            model_config=config,
+        )
     )
 
     assert transformed_mask[:, 0].all()
@@ -371,12 +383,14 @@ def test_historical_prior_retained_frequency_distills_sparse_teacher_target() ->
         historical_prior_k=2,
     )
 
-    transformed, transformed_mask, diagnostics = range_historical_prior_retained_frequency_training_labels(
-        labels=labels,
-        labelled_mask=labelled_mask,
-        points=points,
-        boundaries=[(0, points.shape[0])],
-        model_config=config,
+    transformed, transformed_mask, diagnostics = (
+        range_historical_prior_retained_frequency_training_labels(
+            labels=labels,
+            labelled_mask=labelled_mask,
+            points=points,
+            boundaries=[(0, points.shape[0])],
+            model_config=config,
+        )
     )
 
     assert transformed.shape == labels.shape
@@ -556,12 +570,14 @@ def test_continuity_retained_frequency_ignores_point_only_components() -> None:
         range_component_target_blend=1.0,
     )
 
-    transformed, transformed_mask, diagnostics = range_continuity_retained_frequency_training_labels(
-        labels=labels,
-        labelled_mask=labelled_mask,
-        component_labels=component_labels,
-        boundaries=[(0, 6)],
-        model_config=config,
+    transformed, transformed_mask, diagnostics = (
+        range_continuity_retained_frequency_training_labels(
+            labels=labels,
+            labelled_mask=labelled_mask,
+            component_labels=component_labels,
+            boundaries=[(0, 6)],
+            model_config=config,
+        )
     )
 
     assert transformed_mask[:, 0].all()
@@ -623,11 +639,13 @@ def test_aggregate_component_retained_frequency_averages_replicate_targets() -> 
         range_component_target_blend=1.0,
     )
 
-    labels, labelled_mask, diagnostics = aggregate_range_component_retained_frequency_training_labels(
-        label_sets=[(labels_a, mask), (labels_b, mask)],
-        component_label_sets=[_component_label_dict(labels_a), _component_label_dict(labels_b)],
-        boundaries=[(0, 4)],
-        model_config=config,
+    labels, labelled_mask, diagnostics = (
+        aggregate_range_component_retained_frequency_training_labels(
+            label_sets=[(labels_a, mask), (labels_b, mask)],
+            component_label_sets=[_component_label_dict(labels_a), _component_label_dict(labels_b)],
+            boundaries=[(0, 4)],
+            model_config=config,
+        )
     )
 
     assert labelled_mask[:, 0].all()
@@ -650,11 +668,13 @@ def test_aggregate_continuity_retained_frequency_averages_replicate_targets() ->
         range_component_target_blend=1.0,
     )
 
-    labels, labelled_mask, diagnostics = aggregate_range_continuity_retained_frequency_training_labels(
-        label_sets=[(labels_a, mask), (labels_b, mask)],
-        component_label_sets=[component_a, component_b],
-        boundaries=[(0, 4)],
-        model_config=config,
+    labels, labelled_mask, diagnostics = (
+        aggregate_range_continuity_retained_frequency_training_labels(
+            label_sets=[(labels_a, mask), (labels_b, mask)],
+            component_label_sets=[component_a, component_b],
+            boundaries=[(0, 4)],
+            model_config=config,
+        )
     )
 
     assert labelled_mask[:, 0].all()
@@ -852,7 +872,9 @@ def test_local_swap_utility_frequency_labels_replacement_gain() -> None:
         }
     ]
     query_features, type_ids = pad_query_features(queries)
-    workload = TypedQueryWorkload(query_features=query_features, typed_queries=queries, type_ids=type_ids)
+    workload = TypedQueryWorkload(
+        query_features=query_features, typed_queries=queries, type_ids=type_ids
+    )
     labels = torch.zeros((points.shape[0], 1), dtype=torch.float32)
     labelled_mask = torch.zeros_like(labels, dtype=torch.bool)
     config = ModelConfig(
@@ -904,7 +926,9 @@ def test_local_swap_gain_cost_frequency_labels_candidate_value_and_base_cost() -
         }
     ]
     query_features, type_ids = pad_query_features(queries)
-    workload = TypedQueryWorkload(query_features=query_features, typed_queries=queries, type_ids=type_ids)
+    workload = TypedQueryWorkload(
+        query_features=query_features, typed_queries=queries, type_ids=type_ids
+    )
     labels = torch.zeros((points.shape[0], 1), dtype=torch.float32)
     labelled_mask = torch.zeros_like(labels, dtype=torch.bool)
     config = ModelConfig(
@@ -916,13 +940,15 @@ def test_local_swap_gain_cost_frequency_labels_candidate_value_and_base_cost() -
         range_set_utility_mass_mode="gain",
     )
 
-    transformed, transformed_mask, diagnostics = range_local_swap_gain_cost_frequency_training_labels(
-        labels=labels,
-        labelled_mask=labelled_mask,
-        points=points,
-        boundaries=[(0, points.shape[0])],
-        typed_queries=workload.typed_queries,
-        model_config=config,
+    transformed, transformed_mask, diagnostics = (
+        range_local_swap_gain_cost_frequency_training_labels(
+            labels=labels,
+            labelled_mask=labelled_mask,
+            points=points,
+            boundaries=[(0, points.shape[0])],
+            typed_queries=workload.typed_queries,
+            model_config=config,
+        )
     )
 
     assert transformed.shape == labels.shape

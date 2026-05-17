@@ -6,14 +6,12 @@ from dataclasses import dataclass
 
 from training.model_features import is_workload_blind_model_type
 
-
 DEFAULT_PROFILE = "range_workload_aware_diagnostic"
 BLIND_EXPECTED_USEFULNESS_PROFILE = "range_workload_blind_expected_usefulness"
 BLIND_RETAINED_FREQUENCY_PROFILE = "range_workload_blind_retained_frequency"
 BLIND_TEACHER_DISTILL_PROFILE = "range_workload_blind_teacher_distill"
 LEGACY_DIAGNOSTIC_PROFILE_NOTE = (
-    "Old RangeUseful/scalar-target diagnostic path. "
-    "Not valid for query-driven rework acceptance."
+    "Old RangeUseful/scalar-target diagnostic path. Not valid for query-driven rework acceptance."
 )
 RANGE_WORKLOAD_V1_WORKLOAD_BLIND_V2_PROFILE = "range_workload_v1_workload_blind_v2"
 PROFILE_CHOICES = (
@@ -595,8 +593,7 @@ def benchmark_profile_settings(name: str) -> dict[str, ProfileSetting]:
     profile_role = (
         "query_driven_workload_blind_v2"
         if profile.range_training_target_mode == "query_useful_v1_factorized"
-        else
-        "workload_blind_teacher_distill"
+        else "workload_blind_teacher_distill"
         if profile.range_teacher_distillation_mode != "none"
         else "workload_blind_marginal_coverage"
         if workload_blind and profile.range_training_target_mode == "marginal_coverage_frequency"

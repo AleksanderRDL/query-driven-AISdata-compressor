@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Estimate sampled range-query coverage for benchmark query-count calibration."""
 
+# ruff: noqa: E402
+
 from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 import sys
+from pathlib import Path
 from typing import cast
 
 import torch
@@ -17,7 +19,11 @@ if str(ROOT) not in sys.path:
 
 from data.ais_loader import load_ais_csv
 from data.trajectory_cache import load_or_build_ais_cache
-from queries.coverage_estimator import RangeCoverageEstimate, best_query_count, estimate_range_coverage
+from queries.coverage_estimator import (
+    RangeCoverageEstimate,
+    best_query_count,
+    estimate_range_coverage,
+)
 from queries.query_generator import RANGE_ANCHOR_MODES, RANGE_TIME_DOMAIN_MODES
 
 
@@ -98,14 +104,37 @@ def _print_table(rows: list[RangeCoverageEstimate], target: float | None) -> Non
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--csv_path", required=True, help="Cleaned AIS CSV file or directory of cleaned CSVs.")
-    parser.add_argument("--max_files", type=int, default=2, help="When csv_path is a directory, estimate this many sorted CSVs.")
+    parser.add_argument(
+        "--csv_path", required=True, help="Cleaned AIS CSV file or directory of cleaned CSVs."
+    )
+    parser.add_argument(
+        "--max_files",
+        type=int,
+        default=2,
+        help="When csv_path is a directory, estimate this many sorted CSVs.",
+    )
     parser.add_argument("--cache_dir", default=None, help="Optional AIS cache directory.")
-    parser.add_argument("--refresh_cache", action="store_true", help="Rebuild AIS cache before estimating.")
-    parser.add_argument("--query_counts", default="80,384,512,640,1024,2048", help="Comma-separated query counts to test.")
+    parser.add_argument(
+        "--refresh_cache", action="store_true", help="Rebuild AIS cache before estimating."
+    )
+    parser.add_argument(
+        "--query_counts",
+        default="80,384,512,640,1024,2048",
+        help="Comma-separated query counts to test.",
+    )
     parser.add_argument("--seeds", default="42", help="Comma-separated query generation seeds.")
-    parser.add_argument("--sample_stride", type=int, default=20, help="Use every Nth trajectory for fast estimation.")
-    parser.add_argument("--target_coverage", type=float, default=0.20, help="Target coverage fraction used by generation.")
+    parser.add_argument(
+        "--sample_stride",
+        type=int,
+        default=20,
+        help="Use every Nth trajectory for fast estimation.",
+    )
+    parser.add_argument(
+        "--target_coverage",
+        type=float,
+        default=0.20,
+        help="Target coverage fraction used by generation.",
+    )
     parser.add_argument("--range_spatial_fraction", type=float, default=0.08)
     parser.add_argument("--range_time_fraction", type=float, default=0.15)
     parser.add_argument("--range_spatial_km", type=float, default=2.2)
@@ -117,7 +146,9 @@ def main() -> int:
         default=None,
         help="Reject generated range boxes that would exceed target coverage plus this absolute tolerance. Accepts fractions or percents.",
     )
-    parser.add_argument("--range_time_domain_mode", choices=RANGE_TIME_DOMAIN_MODES, default="dataset")
+    parser.add_argument(
+        "--range_time_domain_mode", choices=RANGE_TIME_DOMAIN_MODES, default="dataset"
+    )
     parser.add_argument("--range_anchor_mode", choices=RANGE_ANCHOR_MODES, default="mixed_density")
     parser.add_argument("--min_points_per_segment", type=int, default=4)
     parser.add_argument("--max_points_per_segment", type=int, default=None)

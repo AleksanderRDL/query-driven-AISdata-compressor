@@ -20,7 +20,10 @@ def _local_distance_matrix_km(local_points: torch.Tensor) -> torch.Tensor:
     lon = torch.deg2rad(points[:, 2].float())
     dlat = lat[:, None] - lat[None, :]
     dlon = lon[:, None] - lon[None, :]
-    a = torch.sin(dlat / 2.0) ** 2 + torch.cos(lat[:, None]) * torch.cos(lat[None, :]) * torch.sin(dlon / 2.0) ** 2
+    a = (
+        torch.sin(dlat / 2.0) ** 2
+        + torch.cos(lat[:, None]) * torch.cos(lat[None, :]) * torch.sin(dlon / 2.0) ** 2
+    )
     c = 2.0 * torch.atan2(torch.sqrt(a), torch.sqrt(torch.clamp(1.0 - a, min=1e-9)))
     return (6371.0 * c).to(dtype=torch.float32)
 
@@ -57,7 +60,11 @@ def _max_length_required_mask(
             left_indices = torch.arange(0, right_idx, dtype=torch.long)
             skipped_required = required_prefix[right_idx] - required_prefix[left_indices + 1]
             previous_scores = dp[selected_count - 1, :right_idx]
-            valid = (skipped_required == 0) & torch.isfinite(previous_scores) & (previous_scores > neg_inf * 0.5)
+            valid = (
+                (skipped_required == 0)
+                & torch.isfinite(previous_scores)
+                & (previous_scores > neg_inf * 0.5)
+            )
             if not bool(valid.any().item()):
                 continue
             candidates = previous_scores + distances[:right_idx, right_idx]
@@ -66,7 +73,10 @@ def _max_length_required_mask(
             dp[selected_count, right_idx] = candidates[best_left]
             previous[selected_count, right_idx] = best_left
 
-    if not torch.isfinite(dp[keep, point_count - 1]) or float(dp[keep, point_count - 1].item()) <= neg_inf * 0.5:
+    if (
+        not torch.isfinite(dp[keep, point_count - 1])
+        or float(dp[keep, point_count - 1].item()) <= neg_inf * 0.5
+    ):
         raise ValueError("No feasible required-point max-length mask found.")
     retained = torch.zeros((point_count,), dtype=torch.bool)
     cursor = point_count - 1
@@ -115,7 +125,9 @@ def _score_protected_length_feasibility(
             continue
         for local_idx in range(1, count - 1):
             point_idx = start_i + local_idx
-            candidate_rows.append((float(score_cpu[point_idx].item()), -point_idx, trajectory_id, local_idx))
+            candidate_rows.append(
+                (float(score_cpu[point_idx].item()), -point_idx, trajectory_id, local_idx)
+            )
 
     protected_target = min(
         max(0, math.ceil(float(total_budget) * max(0.0, float(learned_slot_fraction_min)))),
@@ -220,7 +232,9 @@ def _score_protected_length_frontier(
         }
         rows.append(row)
         if row["length_gate_would_pass"]:
-            max_passing_fraction = fraction if max_passing_fraction is None else max(max_passing_fraction, fraction)
+            max_passing_fraction = (
+                fraction if max_passing_fraction is None else max(max_passing_fraction, fraction)
+            )
         if abs(fraction - materiality_floor) <= 1e-12:
             materiality_row = row
     if materiality_row is None:
@@ -234,12 +248,18 @@ def _score_protected_length_frontier(
         if bool(materiality_diagnostic.get("available", False)):
             materiality_row = {
                 "protected_score_point_fraction_min": materiality_floor,
-                "protected_score_point_count": int(materiality_diagnostic.get("protected_score_point_count", 0)),
+                "protected_score_point_count": int(
+                    materiality_diagnostic.get("protected_score_point_count", 0)
+                ),
                 "protected_score_point_fraction_of_budget": float(
                     materiality_diagnostic.get("protected_score_point_fraction_of_budget", 0.0)
                 ),
-                "length_preservation": float(materiality_diagnostic.get("length_preservation", 0.0)),
-                "length_gate_would_pass": bool(materiality_diagnostic.get("length_gate_would_pass", False)),
+                "length_preservation": float(
+                    materiality_diagnostic.get("length_preservation", 0.0)
+                ),
+                "length_gate_would_pass": bool(
+                    materiality_diagnostic.get("length_gate_would_pass", False)
+                ),
             }
     return {
         "available": True,

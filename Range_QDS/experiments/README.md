@@ -1,7 +1,8 @@
 # Experiments Module
 
-Owns CLI parsing, config construction, benchmark profiles, run orchestration,
-runtime metadata, and artifact writing.
+Owns CLI parsing, benchmark profiles, run orchestration, runtime metadata
+emission, and artifact writing. Shared config dataclasses live in `../config/`;
+shared torch runtime controls live in `../runtime/`.
 
 Run CLI entry points from the repository root:
 
@@ -16,20 +17,22 @@ From `Range_QDS/`, use the Make targets for routine work:
 ```bash
 make smoke
 make benchmark-preflight
-ATTACH=0 BENCHMARK_PROFILE=range_workload_v1_workload_blind_v2 make range-benchmark-tmux
+ATTACH=0 make range-benchmark-tmux
 ATTACH=0 BENCHMARK_SEEDS=42,43,44 make range-benchmark-queue-tmux
 make list-runs
 ```
 
-The benchmark Makefile keeps legacy artifact-family defaults for compatibility.
-Set `BENCHMARK_FAMILY` and `BENCHMARK_CACHE` explicitly for comparable
-query-driven batches.
+The benchmark Makefile defaults use the active
+`range_workload_v1_workload_blind_v2` profile and the
+`query_driven_workload_blind_v2` artifact/cache families. Set
+`BENCHMARK_PROFILE`, `BENCHMARK_FAMILY`, and `BENCHMARK_CACHE` explicitly only
+for diagnostic profiles or separate artifact families.
 
 ## Key Files
 
 | File | Purpose |
 | --- | --- |
-| `experiment_cli.py` / `experiment_config.py` | CLI flags and structured config. |
+| `experiment_cli.py` | CLI flags over shared config dataclasses. |
 | `experiment_pipeline.py` | End-to-end train/eval orchestration. |
 | `experiment_data.py` | Train, validation, selection, and eval data splits. |
 | `experiment_workloads.py` | Workload generation and workload-map resolution. |
@@ -38,7 +41,10 @@ query-driven batches.
 | `range_diagnostics.py` | Range workload, learned-fill, and gate diagnostics. |
 | `benchmark_profiles.py` | Durable benchmark profile defaults. |
 | `benchmark_runner.py` | Benchmark child-run and queue orchestration. |
-| `benchmark_report.py` | Benchmark rows, summaries, and final-grid report logic. |
+| `benchmark_report.py` | Benchmark child-run row shaping and audit-field flattening. |
+| `benchmark_final_grid.py` | Final-grid QueryUsefulV1 acceptance evidence. |
+| `benchmark_table.py` | Markdown table formatting for benchmark summaries. |
+| `benchmark_row_runtime.py` | Runtime, phase, epoch, and collapse-warning row helpers. |
 | `run_ais_experiment.py` | Main training/evaluation entry point. |
 | `run_inference.py` | Evaluate a saved checkpoint without retraining. |
 

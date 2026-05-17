@@ -6,12 +6,14 @@ from typing import Any
 
 import torch
 
+from config.experiment_config import ExperimentConfig
 from evaluation.metrics import MethodEvaluation
-from experiments.experiment_config import ExperimentConfig
 from training.query_prior_fields import QUERY_PRIOR_FIELD_NAMES, sample_query_prior_fields
 
 
-def _points_outside_prior_extent_fraction(points: torch.Tensor, extent: dict[str, Any] | None) -> float | None:
+def _points_outside_prior_extent_fraction(
+    points: torch.Tensor, extent: dict[str, Any] | None
+) -> float | None:
     """Return the fraction of points outside a train-prior spatial extent."""
     if not isinstance(extent, dict) or int(points.shape[0]) <= 0:
         return None
@@ -26,7 +28,9 @@ def _points_outside_prior_extent_fraction(points: torch.Tensor, extent: dict[str
     return float(outside.float().mean().item())
 
 
-def _spatial_extent_intersection_fraction(train_points: torch.Tensor, eval_points: torch.Tensor) -> float | None:
+def _spatial_extent_intersection_fraction(
+    train_points: torch.Tensor, eval_points: torch.Tensor
+) -> float | None:
     """Return train/eval lat-lon extent intersection as a fraction of eval extent area."""
     if int(train_points.shape[0]) <= 0 or int(eval_points.shape[0]) <= 0:
         return None
@@ -177,18 +181,23 @@ def _workload_stability_gate(
     failed_checks: list[str] = []
 
     configured_target = _normalize_fraction_for_gate(getattr(config.query, "target_coverage", None))
-    configured_target_in_grid = (
-        configured_target is not None
-        and any(abs(configured_target - target) <= 1e-9 for target in allowed_coverage_targets)
+    configured_target_in_grid = configured_target is not None and any(
+        abs(configured_target - target) <= 1e-9 for target in allowed_coverage_targets
     )
     if not configured_target_in_grid:
         failed_checks.append("coverage_target_not_in_final_grid")
     if len(train_label_workloads) < min_train_replicates:
         failed_checks.append("too_few_train_workload_replicates")
 
-    overshoot = _normalize_fraction_for_gate(getattr(config.query, "range_max_coverage_overshoot", None))
+    overshoot = _normalize_fraction_for_gate(
+        getattr(config.query, "range_max_coverage_overshoot", None)
+    )
     max_allowed_overshoot = _coverage_overshoot_tolerance_for_target(configured_target)
-    if max_allowed_overshoot is None or overshoot is None or overshoot > max_allowed_overshoot + 1e-12:
+    if (
+        max_allowed_overshoot is None
+        or overshoot is None
+        or overshoot > max_allowed_overshoot + 1e-12
+    ):
         failed_checks.append("coverage_overshoot_tolerance_too_loose")
     workload_rows: list[dict[str, Any]] = []
     workloads: list[tuple[str, Any]] = [
@@ -199,7 +208,9 @@ def _workload_stability_gate(
         workloads.append(("selection", selection_workload))
 
     for label, workload in workloads:
-        generation = (getattr(workload, "generation_diagnostics", None) or {}).get("query_generation", {})
+        generation = (getattr(workload, "generation_diagnostics", None) or {}).get(
+            "query_generation", {}
+        )
         if not isinstance(generation, dict):
             generation = {}
         profile_id = str(generation.get("workload_profile_id", ""))
@@ -213,9 +224,13 @@ def _workload_stability_gate(
         stop_reason = str(generation.get("stop_reason", ""))
         is_calibrated_query_count_mode = query_count_mode == "calibrated_to_coverage"
         row_min_queries_per_workload = (
-            1 if gate_mode == "smoke" and is_calibrated_query_count_mode else min_queries_per_workload
+            1
+            if gate_mode == "smoke" and is_calibrated_query_count_mode
+            else min_queries_per_workload
         )
-        acceptance = (getattr(workload, "generation_diagnostics", None) or {}).get("range_acceptance", {})
+        acceptance = (getattr(workload, "generation_diagnostics", None) or {}).get(
+            "range_acceptance", {}
+        )
         if not isinstance(acceptance, dict):
             acceptance = {}
         row_failed: list[str] = []
@@ -240,25 +255,31 @@ def _workload_stability_gate(
             rejection_rate = float(rejected / max(1, attempts))
             if attempts > 0 and rejection_rate > 0.85:
                 row_failed.append("range_generation_rejection_rate_too_high")
-            coverage_rejections = int((acceptance.get("rejection_reasons", {}) or {}).get("coverage_overshoot", 0))
+            coverage_rejections = int(
+                (acceptance.get("rejection_reasons", {}) or {}).get("coverage_overshoot", 0)
+            )
             if accepted > 0 and coverage_rejections / max(1, accepted) > 2.0:
                 row_failed.append("coverage_guard_rejection_pressure_too_high")
         if not coverage_guard_enabled:
             row_failed.append("coverage_guard_disabled")
         coverage_target_satisfied = False
-        if configured_target is not None and target is not None and abs(target - configured_target) > 1e-9:
+        if (
+            configured_target is not None
+            and target is not None
+            and abs(target - configured_target) > 1e-9
+        ):
             row_failed.append("target_coverage_mismatch")
         if target is not None and final_coverage is not None:
             if final_coverage + coverage_tolerance < target:
                 row_failed.append("coverage_below_target")
-            if overshoot is not None and final_coverage > min(1.0, target + overshoot) + coverage_tolerance:
+            if (
+                overshoot is not None
+                and final_coverage > min(1.0, target + overshoot) + coverage_tolerance
+            ):
                 row_failed.append("coverage_above_guard")
-            coverage_target_satisfied = (
-                final_coverage + coverage_tolerance >= target
-                and (
-                    overshoot is None
-                    or final_coverage <= min(1.0, target + overshoot) + coverage_tolerance
-                )
+            coverage_target_satisfied = final_coverage + coverage_tolerance >= target and (
+                overshoot is None
+                or final_coverage <= min(1.0, target + overshoot) + coverage_tolerance
             )
         else:
             row_failed.append("missing_coverage_fields")
@@ -337,7 +358,9 @@ def _global_sanity_gate(
         failed_checks.append("length_preservation_outside_range")
 
     endpoint_sanity_raw = (
-        primary.range_audit.get("endpoint_sanity") if isinstance(primary.range_audit, dict) else None
+        primary.range_audit.get("endpoint_sanity")
+        if isinstance(primary.range_audit, dict)
+        else None
     )
     endpoint_sanity = _normalize_fraction_for_gate(endpoint_sanity_raw)
     if endpoint_sanity is None:
@@ -436,7 +459,9 @@ def _target_diffusion_gate(target_diagnostics: dict[str, Any]) -> dict[str, Any]
         failed_checks.append("head_diffusion_diagnostics_missing")
     for head_name in head_names:
         blocking = head_name in blocking_heads
-        support_threshold_key = head_support_threshold_keys.get(head_name, default_head_support_threshold_key)
+        support_threshold_key = head_support_threshold_keys.get(
+            head_name, default_head_support_threshold_key
+        )
         head_supports = support_by_head.get(head_name)
         support_fraction = None
         if isinstance(head_supports, dict):
@@ -445,7 +470,11 @@ def _target_diffusion_gate(target_diagnostics: dict[str, Any]) -> dict[str, Any]
             support_fraction = _optional_float_for_gate(positive_by_head.get(head_name))
 
         topk_grid = topk_by_head.get(head_name)
-        top5_mass = _optional_float_for_gate(topk_grid.get(low_budget_key)) if isinstance(topk_grid, dict) else None
+        top5_mass = (
+            _optional_float_for_gate(topk_grid.get(low_budget_key))
+            if isinstance(topk_grid, dict)
+            else None
+        )
         head_failed: list[str] = []
         if support_fraction is None:
             head_failed.append("support_fraction_missing")

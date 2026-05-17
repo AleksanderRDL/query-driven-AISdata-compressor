@@ -28,6 +28,7 @@ from evaluation.query_cache import (
     RangeSegmentAuditGeometry,
     RangeTrajectoryAuditSupport,
 )
+from evaluation.query_useful_v1 import query_useful_v1_from_range_audit
 from evaluation.range_usefulness import (
     RANGE_USEFULNESS_SCHEMA_VERSION,
     RANGE_USEFULNESS_WEIGHTS,
@@ -35,18 +36,19 @@ from evaluation.range_usefulness import (
     range_usefulness_score_from_components,
     range_usefulness_weight_summary,
 )
-from evaluation.query_useful_v1 import query_useful_v1_from_range_audit
+from queries.query_types import normalize_pure_workload_map
 from queries.range_geometry import (
     points_in_range_box,
     segment_box_bracket_indices,
     segment_pairs_box_crossings,
 )
-from queries.query_types import normalize_pure_workload_map
 
 
 def _range_point_f1(retained_mask: torch.Tensor, range_mask: torch.Tensor) -> float:
     """Compute range F1 over retained point instances inside the query box."""
-    return _point_subset_f1(retained_mask.to(device=range_mask.device, dtype=torch.bool), range_mask)
+    return _point_subset_f1(
+        retained_mask.to(device=range_mask.device, dtype=torch.bool), range_mask
+    )
 
 
 def score_range_boundary_preservation(
@@ -187,7 +189,9 @@ def _build_range_query_audit_support(
     """Build retained-independent support for one range query."""
     range_mask = range_mask.bool()
     full_ids = tuple(trajectory_ids_from_mask(range_mask, point_trajectory_ids))
-    boundary_indices_cpu = _range_boundary_indices_for_trajectories(range_mask, boundaries, list(full_ids))
+    boundary_indices_cpu = _range_boundary_indices_for_trajectories(
+        range_mask, boundaries, list(full_ids)
+    )
     crossing_bracket_indices_cpu = _range_crossing_bracket_indices_for_trajectories(
         points_cpu,
         params,
@@ -245,6 +249,7 @@ def _range_query_audit_support(
     query_cache: EvaluationQueryCache | None,
 ) -> RangeQueryAuditSupport:
     """Return retained-independent audit support, using caller cache when available."""
+
     def build_range_mask() -> torch.Tensor:
         return points_in_range_box(points, query["params"])
 
@@ -269,7 +274,9 @@ def _range_query_audit_support(
     return build_support()
 
 
-def _range_gap_coverage_for_offsets(in_offsets: torch.Tensor, retained_offsets: torch.Tensor) -> float:
+def _range_gap_coverage_for_offsets(
+    in_offsets: torch.Tensor, retained_offsets: torch.Tensor
+) -> float:
     """Score whether retained in-query points avoid one large local gap."""
     full_count = int(in_offsets.numel())
     retained_count = int(retained_offsets.numel())
@@ -329,7 +336,9 @@ def _range_gap_span_coverage_for_positions(
     return float(max(0.0, min(1.0, 1.0 - float(max_gap.item()) / float(full_span))))
 
 
-def _range_ship_coverage_for_offsets(in_offsets: torch.Tensor, retained_offsets: torch.Tensor) -> float:
+def _range_ship_coverage_for_offsets(
+    in_offsets: torch.Tensor, retained_offsets: torch.Tensor
+) -> float:
     """Return per-ship point-subset F1 for one in-query trajectory slice."""
     full_count = int(in_offsets.numel())
     if full_count <= 0:
@@ -341,7 +350,9 @@ def _range_ship_coverage_for_offsets(in_offsets: torch.Tensor, retained_offsets:
     return float((2.0 * recall) / (1.0 + recall))
 
 
-def _range_turn_coverage_for_mask(turn_weights: torch.Tensor, retained_local: torch.Tensor) -> float:
+def _range_turn_coverage_for_mask(
+    turn_weights: torch.Tensor, retained_local: torch.Tensor
+) -> float:
     """Return weighted point-subset F1 over route-change support."""
     turn_weights = turn_weights.to(dtype=torch.float32).clamp(min=0.0)
     full_mass = float(turn_weights.sum().item())
@@ -459,7 +470,9 @@ def _range_trajectory_detail_scores_for_query(
         elif retained_offsets.numel() < 2:
             temporal_score = 0.0
         else:
-            retained_span = float((times[start + retained_offsets[-1]] - times[start + retained_offsets[0]]).item())
+            retained_span = float(
+                (times[start + retained_offsets[-1]] - times[start + retained_offsets[0]]).item()
+            )
             temporal_score = float(max(0.0, min(1.0, retained_span / support.full_time_span)))
         temporal_scores.append(temporal_score)
         gap_scores.append(_range_gap_coverage_for_offsets(in_offsets, retained_offsets))
@@ -571,8 +584,12 @@ def score_range_usefulness(
         retained_ids = trajectory_ids_from_mask(retained_in_range, point_trajectory_ids)
         ship_scores.append(f1_score(set(support.full_trajectory_ids), set(retained_ids)))
 
-        entry_exit_scores.append(_point_index_subset_f1(retained_bool, support.boundary_indices_cpu))
-        crossing_scores.append(_point_index_subset_f1(retained_bool, support.crossing_bracket_indices_cpu))
+        entry_exit_scores.append(
+            _point_index_subset_f1(retained_bool, support.boundary_indices_cpu)
+        )
+        crossing_scores.append(
+            _point_index_subset_f1(retained_bool, support.crossing_bracket_indices_cpu)
+        )
 
         (
             ship_coverage,
@@ -643,11 +660,15 @@ def score_range_usefulness(
         "range_shape_score": float(range_shape_score),
         "range_query_local_interpolation_fidelity": float(range_query_local_interpolation_fidelity),
         "range_usefulness_score": float(range_usefulness_score),
-        "range_usefulness_gap_time_score": float(gap_ablation_scores["range_usefulness_gap_time_score"]),
+        "range_usefulness_gap_time_score": float(
+            gap_ablation_scores["range_usefulness_gap_time_score"]
+        ),
         "range_usefulness_gap_distance_score": float(
             gap_ablation_scores["range_usefulness_gap_distance_score"]
         ),
-        "range_usefulness_gap_min_score": float(gap_ablation_scores["range_usefulness_gap_min_score"]),
+        "range_usefulness_gap_min_score": float(
+            gap_ablation_scores["range_usefulness_gap_min_score"]
+        ),
         "range_usefulness_gap_ablation_version": int(
             gap_ablation_scores["range_usefulness_gap_ablation_version"]
         ),
@@ -678,7 +699,9 @@ def score_retained_mask(
     for query_index, query in enumerate(typed_queries):
         qtype = str(query.get("type", "")).lower()
         if qtype != "range":
-            raise ValueError(f"Only range queries are supported for evaluation; got query type: {qtype}")
+            raise ValueError(
+                f"Only range queries are supported for evaluation; got query type: {qtype}"
+            )
         if query_cache is not None:
             range_mask = query_cache.get_support_mask(
                 query_index,
@@ -757,7 +780,9 @@ def evaluate_method(
     measured_latency_ms = (time.time() - t0) * 1000.0
     latency_ms = float(getattr(method, "latency_ms", measured_latency_ms) or measured_latency_ms)
 
-    range_only = bool(typed_queries) and all(str(query.get("type", "")).lower() == "range" for query in typed_queries)
+    range_only = bool(typed_queries) and all(
+        str(query.get("type", "")).lower() == "range" for query in typed_queries
+    )
     range_audit: dict[str, Any] | None = None
     if range_only:
         range_audit = score_range_usefulness(
@@ -811,7 +836,9 @@ def evaluate_method(
         else {}
     )
     query_useful_score = float(cast(Any, query_useful_v1.get("query_useful_v1_score", 0.0)) or 0.0)
-    query_useful_schema = int(cast(Any, query_useful_v1.get("query_useful_v1_schema_version", 0)) or 0)
+    query_useful_schema = int(
+        cast(Any, query_useful_v1.get("query_useful_v1_schema_version", 0)) or 0
+    )
 
     return MethodEvaluation(
         aggregate_f1=float(aggregate),
@@ -842,12 +869,18 @@ def evaluate_method(
             range_audit.get("range_query_local_interpolation_fidelity", 0.0)
         ),
         range_usefulness_score=float(range_audit.get("range_usefulness_score", 0.0)),
-        range_usefulness_gap_time_score=float(range_audit.get("range_usefulness_gap_time_score", 0.0)),
+        range_usefulness_gap_time_score=float(
+            range_audit.get("range_usefulness_gap_time_score", 0.0)
+        ),
         range_usefulness_gap_distance_score=float(
             range_audit.get("range_usefulness_gap_distance_score", 0.0)
         ),
-        range_usefulness_gap_min_score=float(range_audit.get("range_usefulness_gap_min_score", 0.0)),
-        range_usefulness_schema_version=int(range_audit.get("range_usefulness_schema_version", 0) or 0),
+        range_usefulness_gap_min_score=float(
+            range_audit.get("range_usefulness_gap_min_score", 0.0)
+        ),
+        range_usefulness_schema_version=int(
+            range_audit.get("range_usefulness_schema_version", 0) or 0
+        ),
         range_usefulness_gap_ablation_version=int(
             range_audit.get("range_usefulness_gap_ablation_version", 0) or 0
         ),

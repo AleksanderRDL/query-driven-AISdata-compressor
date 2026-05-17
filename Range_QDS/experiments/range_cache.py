@@ -10,8 +10,8 @@ from typing import Any
 
 import torch
 
+from config.experiment_config import ExperimentConfig
 from evaluation.query_cache import EvaluationQueryCache
-from experiments.experiment_config import ExperimentConfig
 from experiments.workload_cache import tensor_cache_digest
 from queries.workload import TypedQueryWorkload
 from training.importance_labels import (
@@ -66,17 +66,23 @@ def ensure_range_runtime_labels(
     runtime_cache: RangeRuntimeCache | None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Return range labels, populating the runtime cache once per split."""
-    if runtime_cache is not None and runtime_cache.labels is not None and runtime_cache.labelled_mask is not None:
+    if (
+        runtime_cache is not None
+        and runtime_cache.labels is not None
+        and runtime_cache.labelled_mask is not None
+    ):
         return runtime_cache.labels, runtime_cache.labelled_mask
 
     range_label_mode = str(range_label_mode).lower()
     if range_label_mode in RANGE_COMPONENT_LABEL_MODES:
-        labels, labelled_mask, component_labels = compute_typed_importance_labels_with_range_components(
-            points=points,
-            boundaries=boundaries,
-            typed_queries=range_queries,
-            range_boundary_prior_weight=range_boundary_prior_weight,
-            range_label_mode=range_label_mode,
+        labels, labelled_mask, component_labels = (
+            compute_typed_importance_labels_with_range_components(
+                points=points,
+                boundaries=boundaries,
+                typed_queries=range_queries,
+                range_boundary_prior_weight=range_boundary_prior_weight,
+                range_label_mode=range_label_mode,
+            )
         )
     else:
         labels, labelled_mask = compute_typed_importance_labels(
@@ -177,7 +183,9 @@ def range_label_cache_payload(payload: dict[str, Any]) -> dict[str, Any]:
     return label_payload
 
 
-def _range_diagnostics_cache_paths(config: ExperimentConfig, label: str, key: str) -> tuple[Path, Path] | None:
+def _range_diagnostics_cache_paths(
+    config: ExperimentConfig, label: str, key: str
+) -> tuple[Path, Path] | None:
     """Return JSON and tensor paths for a range diagnostics cache entry."""
     cache_root = _range_diagnostics_cache_root(config)
     if cache_root is None:
@@ -205,7 +213,10 @@ def load_range_diagnostics_cache(
         return None
     try:
         cached = json.loads(json_path.read_text(encoding="utf-8"))
-        if cached.get("schema_version") != RANGE_DIAGNOSTICS_CACHE_SCHEMA_VERSION or cached.get("key") != key:
+        if (
+            cached.get("schema_version") != RANGE_DIAGNOSTICS_CACHE_SCHEMA_VERSION
+            or cached.get("key") != key
+        ):
             return None
         tensors = torch.load(tensor_path, map_location="cpu", weights_only=True)
         if not isinstance(tensors, dict):
@@ -219,16 +230,25 @@ def load_range_diagnostics_cache(
             runtime_cache.labelled_mask = labelled_mask
             component_labels = tensors.get("component_labels")
             runtime_cache.component_labels = (
-                {str(key): value for key, value in component_labels.items() if isinstance(value, torch.Tensor)}
+                {
+                    str(key): value
+                    for key, value in component_labels.items()
+                    if isinstance(value, torch.Tensor)
+                }
                 if isinstance(component_labels, dict)
                 else None
             )
             range_label_mode = str(getattr(config.model, "range_label_mode", "usefulness")).lower()
-            if range_label_mode in RANGE_COMPONENT_LABEL_MODES and runtime_cache.component_labels is None:
+            if (
+                range_label_mode in RANGE_COMPONENT_LABEL_MODES
+                and runtime_cache.component_labels is None
+            ):
                 runtime_cache.labels = None
                 runtime_cache.labelled_mask = None
                 return None
-            runtime_cache.query_cache = EvaluationQueryCache.for_workload(points, boundaries, scored_queries)
+            runtime_cache.query_cache = EvaluationQueryCache.for_workload(
+                points, boundaries, scored_queries
+            )
         summary = cached["summary"]
         rows = cached["rows"]
         if not isinstance(summary, dict) or not isinstance(rows, list):
@@ -247,11 +267,15 @@ def load_range_diagnostics_cache(
                 return None
         summary = dict(summary)
         cache_info = dict(summary.get("range_diagnostics_cache") or {})
-        cache_info.update({"hit": True, "path": str(json_path), "tensor_path": str(tensor_path), "key": key})
+        cache_info.update(
+            {"hit": True, "path": str(json_path), "tensor_path": str(tensor_path), "key": key}
+        )
         summary["range_diagnostics_cache"] = cache_info
         return summary, rows
     except (OSError, KeyError, TypeError, json.JSONDecodeError, RuntimeError) as exc:
-        print(f"  WARNING: ignoring unreadable range diagnostics cache {json_path}: {exc}", flush=True)
+        print(
+            f"  WARNING: ignoring unreadable range diagnostics cache {json_path}: {exc}", flush=True
+        )
         return None
 
 
@@ -281,12 +305,19 @@ def _load_range_label_tensor_cache(
         runtime_cache.labelled_mask = labelled_mask
         component_labels = tensors.get("component_labels")
         runtime_cache.component_labels = (
-            {str(key): value for key, value in component_labels.items() if isinstance(value, torch.Tensor)}
+            {
+                str(key): value
+                for key, value in component_labels.items()
+                if isinstance(value, torch.Tensor)
+            }
             if isinstance(component_labels, dict)
             else None
         )
         range_label_mode = str(getattr(config.model, "range_label_mode", "usefulness")).lower()
-        if range_label_mode in RANGE_COMPONENT_LABEL_MODES and runtime_cache.component_labels is None:
+        if (
+            range_label_mode in RANGE_COMPONENT_LABEL_MODES
+            and runtime_cache.component_labels is None
+        ):
             runtime_cache.labels = None
             runtime_cache.labelled_mask = None
             return False
@@ -316,7 +347,9 @@ def _write_range_label_tensor_cache(
             "labelled_mask": runtime_cache.labelled_mask.cpu(),
         }
         if runtime_cache.component_labels is not None:
-            payload["component_labels"] = {key: value.cpu() for key, value in runtime_cache.component_labels.items()}
+            payload["component_labels"] = {
+                key: value.cpu() for key, value in runtime_cache.component_labels.items()
+            }
         torch.save(payload, tensor_path)
         print(f"  range label cache wrote: {tensor_path}", flush=True)
     except OSError as exc:
@@ -334,7 +367,12 @@ def write_range_diagnostics_cache(
 ) -> None:
     """Persist range diagnostics plus label tensors for reuse in repeated sweeps."""
     paths = _range_diagnostics_cache_paths(config, label, key)
-    if paths is None or runtime_cache is None or runtime_cache.labels is None or runtime_cache.labelled_mask is None:
+    if (
+        paths is None
+        or runtime_cache is None
+        or runtime_cache.labels is None
+        or runtime_cache.labelled_mask is None
+    ):
         return
     json_path, tensor_path = paths
     try:
@@ -344,11 +382,15 @@ def write_range_diagnostics_cache(
             "labelled_mask": runtime_cache.labelled_mask.cpu(),
         }
         if runtime_cache.component_labels is not None:
-            payload["component_labels"] = {key: value.cpu() for key, value in runtime_cache.component_labels.items()}
+            payload["component_labels"] = {
+                key: value.cpu() for key, value in runtime_cache.component_labels.items()
+            }
         torch.save(payload, tensor_path)
         cache_summary = dict(summary)
         cache_info = dict(cache_summary.get("range_diagnostics_cache") or {})
-        cache_info.update({"hit": False, "path": str(json_path), "tensor_path": str(tensor_path), "key": key})
+        cache_info.update(
+            {"hit": False, "path": str(json_path), "tensor_path": str(tensor_path), "key": key}
+        )
         cache_summary["range_diagnostics_cache"] = cache_info
         json_path.write_text(
             json.dumps(
@@ -414,12 +456,14 @@ def prepare_range_label_cache(
         else getattr(config.model, "range_boundary_prior_weight", 0.0)
     )
     if range_label_mode in RANGE_COMPONENT_LABEL_MODES:
-        labels, labelled_mask, component_labels = compute_typed_importance_labels_with_range_components(
-            points=points,
-            boundaries=boundaries,
-            typed_queries=range_queries,
-            range_boundary_prior_weight=prior_weight,
-            range_label_mode=range_label_mode,
+        labels, labelled_mask, component_labels = (
+            compute_typed_importance_labels_with_range_components(
+                points=points,
+                boundaries=boundaries,
+                typed_queries=range_queries,
+                range_boundary_prior_weight=prior_weight,
+                range_label_mode=range_label_mode,
+            )
         )
         runtime_cache.component_labels = component_labels
     else:

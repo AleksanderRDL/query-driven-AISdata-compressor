@@ -52,11 +52,15 @@ make lock-check
 make check-env
 make test
 make typecheck
+make lint
+make lint-full
 make lint-yaml
 ```
 
-`make lint` still exposes existing Ruff debt in older code. Use changed-file
-Ruff for checkpoint saves until a dedicated Ruff cleanup checkpoint is done.
+`make lint` is intentionally scoped to high-signal correctness checks
+(`F401,F821,F822,F823`) so it is a reliable checkpoint save gate. `make
+lint-full` runs the full Ruff rule set and still exposes known style/modernizer
+debt in older code; use it only for dedicated lint cleanup checkpoints.
 
 ## Artifact Inspection
 

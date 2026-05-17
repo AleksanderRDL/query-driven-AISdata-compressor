@@ -28,19 +28,22 @@ make test
 ```bash
 make typecheck
 make lint
+make lint-full
 make lint-yaml
 make smoke
 make smoke-csv CLEANED_CSV=../AISDATA/cleaned/<file-or-directory>
 make benchmark-preflight
-ATTACH=0 BENCHMARK_PROFILE=range_workload_v1_workload_blind_v2 make range-benchmark-tmux
+ATTACH=0 make range-benchmark-tmux
 ATTACH=0 BENCHMARK_SEEDS=42,43,44 make range-benchmark-queue-tmux
 make list-runs
 make clean-smoke-artifacts CONFIRM=1
 ```
 
-The tmux benchmark Makefile defaults still point at legacy diagnostic artifact
-families. Override `BENCHMARK_PROFILE`, `BENCHMARK_FAMILY`, and
-`BENCHMARK_CACHE` for comparable query-driven runs.
+The tmux benchmark Makefile defaults now use the active
+`range_workload_v1_workload_blind_v2` profile and the
+`query_driven_workload_blind_v2` artifact/cache families. Override
+`BENCHMARK_PROFILE`, `BENCHMARK_FAMILY`, and `BENCHMARK_CACHE` only when you
+intentionally need a diagnostic or separate artifact family.
 
 Direct CLI example:
 

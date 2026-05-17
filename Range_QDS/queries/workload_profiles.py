@@ -129,7 +129,9 @@ def range_workload_profile(profile_id: str | None) -> RangeWorkloadProfile:
         return PROFILE_BY_ID[normalized]
     except KeyError as exc:
         choices = ", ".join(sorted(PROFILE_BY_ID))
-        raise ValueError(f"Unknown workload_profile_id={profile_id!r}; choices: {choices}.") from exc
+        raise ValueError(
+            f"Unknown workload_profile_id={profile_id!r}; choices: {choices}."
+        ) from exc
 
 
 def max_point_hit_fraction_for_coverage(target_coverage: float | None) -> float:
@@ -156,8 +158,7 @@ def workload_profile_metadata(profile: RangeWorkloadProfile) -> dict[str, Any]:
         "anchor_family_weights": dict(profile.anchor_family_weights),
         "footprint_family_weights": dict(profile.footprint_family_weights),
         "footprint_families": {
-            name: dict(values)
-            for name, values in profile.footprint_families.items()
+            name: dict(values) for name, values in profile.footprint_families.items()
         },
         "target_coverage": profile.target_coverage,
         "max_coverage_overshoot": profile.max_coverage_overshoot,

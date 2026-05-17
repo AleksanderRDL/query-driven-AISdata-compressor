@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import subprocess
+from pathlib import Path
 
 from scripts.validate_benchmark_queue_plan import validate_plan
 

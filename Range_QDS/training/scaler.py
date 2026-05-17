@@ -19,7 +19,7 @@ class FeatureScaler:
     query_max: torch.Tensor
 
     @classmethod
-    def fit(cls, points: torch.Tensor, queries: torch.Tensor) -> "FeatureScaler":
+    def fit(cls, points: torch.Tensor, queries: torch.Tensor) -> FeatureScaler:
         """Fit scaler statistics from training points and training queries. See training/README.md for details."""
         if not torch.isfinite(points).all():
             bad = (~torch.isfinite(points)).any(dim=0).nonzero(as_tuple=False).flatten().tolist()
@@ -36,7 +36,9 @@ class FeatureScaler:
             query_max=queries.max(dim=0).values,
         )
 
-    def transform(self, points: torch.Tensor, queries: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def transform(
+        self, points: torch.Tensor, queries: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Transform points and queries with fitted statistics. See training/README.md for details."""
         return normalize_points_and_queries(
             points=points,
@@ -64,7 +66,7 @@ class FeatureScaler:
         }
 
     @classmethod
-    def from_dict(cls, payload: dict) -> "FeatureScaler":
+    def from_dict(cls, payload: dict) -> FeatureScaler:
         """Deserialize scaler statistics. See training/README.md for details."""
         return cls(
             point_min=torch.tensor(payload["point_min"], dtype=torch.float32),

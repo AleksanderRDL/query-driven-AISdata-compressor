@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import math
-from typing import Mapping
+from collections.abc import Mapping
 
 import torch
 
 EARTH_RADIUS_KM = 6371.0
 
 
-def haversine_km_to_point(lat: torch.Tensor, lon: torch.Tensor, anchor_lat: float, anchor_lon: float) -> torch.Tensor:
+def haversine_km_to_point(
+    lat: torch.Tensor, lon: torch.Tensor, anchor_lat: float, anchor_lon: float
+) -> torch.Tensor:
     """Return haversine distance in km from each ``lat``/``lon`` pair to one anchor."""
     lat_rad = torch.deg2rad(lat)
     lon_rad = torch.deg2rad(lon)
@@ -29,7 +31,9 @@ def haversine_km_to_point(lat: torch.Tensor, lon: torch.Tensor, anchor_lat: floa
     return EARTH_RADIUS_KM * central_angle
 
 
-def _range_box_bounds(params: Mapping[str, float], device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+def _range_box_bounds(
+    params: Mapping[str, float], device: torch.device
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Return inclusive ``[time, lat, lon]`` lower and upper bounds."""
     lows = torch.tensor(
         [float(params["t_start"]), float(params["lat_min"]), float(params["lon_min"])],
@@ -150,7 +154,9 @@ def segment_box_bracket_mask(
             local_end = int(overlap_offsets[-1].item()) + 2
         if local_end - local_start < 2:
             continue
-        crossing_offsets = torch.where(segment_box_crossings(points[start + local_start : start + local_end], params))[0]
+        crossing_offsets = torch.where(
+            segment_box_crossings(points[start + local_start : start + local_end], params)
+        )[0]
         if crossing_offsets.numel() == 0:
             continue
         crossing_offsets = crossing_offsets + local_start

@@ -46,7 +46,11 @@ def test_segment_box_crossings_ignore_fully_inside_segments() -> None:
     )
 
     assert segment_box_crossings(points, _range_params()).tolist() == [False, True]
-    assert segment_box_bracket_mask(points, [(0, 3)], _range_params()).tolist() == [False, True, True]
+    assert segment_box_bracket_mask(points, [(0, 3)], _range_params()).tolist() == [
+        False,
+        True,
+        True,
+    ]
 
 
 def test_segment_box_crossings_reject_time_disjoint_segments() -> None:

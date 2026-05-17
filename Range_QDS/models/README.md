@@ -79,3 +79,12 @@ predictability, causality, global sanity, and full-grid gates pass.
 
 Current density/sparsity feature columns are current-split point-cloud context
 features. Do not call them train-derived query-prior fields.
+
+## Checkpoint Compatibility
+
+`workload_blind_range_v2.calibration_head` is retained only as frozen
+checkpoint-state compatibility. It is not part of final score composition, and
+changing its weights must not affect factorized final scores. Removing it is a
+checkpoint-format decision: the loader would need an explicit migration or an
+allowed-unexpected-key policy for older saved states before the module can be
+deleted safely.

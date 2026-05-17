@@ -108,7 +108,9 @@ class WorkloadBlindRangeV2Model(CachedSinusoidalPositionalEncodingMixin, nn.Modu
         if isinstance(prior_output, nn.Linear):
             nn.init.xavier_uniform_(prior_output.weight)
             nn.init.zeros_(prior_output.bias)
-        self.prior_feature_scale = nn.Parameter(torch.tensor(_PRIOR_FEATURE_SCALE_INIT, dtype=torch.float32))
+        self.prior_feature_scale = nn.Parameter(
+            torch.tensor(_PRIOR_FEATURE_SCALE_INIT, dtype=torch.float32)
+        )
 
     def reset_parameters(self) -> None:
         """Reset standalone trainable parameters not owned by child modules."""
@@ -138,7 +140,10 @@ class WorkloadBlindRangeV2Model(CachedSinusoidalPositionalEncodingMixin, nn.Modu
             behavior = torch.zeros_like(behavior)
         if "boundary_event_utility" in disabled:
             boundary = torch.zeros_like(boundary)
-        if "replacement_representative_value" in disabled or "marginal_replacement_gain" in disabled:
+        if (
+            "replacement_representative_value" in disabled
+            or "marginal_replacement_gain" in disabled
+        ):
             replacement = torch.full_like(replacement, 0.5)
         replacement_multiplier = 0.75 + 0.25 * replacement
         interpretable_score = q_hit * (0.5 + behavior) * replacement_multiplier + 0.25 * boundary

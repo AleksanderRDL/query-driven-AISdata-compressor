@@ -9,7 +9,7 @@ UV_RUN := cd $(REPO_ROOT) && $(UV) run $(UV_GROUP_FLAGS) --
 CSV ?=
 QUERY_ARGS ?= --help
 
-.PHONY: help setup sync lock-check check-env pipeline qds-check-env lint lint-yaml test typecheck smoke smoke-csv db-up db-down db-reset db-logs db-smoke db-import db-query
+.PHONY: help setup sync lock-check check-env pipeline qds-check-env lint lint-full lint-yaml test typecheck smoke smoke-csv db-up db-down db-reset db-logs db-smoke db-import db-query
 
 help:
 	@echo "Targets:"
@@ -19,7 +19,8 @@ help:
 	@echo "  check-env        Print uv/Python versions and run pip check"
 	@echo "  pipeline         Run AIS cleaning pipeline"
 	@echo "  qds-check-env    Print QDS Python/package versions and run pip check"
-	@echo "  lint             Run QDS Ruff correctness lint"
+	@echo "  lint             Run QDS scoped Ruff correctness lint"
+	@echo "  lint-full        Run QDS full Ruff lint across active packages"
 	@echo "  lint-yaml        Run yamllint on repository YAML files"
 	@echo "  test             Run the QDS pytest suite"
 	@echo "  typecheck        Run QDS Pyright"
@@ -54,6 +55,9 @@ qds-check-env:
 
 lint:
 	$(MAKE) -C $(RANGE_QDS_DIR) lint UV="$(UV)" UV_GROUP="$(UV_GROUP)"
+
+lint-full:
+	$(MAKE) -C $(RANGE_QDS_DIR) lint-full UV="$(UV)" UV_GROUP="$(UV_GROUP)"
 
 lint-yaml:
 	$(UV_RUN) yamllint .

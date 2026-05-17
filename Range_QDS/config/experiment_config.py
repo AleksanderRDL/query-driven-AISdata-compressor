@@ -1,4 +1,4 @@
-"""Experiment configuration dataclasses for AIS-QDS. See experiments/README.md for details."""
+"""Shared experiment configuration dataclasses. See config/README.md for details."""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ class DataConfig:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "DataConfig":
+    def from_dict(cls, data: dict[str, Any]) -> DataConfig:
         """Deserialize config from a dictionary. See experiments/README.md for details."""
         return cls(**data)
 
@@ -83,7 +83,7 @@ class QueryConfig:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "QueryConfig":
+    def from_dict(cls, data: dict[str, Any]) -> QueryConfig:
         """Deserialize config from a dictionary. See experiments/README.md for details."""
         payload = dict(data)
         raw_train_anchor_modes = payload.get("range_train_anchor_modes", [])
@@ -135,7 +135,9 @@ class ModelConfig:
     ranking_top_quantile: float = 0.80
     pointwise_loss_weight: float = 0.25
     loss_objective: str = "budget_topk"
-    budget_loss_ratios: list[float] = field(default_factory=lambda: list(DEFAULT_BUDGET_LOSS_RATIOS))
+    budget_loss_ratios: list[float] = field(
+        default_factory=lambda: list(DEFAULT_BUDGET_LOSS_RATIOS)
+    )
     budget_loss_temperature: float = DEFAULT_BUDGET_LOSS_TEMPERATURE
     query_useful_aux_loss_weight: float = 0.50
     query_useful_segment_budget_head_weight: float = 0.10
@@ -209,7 +211,7 @@ class ModelConfig:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "ModelConfig":
+    def from_dict(cls, data: dict[str, Any]) -> ModelConfig:
         """Deserialize config from a dictionary. See experiments/README.md for details."""
         return cls(**data)
 
@@ -226,7 +228,7 @@ class BaselineConfig:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "BaselineConfig":
+    def from_dict(cls, data: dict[str, Any]) -> BaselineConfig:
         """Deserialize config from a dictionary. See experiments/README.md for details."""
         return cls(**data)
 
@@ -250,7 +252,7 @@ class ExperimentConfig:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "ExperimentConfig":
+    def from_dict(cls, data: dict[str, Any]) -> ExperimentConfig:
         """Deserialize config from a dictionary. See experiments/README.md for details."""
         expected_keys = {"data", "query", "model", "baselines"}
         unknown_keys = set(data) - expected_keys
@@ -503,7 +505,9 @@ def build_experiment_config(
             checkpoint_uniform_gap_weight=checkpoint_uniform_gap_weight,
             checkpoint_type_penalty_weight=checkpoint_type_penalty_weight,
             checkpoint_smoothing_window=checkpoint_smoothing_window,
-            checkpoint_full_score_every=1 if checkpoint_full_score_every is None else checkpoint_full_score_every,
+            checkpoint_full_score_every=1
+            if checkpoint_full_score_every is None
+            else checkpoint_full_score_every,
             checkpoint_candidate_pool_size=checkpoint_candidate_pool_size,
             checkpoint_score_variant=checkpoint_score_variant or "range_usefulness",
             validation_global_sanity_penalty_enabled=validation_global_sanity_penalty_enabled,

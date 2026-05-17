@@ -4,23 +4,32 @@ from __future__ import annotations
 
 from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import torch
 
-from experiments.experiment_config import BaselineConfig, DataConfig, ExperimentConfig, ModelConfig, QueryConfig
-from models.historical_prior_qds_model import HistoricalPriorRangeQDSModel, HistoricalPriorStudentRangeQDSModel
+from config.experiment_config import (
+    BaselineConfig,
+    DataConfig,
+    ExperimentConfig,
+    ModelConfig,
+    QueryConfig,
+)
+from models.historical_prior_qds_model import (
+    HistoricalPriorRangeQDSModel,
+    HistoricalPriorStudentRangeQDSModel,
+)
 from models.trajectory_qds_model import TrajectoryQDSModel
 from models.turn_aware_qds_model import TurnAwareQDSModel
-from models.workload_blind_range_v2 import WorkloadBlindRangeV2Model
 from models.workload_blind_qds_model import SegmentContextRangeQDSModel, WorkloadBlindRangeQDSModel
-from training.scaler import FeatureScaler
+from models.workload_blind_range_v2 import WorkloadBlindRangeV2Model
 from training.model_features import (
     HISTORICAL_PRIOR_MODEL_TYPES,
     NONPARAMETRIC_HISTORICAL_PRIOR_MODEL_TYPES,
     SUPPORTED_MODEL_TYPES,
     is_workload_blind_model_type,
 )
+from training.scaler import FeatureScaler
 
 
 @dataclass
@@ -39,11 +48,7 @@ def _filter_config_section(raw_section: Any, config_cls: type) -> dict[str, Any]
     """Drop stale checkpoint keys for one dataclass-backed config section."""
     allowed_keys = {field.name for field in fields(config_cls)}
     section = dict(raw_section or {})
-    return {
-        key: value
-        for key, value in section.items()
-        if key in allowed_keys
-    }
+    return {key: value for key, value in section.items() if key in allowed_keys}
 
 
 def _checkpoint_config_payload(raw_config: dict[str, Any]) -> dict[str, Any]:
@@ -90,13 +95,17 @@ def load_checkpoint(path: str) -> ModelArtifacts:
         prior = model_state.get("historical_targets")
         prior_feature_count = int(prior.shape[0]) if isinstance(prior, torch.Tensor) else 0
         if "historical_source_ids" not in model_state:
-            model_state["historical_source_ids"] = torch.zeros((prior_feature_count,), dtype=torch.long)
+            model_state["historical_source_ids"] = torch.zeros(
+                (prior_feature_count,), dtype=torch.long
+            )
     elif model_type == "historical_prior_student":
         model_cls = HistoricalPriorStudentRangeQDSModel
         prior = model_state.get("prior.historical_targets")
         prior_feature_count = int(prior.shape[0]) if isinstance(prior, torch.Tensor) else 0
         if "prior.historical_source_ids" not in model_state:
-            model_state["prior.historical_source_ids"] = torch.zeros((prior_feature_count,), dtype=torch.long)
+            model_state["prior.historical_source_ids"] = torch.zeros(
+                (prior_feature_count,), dtype=torch.long
+            )
     elif model_type == "segment_context_range":
         model_cls = SegmentContextRangeQDSModel
         prior_feature_count = 0
@@ -143,7 +152,7 @@ def load_checkpoint(path: str) -> ModelArtifacts:
     model = model_cls(**model_kwargs)
     query_prior_field = payload.get("query_prior_field")
     if query_prior_field is not None:
-        setattr(model, "query_prior_field", query_prior_field)
+        cast(Any, model).query_prior_field = query_prior_field
     if model_type == "workload_blind_range_v2":
         load_result = model.load_state_dict(model_state, strict=False)
         allowed_missing = {

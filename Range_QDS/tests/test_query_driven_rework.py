@@ -12,12 +12,6 @@ from data.ais_loader import generate_synthetic_ais_data
 from evaluation.evaluate_methods import score_range_usefulness
 from evaluation.metrics import MethodEvaluation, compute_length_preservation
 from evaluation.query_useful_v1 import query_useful_v1_from_range_audit
-from experiments.gates import (
-    _global_sanity_gate,
-    _support_overlap_gate,
-    _target_diffusion_gate,
-    _workload_stability_gate,
-)
 from experiments.causality import (
     _causality_ablation_diagnostics_payload,
     _causality_ablation_tradeoff_summary,
@@ -30,15 +24,23 @@ from experiments.causality import (
     _retained_mask_comparison,
     _score_ablation_sensitivity,
 )
-from experiments.segment_audits import (
-    _factorized_head_probability_sources_from_logits,
-    _segment_oracle_allocation_audit,
-    _target_segment_oracle_alignment_audit,
+from experiments.gates import (
+    _global_sanity_gate,
+    _support_overlap_gate,
+    _target_diffusion_gate,
+    _workload_stability_gate,
 )
 from experiments.length_diagnostics import (
     _max_length_required_mask,
     _score_protected_length_feasibility,
     _score_protected_length_frontier,
+)
+from experiments.model_ablations import _reset_module_parameters
+from experiments.range_diagnostics import _range_workload_distribution_comparison
+from experiments.segment_audits import (
+    _factorized_head_probability_sources_from_logits,
+    _segment_oracle_allocation_audit,
+    _target_segment_oracle_alignment_audit,
 )
 from experiments.selector_diagnostics import (
     _learned_segment_frozen_method,
@@ -47,8 +49,6 @@ from experiments.selector_diagnostics import (
     _segment_score_quantile_bands_for_ablation,
     _segment_score_top_band_for_ablation,
 )
-from experiments.model_ablations import _reset_module_parameters
-from experiments.range_diagnostics import _range_workload_distribution_comparison
 from models.workload_blind_range_v2 import WorkloadBlindRangeV2Model
 from queries.query_generator import (
     _anchor_weights_for_family,
@@ -72,6 +72,12 @@ from training.model_features import (
     WORKLOAD_BLIND_RANGE_V2_POINT_DIM,
     build_workload_blind_range_v2_point_features,
 )
+from training.predictability_audit import (
+    _prior_channel_scores,
+    _rankdata,
+    query_prior_predictability_audit,
+    query_prior_predictability_scores,
+)
 from training.query_prior_fields import (
     QUERY_PRIOR_FIELD_NAMES,
     build_train_query_prior_fields,
@@ -84,12 +90,6 @@ from training.query_useful_targets import (
     QUERY_USEFUL_V1_HEAD_NAMES,
     build_query_useful_v1_targets,
 )
-from training.predictability_audit import (
-    _prior_channel_scores,
-    _rankdata,
-    query_prior_predictability_audit,
-    query_prior_predictability_scores,
-)
 from training.train_model import (
     _factorized_final_score_composition_diagnostics,
     _factorized_head_fit_diagnostics,
@@ -98,7 +98,10 @@ from training.train_model import (
     _scalar_training_target_for_mode,
 )
 from training.training_diagnostics import _training_target_diagnostics
-from training.training_epoch import _factorized_query_useful_loss, _segment_budget_head_segment_level_loss
+from training.training_epoch import (
+    _factorized_query_useful_loss,
+    _segment_budget_head_segment_level_loss,
+)
 from training.training_validation import (
     _validation_factorized_target_fit_metrics,
     _validation_query_useful_selection_score,
@@ -188,7 +191,9 @@ def test_range_workload_v1_footprints_match_rework_guide_defaults() -> None:
 
 
 def test_range_workload_v1_target_coverage_keeps_requested_query_count() -> None:
-    trajectories = generate_synthetic_ais_data(n_ships=5, n_points_per_ship=48, seed=87, route_families=1)
+    trajectories = generate_synthetic_ais_data(
+        n_ships=5, n_points_per_ship=48, seed=87, route_families=1
+    )
     workload = generate_typed_query_workload(
         trajectories=trajectories,
         n_queries=8,
@@ -257,8 +262,12 @@ def test_deterministic_profile_sampling_does_not_advance_generator() -> None:
         deterministic_value=0.77,
     )
 
-    settings = _profile_query_settings(profile, torch.Generator().manual_seed(1), query_index=7, workload_seed=19)
-    settings_deterministic = _profile_query_settings(profile, torch.Generator().manual_seed(1), query_index=7, workload_seed=19)
+    settings = _profile_query_settings(
+        profile, torch.Generator().manual_seed(1), query_index=7, workload_seed=19
+    )
+    settings_deterministic = _profile_query_settings(
+        profile, torch.Generator().manual_seed(1), query_index=7, workload_seed=19
+    )
     assert settings == settings_deterministic
 
     after = gen.get_state()
@@ -273,7 +282,9 @@ def test_deterministic_profile_sampling_does_not_advance_generator() -> None:
 
 
 def test_synthetic_route_families_create_same_support_trajectories() -> None:
-    trajectories = generate_synthetic_ais_data(n_ships=5, n_points_per_ship=32, seed=86, route_families=1)
+    trajectories = generate_synthetic_ais_data(
+        n_ships=5, n_points_per_ship=32, seed=86, route_families=1
+    )
     points = torch.cat(trajectories, dim=0)
 
     assert float(points[:, 1].max().item() - points[:, 1].min().item()) < 0.50
@@ -300,7 +311,9 @@ def test_query_useful_v1_prioritizes_query_local_components() -> None:
         }
     )
 
-    strong_score = float(cast(Any, query_useful_v1_from_range_audit(strong)["query_useful_v1_score"]))
+    strong_score = float(
+        cast(Any, query_useful_v1_from_range_audit(strong)["query_useful_v1_score"])
+    )
     weak_score = float(cast(Any, query_useful_v1_from_range_audit(weak)["query_useful_v1_score"]))
     assert strong_score > weak_score
 
@@ -341,7 +354,10 @@ def test_query_useful_v1_has_true_query_local_interpolation_component() -> None:
     assert audit["range_shape_score"] == 0.0
     assert audit["range_query_local_interpolation_fidelity"] == 0.0
     assert components["query_local_interpolation_fidelity"] == 0.0
-    assert useful["query_useful_v1_metric_maturity"] == "bridge_with_true_query_local_interpolation_component"
+    assert (
+        useful["query_useful_v1_metric_maturity"]
+        == "bridge_with_true_query_local_interpolation_component"
+    )
 
 
 def test_validation_query_useful_penalizes_bad_global_sanity() -> None:
@@ -478,11 +494,16 @@ def test_factorized_replacement_target_is_query_local_and_final_label_keeps_quer
         typed_queries=[query],
     )
 
-    replacement = targets.head_targets[:, tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("replacement_representative_value")]
+    replacement = targets.head_targets[
+        :, tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("replacement_representative_value")
+    ]
     final_score = targets.labels[:, QUERY_TYPE_ID_RANGE]
     assert int((replacement > 0.0).sum().item()) == 5
     assert int((final_score > 0.0).sum().item()) == 10
-    assert targets.diagnostics["replacement_representative_value_normalization"] == "conditional_on_query_hit"
+    assert (
+        targets.diagnostics["replacement_representative_value_normalization"]
+        == "conditional_on_query_hit"
+    )
     assert (
         targets.diagnostics["final_label_formula"]
         == "query_hit_times_behavior_with_conditional_replacement_modulation_plus_boundary"
@@ -521,7 +542,9 @@ def test_conditional_behavior_target_is_masked_to_query_hits() -> None:
 
     assert torch.equal(targets.head_mask[:, behavior_idx], hit_mask)
     assert targets.head_mask[:, query_hit_idx].all()
-    assert targets.diagnostics["conditional_behavior_utility_training"] == "masked_to_query_hit_points"
+    assert (
+        targets.diagnostics["conditional_behavior_utility_training"] == "masked_to_query_hit_points"
+    )
 
 
 def test_path_length_support_target_is_query_free_segment_geometry() -> None:
@@ -722,7 +745,9 @@ def test_prior_behavior_field_uses_behavior_values_not_hit_probability() -> None
 
     spatial_query_hit_probability = features[:, -6]
     behavior_utility_prior = features[:, -2]
-    assert torch.allclose(spatial_query_hit_probability, torch.ones_like(spatial_query_hit_probability))
+    assert torch.allclose(
+        spatial_query_hit_probability, torch.ones_like(spatial_query_hit_probability)
+    )
     assert torch.allclose(behavior_utility_prior, behavior_values)
     assert not torch.allclose(behavior_utility_prior, spatial_query_hit_probability)
 
@@ -1029,7 +1054,9 @@ def test_support_overlap_gate_blocks_out_of_extent_eval_points() -> None:
         smoothing_passes=0,
     )
 
-    gate = _support_overlap_gate(train_points=train_points, eval_points=eval_points, query_prior_field=prior)
+    gate = _support_overlap_gate(
+        train_points=train_points, eval_points=eval_points, query_prior_field=prior
+    )
 
     assert gate["gate_pass"] is False
     assert "eval_points_outside_train_prior_extent_too_high" in gate["failed_checks"]
@@ -1072,7 +1099,9 @@ def test_workload_signature_gate_rejects_profile_mismatch_and_tiny_query_counts(
         },
     }
 
-    gate = _range_workload_distribution_comparison(summaries)["workload_signature_gate"]["pairs"]["train"]
+    gate = _range_workload_distribution_comparison(summaries)["workload_signature_gate"]["pairs"][
+        "train"
+    ]
 
     assert gate["gate_pass"] is False
     assert "profile_id_mismatch" in gate["failed_checks"]
@@ -1106,7 +1135,9 @@ def test_workload_signature_gate_rejects_query_count_mismatch() -> None:
         },
     }
 
-    gate = _range_workload_distribution_comparison(summaries)["workload_signature_gate"]["pairs"]["train"]
+    gate = _range_workload_distribution_comparison(summaries)["workload_signature_gate"]["pairs"][
+        "train"
+    ]
 
     assert gate["gate_pass"] is False
     assert gate["metrics"]["query_count_delta"] == 4
@@ -1141,7 +1172,9 @@ def test_workload_signature_gate_allows_small_calibrated_query_count_drift() -> 
         },
     }
 
-    gate = _range_workload_distribution_comparison(summaries)["workload_signature_gate"]["pairs"]["train"]
+    gate = _range_workload_distribution_comparison(summaries)["workload_signature_gate"]["pairs"][
+        "train"
+    ]
 
     assert gate["gate_pass"] is True
     assert gate["metrics"]["query_count_delta"] == 1
@@ -1178,7 +1211,9 @@ def test_workload_signature_gate_reports_normalized_hit_distribution_diagnostics
         },
     }
 
-    gate = _range_workload_distribution_comparison(summaries)["workload_signature_gate"]["pairs"]["train"]
+    gate = _range_workload_distribution_comparison(summaries)["workload_signature_gate"]["pairs"][
+        "train"
+    ]
     metrics = gate["metrics"]
 
     assert metrics["point_hit_fraction_distribution_ks"] == 0.0
@@ -1319,7 +1354,9 @@ def test_factorized_head_ablation_uses_neutral_multiplicative_heads() -> None:
 
     assert torch.allclose(disabled.squeeze(), torch.logit(expected_score), atol=1e-6)
     assert torch.allclose(disabled, disabled_with_large_calibration)
-    assert torch.allclose(model.final_logit_from_head_logits(low_path), model.final_logit_from_head_logits(high_path))
+    assert torch.allclose(
+        model.final_logit_from_head_logits(low_path), model.final_logit_from_head_logits(high_path)
+    )
     assert all(not parameter.requires_grad for parameter in model.calibration_head.parameters())
 
 
@@ -1586,7 +1623,10 @@ def test_score_protected_length_frontier_reports_materiality_floor() -> None:
     assert frontier["materiality_floor_length_preservation"] == pytest.approx(
         frontier["rows"][1]["length_preservation"]
     )
-    assert frontier["materiality_floor_length_gate_would_pass"] == frontier["rows"][1]["length_gate_would_pass"]
+    assert (
+        frontier["materiality_floor_length_gate_would_pass"]
+        == frontier["rows"][1]["length_gate_would_pass"]
+    )
     assert frontier["rows"][0]["protected_score_point_count"] == 0
     assert frontier["rows"][1]["protected_score_point_count"] == 1
 
@@ -1676,8 +1716,9 @@ def test_learned_segment_budget_trace_separates_allocation_from_point_selection(
     assert diagnostic["primary_length_preservation"] == pytest.approx(
         compute_length_preservation(points, boundaries, retained)
     )
-    assert diagnostic["same_allocation_length_only_point_selection_preservation"] > (
-        diagnostic["primary_length_preservation"]
+    assert (
+        diagnostic["same_allocation_length_only_point_selection_preservation"]
+        > (diagnostic["primary_length_preservation"])
     )
     assert diagnostic["counterfactual_retained_count"] == diagnostic["total_budget_count"]
 
@@ -1716,7 +1757,10 @@ def test_learned_segment_budget_length_repair_swaps_learned_slots_for_path_gain(
     assert int(repaired.sum().item()) == int(retained.sum().item())
     assert repaired_trace["length_repair_swap_count"] > 0
     assert repaired_trace["length_repair_retained_count"] > 0
-    assert repaired_trace["learned_controlled_retained_slots"] < trace["learned_controlled_retained_slots"]
+    assert (
+        repaired_trace["learned_controlled_retained_slots"]
+        < trace["learned_controlled_retained_slots"]
+    )
     assert compute_length_preservation(points, boundaries, repaired) > compute_length_preservation(
         points,
         boundaries,
@@ -1907,7 +1951,9 @@ def test_segment_oracle_allocation_audit_reports_ranking_alignment_after_freeze(
     alignment = audit["source_alignment"]
     assert alignment["segment_budget_head_top20_mean"]["spearman_vs_oracle_mass"] < 1.0
     assert alignment["point_score_top20_mean"]["spearman_vs_oracle_mass"] == pytest.approx(1.0)
-    assert alignment["head_query_hit_probability_sigmoid_top20_mean"]["spearman_vs_oracle_mass"] == pytest.approx(1.0)
+    assert alignment["head_query_hit_probability_sigmoid_top20_mean"][
+        "spearman_vs_oracle_mass"
+    ] == pytest.approx(1.0)
     assert audit["best_source_by_top25_oracle_mass_recall"] == "point_score_top20_mean"
     assert "head_segment_budget_target_sigmoid_top20_mean" in audit["score_source_names"]
     transfer_rows = audit["paired_segment_transfer_rows"]
@@ -1915,7 +1961,10 @@ def test_segment_oracle_allocation_audit_reports_ranking_alignment_after_freeze(
     assert transfer_rows["row_limit_per_source"] == 2
     assert transfer_rows["retained_segment_summary"]["available"] is True
     assert transfer_rows["retained_segment_summary"]["frozen_primary_retained_count_total"] == 2
-    assert transfer_rows["retained_segment_summary"]["segments_with_any_frozen_primary_retained_point"] == 2
+    assert (
+        transfer_rows["retained_segment_summary"]["segments_with_any_frozen_primary_retained_point"]
+        == 2
+    )
     first_row = transfer_rows["rows"][0]
     assert {
         "segment_index",
@@ -1983,7 +2032,10 @@ def test_target_segment_oracle_alignment_audit_reports_eval_target_sources_after
     assert audit["diagnostic_only"] is True
     assert audit["uses_eval_labels_after_mask_freeze"] is True
     assert audit["target_alignment_attempted"] is True
-    assert audit["source_semantics"]["point_score_top20_mean"] == "eval_query_useful_v1_final_target_top20_mean"
+    assert (
+        audit["source_semantics"]["point_score_top20_mean"]
+        == "eval_query_useful_v1_final_target_top20_mean"
+    )
     assert (
         audit["source_semantics"]["target_head_segment_budget_target_top20_mean"]
         == "eval_query_useful_v1_factorized_target_head:segment_budget_target"
@@ -1993,7 +2045,10 @@ def test_target_segment_oracle_alignment_audit_reports_eval_target_sources_after
     rows = audit["all_segment_transfer_rows"]["rows"]
     assert len(rows) == 4
     assert "target_head_query_hit_probability_top20_mean_rank" in rows[0]
-    assert audit["target_diagnostics_summary"]["segment_budget_target_base_source"] == "query_useful_v1_final_score"
+    assert (
+        audit["target_diagnostics_summary"]["segment_budget_target_base_source"]
+        == "query_useful_v1_final_score"
+    )
 
 
 def test_learned_segment_allocation_guarantees_one_slot_per_trajectory_when_possible() -> None:
@@ -2266,9 +2321,7 @@ def test_factorized_final_score_composition_diagnostics_match_scalar_target() ->
     head_targets[:, 4] = torch.linspace(0.00, 1.00, steps=point_count)
     head_targets[:, 5] = torch.linspace(1.00, 0.00, steps=point_count)
     scalar_target = (
-        head_targets[:, 0]
-        * (0.5 + head_targets[:, 1])
-        * (0.75 + 0.25 * head_targets[:, 3])
+        head_targets[:, 0] * (0.5 + head_targets[:, 1]) * (0.75 + 0.25 * head_targets[:, 3])
         + 0.25 * head_targets[:, 2]
     ).clamp(0.0, 1.0)
     head_logits = torch.logit(head_targets.clamp(1e-4, 1.0 - 1e-4))
@@ -2284,9 +2337,13 @@ def test_factorized_final_score_composition_diagnostics_match_scalar_target() ->
     assert diagnostics["factorized_final_score_composition_available"] is True
     assert diagnostics["factorized_final_score_tau"] > 0.99
     assert diagnostics["factorized_final_score_topk_mass_recall_at_5_percent"] == pytest.approx(1.0)
-    assert diagnostics["factorized_final_score_prediction_std_to_target_std"] == pytest.approx(1.0, abs=1e-4)
+    assert diagnostics["factorized_final_score_prediction_std_to_target_std"] == pytest.approx(
+        1.0, abs=1e-4
+    )
     assert diagnostics["factorized_target_formula_label_mae"] < 1e-5
-    assert diagnostics["factorized_target_formula_topk_mass_recall_at_5_percent"] == pytest.approx(1.0)
+    assert diagnostics["factorized_target_formula_topk_mass_recall_at_5_percent"] == pytest.approx(
+        1.0
+    )
     assert diagnostics["factorized_replacement_multiplier_mean"] > 0.75
 
 
@@ -2500,7 +2557,10 @@ def test_query_useful_component_delta_summary_reports_weighted_tradeoffs() -> No
     assert row["weighted_component_deltas"]["ship_f1"] == pytest.approx(-0.008)
     assert row["component_weighted_delta_sum"] == pytest.approx(0.003)
     assert row["component_delta_residual"] == pytest.approx(0.013)
-    assert row["top_positive_weighted_component_deltas"][0]["component"] == "query_balanced_point_recall"
+    assert (
+        row["top_positive_weighted_component_deltas"][0]["component"]
+        == "query_balanced_point_recall"
+    )
     assert row["top_negative_weighted_component_deltas"][0]["component"] == "ship_f1"
 
 
@@ -2553,7 +2613,10 @@ def test_causality_ablation_tradeoff_summary_connects_mask_and_component_changes
     assert row["query_useful_v1_delta_per_changed_retained_decision"] == pytest.approx(0.008)
     assert row["positive_weighted_component_delta_sum"] == pytest.approx(0.011)
     assert row["negative_weighted_component_delta_sum"] == pytest.approx(-0.008)
-    assert row["dominant_positive_weighted_component_delta"]["component"] == "query_balanced_point_recall"
+    assert (
+        row["dominant_positive_weighted_component_delta"]["component"]
+        == "query_balanced_point_recall"
+    )
     assert row["dominant_negative_weighted_component_delta"]["component"] == "ship_f1"
 
 
@@ -2596,7 +2659,9 @@ def test_causality_ablation_diagnostics_payload_reuses_component_and_mask_tradeo
     assert payload["available"] is True
     assert payload["primary_query_useful_v1_score"] == pytest.approx(0.108)
     assert payload["ablation_scores"]["MLQDS_without_behavior_utility_head"] == pytest.approx(0.092)
-    assert payload["ablation_query_useful_deltas"]["MLQDS_without_behavior_utility_head"] == pytest.approx(0.016)
+    assert payload["ablation_query_useful_deltas"][
+        "MLQDS_without_behavior_utility_head"
+    ] == pytest.approx(0.016)
     assert row["retained_symmetric_difference_count"] == 4.0
     assert row["dominant_negative_weighted_component_delta"]["component"] == "ship_f1"
 
@@ -2746,7 +2811,11 @@ def test_workload_signature_gate_reports_pass_for_matching_profiles() -> None:
     }
     summaries = {
         "train": {"range": {}, "range_signal": {}, "generation": {"workload_signature": signature}},
-        "eval": {"range": {}, "range_signal": {}, "generation": {"workload_signature": dict(signature)}},
+        "eval": {
+            "range": {},
+            "range_signal": {},
+            "generation": {"workload_signature": dict(signature)},
+        },
     }
 
     comparison = _range_workload_distribution_comparison(summaries)
@@ -2803,12 +2872,20 @@ def test_predictability_audit_is_diagnostic_only_and_reports_gate_fields() -> No
     channel_by_head = audit["prior_channel_by_head_predictability"]
     assert "query_hit_probability" in channel_by_head
     assert "spatiotemporal_query_hit_probability" in channel_by_head["query_hit_probability"]
-    assert "lift_at_5_percent" in channel_by_head["query_hit_probability"]["spatiotemporal_query_hit_probability"]
     assert (
-        channel_by_head["query_hit_probability"]["spatiotemporal_query_hit_probability"]["rank_correlation_method"]
+        "lift_at_5_percent"
+        in channel_by_head["query_hit_probability"]["spatiotemporal_query_hit_probability"]
+    )
+    assert (
+        channel_by_head["query_hit_probability"]["spatiotemporal_query_hit_probability"][
+            "rank_correlation_method"
+        ]
         == "average_tie_ranks"
     )
-    assert "score_decile_calibration" in channel_by_head["query_hit_probability"]["spatiotemporal_query_hit_probability"]
+    assert (
+        "score_decile_calibration"
+        in channel_by_head["query_hit_probability"]["spatiotemporal_query_hit_probability"]
+    )
     best_by_head = audit["best_prior_channel_by_head"]
     assert "query_hit_probability" in best_by_head
     assert "channel" in best_by_head["query_hit_probability"]["best_lift_at_5_percent"]
@@ -2852,7 +2929,9 @@ def test_segment_budget_prior_does_not_blend_raw_route_density() -> None:
 
     scores = _prior_channel_scores(points, prior)
 
-    assert torch.allclose(scores["segment_budget_prior"], scores["replacement_representative_prior"])
+    assert torch.allclose(
+        scores["segment_budget_prior"], scores["replacement_representative_prior"]
+    )
     assert not torch.allclose(scores["segment_budget_prior"], scores["route_density_prior"])
 
 
@@ -2922,7 +3001,9 @@ def test_route_corridor_family_has_actual_corridor_semantics_or_is_not_final() -
     params = query["params"]
     metadata = query["_metadata"]
     assert metadata["corridor_axis"] == "east_west"
-    assert float(params["lon_max"] - params["lon_min"]) > float(params["lat_max"] - params["lat_min"])
+    assert float(params["lon_max"] - params["lon_min"]) > float(
+        params["lat_max"] - params["lat_min"]
+    )
 
 
 def test_port_or_approach_zone_anchor_family_is_distinct_from_density_route() -> None:
@@ -2945,7 +3026,9 @@ def test_port_or_approach_zone_anchor_family_is_distinct_from_density_route() ->
 
 
 def test_final_profile_does_not_chase_uncovered_points_unless_declared() -> None:
-    trajectories = generate_synthetic_ais_data(n_ships=4, n_points_per_ship=32, seed=91, route_families=1)
+    trajectories = generate_synthetic_ais_data(
+        n_ships=4, n_points_per_ship=32, seed=91, route_families=1
+    )
     workload = generate_typed_query_workload(
         trajectories=trajectories,
         n_queries=4,
@@ -3018,16 +3101,16 @@ def test_workload_stability_gate_accepts_coverage_calibrated_replicates() -> Non
             typed_queries=[{} for _ in range(8)],
             coverage_fraction=0.105,
             generation_diagnostics={
-            "query_generation": {
-                "mode": "target_coverage",
-                "workload_profile_id": "range_workload_v1",
-                "coverage_calibration_mode": "profile_sampled_query_count",
-                "query_count_mode": "calibrated_to_coverage",
-                "target_coverage": 0.10,
-                "coverage_guard_enabled": True,
-                "stop_reason": "target_coverage_reached",
-            }
-        },
+                "query_generation": {
+                    "mode": "target_coverage",
+                    "workload_profile_id": "range_workload_v1",
+                    "coverage_calibration_mode": "profile_sampled_query_count",
+                    "query_count_mode": "calibrated_to_coverage",
+                    "target_coverage": 0.10,
+                    "coverage_guard_enabled": True,
+                    "stop_reason": "target_coverage_reached",
+                }
+            },
         )
 
     gate = _workload_stability_gate(
@@ -3062,8 +3145,7 @@ def test_workload_stability_gate_rejects_exhausted_generation_after_coverage_sat
                 "target_coverage": 0.10,
                 "coverage_guard_enabled": True,
                 "stop_reason": "range_acceptance_exhausted",
-            }
-        ,
+            },
             "range_acceptance": {
                 "enabled": True,
                 "attempts": 6000,

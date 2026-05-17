@@ -65,7 +65,7 @@ def test_ais_cache_roundtrip_and_cache_hit(tmp_path: Path) -> None:
     assert second.mmsis == first.mmsis
     assert second.audit.to_dict() == first.audit.to_dict()
     assert len(second.trajectories) == len(first.trajectories)
-    for cached, original in zip(second.trajectories, first.trajectories):
+    for cached, original in zip(second.trajectories, first.trajectories, strict=False):
         assert torch.equal(cached, original)
 
 
@@ -90,5 +90,5 @@ def test_ais_cache_refresh_rebuilds_matching_entry(tmp_path: Path) -> None:
     assert refreshed.cache_hit is False
     assert refreshed.manifest_path == first.manifest_path
     assert refreshed.parquet_path == first.parquet_path
-    for cached, original in zip(refreshed.trajectories, first.trajectories):
+    for cached, original in zip(refreshed.trajectories, first.trajectories, strict=False):
         assert torch.equal(cached, original)

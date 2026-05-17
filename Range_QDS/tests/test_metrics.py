@@ -589,7 +589,9 @@ def test_range_boundary_preservation_is_separate_from_range_f1() -> None:
     ]
     retained = torch.tensor([True, False, False, True, True])
 
-    aggregate, per_type, _, _ = score_retained_mask(points, boundaries, retained, queries, {"range": 1.0})
+    aggregate, per_type, _, _ = score_retained_mask(
+        points, boundaries, retained, queries, {"range": 1.0}
+    )
     boundary_f1 = score_range_boundary_preservation(points, boundaries, retained, queries)
 
     assert aggregate == pytest.approx(2.0 / 3.0)
@@ -946,9 +948,13 @@ def test_range_usefulness_cache_reuses_retained_independent_support() -> None:
     ]
     query_cache = EvaluationQueryCache.for_workload(points, boundaries, queries)
 
-    score_range_usefulness(points, boundaries, torch.tensor([True, False, False, True]), queries, query_cache)
+    score_range_usefulness(
+        points, boundaries, torch.tensor([True, False, False, True]), queries, query_cache
+    )
     support = query_cache.range_audit_supports[0]
-    score_range_usefulness(points, boundaries, torch.tensor([False, True, True, False]), queries, query_cache)
+    score_range_usefulness(
+        points, boundaries, torch.tensor([False, True, True, False]), queries, query_cache
+    )
 
     assert len(query_cache.range_audit_supports) == 1
     assert query_cache.range_audit_supports[0] is support
@@ -958,7 +964,9 @@ def test_range_usefulness_cache_reuses_retained_independent_support() -> None:
 def test_retained_point_gap_stats_measure_original_spacing() -> None:
     retained = torch.tensor([True, False, False, True, False, True, True, False, True])
 
-    avg_gap, avg_norm_gap, max_gap = _retained_point_gap_stats(retained, boundaries=[(0, 6), (6, 9)])
+    avg_gap, avg_norm_gap, max_gap = _retained_point_gap_stats(
+        retained, boundaries=[(0, 6), (6, 9)]
+    )
 
     assert avg_gap == pytest.approx((3.0 + 2.0 + 2.0) / 3.0)
     assert avg_norm_gap == pytest.approx(((3.0 / 5.0) + (2.0 / 5.0) + (2.0 / 2.0)) / 3.0)

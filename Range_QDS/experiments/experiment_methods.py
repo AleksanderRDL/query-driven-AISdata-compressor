@@ -6,17 +6,17 @@ from collections.abc import Sequence
 
 import torch
 
+from config.experiment_config import ExperimentConfig, SeedBundle
 from evaluation.baselines import (
     DouglasPeuckerMethod,
-    MLQDSMethod,
     Method,
+    MLQDSMethod,
     ScoreGlobalBudgetMethod,
     ScoreHybridMethod,
     UniformTemporalMethod,
 )
 from evaluation.evaluate_methods import evaluate_method
 from evaluation.query_cache import EvaluationQueryCache
-from experiments.experiment_config import ExperimentConfig, SeedBundle
 from experiments.experiment_workloads import workload_name
 from experiments.range_cache import RangeRuntimeCache, prepare_range_label_cache
 from queries.query_types import single_workload_type
@@ -111,7 +111,9 @@ def prepare_eval_labels(
             config=config,
             seed=seeds.eval_query_seed,
             runtime_cache=runtime_cache,
-            range_boundary_prior_weight=float(getattr(config.model, "range_boundary_prior_weight", 0.0)),
+            range_boundary_prior_weight=float(
+                getattr(config.model, "range_boundary_prior_weight", 0.0)
+            ),
         )
         if prepared_eval_labels is not None:
             labels, _ = prepared_eval_labels
@@ -123,7 +125,9 @@ def prepare_eval_labels(
             boundaries=test_boundaries,
             typed_queries=eval_workload.typed_queries,
             range_label_mode=str(getattr(config.model, "range_label_mode", "usefulness")),
-            range_boundary_prior_weight=float(getattr(config.model, "range_boundary_prior_weight", 0.0)),
+            range_boundary_prior_weight=float(
+                getattr(config.model, "range_boundary_prior_weight", 0.0)
+            ),
         )
         return labels
     return None

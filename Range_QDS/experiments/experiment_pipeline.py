@@ -5,10 +5,11 @@ from __future__ import annotations
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import torch
 
+from config.experiment_config import ExperimentConfig, derive_seed_bundle
 from evaluation.baselines import (
     FrozenMaskMethod,
     Method,
@@ -25,7 +26,6 @@ from evaluation.tables import (
     print_range_usefulness_table,
     print_shift_table,
 )
-from experiments.experiment_config import ExperimentConfig, derive_seed_bundle
 from experiments.causality import (
     LEARNING_CAUSALITY_MIN_MATERIAL_DELTA,
     _causality_ablation_diagnostics_payload,
@@ -35,19 +35,37 @@ from experiments.causality import (
     _learning_causality_delta_gate_config,
     _prior_feature_sample_sensitivity,
     _prior_sample_gate_failures,
-    _query_useful_delta,
     _query_useful_component_delta_summary,
+    _query_useful_delta,
     _retained_mask_comparison,
     _score_ablation_sensitivity,
 )
 from experiments.experiment_data import build_experiment_datasets, prepare_experiment_split
+from experiments.experiment_methods import (
+    attach_range_geometry_scores,
+    build_learned_fill_methods,
+    build_primary_methods,
+    evaluate_shift_pairs,
+    prepare_eval_labels,
+    prepare_eval_query_cache,
+)
+from experiments.experiment_outputs import ExperimentOutputs, write_experiment_results
+from experiments.experiment_workloads import (
+    generate_experiment_workloads,
+    resolve_workload_maps,
+    workload_name,
+)
 from experiments.gates import (
     _global_sanity_gate,
     _support_overlap_gate,
     _target_diffusion_gate,
     _workload_stability_gate,
 )
-from experiments.geojson_writers import report_trajectory_length_loss, write_queries_geojson, write_simplified_csv
+from experiments.geojson_writers import (
+    report_trajectory_length_loss,
+    write_queries_geojson,
+    write_simplified_csv,
+)
 from experiments.length_diagnostics import (
     _score_protected_length_feasibility,
     _score_protected_length_frontier,
@@ -58,15 +76,6 @@ from experiments.model_ablations import (
     _scores_without_factorized_head,
     _shuffled_query_prior_field,
 )
-from experiments.experiment_methods import (
-    attach_range_geometry_scores,
-    build_learned_fill_methods,
-    build_primary_methods,
-    evaluate_shift_pairs,
-    prepare_eval_labels,
-    prepare_eval_query_cache,
-)
-from experiments.experiment_outputs import ExperimentOutputs, write_experiment_results
 from experiments.range_cache import (
     RangeRuntimeCache,
     prepare_range_label_cache,
@@ -94,35 +103,39 @@ from experiments.selector_diagnostics import (
     _segment_score_top_band_for_ablation,
     _selector_segment_score_source_label,
 )
-from experiments.experiment_workloads import (
-    generate_experiment_workloads,
-    resolve_workload_maps,
-    workload_name,
-)
 from queries.query_types import QUERY_TYPE_ID_RANGE, single_workload_type
-from simplification.mlqds_scoring import workload_type_head
+from runtime.torch_runtime import (
+    amp_runtime_snapshot,
+    cuda_memory_snapshot,
+    reset_cuda_peak_memory_stats,
+    torch_runtime_snapshot,
+)
 from simplification.learned_segment_budget import (
     blend_segment_support_scores,
     learned_segment_budget_diagnostics,
     simplify_with_learned_segment_budget_v1_with_trace,
 )
+from simplification.mlqds_scoring import workload_type_head
 from simplification.simplify_trajectories import temporal_hybrid_selector_budget_diagnostics
-from training.train_model import train_model
 from training.checkpoints import ModelArtifacts, save_checkpoint
 from training.model_features import is_workload_blind_model_type, model_type_metadata
-from training.predictability_audit import query_prior_predictability_audit, query_prior_predictability_scores
+from training.predictability_audit import (
+    query_prior_predictability_audit,
+    query_prior_predictability_scores,
+)
 from training.query_prior_fields import (
     QUERY_PRIOR_FIELD_NAMES,
     query_prior_field_metadata,
     zero_query_prior_field_channels,
     zero_query_prior_field_like,
 )
-from training.training_outputs import TrainingOutputs
 from training.teacher_distillation import (
     build_range_teacher_config,
     distill_range_teacher_labels,
     range_teacher_distillation_enabled,
 )
+from training.train_model import train_model
+from training.training_outputs import TrainingOutputs
 from training.training_targets import (
     aggregate_range_component_label_sets,
     aggregate_range_component_retained_frequency_training_labels,
@@ -139,18 +152,12 @@ from training.training_targets import (
     range_historical_prior_retained_frequency_training_labels,
     range_local_swap_gain_cost_frequency_training_labels,
     range_local_swap_utility_frequency_training_labels,
-    range_query_residual_frequency_training_labels,
-    range_set_utility_frequency_training_labels,
-    range_query_spine_frequency_training_labels,
     range_marginal_coverage_training_labels,
+    range_query_residual_frequency_training_labels,
+    range_query_spine_frequency_training_labels,
     range_retained_frequency_training_labels,
+    range_set_utility_frequency_training_labels,
     range_structural_retained_frequency_training_labels,
-)
-from experiments.torch_runtime import (
-    amp_runtime_snapshot,
-    cuda_memory_snapshot,
-    reset_cuda_peak_memory_stats,
-    torch_runtime_snapshot,
 )
 
 
@@ -222,11 +229,15 @@ def _selection_causality_diagnostics(
         workload=selection_workload,
     )
     try:
-        primary_mask = primary_method.simplify(
-            selection_points,
-            selection_boundaries,
-            float(config.model.compression_ratio),
-        ).detach().cpu()
+        primary_mask = (
+            primary_method.simplify(
+                selection_points,
+                selection_boundaries,
+                float(config.model.compression_ratio),
+            )
+            .detach()
+            .cpu()
+        )
     except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
         return {"available": False, "reason": "primary_mask_freeze_failed", "error": str(exc)}
 
@@ -243,7 +254,9 @@ def _selection_causality_diagnostics(
     primary_raw_preds = getattr(primary_method, "_raw_pred_cache", None)
     primary_head_logits = getattr(primary_method, "_head_logit_cache", None)
     primary_segment_scores = getattr(primary_method, "_segment_score_cache", None)
-    primary_path_length_support_scores = getattr(primary_method, "_path_length_support_score_cache", None)
+    primary_path_length_support_scores = getattr(
+        primary_method, "_path_length_support_score_cache", None
+    )
     primary_selector_segment_scores = getattr(primary_method, "_selector_segment_score_cache", None)
     if isinstance(primary_scores, torch.Tensor):
         primary_scores = primary_scores.detach().cpu().float()
@@ -254,7 +267,9 @@ def _selection_causality_diagnostics(
     if isinstance(primary_segment_scores, torch.Tensor):
         primary_segment_scores = primary_segment_scores.detach().cpu().float()
     if isinstance(primary_path_length_support_scores, torch.Tensor):
-        primary_path_length_support_scores = primary_path_length_support_scores.detach().cpu().float()
+        primary_path_length_support_scores = (
+            primary_path_length_support_scores.detach().cpu().float()
+        )
     if isinstance(primary_selector_segment_scores, torch.Tensor):
         primary_selector_segment_scores = primary_selector_segment_scores.detach().cpu().float()
 
@@ -267,7 +282,9 @@ def _selection_causality_diagnostics(
     if isinstance(primary_scores, torch.Tensor) and geometry_gain_weight > 0.0:
         try:
             selection_segment_scores = (
-                primary_selector_segment_scores if isinstance(primary_selector_segment_scores, torch.Tensor) else None
+                primary_selector_segment_scores
+                if isinstance(primary_selector_segment_scores, torch.Tensor)
+                else None
             )
             ablation_methods.append(
                 _learned_segment_frozen_method(
@@ -279,15 +296,23 @@ def _selection_causality_diagnostics(
                     segment_point_scores=primary_segment_scores,
                     points=selection_points,
                     learned_segment_geometry_gain_weight=0.0,
-                    learned_segment_score_blend_weight=float(config.model.learned_segment_score_blend_weight),
-                    learned_segment_fairness_preallocation=bool(config.model.learned_segment_fairness_preallocation),
-                    learned_segment_length_repair_fraction=float(config.model.learned_segment_length_repair_fraction),
+                    learned_segment_score_blend_weight=float(
+                        config.model.learned_segment_score_blend_weight
+                    ),
+                    learned_segment_fairness_preallocation=bool(
+                        config.model.learned_segment_fairness_preallocation
+                    ),
+                    learned_segment_length_repair_fraction=float(
+                        config.model.learned_segment_length_repair_fraction
+                    ),
                 )
             )
         except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
             freeze_failures["MLQDS_without_geometry_tie_breaker"] = str(exc)
 
-    if isinstance(primary_scores, torch.Tensor) and isinstance(primary_segment_scores, torch.Tensor):
+    if isinstance(primary_scores, torch.Tensor) and isinstance(
+        primary_segment_scores, torch.Tensor
+    ):
         try:
             neutral_segment_scores = _neutral_segment_scores_for_ablation(primary_segment_scores)
             no_segment_selector_scores = blend_segment_support_scores(
@@ -297,7 +322,9 @@ def _selection_causality_diagnostics(
                     if isinstance(primary_path_length_support_scores, torch.Tensor)
                     else None
                 ),
-                path_length_support_weight=float(config.model.learned_segment_length_support_blend_weight),
+                path_length_support_weight=float(
+                    config.model.learned_segment_length_support_blend_weight
+                ),
             )
             no_segment = _learned_segment_frozen_method(
                 name="MLQDS_without_segment_budget_head",
@@ -307,18 +334,30 @@ def _selection_causality_diagnostics(
                 segment_scores=no_segment_selector_scores,
                 segment_point_scores=neutral_segment_scores,
                 points=selection_points,
-                learned_segment_geometry_gain_weight=float(config.model.learned_segment_geometry_gain_weight),
-                learned_segment_score_blend_weight=float(config.model.learned_segment_score_blend_weight),
-                learned_segment_fairness_preallocation=bool(config.model.learned_segment_fairness_preallocation),
-                learned_segment_length_repair_fraction=float(config.model.learned_segment_length_repair_fraction),
+                learned_segment_geometry_gain_weight=float(
+                    config.model.learned_segment_geometry_gain_weight
+                ),
+                learned_segment_score_blend_weight=float(
+                    config.model.learned_segment_score_blend_weight
+                ),
+                learned_segment_fairness_preallocation=bool(
+                    config.model.learned_segment_fairness_preallocation
+                ),
+                learned_segment_length_repair_fraction=float(
+                    config.model.learned_segment_length_repair_fraction
+                ),
             )
             ablation_methods.append(no_segment)
             head_sensitivity["MLQDS_without_segment_budget_head"] = {
                 **_head_ablation_sensitivity(
                     primary_scores=primary_scores,
                     ablation_scores=primary_scores,
-                    primary_raw_predictions=primary_raw_preds if isinstance(primary_raw_preds, torch.Tensor) else None,
-                    ablation_raw_predictions=primary_raw_preds if isinstance(primary_raw_preds, torch.Tensor) else None,
+                    primary_raw_predictions=primary_raw_preds
+                    if isinstance(primary_raw_preds, torch.Tensor)
+                    else None,
+                    ablation_raw_predictions=primary_raw_preds
+                    if isinstance(primary_raw_preds, torch.Tensor)
+                    else None,
                     primary_segment_scores=(
                         primary_selector_segment_scores
                         if isinstance(primary_selector_segment_scores, torch.Tensor)
@@ -334,7 +373,9 @@ def _selection_causality_diagnostics(
         except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
             freeze_failures["MLQDS_without_segment_budget_head"] = str(exc)
 
-    if isinstance(primary_scores, torch.Tensor) and isinstance(primary_path_length_support_scores, torch.Tensor):
+    if isinstance(primary_scores, torch.Tensor) and isinstance(
+        primary_path_length_support_scores, torch.Tensor
+    ):
         try:
             path_length_segment_method = _learned_segment_frozen_method(
                 name="MLQDS_path_length_support_segment_head_diagnostic",
@@ -343,18 +384,30 @@ def _selection_causality_diagnostics(
                 compression_ratio=float(config.model.compression_ratio),
                 segment_scores=primary_path_length_support_scores,
                 points=selection_points,
-                learned_segment_geometry_gain_weight=float(config.model.learned_segment_geometry_gain_weight),
-                learned_segment_score_blend_weight=float(config.model.learned_segment_score_blend_weight),
-                learned_segment_fairness_preallocation=bool(config.model.learned_segment_fairness_preallocation),
-                learned_segment_length_repair_fraction=float(config.model.learned_segment_length_repair_fraction),
+                learned_segment_geometry_gain_weight=float(
+                    config.model.learned_segment_geometry_gain_weight
+                ),
+                learned_segment_score_blend_weight=float(
+                    config.model.learned_segment_score_blend_weight
+                ),
+                learned_segment_fairness_preallocation=bool(
+                    config.model.learned_segment_fairness_preallocation
+                ),
+                learned_segment_length_repair_fraction=float(
+                    config.model.learned_segment_length_repair_fraction
+                ),
             )
             ablation_methods.append(path_length_segment_method)
             head_sensitivity["MLQDS_path_length_support_segment_head_diagnostic"] = {
                 **_head_ablation_sensitivity(
                     primary_scores=primary_scores,
                     ablation_scores=primary_scores,
-                    primary_raw_predictions=primary_raw_preds if isinstance(primary_raw_preds, torch.Tensor) else None,
-                    ablation_raw_predictions=primary_raw_preds if isinstance(primary_raw_preds, torch.Tensor) else None,
+                    primary_raw_predictions=primary_raw_preds
+                    if isinstance(primary_raw_preds, torch.Tensor)
+                    else None,
+                    ablation_raw_predictions=primary_raw_preds
+                    if isinstance(primary_raw_preds, torch.Tensor)
+                    else None,
                     primary_segment_scores=(
                         primary_selector_segment_scores
                         if isinstance(primary_selector_segment_scores, torch.Tensor)
@@ -378,18 +431,30 @@ def _selection_causality_diagnostics(
                 segment_scores=primary_path_length_support_scores,
                 segment_point_scores=primary_segment_scores,
                 points=selection_points,
-                learned_segment_geometry_gain_weight=float(config.model.learned_segment_geometry_gain_weight),
-                learned_segment_score_blend_weight=float(config.model.learned_segment_score_blend_weight),
-                learned_segment_fairness_preallocation=bool(config.model.learned_segment_fairness_preallocation),
-                learned_segment_length_repair_fraction=float(config.model.learned_segment_length_repair_fraction),
+                learned_segment_geometry_gain_weight=float(
+                    config.model.learned_segment_geometry_gain_weight
+                ),
+                learned_segment_score_blend_weight=float(
+                    config.model.learned_segment_score_blend_weight
+                ),
+                learned_segment_fairness_preallocation=bool(
+                    config.model.learned_segment_fairness_preallocation
+                ),
+                learned_segment_length_repair_fraction=float(
+                    config.model.learned_segment_length_repair_fraction
+                ),
             )
             ablation_methods.append(path_length_allocation_method)
             head_sensitivity["MLQDS_path_length_support_allocation_only_diagnostic"] = {
                 **_head_ablation_sensitivity(
                     primary_scores=primary_scores,
                     ablation_scores=primary_scores,
-                    primary_raw_predictions=primary_raw_preds if isinstance(primary_raw_preds, torch.Tensor) else None,
-                    ablation_raw_predictions=primary_raw_preds if isinstance(primary_raw_preds, torch.Tensor) else None,
+                    primary_raw_predictions=primary_raw_preds
+                    if isinstance(primary_raw_preds, torch.Tensor)
+                    else None,
+                    ablation_raw_predictions=primary_raw_preds
+                    if isinstance(primary_raw_preds, torch.Tensor)
+                    else None,
                     primary_segment_scores=(
                         primary_selector_segment_scores
                         if isinstance(primary_selector_segment_scores, torch.Tensor)
@@ -437,17 +502,27 @@ def _selection_causality_diagnostics(
                 segment_scores=primary_selector_segment_scores,
                 segment_point_scores=primary_segment_scores,
                 points=selection_points,
-                learned_segment_geometry_gain_weight=float(config.model.learned_segment_geometry_gain_weight),
-                learned_segment_score_blend_weight=float(config.model.learned_segment_score_blend_weight),
-                learned_segment_fairness_preallocation=bool(config.model.learned_segment_fairness_preallocation),
-                learned_segment_length_repair_fraction=float(config.model.learned_segment_length_repair_fraction),
+                learned_segment_geometry_gain_weight=float(
+                    config.model.learned_segment_geometry_gain_weight
+                ),
+                learned_segment_score_blend_weight=float(
+                    config.model.learned_segment_score_blend_weight
+                ),
+                learned_segment_fairness_preallocation=bool(
+                    config.model.learned_segment_fairness_preallocation
+                ),
+                learned_segment_length_repair_fraction=float(
+                    config.model.learned_segment_length_repair_fraction
+                ),
             )
             ablation_methods.append(no_behavior)
             head_sensitivity["MLQDS_without_behavior_utility_head"] = {
                 **_head_ablation_sensitivity(
                     primary_scores=primary_scores,
                     ablation_scores=behavior_scores,
-                    primary_raw_predictions=primary_raw_preds if isinstance(primary_raw_preds, torch.Tensor) else None,
+                    primary_raw_predictions=primary_raw_preds
+                    if isinstance(primary_raw_preds, torch.Tensor)
+                    else None,
                     ablation_raw_predictions=behavior_raw_preds,
                     primary_segment_scores=primary_selector_segment_scores,
                     ablation_segment_scores=primary_selector_segment_scores,
@@ -463,7 +538,11 @@ def _selection_causality_diagnostics(
     query_prior_field = trained.feature_context.get("query_prior_field")
     if isinstance(query_prior_field, dict) and isinstance(primary_scores, torch.Tensor):
         try:
-            prior_scores = query_prior_predictability_scores(selection_points, query_prior_field).detach().cpu()
+            prior_scores = (
+                query_prior_predictability_scores(selection_points, query_prior_field)
+                .detach()
+                .cpu()
+            )
             ablation_methods.append(
                 _learned_segment_frozen_method(
                     name="MLQDS_prior_field_only_score",
@@ -471,10 +550,18 @@ def _selection_causality_diagnostics(
                     boundaries=selection_boundaries,
                     compression_ratio=float(config.model.compression_ratio),
                     points=selection_points,
-                    learned_segment_geometry_gain_weight=float(config.model.learned_segment_geometry_gain_weight),
-                    learned_segment_score_blend_weight=float(config.model.learned_segment_score_blend_weight),
-                    learned_segment_fairness_preallocation=bool(config.model.learned_segment_fairness_preallocation),
-                    learned_segment_length_repair_fraction=float(config.model.learned_segment_length_repair_fraction),
+                    learned_segment_geometry_gain_weight=float(
+                        config.model.learned_segment_geometry_gain_weight
+                    ),
+                    learned_segment_score_blend_weight=float(
+                        config.model.learned_segment_score_blend_weight
+                    ),
+                    learned_segment_fairness_preallocation=bool(
+                        config.model.learned_segment_fairness_preallocation
+                    ),
+                    learned_segment_length_repair_fraction=float(
+                        config.model.learned_segment_length_repair_fraction
+                    ),
                 )
             )
         except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
@@ -532,13 +619,19 @@ def _selection_causality_diagnostics(
                     "sampled_prior_features": prior_feature_sensitivity,
                     "selector_score": _score_ablation_sensitivity(
                         primary_scores=primary_scores,
-                        ablation_scores=ablation_scores if isinstance(ablation_scores, torch.Tensor) else None,
+                        ablation_scores=ablation_scores
+                        if isinstance(ablation_scores, torch.Tensor)
+                        else None,
                         primary_mask=primary_mask,
                         ablation_mask=ablation_mask,
                     ),
                     "raw_prediction": _score_ablation_sensitivity(
-                        primary_scores=primary_raw_preds if isinstance(primary_raw_preds, torch.Tensor) else None,
-                        ablation_scores=ablation_raw_preds if isinstance(ablation_raw_preds, torch.Tensor) else None,
+                        primary_scores=primary_raw_preds
+                        if isinstance(primary_raw_preds, torch.Tensor)
+                        else None,
+                        ablation_scores=ablation_raw_preds
+                        if isinstance(ablation_raw_preds, torch.Tensor)
+                        else None,
                         primary_mask=primary_mask,
                         ablation_mask=ablation_mask,
                     ),
@@ -589,7 +682,7 @@ def _selection_causality_diagnostics(
         {
             "split": "checkpoint_selection",
             "diagnostic_only": True,
-            "query_count": int(len(selection_workload.typed_queries)),
+            "query_count": len(selection_workload.typed_queries),
             "ablation_freeze_failures": freeze_failures,
             "prior_sensitivity_diagnostics": prior_sensitivity,
             "head_ablation_sensitivity_diagnostics": head_sensitivity,
@@ -636,7 +729,9 @@ def run_experiment_pipeline(
     seeds = derive_seed_bundle(config.data.seed)
     selection_metric = str(getattr(config.model, "checkpoint_selection_metric", "score")).lower()
     validation_score_every = int(getattr(config.model, "validation_score_every", 0) or 0)
-    needs_validation_score = selection_metric in {"score", "uniform_gap"} or validation_score_every > 0
+    needs_validation_score = (
+        selection_metric in {"score", "uniform_gap"} or validation_score_every > 0
+    )
     with _phase("split"):
         data_split = prepare_experiment_split(
             config=config,
@@ -702,7 +797,9 @@ def run_experiment_pipeline(
 
     reset_cuda_peak_memory_stats()
     train_labels: tuple[torch.Tensor, torch.Tensor] | None = None
-    range_training_target_mode = str(getattr(config.model, "range_training_target_mode", "point_value")).lower()
+    range_training_target_mode = str(
+        getattr(config.model, "range_training_target_mode", "point_value")
+    ).lower()
     range_replicate_target_aggregation = str(
         getattr(config.model, "range_replicate_target_aggregation", "label_mean")
     ).lower()
@@ -711,7 +808,9 @@ def run_experiment_pipeline(
             "range_replicate_target_aggregation must be 'label_mean', 'label_max', or 'frequency_mean'."
         )
     if len(train_label_workloads) > 1 and not is_workload_blind_model_type(config.model.model_type):
-        raise RuntimeError("range_train_workload_replicates > 1 is only valid for workload-blind model types.")
+        raise RuntimeError(
+            "range_train_workload_replicates > 1 is only valid for workload-blind model types."
+        )
     range_training_target_transform: dict[str, Any] = {
         "mode": range_training_target_mode,
         "enabled": False,
@@ -722,7 +821,7 @@ def run_experiment_pipeline(
     }
     range_training_label_aggregation: dict[str, Any] = {
         "enabled": False,
-        "replicate_count": int(len(train_label_workloads)),
+        "replicate_count": len(train_label_workloads),
         "seeds": [int(seed) for seed in train_label_workload_seeds],
     }
     teacher_distillation_diagnostics: dict[str, Any] = {
@@ -739,14 +838,21 @@ def run_experiment_pipeline(
         )
     selection_query_cache: EvaluationQueryCache | None = None
     selection_geometry_scores: torch.Tensor | None = None
-    mlqds_range_geometry_blend = max(0.0, min(1.0, float(getattr(config.model, "mlqds_range_geometry_blend", 0.0))))
+    mlqds_range_geometry_blend = max(
+        0.0, min(1.0, float(getattr(config.model, "mlqds_range_geometry_blend", 0.0)))
+    )
     with _phase("range-training-prep"):
         train_label_sets: list[tuple[torch.Tensor, torch.Tensor]] = []
         train_component_label_sets: list[dict[str, torch.Tensor] | None] = []
-        if range_training_target_mode != "query_useful_v1_factorized" or range_teacher_distillation_enabled(config.model):
+        if (
+            range_training_target_mode != "query_useful_v1_factorized"
+            or range_teacher_distillation_enabled(config.model)
+        ):
             for replicate_index, label_workload in enumerate(train_label_workloads):
                 label_cache_name = "train" if replicate_index == 0 else f"train_r{replicate_index}"
-                runtime_cache = range_runtime_caches["train"] if replicate_index == 0 else RangeRuntimeCache()
+                runtime_cache = (
+                    range_runtime_caches["train"] if replicate_index == 0 else RangeRuntimeCache()
+                )
                 label_result = prepare_range_label_cache(
                     cache_label=label_cache_name,
                     points=train_points,
@@ -756,7 +862,9 @@ def run_experiment_pipeline(
                     config=config,
                     seed=train_label_workload_seeds[replicate_index],
                     runtime_cache=runtime_cache,
-                    range_boundary_prior_weight=float(getattr(config.model, "range_boundary_prior_weight", 0.0)),
+                    range_boundary_prior_weight=float(
+                        getattr(config.model, "range_boundary_prior_weight", 0.0)
+                    ),
                 )
                 if label_result is not None:
                     train_label_sets.append(label_result)
@@ -769,10 +877,14 @@ def run_experiment_pipeline(
                 and not range_teacher_distillation_enabled(config.model)
             ):
                 if range_replicate_target_aggregation == "frequency_mean":
-                    raise ValueError("range_replicate_target_aggregation='frequency_mean' requires a frequency target.")
+                    raise ValueError(
+                        "range_replicate_target_aggregation='frequency_mean' requires a frequency target."
+                    )
                 labels, labelled_mask, aggregation_diagnostics = aggregate_range_label_sets(
                     train_label_sets,
-                    aggregation="max" if range_replicate_target_aggregation == "label_max" else "mean",
+                    aggregation="max"
+                    if range_replicate_target_aggregation == "label_max"
+                    else "mean",
                 )
                 train_labels = (labels, labelled_mask)
                 range_training_label_aggregation.update(aggregation_diagnostics)
@@ -784,7 +896,8 @@ def run_experiment_pipeline(
             selection_workload is not None
             and selection_points is not None
             and selection_boundaries is not None
-            and len(range_only_queries(selection_workload.typed_queries)) == len(selection_workload.typed_queries)
+            and len(range_only_queries(selection_workload.typed_queries))
+            == len(selection_workload.typed_queries)
         ):
             selection_query_cache = EvaluationQueryCache.for_workload(
                 selection_points,
@@ -802,27 +915,38 @@ def run_experiment_pipeline(
                     config=config,
                     seed=seeds.eval_query_seed + 17,
                     runtime_cache=range_runtime_caches["selection"],
-                    range_boundary_prior_weight=float(getattr(config.model, "range_boundary_prior_weight", 0.0)),
+                    range_boundary_prior_weight=float(
+                        getattr(config.model, "range_boundary_prior_weight", 0.0)
+                    ),
                 )
                 if selection_labels is not None:
                     labels, _labelled_mask = selection_labels
-                    _, selection_type_id = workload_type_head(single_workload_type(eval_workload_map))
+                    _, selection_type_id = workload_type_head(
+                        single_workload_type(eval_workload_map)
+                    )
                     selection_geometry_scores = labels[:, selection_type_id].float()
-    if (
-        train_labels is not None
-        and len(range_only_queries(train_workload.typed_queries)) == len(train_workload.typed_queries)
+    if train_labels is not None and len(range_only_queries(train_workload.typed_queries)) == len(
+        train_workload.typed_queries
     ):
         print("  prepared train range labels for precomputed training target", flush=True)
     if selection_query_cache is not None:
         print("  prepared checkpoint-validation range query cache", flush=True)
     if range_teacher_distillation_enabled(config.model):
         if not is_workload_blind_model_type(config.model.model_type):
-            raise RuntimeError("range teacher distillation is only valid for workload-blind model types.")
+            raise RuntimeError(
+                "range teacher distillation is only valid for workload-blind model types."
+            )
         if train_labels is None:
-            raise RuntimeError("range teacher distillation requires precomputed range training labels.")
+            raise RuntimeError(
+                "range teacher distillation requires precomputed range training labels."
+            )
         for label_workload in train_label_workloads:
-            if len(range_only_queries(label_workload.typed_queries)) != len(label_workload.typed_queries):
-                raise RuntimeError("range teacher distillation requires pure range training workloads.")
+            if len(range_only_queries(label_workload.typed_queries)) != len(
+                label_workload.typed_queries
+            ):
+                raise RuntimeError(
+                    "range teacher distillation requires pure range training workloads."
+                )
         teacher_config = build_range_teacher_config(config.model)
         print(
             f"  range teacher distillation enabled: mode={config.model.range_teacher_distillation_mode} "
@@ -862,37 +986,49 @@ def run_experiment_pipeline(
             train_labels = distilled_label_sets[0]
             teacher_distillation_diagnostics = dict(per_teacher[0])
         else:
-            teacher_aggregation_mode = "max" if range_replicate_target_aggregation == "label_max" else "mean"
+            teacher_aggregation_mode = (
+                "max" if range_replicate_target_aggregation == "label_max" else "mean"
+            )
             labels, labelled_mask, aggregation_diagnostics = aggregate_range_label_sets(
                 distilled_label_sets,
                 source="range_teacher_distillation_replicates",
                 aggregation=teacher_aggregation_mode,
             )
             train_labels = (labels, labelled_mask)
-            positive = labelled_mask[:, QUERY_TYPE_ID_RANGE] & (labels[:, QUERY_TYPE_ID_RANGE] > 0.0)
+            positive = labelled_mask[:, QUERY_TYPE_ID_RANGE] & (
+                labels[:, QUERY_TYPE_ID_RANGE] > 0.0
+            )
             teacher_distillation_diagnostics = {
                 "enabled": True,
                 "mode": str(getattr(config.model, "range_teacher_distillation_mode", "none")),
                 "teacher_model_type": str(teacher_config.model_type),
                 "teacher_epochs": int(teacher_config.epochs),
-                "replicate_count": int(len(distilled_label_sets)),
+                "replicate_count": len(distilled_label_sets),
                 "replicate_target_aggregation": range_replicate_target_aggregation,
                 "aggregation": aggregation_diagnostics,
                 "per_replicate": per_teacher,
                 "labelled_point_count": int(labelled_mask[:, QUERY_TYPE_ID_RANGE].sum().item()),
                 "positive_label_count": int(positive.sum().item()),
-                "positive_label_fraction": float(positive.sum().item() / max(1, int(labels.shape[0]))),
+                "positive_label_fraction": float(
+                    positive.sum().item() / max(1, int(labels.shape[0]))
+                ),
                 "positive_label_mass": (
-                    float(labels[positive, QUERY_TYPE_ID_RANGE].sum().item()) if bool(positive.any().item()) else 0.0
+                    float(labels[positive, QUERY_TYPE_ID_RANGE].sum().item())
+                    if bool(positive.any().item())
+                    else 0.0
                 ),
                 "budget_loss_ratios": list(getattr(config.model, "budget_loss_ratios", [])),
-                "mlqds_temporal_fraction": float(getattr(config.model, "mlqds_temporal_fraction", 0.0)),
+                "mlqds_temporal_fraction": float(
+                    getattr(config.model, "mlqds_temporal_fraction", 0.0)
+                ),
                 "mlqds_hybrid_mode": str(getattr(config.model, "mlqds_hybrid_mode", "fill")),
             }
             range_training_label_aggregation.update(aggregation_diagnostics)
             range_training_label_aggregation["enabled"] = True
             range_training_label_aggregation["target_mode"] = "teacher_distillation"
-            range_training_label_aggregation["replicate_target_aggregation"] = range_replicate_target_aggregation
+            range_training_label_aggregation["replicate_target_aggregation"] = (
+                range_replicate_target_aggregation
+            )
             print(
                 f"  distilled range labels: replicate_count={len(distilled_label_sets)} "
                 f"positives={teacher_distillation_diagnostics['positive_label_count']} "
@@ -908,9 +1044,13 @@ def run_experiment_pipeline(
         "local_swap_gain_cost_frequency",
     }:
         if train_labels is None:
-            raise RuntimeError(f"{range_training_target_mode} target mode requires precomputed range training labels.")
+            raise RuntimeError(
+                f"{range_training_target_mode} target mode requires precomputed range training labels."
+            )
         if len(train_label_sets) > 1:
-            raise RuntimeError(f"{range_training_target_mode} does not yet support multiple train workload replicates.")
+            raise RuntimeError(
+                f"{range_training_target_mode} does not yet support multiple train workload replicates."
+            )
         target_phase = range_training_target_mode.replace("_", "-")
         with _phase(f"range-{target_phase}-target"):
             labels, labelled_mask = train_labels
@@ -1001,7 +1141,9 @@ def run_experiment_pipeline(
                     )
                     range_training_label_aggregation["enabled"] = True
                     range_training_label_aggregation["target_mode"] = range_training_target_mode
-                    range_training_label_aggregation["replicate_target_aggregation"] = "frequency_mean"
+                    range_training_label_aggregation["replicate_target_aggregation"] = (
+                        "frequency_mean"
+                    )
                 else:
                     labels, labelled_mask, aggregation_diagnostics = aggregate_range_label_sets(
                         label_sets=train_label_sets,
@@ -1009,7 +1151,9 @@ def run_experiment_pipeline(
                             f"range_label_{'max' if range_replicate_target_aggregation == 'label_max' else 'mean'}"
                             f"_before_{range_training_target_mode}"
                         ),
-                        aggregation="max" if range_replicate_target_aggregation == "label_max" else "mean",
+                        aggregation="max"
+                        if range_replicate_target_aggregation == "label_max"
+                        else "mean",
                     )
                     range_training_label_aggregation.update(aggregation_diagnostics)
                     range_training_label_aggregation["enabled"] = True
@@ -1028,7 +1172,9 @@ def run_experiment_pipeline(
                         "structural_retained_frequency",
                     }:
                         target_kwargs["points"] = train_points
-                    labels, labelled_mask, range_training_target_transform = target_fn(**target_kwargs)
+                    labels, labelled_mask, range_training_target_transform = target_fn(
+                        **target_kwargs
+                    )
                     range_training_target_transform["label_aggregation"] = aggregation_diagnostics
                 range_training_target_transform["replicate_target_aggregation"] = (
                     range_replicate_target_aggregation
@@ -1057,12 +1203,17 @@ def run_experiment_pipeline(
                 flush=True,
             )
     elif range_training_target_mode not in {"point_value", "query_useful_v1_factorized"}:
-        if range_training_target_mode in {"component_retained_frequency", "continuity_retained_frequency"}:
+        if range_training_target_mode in {
+            "component_retained_frequency",
+            "continuity_retained_frequency",
+        }:
             if train_labels is None:
                 raise RuntimeError(
                     f"{range_training_target_mode} target mode requires precomputed range training labels."
                 )
-            if not train_component_label_sets or any(component_labels is None for component_labels in train_component_label_sets):
+            if not train_component_label_sets or any(
+                component_labels is None for component_labels in train_component_label_sets
+            ):
                 raise RuntimeError(
                     f"{range_training_target_mode} requires range component labels; use range_label_mode=usefulness."
                 )
@@ -1088,9 +1239,13 @@ def run_experiment_pipeline(
                                 model_config=config.model,
                             )
                         )
-                        range_training_label_aggregation["replicate_target_aggregation"] = "frequency_mean"
+                        range_training_label_aggregation["replicate_target_aggregation"] = (
+                            "frequency_mean"
+                        )
                     else:
-                        aggregation_mode = "max" if range_replicate_target_aggregation == "label_max" else "mean"
+                        aggregation_mode = (
+                            "max" if range_replicate_target_aggregation == "label_max" else "mean"
+                        )
                         labels, labelled_mask, component_labels, aggregation_diagnostics = (
                             aggregate_range_component_label_sets(
                                 label_sets=train_label_sets,
@@ -1102,35 +1257,37 @@ def run_experiment_pipeline(
                         range_training_label_aggregation["replicate_target_aggregation"] = (
                             range_replicate_target_aggregation
                         )
-                        labels, labelled_mask, range_training_target_transform = (
-                            target_fn(
-                                labels=labels,
-                                labelled_mask=labelled_mask,
-                                component_labels=component_labels,
-                                boundaries=train_boundaries,
-                                model_config=config.model,
-                            )
-                        )
-                        range_training_target_transform["label_aggregation"] = aggregation_diagnostics
-                    range_training_label_aggregation["enabled"] = True
-                    range_training_label_aggregation["target_mode"] = range_training_target_mode
-                else:
-                    labels, labelled_mask = train_labels
-                    component_labels = train_component_label_sets[0]
-                    if component_labels is None:
-                        raise RuntimeError("component_retained_frequency requires component labels.")
-                    labels, labelled_mask, range_training_target_transform = (
-                        target_fn(
+                        labels, labelled_mask, range_training_target_transform = target_fn(
                             labels=labels,
                             labelled_mask=labelled_mask,
                             component_labels=component_labels,
                             boundaries=train_boundaries,
                             model_config=config.model,
                         )
+                        range_training_target_transform["label_aggregation"] = (
+                            aggregation_diagnostics
+                        )
+                    range_training_label_aggregation["enabled"] = True
+                    range_training_label_aggregation["target_mode"] = range_training_target_mode
+                else:
+                    labels, labelled_mask = train_labels
+                    component_labels = train_component_label_sets[0]
+                    if component_labels is None:
+                        raise RuntimeError(
+                            "component_retained_frequency requires component labels."
+                        )
+                    labels, labelled_mask, range_training_target_transform = target_fn(
+                        labels=labels,
+                        labelled_mask=labelled_mask,
+                        component_labels=component_labels,
+                        boundaries=train_boundaries,
+                        model_config=config.model,
                     )
                 range_training_target_transform["enabled"] = True
                 range_training_target_transform["replicate_count"] = len(train_label_sets)
-                range_training_target_transform["replicate_target_aggregation"] = range_replicate_target_aggregation
+                range_training_target_transform["replicate_target_aggregation"] = (
+                    range_replicate_target_aggregation
+                )
                 train_labels = (labels, labelled_mask)
                 print(
                     f"  {target_phase} target: "
@@ -1149,17 +1306,23 @@ def run_experiment_pipeline(
                 "'component_retained_frequency', or "
                 "'continuity_retained_frequency', or 'query_useful_v1_factorized'."
             )
-    range_target_balance_mode = str(getattr(config.model, "range_target_balance_mode", "none")).lower()
+    range_target_balance_mode = str(
+        getattr(config.model, "range_target_balance_mode", "none")
+    ).lower()
     if range_target_balance_mode != "none":
         if train_labels is None:
-            raise RuntimeError("range_target_balance_mode requires precomputed range training labels.")
+            raise RuntimeError(
+                "range_target_balance_mode requires precomputed range training labels."
+            )
         with _phase("range-target-balance"):
             labels, labelled_mask = train_labels
-            labels, labelled_mask, range_target_balance_diagnostics = balance_range_training_target_by_trajectory(
-                labels=labels,
-                labelled_mask=labelled_mask,
-                boundaries=train_boundaries,
-                mode=range_target_balance_mode,
+            labels, labelled_mask, range_target_balance_diagnostics = (
+                balance_range_training_target_by_trajectory(
+                    labels=labels,
+                    labelled_mask=labelled_mask,
+                    boundaries=train_boundaries,
+                    mode=range_target_balance_mode,
+                )
             )
             train_labels = (labels, labelled_mask)
             print(
@@ -1237,7 +1400,10 @@ def run_experiment_pipeline(
     selector_budget_ratios = tuple(
         sorted({float(config.model.compression_ratio), *(float(ratio) for ratio in audit_ratios)})
     )
-    if str(getattr(config.model, "selector_type", "temporal_hybrid")).lower() == "learned_segment_budget_v1":
+    if (
+        str(getattr(config.model, "selector_type", "temporal_hybrid")).lower()
+        == "learned_segment_budget_v1"
+    ):
         selector_budget_diagnostics = {
             "train": learned_segment_budget_diagnostics(train_boundaries, selector_budget_ratios),
             "eval": learned_segment_budget_diagnostics(test_boundaries, selector_budget_ratios),
@@ -1292,40 +1458,62 @@ def run_experiment_pipeline(
             for method in methods:
                 with _phase(f"  freeze {method.name}"):
                     freeze_t0 = time.perf_counter()
-                    frozen_primary_masks[method.name] = method.simplify(
-                        test_points,
-                        test_boundaries,
-                        config.model.compression_ratio,
-                    ).detach().cpu()
-                    setattr(method, "latency_ms", float((time.perf_counter() - freeze_t0) * 1000.0))
+                    frozen_primary_masks[method.name] = (
+                        method.simplify(
+                            test_points,
+                            test_boundaries,
+                            config.model.compression_ratio,
+                        )
+                        .detach()
+                        .cpu()
+                    )
+                    cast(Any, method).latency_ms = float((time.perf_counter() - freeze_t0) * 1000.0)
                     score_cache = getattr(method, "_score_cache", None)
                     if isinstance(score_cache, torch.Tensor):
                         frozen_primary_scores[method.name] = score_cache.detach().cpu().float()
                     raw_pred_cache = getattr(method, "_raw_pred_cache", None)
                     if isinstance(raw_pred_cache, torch.Tensor):
-                        frozen_primary_raw_preds[method.name] = raw_pred_cache.detach().cpu().float()
+                        frozen_primary_raw_preds[method.name] = (
+                            raw_pred_cache.detach().cpu().float()
+                        )
                     head_logit_cache = getattr(method, "_head_logit_cache", None)
                     if isinstance(head_logit_cache, torch.Tensor):
-                        frozen_primary_head_logits[method.name] = head_logit_cache.detach().cpu().float()
+                        frozen_primary_head_logits[method.name] = (
+                            head_logit_cache.detach().cpu().float()
+                        )
                     segment_score_cache = getattr(method, "_segment_score_cache", None)
                     if isinstance(segment_score_cache, torch.Tensor):
-                        frozen_primary_segment_scores[method.name] = segment_score_cache.detach().cpu().float()
-                    path_length_support_cache = getattr(method, "_path_length_support_score_cache", None)
+                        frozen_primary_segment_scores[method.name] = (
+                            segment_score_cache.detach().cpu().float()
+                        )
+                    path_length_support_cache = getattr(
+                        method, "_path_length_support_score_cache", None
+                    )
                     if isinstance(path_length_support_cache, torch.Tensor):
                         frozen_primary_path_length_support_scores[method.name] = (
                             path_length_support_cache.detach().cpu().float()
                         )
-                    selector_segment_score_cache = getattr(method, "_selector_segment_score_cache", None)
+                    selector_segment_score_cache = getattr(
+                        method, "_selector_segment_score_cache", None
+                    )
                     if isinstance(selector_segment_score_cache, torch.Tensor):
                         frozen_primary_selector_segment_scores[method.name] = (
                             selector_segment_score_cache.detach().cpu().float()
                         )
             primary_scores = frozen_primary_scores.get("MLQDS")
             primary_raw_preds = frozen_primary_raw_preds.get("MLQDS")
-            if primary_scores is not None and str(getattr(config.model, "selector_type", "")).lower() == "learned_segment_budget_v1":
+            if (
+                primary_scores is not None
+                and str(getattr(config.model, "selector_type", "")).lower()
+                == "learned_segment_budget_v1"
+            ):
                 primary_segment_scores = frozen_primary_segment_scores.get("MLQDS")
-                primary_path_length_support_scores = frozen_primary_path_length_support_scores.get("MLQDS")
-                primary_selector_segment_scores = frozen_primary_selector_segment_scores.get("MLQDS")
+                primary_path_length_support_scores = frozen_primary_path_length_support_scores.get(
+                    "MLQDS"
+                )
+                primary_selector_segment_scores = frozen_primary_selector_segment_scores.get(
+                    "MLQDS"
+                )
                 trace_mask, trace = simplify_with_learned_segment_budget_v1_with_trace(
                     primary_scores,
                     test_boundaries,
@@ -1334,13 +1522,21 @@ def run_experiment_pipeline(
                     segment_point_scores=primary_segment_scores,
                     points=test_points.detach().cpu().float(),
                     geometry_gain_weight=float(config.model.learned_segment_geometry_gain_weight),
-                    segment_score_point_blend_weight=float(config.model.learned_segment_score_blend_weight),
-                    fairness_preallocation_enabled=bool(config.model.learned_segment_fairness_preallocation),
-                    length_repair_fraction=float(config.model.learned_segment_length_repair_fraction),
+                    segment_score_point_blend_weight=float(
+                        config.model.learned_segment_score_blend_weight
+                    ),
+                    fairness_preallocation_enabled=bool(
+                        config.model.learned_segment_fairness_preallocation
+                    ),
+                    length_repair_fraction=float(
+                        config.model.learned_segment_length_repair_fraction
+                    ),
                     segment_score_source_label=_selector_segment_score_source_label(
                         segment_scores=primary_segment_scores,
                         path_length_support_scores=primary_path_length_support_scores,
-                        length_support_blend_weight=float(config.model.learned_segment_length_support_blend_weight),
+                        length_support_blend_weight=float(
+                            config.model.learned_segment_length_support_blend_weight
+                        ),
                     ),
                 )
                 frozen_mlqds_mask = frozen_primary_masks.get("MLQDS")
@@ -1351,15 +1547,21 @@ def run_experiment_pipeline(
                     trace["frozen_primary_retained_count"] = int(frozen_mlqds_mask.sum().item())
                 compression_for_trace = float(config.model.compression_ratio)
                 learned_fraction_min_for_trace = (
-                    0.35 if compression_for_trace >= 0.10 else 0.25 if compression_for_trace >= 0.05 else 0.0
+                    0.35
+                    if compression_for_trace >= 0.10
+                    else 0.25
+                    if compression_for_trace >= 0.05
+                    else 0.0
                 )
                 if learned_fraction_min_for_trace > 0.0:
-                    trace["score_protected_length_feasibility"] = _score_protected_length_feasibility(
-                        scores=primary_scores,
-                        points=test_points,
-                        boundaries=test_boundaries,
-                        compression_ratio=compression_for_trace,
-                        learned_slot_fraction_min=learned_fraction_min_for_trace,
+                    trace["score_protected_length_feasibility"] = (
+                        _score_protected_length_feasibility(
+                            scores=primary_scores,
+                            points=test_points,
+                            boundaries=test_boundaries,
+                            compression_ratio=compression_for_trace,
+                            learned_slot_fraction_min=learned_fraction_min_for_trace,
+                        )
                     )
                     trace["score_protected_length_frontier"] = _score_protected_length_frontier(
                         scores=primary_scores,
@@ -1385,7 +1587,9 @@ def run_experiment_pipeline(
                         "source": "selector_trace.pre_repair_retained_mask.indices",
                         "retained_count": int(pre_repair_method.retained_mask.sum().item()),
                     }
-                except Exception as exc:  # pragma: no cover - optional diagnostic should not gate eval.
+                except (
+                    Exception
+                ) as exc:  # pragma: no cover - optional diagnostic should not gate eval.
                     trace["pre_repair_frozen_method_diagnostic"] = {
                         "available": False,
                         "diagnostic_only": True,
@@ -1417,8 +1621,12 @@ def run_experiment_pipeline(
                                 ),
                             )
                         )
-                    except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
-                        causal_ablation_freeze_failures["MLQDS_without_geometry_tie_breaker"] = str(exc)
+                    except (
+                        Exception
+                    ) as exc:  # pragma: no cover - diagnostic should not break final eval.
+                        causal_ablation_freeze_failures["MLQDS_without_geometry_tie_breaker"] = str(
+                            exc
+                        )
                 generator = torch.Generator().manual_seed(int(seeds.eval_query_seed) + 91_337)
                 shuffled_order = torch.randperm(int(primary_scores.numel()), generator=generator)
                 shuffled_scores = primary_scores[shuffled_order]
@@ -1441,18 +1649,30 @@ def run_experiment_pipeline(
                         segment_scores=shuffled_segment_scores,
                         segment_point_scores=shuffled_segment_point_scores,
                         points=test_points,
-                        learned_segment_geometry_gain_weight=float(config.model.learned_segment_geometry_gain_weight),
-                        learned_segment_score_blend_weight=float(config.model.learned_segment_score_blend_weight),
-                        learned_segment_fairness_preallocation=bool(config.model.learned_segment_fairness_preallocation),
-                        learned_segment_length_repair_fraction=float(config.model.learned_segment_length_repair_fraction),
+                        learned_segment_geometry_gain_weight=float(
+                            config.model.learned_segment_geometry_gain_weight
+                        ),
+                        learned_segment_score_blend_weight=float(
+                            config.model.learned_segment_score_blend_weight
+                        ),
+                        learned_segment_fairness_preallocation=bool(
+                            config.model.learned_segment_fairness_preallocation
+                        ),
+                        learned_segment_length_repair_fraction=float(
+                            config.model.learned_segment_length_repair_fraction
+                        ),
                     )
                 )
                 if primary_segment_scores is not None:
-                    neutral_segment_scores = _neutral_segment_scores_for_ablation(primary_segment_scores)
+                    neutral_segment_scores = _neutral_segment_scores_for_ablation(
+                        primary_segment_scores
+                    )
                     no_segment_selector_scores = blend_segment_support_scores(
                         segment_scores=neutral_segment_scores,
                         path_length_support_scores=primary_path_length_support_scores,
-                        path_length_support_weight=float(config.model.learned_segment_length_support_blend_weight),
+                        path_length_support_weight=float(
+                            config.model.learned_segment_length_support_blend_weight
+                        ),
                     )
                     segment_budget_head_ablation_mode = "neutral_constant_segment_scores"
                     segment_budget_ablation_method = _learned_segment_frozen_method(
@@ -1463,10 +1683,18 @@ def run_experiment_pipeline(
                         segment_scores=no_segment_selector_scores,
                         segment_point_scores=neutral_segment_scores,
                         points=test_points,
-                        learned_segment_geometry_gain_weight=float(config.model.learned_segment_geometry_gain_weight),
-                        learned_segment_score_blend_weight=float(config.model.learned_segment_score_blend_weight),
-                        learned_segment_fairness_preallocation=bool(config.model.learned_segment_fairness_preallocation),
-                        learned_segment_length_repair_fraction=float(config.model.learned_segment_length_repair_fraction),
+                        learned_segment_geometry_gain_weight=float(
+                            config.model.learned_segment_geometry_gain_weight
+                        ),
+                        learned_segment_score_blend_weight=float(
+                            config.model.learned_segment_score_blend_weight
+                        ),
+                        learned_segment_fairness_preallocation=bool(
+                            config.model.learned_segment_fairness_preallocation
+                        ),
+                        learned_segment_length_repair_fraction=float(
+                            config.model.learned_segment_length_repair_fraction
+                        ),
                     )
                     causality_ablation_methods.append(segment_budget_ablation_method)
                     segment_budget_sensitivity = _head_ablation_sensitivity(
@@ -1493,10 +1721,18 @@ def run_experiment_pipeline(
                             segment_scores=no_segment_selector_scores,
                             segment_point_scores=primary_segment_scores,
                             points=test_points,
-                            learned_segment_geometry_gain_weight=float(config.model.learned_segment_geometry_gain_weight),
-                            learned_segment_score_blend_weight=float(config.model.learned_segment_score_blend_weight),
-                            learned_segment_fairness_preallocation=bool(config.model.learned_segment_fairness_preallocation),
-                            learned_segment_length_repair_fraction=float(config.model.learned_segment_length_repair_fraction),
+                            learned_segment_geometry_gain_weight=float(
+                                config.model.learned_segment_geometry_gain_weight
+                            ),
+                            learned_segment_score_blend_weight=float(
+                                config.model.learned_segment_score_blend_weight
+                            ),
+                            learned_segment_fairness_preallocation=bool(
+                                config.model.learned_segment_fairness_preallocation
+                            ),
+                            learned_segment_length_repair_fraction=float(
+                                config.model.learned_segment_length_repair_fraction
+                            ),
                         )
                         causality_ablation_methods.append(segment_allocation_ablation_method)
                         allocation_sensitivity = _head_ablation_sensitivity(
@@ -1510,7 +1746,9 @@ def run_experiment_pipeline(
                             ablation_mask=segment_allocation_ablation_method.retained_mask,
                         )
                         allocation_sensitivity["disabled_head_name"] = "segment_budget_target"
-                        allocation_sensitivity["ablation_mode"] = "neutral_constant_segment_scores_for_allocation_only"
+                        allocation_sensitivity["ablation_mode"] = (
+                            "neutral_constant_segment_scores_for_allocation_only"
+                        )
                         allocation_sensitivity["diagnostic_only"] = True
                         head_ablation_sensitivity_diagnostics[
                             "MLQDS_without_segment_budget_allocation_only"
@@ -1524,10 +1762,18 @@ def run_experiment_pipeline(
                             segment_scores=None,
                             segment_point_scores=primary_segment_scores,
                             points=test_points,
-                            learned_segment_geometry_gain_weight=float(config.model.learned_segment_geometry_gain_weight),
-                            learned_segment_score_blend_weight=float(config.model.learned_segment_score_blend_weight),
-                            learned_segment_fairness_preallocation=bool(config.model.learned_segment_fairness_preallocation),
-                            learned_segment_length_repair_fraction=float(config.model.learned_segment_length_repair_fraction),
+                            learned_segment_geometry_gain_weight=float(
+                                config.model.learned_segment_geometry_gain_weight
+                            ),
+                            learned_segment_score_blend_weight=float(
+                                config.model.learned_segment_score_blend_weight
+                            ),
+                            learned_segment_fairness_preallocation=bool(
+                                config.model.learned_segment_fairness_preallocation
+                            ),
+                            learned_segment_length_repair_fraction=float(
+                                config.model.learned_segment_length_repair_fraction
+                            ),
                         )
                         causality_ablation_methods.append(point_score_allocation_method)
                         point_score_allocation_sensitivity = _head_ablation_sensitivity(
@@ -1540,10 +1786,16 @@ def run_experiment_pipeline(
                             primary_mask=frozen_primary_masks.get("MLQDS"),
                             ablation_mask=point_score_allocation_method.retained_mask,
                         )
-                        point_score_allocation_sensitivity["disabled_head_name"] = "segment_budget_target"
-                        point_score_allocation_sensitivity["ablation_mode"] = "point_score_top20_mean_for_allocation_only"
+                        point_score_allocation_sensitivity["disabled_head_name"] = (
+                            "segment_budget_target"
+                        )
+                        point_score_allocation_sensitivity["ablation_mode"] = (
+                            "point_score_top20_mean_for_allocation_only"
+                        )
                         point_score_allocation_sensitivity["diagnostic_only"] = True
-                        point_score_allocation_sensitivity["allocation_score_source"] = "point_score_top20_mean"
+                        point_score_allocation_sensitivity["allocation_score_source"] = (
+                            "point_score_top20_mean"
+                        )
                         head_ablation_sensitivity_diagnostics[
                             "MLQDS_point_score_allocation_diagnostic"
                         ] = point_score_allocation_sensitivity
@@ -1577,7 +1829,11 @@ def run_experiment_pipeline(
                                 "quartile_banded_selector_segment_scores_for_allocation_only",
                             ),
                         ]
-                        for diagnostic_name, authority_scores, authority_mode in allocation_authority_variants:
+                        for (
+                            diagnostic_name,
+                            authority_scores,
+                            authority_mode,
+                        ) in allocation_authority_variants:
                             authority_method = _learned_segment_frozen_method(
                                 name=diagnostic_name,
                                 scores=primary_scores,
@@ -1614,8 +1870,12 @@ def run_experiment_pipeline(
                             authority_sensitivity["ablation_mode"] = str(authority_mode)
                             authority_sensitivity["diagnostic_only"] = True
                             authority_sensitivity["allocation_authority_diagnostic"] = True
-                            authority_sensitivity["allocation_score_source"] = "selector_segment_score_bands"
-                            head_ablation_sensitivity_diagnostics[diagnostic_name] = authority_sensitivity
+                            authority_sensitivity["allocation_score_source"] = (
+                                "selector_segment_score_bands"
+                            )
+                            head_ablation_sensitivity_diagnostics[diagnostic_name] = (
+                                authority_sensitivity
+                            )
 
                         segment_point_blend_ablation_method = _learned_segment_frozen_method(
                             name="MLQDS_without_segment_budget_point_blend_only",
@@ -1625,10 +1885,16 @@ def run_experiment_pipeline(
                             segment_scores=primary_selector_segment_scores,
                             segment_point_scores=primary_segment_scores,
                             points=test_points,
-                            learned_segment_geometry_gain_weight=float(config.model.learned_segment_geometry_gain_weight),
+                            learned_segment_geometry_gain_weight=float(
+                                config.model.learned_segment_geometry_gain_weight
+                            ),
                             learned_segment_score_blend_weight=0.0,
-                            learned_segment_fairness_preallocation=bool(config.model.learned_segment_fairness_preallocation),
-                            learned_segment_length_repair_fraction=float(config.model.learned_segment_length_repair_fraction),
+                            learned_segment_fairness_preallocation=bool(
+                                config.model.learned_segment_fairness_preallocation
+                            ),
+                            learned_segment_length_repair_fraction=float(
+                                config.model.learned_segment_length_repair_fraction
+                            ),
                         )
                         causality_ablation_methods.append(segment_point_blend_ablation_method)
                         point_blend_sensitivity = _head_ablation_sensitivity(
@@ -1642,7 +1908,9 @@ def run_experiment_pipeline(
                             ablation_mask=segment_point_blend_ablation_method.retained_mask,
                         )
                         point_blend_sensitivity["disabled_head_name"] = "segment_budget_target"
-                        point_blend_sensitivity["ablation_mode"] = "disable_segment_score_point_blend_only"
+                        point_blend_sensitivity["ablation_mode"] = (
+                            "disable_segment_score_point_blend_only"
+                        )
                         point_blend_sensitivity["diagnostic_only"] = True
                         head_ablation_sensitivity_diagnostics[
                             "MLQDS_without_segment_budget_point_blend_only"
@@ -1657,10 +1925,16 @@ def run_experiment_pipeline(
                                 segment_scores=primary_selector_segment_scores,
                                 segment_point_scores=primary_segment_scores,
                                 points=test_points,
-                                learned_segment_geometry_gain_weight=float(config.model.learned_segment_geometry_gain_weight),
-                                learned_segment_score_blend_weight=float(config.model.learned_segment_score_blend_weight),
+                                learned_segment_geometry_gain_weight=float(
+                                    config.model.learned_segment_geometry_gain_weight
+                                ),
+                                learned_segment_score_blend_weight=float(
+                                    config.model.learned_segment_score_blend_weight
+                                ),
                                 learned_segment_fairness_preallocation=False,
-                                learned_segment_length_repair_fraction=float(config.model.learned_segment_length_repair_fraction),
+                                learned_segment_length_repair_fraction=float(
+                                    config.model.learned_segment_length_repair_fraction
+                                ),
                             )
                         )
                 path_length_support_scores = frozen_primary_path_length_support_scores.get("MLQDS")
@@ -1673,8 +1947,12 @@ def run_experiment_pipeline(
                             compression_ratio=float(config.model.compression_ratio),
                             segment_scores=path_length_support_scores,
                             points=test_points,
-                            learned_segment_geometry_gain_weight=float(config.model.learned_segment_geometry_gain_weight),
-                            learned_segment_score_blend_weight=float(config.model.learned_segment_score_blend_weight),
+                            learned_segment_geometry_gain_weight=float(
+                                config.model.learned_segment_geometry_gain_weight
+                            ),
+                            learned_segment_score_blend_weight=float(
+                                config.model.learned_segment_score_blend_weight
+                            ),
                             learned_segment_fairness_preallocation=bool(
                                 config.model.learned_segment_fairness_preallocation
                             ),
@@ -1708,8 +1986,12 @@ def run_experiment_pipeline(
                             segment_scores=path_length_support_scores,
                             segment_point_scores=primary_segment_scores,
                             points=test_points,
-                            learned_segment_geometry_gain_weight=float(config.model.learned_segment_geometry_gain_weight),
-                            learned_segment_score_blend_weight=float(config.model.learned_segment_score_blend_weight),
+                            learned_segment_geometry_gain_weight=float(
+                                config.model.learned_segment_geometry_gain_weight
+                            ),
+                            learned_segment_score_blend_weight=float(
+                                config.model.learned_segment_score_blend_weight
+                            ),
                             learned_segment_fairness_preallocation=bool(
                                 config.model.learned_segment_fairness_preallocation
                             ),
@@ -1735,7 +2017,9 @@ def run_experiment_pipeline(
                             "replacement_head_name": "path_length_support_target",
                             "ablation_mode": "path_length_support_allocation_only",
                         }
-                    except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
+                    except (
+                        Exception
+                    ) as exc:  # pragma: no cover - diagnostic should not break final eval.
                         head_ablation_sensitivity_diagnostics[
                             "MLQDS_path_length_support_segment_head_diagnostic"
                         ] = {
@@ -1770,10 +2054,18 @@ def run_experiment_pipeline(
                             segment_scores=primary_selector_segment_scores,
                             segment_point_scores=primary_segment_scores,
                             points=test_points,
-                            learned_segment_geometry_gain_weight=float(config.model.learned_segment_geometry_gain_weight),
-                            learned_segment_score_blend_weight=float(config.model.learned_segment_score_blend_weight),
-                            learned_segment_fairness_preallocation=bool(config.model.learned_segment_fairness_preallocation),
-                            learned_segment_length_repair_fraction=float(config.model.learned_segment_length_repair_fraction),
+                            learned_segment_geometry_gain_weight=float(
+                                config.model.learned_segment_geometry_gain_weight
+                            ),
+                            learned_segment_score_blend_weight=float(
+                                config.model.learned_segment_score_blend_weight
+                            ),
+                            learned_segment_fairness_preallocation=bool(
+                                config.model.learned_segment_fairness_preallocation
+                            ),
+                            learned_segment_length_repair_fraction=float(
+                                config.model.learned_segment_length_repair_fraction
+                            ),
                         )
                         causality_ablation_methods.append(behavior_ablation_method)
                         behavior_sensitivity = _head_ablation_sensitivity(
@@ -1788,11 +2080,15 @@ def run_experiment_pipeline(
                         )
                         behavior_sensitivity["disabled_head_name"] = "conditional_behavior_utility"
                         behavior_sensitivity["ablation_mode"] = "neutral_multiplicative_head"
-                        head_ablation_sensitivity_diagnostics["MLQDS_without_behavior_utility_head"] = (
-                            behavior_sensitivity
+                        head_ablation_sensitivity_diagnostics[
+                            "MLQDS_without_behavior_utility_head"
+                        ] = behavior_sensitivity
+                    except (
+                        Exception
+                    ) as exc:  # pragma: no cover - diagnostic should not break final eval.
+                        causal_ablation_freeze_failures["MLQDS_without_behavior_utility_head"] = (
+                            str(exc)
                         )
-                    except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
-                        causal_ablation_freeze_failures["MLQDS_without_behavior_utility_head"] = str(exc)
                 try:
                     untrained_model = _reset_module_parameters(
                         trained.model,
@@ -1843,11 +2139,17 @@ def run_experiment_pipeline(
                             retained_mask=untrained_mask.detach().cpu(),
                         )
                     )
-                except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
+                except (
+                    Exception
+                ) as exc:  # pragma: no cover - diagnostic should not break final eval.
                     causal_ablation_freeze_failures["MLQDS_untrained_model"] = str(exc)
                 query_prior_field = trained.feature_context.get("query_prior_field")
                 if isinstance(query_prior_field, dict):
-                    prior_scores = query_prior_predictability_scores(test_points, query_prior_field).detach().cpu()
+                    prior_scores = (
+                        query_prior_predictability_scores(test_points, query_prior_field)
+                        .detach()
+                        .cpu()
+                    )
                     causality_ablation_methods.append(
                         _learned_segment_frozen_method(
                             name="MLQDS_prior_field_only_score",
@@ -1855,10 +2157,18 @@ def run_experiment_pipeline(
                             boundaries=test_boundaries,
                             compression_ratio=float(config.model.compression_ratio),
                             points=test_points,
-                            learned_segment_geometry_gain_weight=float(config.model.learned_segment_geometry_gain_weight),
-                            learned_segment_score_blend_weight=float(config.model.learned_segment_score_blend_weight),
-                            learned_segment_fairness_preallocation=bool(config.model.learned_segment_fairness_preallocation),
-                            learned_segment_length_repair_fraction=float(config.model.learned_segment_length_repair_fraction),
+                            learned_segment_geometry_gain_weight=float(
+                                config.model.learned_segment_geometry_gain_weight
+                            ),
+                            learned_segment_score_blend_weight=float(
+                                config.model.learned_segment_score_blend_weight
+                            ),
+                            learned_segment_fairness_preallocation=bool(
+                                config.model.learned_segment_fairness_preallocation
+                            ),
+                            learned_segment_length_repair_fraction=float(
+                                config.model.learned_segment_length_repair_fraction
+                            ),
                         )
                     )
                     try:
@@ -1920,17 +2230,23 @@ def run_experiment_pipeline(
                             float(config.model.compression_ratio),
                         )
                         shuffled_prior_scores = getattr(shuffled_prior_method, "_score_cache", None)
-                        shuffled_prior_raw_preds = getattr(shuffled_prior_method, "_raw_pred_cache", None)
+                        shuffled_prior_raw_preds = getattr(
+                            shuffled_prior_method, "_raw_pred_cache", None
+                        )
                         score_sensitivity = _score_ablation_sensitivity(
                             primary_scores=primary_scores,
-                            ablation_scores=shuffled_prior_scores if isinstance(shuffled_prior_scores, torch.Tensor) else None,
+                            ablation_scores=shuffled_prior_scores
+                            if isinstance(shuffled_prior_scores, torch.Tensor)
+                            else None,
                             primary_mask=frozen_primary_masks.get("MLQDS"),
                             ablation_mask=shuffled_prior_mask,
                         )
                         raw_sensitivity = _score_ablation_sensitivity(
                             primary_scores=primary_raw_preds,
                             ablation_scores=(
-                                shuffled_prior_raw_preds if isinstance(shuffled_prior_raw_preds, torch.Tensor) else None
+                                shuffled_prior_raw_preds
+                                if isinstance(shuffled_prior_raw_preds, torch.Tensor)
+                                else None
                             ),
                             primary_mask=frozen_primary_masks.get("MLQDS"),
                             ablation_mask=shuffled_prior_mask,
@@ -1946,7 +2262,9 @@ def run_experiment_pipeline(
                                 retained_mask=shuffled_prior_mask.detach().cpu(),
                             )
                         )
-                    except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
+                    except (
+                        Exception
+                    ) as exc:  # pragma: no cover - diagnostic should not break final eval.
                         causal_ablation_freeze_failures["MLQDS_shuffled_prior_fields"] = str(exc)
                     try:
                         zero_prior_field = zero_query_prior_field_like(query_prior_field)
@@ -1970,7 +2288,9 @@ def run_experiment_pipeline(
                             feature_context={
                                 **trained.feature_context,
                                 "query_prior_field": zero_prior_field,
-                                "query_prior_field_metadata": query_prior_field_metadata(zero_prior_field),
+                                "query_prior_field_metadata": query_prior_field_metadata(
+                                    zero_prior_field
+                                ),
                             },
                         )
                         zero_prior_method = MLQDSMethod(
@@ -2008,13 +2328,17 @@ def run_experiment_pipeline(
                         zero_prior_raw_preds = getattr(zero_prior_method, "_raw_pred_cache", None)
                         score_sensitivity = _score_ablation_sensitivity(
                             primary_scores=primary_scores,
-                            ablation_scores=zero_prior_scores if isinstance(zero_prior_scores, torch.Tensor) else None,
+                            ablation_scores=zero_prior_scores
+                            if isinstance(zero_prior_scores, torch.Tensor)
+                            else None,
                             primary_mask=frozen_primary_masks.get("MLQDS"),
                             ablation_mask=zero_prior_mask,
                         )
                         raw_sensitivity = _score_ablation_sensitivity(
                             primary_scores=primary_raw_preds,
-                            ablation_scores=zero_prior_raw_preds if isinstance(zero_prior_raw_preds, torch.Tensor) else None,
+                            ablation_scores=zero_prior_raw_preds
+                            if isinstance(zero_prior_raw_preds, torch.Tensor)
+                            else None,
                             primary_mask=frozen_primary_masks.get("MLQDS"),
                             ablation_mask=zero_prior_mask,
                         )
@@ -2029,8 +2353,12 @@ def run_experiment_pipeline(
                                 retained_mask=zero_prior_mask.detach().cpu(),
                             )
                         )
-                    except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
-                        causal_ablation_freeze_failures["MLQDS_without_query_prior_features"] = str(exc)
+                    except (
+                        Exception
+                    ) as exc:  # pragma: no cover - diagnostic should not break final eval.
+                        causal_ablation_freeze_failures["MLQDS_without_query_prior_features"] = str(
+                            exc
+                        )
                     for prior_channel_name in QUERY_PRIOR_FIELD_NAMES:
                         channel_method_name = f"MLQDS_without_prior_channel_{prior_channel_name}"
                         try:
@@ -2058,7 +2386,9 @@ def run_experiment_pipeline(
                                 feature_context={
                                     **trained.feature_context,
                                     "query_prior_field": channel_prior_field,
-                                    "query_prior_field_metadata": query_prior_field_metadata(channel_prior_field),
+                                    "query_prior_field_metadata": query_prior_field_metadata(
+                                        channel_prior_field
+                                    ),
                                 },
                             )
                             channel_method = MLQDSMethod(
@@ -2100,14 +2430,18 @@ def run_experiment_pipeline(
                                 "sampled_prior_features": channel_feature_sensitivity,
                                 "selector_score": _score_ablation_sensitivity(
                                     primary_scores=primary_scores,
-                                    ablation_scores=channel_scores if isinstance(channel_scores, torch.Tensor) else None,
+                                    ablation_scores=channel_scores
+                                    if isinstance(channel_scores, torch.Tensor)
+                                    else None,
                                     primary_mask=frozen_primary_masks.get("MLQDS"),
                                     ablation_mask=channel_mask,
                                 ),
                                 "raw_prediction": _score_ablation_sensitivity(
                                     primary_scores=primary_raw_preds,
                                     ablation_scores=(
-                                        channel_raw_preds if isinstance(channel_raw_preds, torch.Tensor) else None
+                                        channel_raw_preds
+                                        if isinstance(channel_raw_preds, torch.Tensor)
+                                        else None
                                     ),
                                     primary_mask=frozen_primary_masks.get("MLQDS"),
                                     ablation_mask=channel_mask,
@@ -2147,11 +2481,15 @@ def run_experiment_pipeline(
                     for method in retention_methods:
                         with _phase(f"  freeze audit {method.name} ratio={ratio:.4f}"):
                             freeze_t0 = time.perf_counter()
-                            retained_mask = method.simplify(
-                                test_points,
-                                test_boundaries,
-                                float(ratio),
-                            ).detach().cpu()
+                            retained_mask = (
+                                method.simplify(
+                                    test_points,
+                                    test_boundaries,
+                                    float(ratio),
+                                )
+                                .detach()
+                                .cpu()
+                            )
                             frozen_ratio_methods.append(
                                 FrozenMaskMethod(
                                     name=method.name,
@@ -2169,9 +2507,14 @@ def run_experiment_pipeline(
     oracle_method: OracleMethod | None = None
     eval_labels: torch.Tensor | None = None
     segment_oracle_allocation_audit: dict[str, Any] = {"available": False, "reason": "not_run"}
-    target_segment_oracle_alignment_audit: dict[str, Any] = {"available": False, "reason": "not_run"}
+    target_segment_oracle_alignment_audit: dict[str, Any] = {
+        "available": False,
+        "reason": "not_run",
+    }
     save_masks = bool(save_simplified_dir)
-    eval_is_range_only = len(range_only_queries(eval_workload.typed_queries)) == len(eval_workload.typed_queries)
+    eval_is_range_only = len(range_only_queries(eval_workload.typed_queries)) == len(
+        eval_workload.typed_queries
+    )
     final_metrics_mode = str(getattr(config.baselines, "final_metrics_mode", "diagnostic")).lower()
     if final_metrics_mode not in {"diagnostic", "core"}:
         raise ValueError("final_metrics_mode must be either 'diagnostic' or 'core'.")
@@ -2201,13 +2544,18 @@ def run_experiment_pipeline(
             )
     if mlqds_range_geometry_blend > 0.0:
         if eval_labels is None:
-            raise RuntimeError("MLQDS range geometry blend requested but eval labels were not prepared.")
+            raise RuntimeError(
+                "MLQDS range geometry blend requested but eval labels were not prepared."
+            )
         attach_range_geometry_scores(
             methods=methods,
             eval_labels=eval_labels,
             eval_workload_map=eval_workload_map,
         )
-    if workload_blind_eval and str(getattr(config.model, "selector_type", "")).lower() == "learned_segment_budget_v1":
+    if (
+        workload_blind_eval
+        and str(getattr(config.model, "selector_type", "")).lower() == "learned_segment_budget_v1"
+    ):
         segment_oracle_allocation_audit = _segment_oracle_allocation_audit(
             point_scores=frozen_primary_scores.get("MLQDS"),
             segment_budget_scores=frozen_primary_segment_scores.get("MLQDS"),
@@ -2253,7 +2601,9 @@ def run_experiment_pipeline(
         if run_oracle_baseline:
             if eval_labels is None:
                 raise RuntimeError("Oracle baseline requested but eval labels were not prepared.")
-            oracle_method = OracleMethod(labels=eval_labels, workload_type=single_workload_type(eval_workload_map))
+            oracle_method = OracleMethod(
+                labels=eval_labels, workload_type=single_workload_type(eval_workload_map)
+            )
             with _phase(f"  eval {oracle_method.name}"):
                 matched[oracle_method.name] = evaluate_method(
                     method=oracle_method,
@@ -2296,7 +2646,9 @@ def run_experiment_pipeline(
     diagnostic_methods: list[Method] = []
     if run_learned_fill_diagnostics:
         if eval_labels is None:
-            raise RuntimeError("Learned-fill diagnostics requested but eval labels were not prepared.")
+            raise RuntimeError(
+                "Learned-fill diagnostics requested but eval labels were not prepared."
+            )
         diagnostic_methods = build_learned_fill_methods(
             test_points=test_points,
             eval_labels=eval_labels,
@@ -2324,7 +2676,10 @@ def run_experiment_pipeline(
     range_compression_audit: dict[str, dict[str, Any]] = {}
     range_compression_audit_table = ""
     if audit_ratios:
-        audit_methods = [*(retention_methods if workload_blind_eval else methods), *diagnostic_methods]
+        audit_methods = [
+            *(retention_methods if workload_blind_eval else methods),
+            *diagnostic_methods,
+        ]
         if oracle_method is not None:
             audit_methods.append(oracle_method)
         audit_sections: list[str] = []
@@ -2344,7 +2699,10 @@ def run_experiment_pipeline(
                     ratio_key = f"{float(ratio):.4f}"
                     ratio_audit_methods = audit_methods
                     if workload_blind_eval and ratio_key in frozen_audit_methods_by_ratio:
-                        ratio_audit_methods = [*frozen_audit_methods_by_ratio[ratio_key], *diagnostic_methods]
+                        ratio_audit_methods = [
+                            *frozen_audit_methods_by_ratio[ratio_key],
+                            *diagnostic_methods,
+                        ]
                         if oracle_method is not None:
                             ratio_audit_methods.append(oracle_method)
                     for method in ratio_audit_methods:
@@ -2360,9 +2718,12 @@ def run_experiment_pipeline(
                             )
                 ratio_key = f"{float(ratio):.4f}"
                 range_compression_audit[ratio_key] = {
-                    name: _evaluation_metrics_payload(metrics) for name, metrics in ratio_results.items()
+                    name: _evaluation_metrics_payload(metrics)
+                    for name, metrics in ratio_results.items()
                 }
-                audit_sections.append(f"compression_ratio={ratio_key}\n{print_range_usefulness_table(ratio_results)}")
+                audit_sections.append(
+                    f"compression_ratio={ratio_key}\n{print_range_usefulness_table(ratio_results)}"
+                )
         range_compression_audit_table = "\n\n".join(audit_sections)
 
     with _phase("evaluate-shift"):
@@ -2373,10 +2734,10 @@ def run_experiment_pipeline(
             train_workload_map=train_workload_map,
             eval_workload_map=eval_workload_map,
             config=config,
-        test_points=test_points,
-        test_boundaries=test_boundaries,
-        test_mmsis=test_mmsis,
-    )
+            test_points=test_points,
+            test_boundaries=test_boundaries,
+            test_mmsis=test_mmsis,
+        )
     shift_table = print_shift_table(shift_pairs)
 
     with _phase("range-diagnostics"):
@@ -2418,7 +2779,11 @@ def run_experiment_pipeline(
             )
             range_diagnostics_summary[replicate_label] = replicate_summary
             range_diagnostics_rows.extend(replicate_rows)
-        if selection_workload is not None and selection_points is not None and selection_boundaries is not None:
+        if (
+            selection_workload is not None
+            and selection_points is not None
+            and selection_boundaries is not None
+        ):
             selection_summary, selection_rows = _range_workload_diagnostics(
                 "selection",
                 selection_points,
@@ -2432,7 +2797,9 @@ def run_experiment_pipeline(
             range_diagnostics_summary["selection"] = selection_summary
             range_diagnostics_rows.extend(selection_rows)
         _print_range_diagnostics_summary(range_diagnostics_summary)
-        workload_distribution_comparison = _range_workload_distribution_comparison(range_diagnostics_summary)
+        workload_distribution_comparison = _range_workload_distribution_comparison(
+            range_diagnostics_summary
+        )
         _print_range_distribution_comparison(workload_distribution_comparison)
 
     range_learned_fill_summary = _range_learned_fill_summary(
@@ -2451,9 +2818,12 @@ def run_experiment_pipeline(
     douglas_peucker_eval = matched.get("DouglasPeucker")
     workload_signature_gate = workload_distribution_comparison.get("workload_signature_gate", {})
     predictability_gate_pass = bool(predictability_audit.get("gate_pass", False))
-    prior_predictive_alignment_gate = predictability_audit.get("prior_predictive_alignment_gate", {})
+    prior_predictive_alignment_gate = predictability_audit.get(
+        "prior_predictive_alignment_gate", {}
+    )
     prior_predictive_alignment_gate_pass = bool(
-        isinstance(prior_predictive_alignment_gate, dict) and prior_predictive_alignment_gate.get("gate_pass", False)
+        isinstance(prior_predictive_alignment_gate, dict)
+        and prior_predictive_alignment_gate.get("gate_pass", False)
     )
     signature_gate_pass = bool(
         isinstance(workload_signature_gate, dict)
@@ -2499,13 +2869,17 @@ def run_experiment_pipeline(
         primary_selector_trace,
     )
     primary_eval = matched["MLQDS"]
-    shuffled_delta = _query_useful_delta(primary_eval, causality_ablation_evaluations, "MLQDS_shuffled_scores")
+    shuffled_delta = _query_useful_delta(
+        primary_eval, causality_ablation_evaluations, "MLQDS_shuffled_scores"
+    )
     prior_only_delta = _query_useful_delta(
         primary_eval,
         causality_ablation_evaluations,
         "MLQDS_prior_field_only_score",
     )
-    untrained_delta = _query_useful_delta(primary_eval, causality_ablation_evaluations, "MLQDS_untrained_model")
+    untrained_delta = _query_useful_delta(
+        primary_eval, causality_ablation_evaluations, "MLQDS_untrained_model"
+    )
     shuffled_prior_delta = _query_useful_delta(
         primary_eval,
         causality_ablation_evaluations,
@@ -2546,9 +2920,13 @@ def run_experiment_pipeline(
     )
     for name, tradeoff_diagnostics in causality_ablation_tradeoff_diagnostics.items():
         if name in head_ablation_sensitivity_diagnostics:
-            head_ablation_sensitivity_diagnostics[name]["query_useful_component_tradeoff"] = tradeoff_diagnostics
-    for prior_channel_name, channel_diagnostics in prior_channel_ablation_diagnostics.items():
-        if not isinstance(channel_diagnostics, dict) or not bool(channel_diagnostics.get("available", False)):
+            head_ablation_sensitivity_diagnostics[name]["query_useful_component_tradeoff"] = (
+                tradeoff_diagnostics
+            )
+    for _prior_channel_name, channel_diagnostics in prior_channel_ablation_diagnostics.items():
+        if not isinstance(channel_diagnostics, dict) or not bool(
+            channel_diagnostics.get("available", False)
+        ):
             continue
         method_name = str(channel_diagnostics.get("method_name", ""))
         channel_eval = causality_ablation_evaluations.get(method_name)
@@ -2562,9 +2940,13 @@ def run_experiment_pipeline(
         if method_name in causality_ablation_mask_diagnostics:
             channel_diagnostics["retained_mask"] = causality_ablation_mask_diagnostics[method_name]
         if method_name in causality_ablation_component_deltas:
-            channel_diagnostics["query_useful_component_deltas"] = causality_ablation_component_deltas[method_name]
+            channel_diagnostics["query_useful_component_deltas"] = (
+                causality_ablation_component_deltas[method_name]
+            )
         if method_name in causality_ablation_tradeoff_diagnostics:
-            channel_diagnostics["query_useful_component_tradeoff"] = causality_ablation_tradeoff_diagnostics[method_name]
+            channel_diagnostics["query_useful_component_tradeoff"] = (
+                causality_ablation_tradeoff_diagnostics[method_name]
+            )
     required_causality_ablation_names = (
         "MLQDS_shuffled_scores",
         "MLQDS_untrained_model",
@@ -2574,7 +2956,9 @@ def run_experiment_pipeline(
         "MLQDS_without_segment_budget_head",
     )
     missing_causality_ablations = [
-        name for name in required_causality_ablation_names if name not in causality_ablation_evaluations
+        name
+        for name in required_causality_ablation_names
+        if name not in causality_ablation_evaluations
     ]
     failed_causality_checks: list[str] = []
     delta_checks = {
@@ -2597,7 +2981,9 @@ def run_experiment_pipeline(
             failed_causality_checks.append(check_name)
     prior_sample_failures = _prior_sample_gate_failures(prior_sensitivity_diagnostics)
     failed_causality_checks.extend(prior_sample_failures)
-    learned_slot_fraction = float(learned_slot_summary.get("learned_controlled_retained_slot_fraction") or 0.0)
+    learned_slot_fraction = float(
+        learned_slot_summary.get("learned_controlled_retained_slot_fraction") or 0.0
+    )
     learned_slot_fraction_min = 0.0
     if float(config.model.compression_ratio) >= 0.10:
         learned_slot_fraction_min = 0.35
@@ -2607,9 +2993,15 @@ def run_experiment_pipeline(
         failed_causality_checks.append("learned_controlled_slot_fraction_below_minimum")
     ablation_status = "not_run"
     if causality_ablation_evaluations or causal_ablation_freeze_failures:
-        ablation_status = "complete" if not missing_causality_ablations and not causal_ablation_freeze_failures else "partial"
+        ablation_status = (
+            "complete"
+            if not missing_causality_ablations and not causal_ablation_freeze_failures
+            else "partial"
+        )
     learning_causality_gate_pass = (
-        ablation_status == "complete" and not failed_causality_checks and not missing_causality_ablations
+        ablation_status == "complete"
+        and not failed_causality_checks
+        and not missing_causality_ablations
     )
     learning_causality_summary = {
         "selector_diagnostics_present": bool(selector_budget_diagnostics),
@@ -2631,9 +3023,13 @@ def run_experiment_pipeline(
         "learned_segment_selector_config": {
             "geometry_gain_weight": float(config.model.learned_segment_geometry_gain_weight),
             "segment_score_blend_weight": float(config.model.learned_segment_score_blend_weight),
-            "fairness_preallocation_enabled": bool(config.model.learned_segment_fairness_preallocation),
+            "fairness_preallocation_enabled": bool(
+                config.model.learned_segment_fairness_preallocation
+            ),
             "length_repair_fraction": float(config.model.learned_segment_length_repair_fraction),
-            "length_support_blend_weight": float(config.model.learned_segment_length_support_blend_weight),
+            "length_support_blend_weight": float(
+                config.model.learned_segment_length_support_blend_weight
+            ),
         },
         "prior_field_only_score_ablation_delta": prior_only_delta,
         "without_query_prior_features_delta": no_query_prior_delta,
@@ -2657,7 +3053,8 @@ def run_experiment_pipeline(
         "prior_sample_gate_pass": not prior_sample_failures,
         "prior_sample_gate_failures": prior_sample_failures,
         "causality_ablation_scores": {
-            name: metrics.query_useful_v1_score for name, metrics in causality_ablation_evaluations.items()
+            name: metrics.query_useful_v1_score
+            for name, metrics in causality_ablation_evaluations.items()
         },
         "causality_ablation_component_deltas": causality_ablation_component_deltas,
         "causality_ablation_mask_diagnostics": causality_ablation_mask_diagnostics,
@@ -2712,7 +3109,9 @@ def run_experiment_pipeline(
             )
         final_claim_summary = {
             "primary_metric": "QueryUsefulV1",
-            "status": "candidate_blocked_by_required_gates" if blocking_gates else "candidate_ready_for_final_claim",
+            "status": "candidate_blocked_by_required_gates"
+            if blocking_gates
+            else "candidate_ready_for_final_claim",
             "final_success_allowed": not blocking_gates,
             "blocking_gates": blocking_gates,
             "workload_stability_gate_pass": workload_stability_gate_pass,
@@ -2724,7 +3123,9 @@ def run_experiment_pipeline(
             "learning_causality_gate_pass": learning_causality_gate_pass,
             "global_sanity_gate_pass": global_sanity_gate_pass,
             "mlqds_score": matched["MLQDS"].query_useful_v1_score,
-            "uniform_score": uniform_eval.query_useful_v1_score if uniform_eval is not None else None,
+            "uniform_score": uniform_eval.query_useful_v1_score
+            if uniform_eval is not None
+            else None,
             "douglas_peucker_score": (
                 douglas_peucker_eval.query_useful_v1_score
                 if douglas_peucker_eval is not None
@@ -2739,7 +3140,9 @@ def run_experiment_pipeline(
             "final_success_allowed": False,
             "reason": "Requires range_workload_v1, QueryUsefulV1 factorized target, workload_blind_range_v2, and learned_segment_budget_v1.",
         }
-    learning_causality_summary["final_success_allowed"] = bool(final_candidate and not blocking_gates)
+    learning_causality_summary["final_success_allowed"] = bool(
+        final_candidate and not blocking_gates
+    )
 
     dump = {
         "config": config.to_dict(),
@@ -2750,13 +3153,16 @@ def run_experiment_pipeline(
             "range_component_diagnostics_available": True,
             "workload_blind_protocol_available": True,
             "predictability_audit_available": bool(predictability_audit.get("available", False)),
-            "prior_predictive_alignment_gate_available": isinstance(prior_predictive_alignment_gate, dict),
+            "prior_predictive_alignment_gate_available": isinstance(
+                prior_predictive_alignment_gate, dict
+            ),
             "workload_stability_gate_available": bool(workload_stability_gate),
             "support_overlap_gate_available": bool(support_overlap_gate),
             "global_sanity_gate_available": bool(global_sanity_gate),
             "target_diffusion_gate_available": bool(target_diffusion_gate),
             "workload_signature_gate_available": bool(
-                isinstance(workload_signature_gate, dict) and workload_signature_gate.get("all_available")
+                isinstance(workload_signature_gate, dict)
+                and workload_signature_gate.get("all_available")
             ),
         },
         "legacy_range_useful_summary": legacy_range_useful_summary,
@@ -2767,23 +3173,37 @@ def run_experiment_pipeline(
         "workload": single_workload_type(eval_workload_map),
         "train_query_count": len(train_workload.typed_queries),
         "train_label_workload_count": len(train_label_workloads),
-        "train_label_workload_query_counts": [len(workload.typed_queries) for workload in train_label_workloads],
+        "train_label_workload_query_counts": [
+            len(workload.typed_queries) for workload in train_label_workloads
+        ],
         "eval_query_count": len(eval_workload.typed_queries),
-        "selection_query_count": len(selection_workload.typed_queries) if selection_workload is not None else None,
+        "selection_query_count": len(selection_workload.typed_queries)
+        if selection_workload is not None
+        else None,
         "train_query_coverage": train_workload.coverage_fraction,
-        "train_label_workload_coverages": [workload.coverage_fraction for workload in train_label_workloads],
+        "train_label_workload_coverages": [
+            workload.coverage_fraction for workload in train_label_workloads
+        ],
         "eval_query_coverage": eval_workload.coverage_fraction,
-        "selection_query_coverage": selection_workload.coverage_fraction if selection_workload is not None else None,
+        "selection_query_coverage": selection_workload.coverage_fraction
+        if selection_workload is not None
+        else None,
         "query_generation_diagnostics": {
             "train": train_workload.generation_diagnostics,
-            "train_label_workloads": [workload.generation_diagnostics for workload in train_label_workloads],
+            "train_label_workloads": [
+                workload.generation_diagnostics for workload in train_label_workloads
+            ],
             "eval": eval_workload.generation_diagnostics,
-            "selection": selection_workload.generation_diagnostics if selection_workload is not None else None,
+            "selection": selection_workload.generation_diagnostics
+            if selection_workload is not None
+            else None,
         },
         "data_split_diagnostics": data_split.split_diagnostics,
         "selector_budget_diagnostics": selector_budget_diagnostics,
         "selector_trace_diagnostics": {
-            "eval_primary": primary_selector_trace if primary_selector_trace is not None else {"available": False}
+            "eval_primary": primary_selector_trace
+            if primary_selector_trace is not None
+            else {"available": False}
         },
         "segment_oracle_allocation_audit": segment_oracle_allocation_audit,
         "target_segment_oracle_alignment_audit": target_segment_oracle_alignment_audit,
@@ -2793,7 +3213,8 @@ def run_experiment_pipeline(
             for name, metrics in causality_ablation_evaluations.items()
         },
         "learned_fill_diagnostics": {
-            name: _evaluation_metrics_payload(metrics) for name, metrics in learned_fill_diagnostics.items()
+            name: _evaluation_metrics_payload(metrics)
+            for name, metrics in learned_fill_diagnostics.items()
         },
         "range_learned_fill_summary": range_learned_fill_summary,
         "predictability_audit": predictability_audit,
@@ -2805,7 +3226,9 @@ def run_experiment_pipeline(
         "training_fit_diagnostics": trained.fit_diagnostics,
         "range_training_target_transform": range_training_target_transform,
         "model_metadata": model_type_metadata(config.model.model_type),
-        "query_prior_field": trained.feature_context.get("query_prior_field_metadata", {"available": False}),
+        "query_prior_field": trained.feature_context.get(
+            "query_prior_field_metadata", {"available": False}
+        ),
         "range_target_balance": range_target_balance_diagnostics,
         "range_training_label_aggregation": range_training_label_aggregation,
         "teacher_distillation": teacher_distillation_diagnostics,
@@ -2829,7 +3252,7 @@ def run_experiment_pipeline(
             "audit_masks_frozen_before_eval_query_scoring": bool(
                 workload_blind_eval and bool(frozen_audit_methods_by_ratio)
             ),
-            "frozen_audit_ratio_count": int(len(frozen_audit_methods_by_ratio)),
+            "frozen_audit_ratio_count": len(frozen_audit_methods_by_ratio),
             "frozen_method_names": sorted(frozen_primary_masks),
             "frozen_audit_ratios": sorted(frozen_audit_methods_by_ratio),
             "eval_geometry_blend_allowed": not bool(workload_blind_eval),
@@ -2914,7 +3337,9 @@ def run_experiment_pipeline(
                     inference_batch_size=config.model.inference_batch_size,
                     amp_mode=config.model.amp_mode,
                 )
-                eval_mask = eval_mlqds.simplify(test_points, test_boundaries, config.model.compression_ratio)
+                eval_mask = eval_mlqds.simplify(
+                    test_points, test_boundaries, config.model.compression_ratio
+                )
             write_simplified_csv(
                 str(out_dir / "ML_simplified_eval.csv"),
                 test_points,
@@ -2922,8 +3347,10 @@ def run_experiment_pipeline(
                 eval_mask,
                 trajectory_mmsis=test_mmsis,
             )
-            for ref_name, csv_name in (("uniform", "uniform_simplified_eval.csv"),
-                                       ("DouglasPeucker", "DP_simplified_eval.csv")):
+            for ref_name, csv_name in (
+                ("uniform", "uniform_simplified_eval.csv"),
+                ("DouglasPeucker", "DP_simplified_eval.csv"),
+            ):
                 ref_eval = matched.get(ref_name)
                 ref_mask = ref_eval.retained_mask if ref_eval is not None else None
                 if ref_mask is not None:

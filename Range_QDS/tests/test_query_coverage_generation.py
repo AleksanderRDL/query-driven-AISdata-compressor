@@ -6,14 +6,18 @@ from pathlib import Path
 
 import torch
 
+from config.experiment_config import build_experiment_config, derive_seed_bundle
 from data.ais_loader import generate_synthetic_ais_data, load_ais_csv
-from experiments.experiment_config import build_experiment_config, derive_seed_bundle
 from experiments.experiment_workloads import generate_experiment_workloads
 from experiments.workload_cache import generate_typed_query_workload_for_config
-from queries.coverage_estimator import best_query_count, estimate_range_coverage, sample_trajectories_by_stride
+from queries.coverage_estimator import (
+    best_query_count,
+    estimate_range_coverage,
+    sample_trajectories_by_stride,
+)
 from queries.query_generator import (
-    _dataset_bounds,
     _counts_from_metadata,
+    _dataset_bounds,
     _make_range_query,
     generate_typed_query_workload,
     point_coverage_mask_for_query,
@@ -593,7 +597,9 @@ def test_train_workload_replicates_can_cycle_anchor_modes() -> None:
         (workload.generation_diagnostics or {})["query_generation"]["range_anchor_mode"]
         for workload in workloads.train_label_workloads
     ]
-    eval_mode = (workloads.eval_workload.generation_diagnostics or {})["query_generation"]["range_anchor_mode"]
+    eval_mode = (workloads.eval_workload.generation_diagnostics or {})["query_generation"][
+        "range_anchor_mode"
+    ]
     assert train_modes == ["mixed_density", "sparse", "mixed_density"]
     assert eval_mode == "mixed_density"
 

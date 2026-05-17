@@ -49,7 +49,13 @@ class RangeSegmentAuditGeometry:
 def _points_cache_token(points: torch.Tensor) -> tuple[int, int, tuple[int, ...], str, str]:
     """Return an identity token for caller-owned evaluation caches."""
     data_ptr = int(points.data_ptr()) if points.numel() > 0 else 0
-    return (id(points), data_ptr, tuple(int(dim) for dim in points.shape), str(points.device), str(points.dtype))
+    return (
+        id(points),
+        data_ptr,
+        tuple(int(dim) for dim in points.shape),
+        str(points.device),
+        str(points.dtype),
+    )
 
 
 def _queries_cache_token(typed_queries: list[dict]) -> tuple[int, int, tuple[int, ...]]:
@@ -74,7 +80,7 @@ class EvaluationQueryCache:
         points: torch.Tensor,
         boundaries: list[tuple[int, int]],
         typed_queries: list[dict],
-    ) -> "EvaluationQueryCache":
+    ) -> EvaluationQueryCache:
         """Build a cache scoped to exactly one points/boundaries/workload object."""
         return cls(
             points_token=_points_cache_token(points),
@@ -94,9 +100,13 @@ class EvaluationQueryCache:
             or self.boundaries_key != tuple((int(start), int(end)) for start, end in boundaries)
             or self.queries_token != _queries_cache_token(typed_queries)
         ):
-            raise ValueError("EvaluationQueryCache was built for different points, boundaries, or typed queries.")
+            raise ValueError(
+                "EvaluationQueryCache was built for different points, boundaries, or typed queries."
+            )
 
-    def get_support_mask(self, query_index: int, builder: Callable[[], torch.Tensor]) -> torch.Tensor:
+    def get_support_mask(
+        self, query_index: int, builder: Callable[[], torch.Tensor]
+    ) -> torch.Tensor:
         """Return a cached full-data support mask."""
         if query_index not in self.support_masks:
             self.support_masks[query_index] = builder()

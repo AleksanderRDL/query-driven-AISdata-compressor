@@ -7,8 +7,8 @@ from typing import Any
 
 import torch
 
+from config.experiment_config import ExperimentConfig, SeedBundle
 from data.trajectory_dataset import TrajectoryDataset
-from experiments.experiment_config import ExperimentConfig, SeedBundle
 
 
 @dataclass
@@ -65,7 +65,9 @@ def _source_stratified_validation_indices(
 ) -> set[int]:
     """Hold out validation trajectories from each train source without emptying a source."""
     if source_ids is None:
-        raise ValueError("validation_split_mode='source_stratified' requires train trajectory source ids.")
+        raise ValueError(
+            "validation_split_mode='source_stratified' requires train trajectory source ids."
+        )
     grouped: dict[int, list[int]] = {}
     for trajectory_idx, source_id in enumerate(source_ids):
         grouped.setdefault(int(source_id), []).append(trajectory_idx)
@@ -108,8 +110,7 @@ def _fallback_validation_indices(
             generator=generator,
         )
     raise ValueError(
-        "validation_split_mode must be 'random' or 'source_stratified'; "
-        f"got {mode!r}."
+        f"validation_split_mode must be 'random' or 'source_stratified'; got {mode!r}."
     )
 
 
@@ -173,10 +174,9 @@ def prepare_experiment_split(
             train_mmsis = [trajectory_mmsis[i] for i in permutation[:train_count]]
             test_mmsis = [trajectory_mmsis[i] for i in permutation[train_count + val_count :]]
             if not test_mmsis:
-                test_mmsis = (
-                    [trajectory_mmsis[i] for i in permutation[train_count : train_count + val_count]]
-                    or [trajectory_mmsis[i] for i in permutation[:train_count]]
-                )
+                test_mmsis = [
+                    trajectory_mmsis[i] for i in permutation[train_count : train_count + val_count]
+                ] or [trajectory_mmsis[i] for i in permutation[:train_count]]
         else:
             train_mmsis = None
             test_mmsis = None
@@ -195,7 +195,10 @@ def prepare_experiment_split(
                 "train_source_counts": _source_counts(train_source_ids),
             }
         )
-        print(f"  split mode=single dataset  train={len(train_traj)}  test={len(test_traj)}", flush=True)
+        print(
+            f"  split mode=single dataset  train={len(train_traj)}  test={len(test_traj)}",
+            flush=True,
+        )
     else:
         train_traj = trajectories
         test_traj = eval_trajectories
@@ -252,10 +255,7 @@ def prepare_experiment_split(
                     "validation_split_mode_effective": config.data.validation_split_mode,
                     "fallback_validation_index_count": len(val_indices),
                     "fallback_validation_source_counts": _source_counts(
-                        [
-                            int(trajectory_source_ids[idx])
-                            for idx in sorted(val_indices)
-                        ]
+                        [int(trajectory_source_ids[idx]) for idx in sorted(val_indices)]
                         if trajectory_source_ids is not None
                         else None
                     ),
@@ -270,7 +270,10 @@ def prepare_experiment_split(
                 "train_source_counts": _source_counts(train_source_ids),
             }
         )
-        print(f"  split mode=separate CSVs  train={len(train_traj)}  eval={len(test_traj)}", flush=True)
+        print(
+            f"  split mode=separate CSVs  train={len(train_traj)}  eval={len(test_traj)}",
+            flush=True,
+        )
     if selection_traj:
         print(f"  checkpoint-selection validation={len(selection_traj)} trajectories", flush=True)
 
@@ -289,12 +292,16 @@ def build_experiment_datasets(data_split: ExperimentDataSplit) -> ExperimentData
     """Build flattened trajectory datasets for train, eval, and optional selection split."""
     train_ds = TrajectoryDataset(data_split.train_traj)
     test_ds = TrajectoryDataset(data_split.test_traj)
-    selection_ds = TrajectoryDataset(data_split.selection_traj) if data_split.selection_traj else None
+    selection_ds = (
+        TrajectoryDataset(data_split.selection_traj) if data_split.selection_traj else None
+    )
     return ExperimentDatasets(
         train_points=train_ds.get_all_points(),
         test_points=test_ds.get_all_points(),
         selection_points=selection_ds.get_all_points() if selection_ds is not None else None,
         train_boundaries=train_ds.get_trajectory_boundaries(),
         test_boundaries=test_ds.get_trajectory_boundaries(),
-        selection_boundaries=selection_ds.get_trajectory_boundaries() if selection_ds is not None else None,
+        selection_boundaries=selection_ds.get_trajectory_boundaries()
+        if selection_ds is not None
+        else None,
     )

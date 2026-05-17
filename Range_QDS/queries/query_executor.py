@@ -20,7 +20,9 @@ def execute_range_query(
     mask = points_in_range_box(points, params)
     if not mask.any():
         return set()
-    return trajectory_ids_intersecting_indices(torch.where(mask)[0], default_boundaries(points, boundaries))
+    return trajectory_ids_intersecting_indices(
+        torch.where(mask)[0], default_boundaries(points, boundaries)
+    )
 
 
 def execute_typed_query(

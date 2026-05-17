@@ -5,14 +5,14 @@ usage() {
   cat <<'EOF'
 Usage: scripts/benchmark_preflight.sh [options]
 
-Check local prerequisites before launching the range workload-aware diagnostic benchmark.
+Check local prerequisites before launching the query-driven workload-blind v2 range benchmark.
 
 Options:
   --session NAME       tmux session name. Default: qds-range-benchmark.
   --csv-path PATH      Cleaned CSV file/directory. Default: ../AISDATA/cleaned.
-  --cache-dir PATH     Cache directory. Default: artifacts/cache/range_workload_aware_diagnostic.
+  --cache-dir PATH     Cache directory. Default: artifacts/cache/query_driven_workload_blind_v2.
   --artifact-root PATH Benchmark family root. Default:
-                       artifacts/benchmarks/range_workload_aware_diagnostic.
+                       artifacts/benchmarks/query_driven_workload_blind_v2.
   --uv CMD            uv executable. Default: uv.
   --uv-group NAME     uv dependency group. Default: dev.
   --min-free-gb N      Required free space on artifact filesystem. Default: 20.
@@ -31,8 +31,8 @@ QDS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO_ROOT="$(cd "$QDS_ROOT/.." && pwd)"
 SESSION="${SESSION:-qds-range-benchmark}"
 CSV_PATH="${CSV_PATH:-../AISDATA/cleaned}"
-CACHE_DIR="${CACHE_DIR:-artifacts/cache/range_workload_aware_diagnostic}"
-ARTIFACT_ROOT="${ARTIFACT_ROOT:-artifacts/benchmarks/range_workload_aware_diagnostic}"
+CACHE_DIR="${CACHE_DIR:-artifacts/cache/query_driven_workload_blind_v2}"
+ARTIFACT_ROOT="${ARTIFACT_ROOT:-artifacts/benchmarks/query_driven_workload_blind_v2}"
 UV="${UV:-uv}"
 UV_GROUP="${UV_GROUP:-dev}"
 MIN_FREE_GB="${MIN_FREE_GB:-20}"

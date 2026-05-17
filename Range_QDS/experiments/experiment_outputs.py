@@ -45,8 +45,12 @@ def write_experiment_results(
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "matched_table.txt").write_text(matched_table + "\n", encoding="utf-8")
     (out_dir / "shift_table.txt").write_text(shift_table + "\n", encoding="utf-8")
-    (out_dir / "geometric_distortion_table.txt").write_text(geometric_table + "\n", encoding="utf-8")
-    (out_dir / "range_usefulness_table.txt").write_text(range_usefulness_table + "\n", encoding="utf-8")
+    (out_dir / "geometric_distortion_table.txt").write_text(
+        geometric_table + "\n", encoding="utf-8"
+    )
+    (out_dir / "range_usefulness_table.txt").write_text(
+        range_usefulness_table + "\n", encoding="utf-8"
+    )
     if learned_fill_table:
         (out_dir / "learned_fill_diagnostics_table.txt").write_text(
             learned_fill_table + "\n",
@@ -54,7 +58,10 @@ def write_experiment_results(
         )
     (out_dir / "learned_fill_diagnostics.json").write_text(
         json.dumps(
-            {name: _evaluation_metrics_payload(metrics) for name, metrics in learned_fill_diagnostics.items()},
+            {
+                name: _evaluation_metrics_payload(metrics)
+                for name, metrics in learned_fill_diagnostics.items()
+            },
             indent=2,
         )
         + "\n",

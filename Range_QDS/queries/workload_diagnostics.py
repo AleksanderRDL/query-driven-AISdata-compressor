@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Mapping
+from collections.abc import Callable, Mapping
+from typing import Any
 
 import torch
 
 from data.trajectory_index import trajectory_ids_for_points
-from queries.range_geometry import points_in_range_box
 from queries.query_types import QUERY_TYPE_ID_RANGE
+from queries.range_geometry import points_in_range_box
 
 
 def _dataset_bounds(points: torch.Tensor) -> dict[str, float]:
@@ -58,7 +59,9 @@ def _safe_span(max_value: float, min_value: float) -> float:
     return max(float(max_value) - float(min_value), 1e-9)
 
 
-def _range_span_fractions(params: dict[str, float], bounds: dict[str, float]) -> tuple[float, float, float, float]:
+def _range_span_fractions(
+    params: dict[str, float], bounds: dict[str, float]
+) -> tuple[float, float, float, float]:
     """Return normalized lat/lon/time spans and their product."""
     lat_fraction = max(0.0, float(params["lat_max"]) - float(params["lat_min"])) / _safe_span(
         bounds["lat_max"],
@@ -75,7 +78,12 @@ def _range_span_fractions(params: dict[str, float], bounds: dict[str, float]) ->
     lat_fraction = min(1.0, float(lat_fraction))
     lon_fraction = min(1.0, float(lon_fraction))
     time_fraction = min(1.0, float(time_fraction))
-    return lat_fraction, lon_fraction, time_fraction, float(lat_fraction * lon_fraction * time_fraction)
+    return (
+        lat_fraction,
+        lon_fraction,
+        time_fraction,
+        float(lat_fraction * lon_fraction * time_fraction),
+    )
 
 
 def range_box_iou(params_a: dict[str, float], params_b: dict[str, float]) -> float:
@@ -131,10 +139,14 @@ def range_query_diagnostic(
         else _trajectory_hits(mask, boundaries)
     )
     total_points = int(points.shape[0])
-    total_trajectories = int(len(boundaries))
+    total_trajectories = len(boundaries)
     point_hit_fraction = float(point_hits / total_points) if total_points > 0 else 0.0
-    trajectory_hit_fraction = float(trajectory_hits / total_trajectories) if total_trajectories > 0 else 0.0
-    lat_fraction, lon_fraction, time_fraction, box_volume_fraction = _range_span_fractions(params, bounds)
+    trajectory_hit_fraction = (
+        float(trajectory_hits / total_trajectories) if total_trajectories > 0 else 0.0
+    )
+    lat_fraction, lon_fraction, time_fraction, box_volume_fraction = _range_span_fractions(
+        params, bounds
+    )
 
     near_duplicate_of: int | None = None
     near_duplicate_iou = 0.0
@@ -146,13 +158,17 @@ def range_query_diagnostic(
             if iou > near_duplicate_iou:
                 near_duplicate_iou = float(iou)
             if iou >= threshold:
-                near_duplicate_of = int(previous.get("query_index", previous.get("_query_index", 0)))
+                near_duplicate_of = int(
+                    previous.get("query_index", previous.get("_query_index", 0))
+                )
                 break
 
     too_broad = False
     if max_point_hit_fraction is not None and point_hit_fraction > float(max_point_hit_fraction):
         too_broad = True
-    if max_trajectory_hit_fraction is not None and trajectory_hit_fraction > float(max_trajectory_hit_fraction):
+    if max_trajectory_hit_fraction is not None and trajectory_hit_fraction > float(
+        max_trajectory_hit_fraction
+    ):
         too_broad = True
     if max_box_volume_fraction is not None and box_volume_fraction > float(max_box_volume_fraction):
         too_broad = True
@@ -181,7 +197,9 @@ def _quantile(values: list[float], q: float) -> float:
     return float(torch.quantile(torch.tensor(values, dtype=torch.float32), float(q)).item())
 
 
-def _summary_from_query_diagnostics(query_rows: list[dict[str, Any]], coverage_fraction: float) -> dict[str, Any]:
+def _summary_from_query_diagnostics(
+    query_rows: list[dict[str, Any]], coverage_fraction: float
+) -> dict[str, Any]:
     """Aggregate per-query diagnostics into a compact summary."""
     count = len(query_rows)
     point_hits = [float(row["point_hits"]) for row in query_rows]
@@ -191,10 +209,16 @@ def _summary_from_query_diagnostics(query_rows: list[dict[str, Any]], coverage_f
     box_volume_fractions = [float(row["box_volume_fraction"]) for row in query_rows]
     return {
         "range_query_count": int(count),
-        "empty_query_rate": float(sum(1 for row in query_rows if row["is_empty"]) / count) if count else 0.0,
-        "too_broad_query_rate": float(sum(1 for row in query_rows if row["is_too_broad"]) / count) if count else 0.0,
+        "empty_query_rate": float(sum(1 for row in query_rows if row["is_empty"]) / count)
+        if count
+        else 0.0,
+        "too_broad_query_rate": float(sum(1 for row in query_rows if row["is_too_broad"]) / count)
+        if count
+        else 0.0,
         "near_duplicate_query_rate": (
-            float(sum(1 for row in query_rows if row["near_duplicate_of"] is not None) / count) if count else 0.0
+            float(sum(1 for row in query_rows if row["near_duplicate_of"] is not None) / count)
+            if count
+            else 0.0
         ),
         "point_hit_count_p10": _quantile(point_hits, 0.10),
         "point_hit_count_p50": _quantile(point_hits, 0.50),
@@ -264,7 +288,11 @@ def compute_range_workload_diagnostics(
             covered |= mask
 
     if coverage_fraction is None:
-        coverage_fraction = float(covered.float().mean().item()) if points.shape[0] > 0 and covered is not None else 0.0
+        coverage_fraction = (
+            float(covered.float().mean().item())
+            if points.shape[0] > 0 and covered is not None
+            else 0.0
+        )
     return {
         "summary": _summary_from_query_diagnostics(rows, coverage_fraction),
         "queries": rows,
@@ -289,7 +317,9 @@ def _component_label_diagnostics(
     for component_name, component_tensor in component_labels.items():
         values = component_tensor[:, QUERY_TYPE_ID_RANGE].detach()
         positive = active & (values > 0.0)
-        masses[str(component_name)] = float(values[positive].sum().item()) if bool(positive.any().item()) else 0.0
+        masses[str(component_name)] = (
+            float(values[positive].sum().item()) if bool(positive.any().item()) else 0.0
+        )
         counts[str(component_name)] = int(positive.sum().item())
 
     total_mass = sum(masses.values())
@@ -337,7 +367,9 @@ def compute_range_label_diagnostics(
         "labelled_point_count": labelled_count,
         "positive_point_count": positive_count,
         "positive_label_fraction": float(positive_count / max(1, labelled_count)),
-        "positive_label_mass": float(values[positive].sum().item()) if bool(positive.any().item()) else 0.0,
+        "positive_label_mass": float(values[positive].sum().item())
+        if bool(positive.any().item())
+        else 0.0,
         "positive_label_p50": _quantile(positive_values, 0.50),
         "positive_label_p90": _quantile(positive_values, 0.90),
         "positive_label_p95": _quantile(positive_values, 0.95),

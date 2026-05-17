@@ -7,24 +7,29 @@ from typing import Any, cast
 import pytest
 import torch
 
+from config.experiment_config import build_experiment_config
 from data.ais_loader import generate_synthetic_ais_data
 from data.trajectory_dataset import TrajectoryDataset
 from evaluation.baselines import MLQDSMethod
 from evaluation.evaluate_methods import score_range_usefulness, score_retained_mask
-from experiments.experiment_config import build_experiment_config
 from models.historical_prior_qds_model import HistoricalPriorRangeQDSModel
 from models.trajectory_qds_model import TrajectoryQDSModel
 from queries.query_generator import generate_typed_query_workload
 from queries.query_types import NUM_QUERY_TYPES, QUERY_TYPE_ID_RANGE
 from training.checkpoint_selection import (
-    validation_score_selection_score as _validation_score_selection_score,
     selection_score as _selection_score,
+)
+from training.checkpoint_selection import (
     uniform_gap_selection_score as _uniform_gap_selection_score,
+)
+from training.checkpoint_selection import (
+    validation_score_selection_score as _validation_score_selection_score,
 )
 from training.importance_labels import compute_typed_importance_labels
 from training.query_useful_targets import QUERY_USEFUL_V1_HEAD_NAMES
 from training.scaler import FeatureScaler
 from training.train_model import train_model
+from training.training_diagnostics import train_target_fit_diagnostics
 from training.training_losses import (
     _balanced_pointwise_loss,
     _balanced_pointwise_loss_rows,
@@ -35,7 +40,6 @@ from training.training_losses import (
     _effective_budget_loss_ratios,
     _ranking_loss_for_type,
 )
-from training.training_diagnostics import train_target_fit_diagnostics
 from training.training_outputs import TrainingOutputs
 from training.training_setup import _single_active_type_id
 from training.training_targets import _apply_temporal_residual_labels
@@ -46,7 +50,9 @@ from training.trajectory_batching import build_trajectory_windows
 
 def test_selection_score_penalizes_collapsed_predictions() -> None:
     """Assert model selection does not prefer collapsed output solely because tau is nonnegative."""
-    assert _selection_score(avg_tau=0.0, pred_std=0.0) < _selection_score(avg_tau=-0.05, pred_std=0.01)
+    assert _selection_score(avg_tau=0.0, pred_std=0.0) < _selection_score(
+        avg_tau=-0.05, pred_std=0.01
+    )
 
 
 def test_temporal_residual_budget_ratios_match_learned_fill_budget() -> None:
@@ -66,7 +72,9 @@ def test_temporal_residual_budget_ratios_match_learned_fill_budget() -> None:
             0.0270270270,
         )
     )
-    assert _effective_budget_loss_ratios(cfg.model, "none") == pytest.approx((0.01, 0.02, 0.05, 0.10))
+    assert _effective_budget_loss_ratios(cfg.model, "none") == pytest.approx(
+        (0.01, 0.02, 0.05, 0.10)
+    )
 
     stratified_cfg = build_experiment_config(
         compression_ratio=0.05,
@@ -123,7 +131,10 @@ def test_train_target_fit_diagnostics_reports_budget_target_recall() -> None:
     assert diagnostics["score_target_kendall_tau"] > 0.9
     assert diagnostics["matched_mlqds_target_recall"] == pytest.approx(1.0)
     assert diagnostics["matched_mlqds_vs_uniform_target_recall"] > 0.0
-    assert diagnostics["budget_rows"][0]["mlqds_target_mass"] > diagnostics["budget_rows"][0]["uniform_target_mass"]
+    assert (
+        diagnostics["budget_rows"][0]["mlqds_target_mass"]
+        > diagnostics["budget_rows"][0]["uniform_target_mass"]
+    )
 
 
 def test_validation_score_selection_score_penalizes_collapsed_predictions() -> None:
@@ -446,7 +457,9 @@ def test_single_active_type_rejects_mixed_training_weights() -> None:
 
 def test_filter_supervised_windows_removes_zero_positive_training_windows() -> None:
     points = torch.arange(24, dtype=torch.float32).reshape(12, 2)
-    windows = build_trajectory_windows(points, boundaries=[(0, 4), (4, 12)], window_length=4, stride=4)
+    windows = build_trajectory_windows(
+        points, boundaries=[(0, 4), (4, 12)], window_length=4, stride=4
+    )
     targets = torch.zeros((12, 4), dtype=torch.float32)
     labelled_mask = torch.ones((12, 4), dtype=torch.bool)
     targets[5, 0] = 1.0
@@ -465,7 +478,9 @@ def test_filter_supervised_windows_removes_zero_positive_training_windows() -> N
 
 def test_filter_supervised_windows_can_keep_zero_labelled_windows_for_pointwise_objective() -> None:
     points = torch.arange(24, dtype=torch.float32).reshape(12, 2)
-    windows = build_trajectory_windows(points, boundaries=[(0, 4), (4, 12)], window_length=4, stride=4)
+    windows = build_trajectory_windows(
+        points, boundaries=[(0, 4), (4, 12)], window_length=4, stride=4
+    )
     targets = torch.zeros((12,), dtype=torch.float32)
     labelled_mask = torch.ones((12,), dtype=torch.bool)
 
@@ -541,8 +556,12 @@ def test_training_records_validation_selection_score() -> None:
     assert all("val_range_point_f1" in row for row in score_rows)
     assert all("val_range_usefulness" in row for row in score_rows)
     assert all("val_query_f1" not in row for row in score_rows)
-    assert all("selection_score" not in row for row in out.history if "val_selection_score" not in row)
-    assert out.best_selection_score == pytest.approx(max(row["val_selection_score"] for row in score_rows))
+    assert all(
+        "selection_score" not in row for row in out.history if "val_selection_score" not in row
+    )
+    assert out.best_selection_score == pytest.approx(
+        max(row["val_selection_score"] for row in score_rows)
+    )
 
 
 def test_checkpoint_candidate_pool_defers_full_validation() -> None:
@@ -598,14 +617,20 @@ def test_checkpoint_candidate_pool_defers_full_validation() -> None:
     )
 
     candidate_rows = [row for row in out.history if row.get("checkpoint_score_candidate") == 1.0]
-    evaluated_rows = [row for row in out.history if row.get("checkpoint_candidate_evaluated") == 1.0]
+    evaluated_rows = [
+        row for row in out.history if row.get("checkpoint_candidate_evaluated") == 1.0
+    ]
 
     assert len(candidate_rows) == 5
     assert 1 <= len(evaluated_rows) <= 3
     assert all("val_selection_score" in row for row in evaluated_rows)
     assert all("selection_score" in row for row in evaluated_rows)
     assert all(0.0 <= row["val_selection_score"] <= 1.0 for row in evaluated_rows)
-    assert all("selection_score" not in row for row in candidate_rows if row.get("checkpoint_candidate_evaluated") != 1.0)
+    assert all(
+        "selection_score" not in row
+        for row in candidate_rows
+        if row.get("checkpoint_candidate_evaluated") != 1.0
+    )
     assert out.best_selection_score == pytest.approx(
         max(row["val_selection_score"] for row in evaluated_rows)
     )
@@ -613,9 +638,19 @@ def test_checkpoint_candidate_pool_defers_full_validation() -> None:
 
 @pytest.mark.parametrize(
     "score_mode",
-    ["rank", "rank_tie", "raw", "sigmoid", "zscore_sigmoid", "rank_confidence", "temperature_sigmoid"],
+    [
+        "rank",
+        "rank_tie",
+        "raw",
+        "sigmoid",
+        "zscore_sigmoid",
+        "rank_confidence",
+        "temperature_sigmoid",
+    ],
 )
-def test_validation_query_score_matches_final_mlqds_scoring(score_mode: str, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_validation_query_score_matches_final_mlqds_scoring(
+    score_mode: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     trajectories = generate_synthetic_ais_data(n_ships=2, n_points_per_ship=12, seed=515)
     ds = TrajectoryDataset(trajectories)
     points = ds.get_all_points()
@@ -782,7 +817,9 @@ def test_validation_range_usefulness_matches_final_audit(monkeypatch: pytest.Mon
     assert validation_per_type["range"] == pytest.approx(audit["range_usefulness_score"])
 
 
-def test_validation_selection_passes_segment_head_to_learned_selector(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_validation_selection_passes_segment_head_to_learned_selector(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     trajectories = generate_synthetic_ais_data(n_ships=1, n_points_per_ship=12, seed=617)
     ds = TrajectoryDataset(trajectories)
     points = ds.get_all_points()
@@ -867,7 +904,9 @@ def test_validation_selection_can_blend_length_support_head_for_learned_selector
     )
     cfg.model.selector_type = "learned_segment_budget_v1"
     predictions = torch.zeros((points.shape[0],), dtype=torch.float32)
-    head_logits = torch.zeros((points.shape[0], len(QUERY_USEFUL_V1_HEAD_NAMES)), dtype=torch.float32)
+    head_logits = torch.zeros(
+        (points.shape[0], len(QUERY_USEFUL_V1_HEAD_NAMES)), dtype=torch.float32
+    )
     segment_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("segment_budget_target")
     path_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("path_length_support_target")
     head_logits[:, segment_idx] = torch.linspace(-2.0, 2.0, steps=points.shape[0])
@@ -947,14 +986,21 @@ def test_validation_checkpoint_scores_report_factorized_causality_deltas(
     )
     cfg.model.selector_type = "learned_segment_budget_v1"
     predictions = torch.ones((points.shape[0],), dtype=torch.float32)
-    head_logits = torch.ones((points.shape[0], len(QUERY_USEFUL_V1_HEAD_NAMES)), dtype=torch.float32)
+    head_logits = torch.ones(
+        (points.shape[0], len(QUERY_USEFUL_V1_HEAD_NAMES)), dtype=torch.float32
+    )
 
     monkeypatch.setattr(
         "training.training_validation._predict_workload_logits_with_heads",
         lambda **_kwargs: (predictions.clone(), head_logits.clone()),
     )
 
-    def fake_simplify(scores: torch.Tensor, *_args: object, segment_scores: torch.Tensor | None = None, **_kwargs: object) -> torch.Tensor:
+    def fake_simplify(
+        scores: torch.Tensor,
+        *_args: object,
+        segment_scores: torch.Tensor | None = None,
+        **_kwargs: object,
+    ) -> torch.Tensor:
         keep = 5
         if segment_scores is not None and int(torch.count_nonzero(segment_scores).item()) == 0:
             keep = 2
@@ -982,7 +1028,9 @@ def test_validation_checkpoint_scores_report_factorized_causality_deltas(
         }
 
     monkeypatch.setattr("training.training_validation.simplify_mlqds_predictions", fake_simplify)
-    monkeypatch.setattr("training.training_validation.score_range_usefulness", fake_range_usefulness)
+    monkeypatch.setattr(
+        "training.training_validation.score_range_usefulness", fake_range_usefulness
+    )
     monkeypatch.setattr(
         "training.training_validation.query_useful_v1_from_range_audit",
         lambda audit, **_kwargs: {"query_useful_v1_score": audit["range_usefulness_score"]},
@@ -1176,10 +1224,12 @@ def test_historical_prior_training_preserves_train_source_ids() -> None:
     )
 
     assert isinstance(out.model, HistoricalPriorRangeQDSModel)
-    expected = torch.cat([
-        torch.full((end - start,), source_id, dtype=torch.long)
-        for source_id, (start, end) in zip(source_ids, boundaries, strict=True)
-    ])
+    expected = torch.cat(
+        [
+            torch.full((end - start,), source_id, dtype=torch.long)
+            for source_id, (start, end) in zip(source_ids, boundaries, strict=True)
+        ]
+    )
     assert torch.equal(out.model.historical_source_ids, expected)
     assert out.target_diagnostics["historical_prior_source_aggregation"] == "mean"
     assert out.target_diagnostics["historical_prior_source_count"] == 2
@@ -1191,7 +1241,9 @@ def test_ranking_bce_objective_keeps_rank_signal(synthetic_dataset) -> None:
     ds = TrajectoryDataset(trajectories)
     boundaries = ds.get_trajectory_boundaries()
 
-    cfg = build_experiment_config(epochs=4, n_queries=80, workload="range", loss_objective="ranking_bce")
+    cfg = build_experiment_config(
+        epochs=4, n_queries=80, workload="range", loss_objective="ranking_bce"
+    )
     workload = generate_typed_query_workload(
         trajectories=trajectories,
         n_queries=80,
@@ -1220,7 +1272,9 @@ def test_pointwise_bce_objective_trains_on_range_labels(synthetic_dataset) -> No
     ds = TrajectoryDataset(trajectories)
     boundaries = ds.get_trajectory_boundaries()
 
-    cfg = build_experiment_config(epochs=1, n_queries=24, workload="range", loss_objective="pointwise_bce")
+    cfg = build_experiment_config(
+        epochs=1, n_queries=24, workload="range", loss_objective="pointwise_bce"
+    )
     cfg.model.embed_dim = 16
     cfg.model.num_heads = 2
     cfg.model.num_layers = 1

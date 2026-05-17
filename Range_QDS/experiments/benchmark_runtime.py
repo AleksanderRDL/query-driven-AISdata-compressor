@@ -18,39 +18,30 @@ import shutil
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import torch
 
 from experiments.benchmark_profiles import (
-    DEFAULT_PROFILE,
     PROFILE_CHOICES,
+    RANGE_WORKLOAD_V1_WORKLOAD_BLIND_V2_PROFILE,
     benchmark_profile,
     benchmark_profile_args,
 )
-from experiments.torch_runtime import (
+from runtime.torch_runtime import (
     AMP_MODE_CHOICES,
     FLOAT32_MATMUL_PRECISION_CHOICES,
     amp_runtime_snapshot,
     apply_torch_runtime_settings,
 )
 
-
 PHASE_DONE_RE = re.compile(r"^\[(?P<name>[^\]]+)\]\s+done in (?P<seconds>[0-9.]+)s")
-EPOCH_RE = re.compile(
-    r"epoch\s+(?P<epoch>\d+)/(?P<total>\d+).*?\((?P<seconds>[0-9.]+)s\)"
-)
+EPOCH_RE = re.compile(r"epoch\s+(?P<epoch>\d+)/(?P<total>\d+).*?\((?P<seconds>[0-9.]+)s\)")
 INFERENCE_STEP_RE = re.compile(
     r"^\[(?P<name>eval|workload|load-data|trajectory-length-loss)\].*?(?:done|generated|in)\s+"
     r"(?P<seconds>[0-9.]+)s"
-)
-DEFAULT_PROFILE_ARGS = benchmark_profile_args(
-    DEFAULT_PROFILE,
-    include_workload=True,
-    include_checkpoint_selection=True,
-    include_validation_score_diagnostic=True,
 )
 
 
@@ -136,8 +127,7 @@ def _nvidia_smi_metadata() -> dict[str, Any]:
         proc = subprocess.run(
             command,
             text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             check=False,
         )
     except OSError as exc:
@@ -213,7 +203,7 @@ def _torch_cuda_metadata() -> dict[str, Any]:
 def _environment_metadata(amp_mode: str) -> dict[str, Any]:
     """Collect benchmark environment metadata."""
     return {
-        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+        "timestamp_utc": datetime.now(UTC).isoformat(),
         "working_directory": str(Path.cwd()),
         "qds_root": str(_qds_root()),
         "repo_root": str(_repo_root()),
@@ -321,10 +311,14 @@ def _matched_summary(run_json: dict[str, Any] | None) -> dict[str, Any]:
             "range_shape_score": payload.get("range_shape_score"),
             "range_usefulness_score": payload.get("range_usefulness_score"),
             "range_usefulness_gap_time_score": payload.get("range_usefulness_gap_time_score"),
-            "range_usefulness_gap_distance_score": payload.get("range_usefulness_gap_distance_score"),
+            "range_usefulness_gap_distance_score": payload.get(
+                "range_usefulness_gap_distance_score"
+            ),
             "range_usefulness_gap_min_score": payload.get("range_usefulness_gap_min_score"),
             "range_usefulness_schema_version": payload.get("range_usefulness_schema_version"),
-            "range_usefulness_gap_ablation_version": payload.get("range_usefulness_gap_ablation_version"),
+            "range_usefulness_gap_ablation_version": payload.get(
+                "range_usefulness_gap_ablation_version"
+            ),
         }
     config = run_json.get("config", {})
     model_config = config.get("model", {}) if isinstance(config, dict) else {}
@@ -349,9 +343,15 @@ def _profile_train_args(profile: str, seed: int, results_dir: Path, checkpoint: 
         "--save_model",
         str(checkpoint),
     ]
-    if profile == DEFAULT_PROFILE:
-        return [*DEFAULT_PROFILE_ARGS, *common]
-    raise ValueError(f"Unknown benchmark profile: {profile}")
+    return [
+        *benchmark_profile_args(
+            profile,
+            include_workload=True,
+            include_checkpoint_selection=True,
+            include_validation_score_diagnostic=True,
+        ),
+        *common,
+    ]
 
 
 def _split_extra_args(raw: str | None) -> list[str]:
@@ -363,7 +363,10 @@ def _extra_args_include_training_data_source(raw: str | None) -> bool:
     """Return whether train extra args provide real CSV training data."""
     tokens = _split_extra_args(raw)
     data_flags = {"--csv_path", "--train_csv_path", "--train_csv"}
-    return any(token in data_flags or any(token.startswith(f"{flag}=") for flag in data_flags) for token in tokens)
+    return any(
+        token in data_flags or any(token.startswith(f"{flag}=") for flag in data_flags)
+        for token in tokens
+    )
 
 
 def _parse_train_batch_sizes(raw: str | None) -> list[int] | None:
@@ -412,7 +415,9 @@ def _batch_size_sweep_summary(steps: list[dict[str, Any]]) -> list[dict[str, Any
                 "peak_allocated_mb": training_memory.get("max_allocated_mb"),
                 "peak_reserved_mb": training_memory.get("max_reserved_mb"),
                 "best_selection_score": metrics.get("best_selection_score"),
-                "mlqds_aggregate_f1": mlqds.get("aggregate_f1") if isinstance(mlqds, dict) else None,
+                "mlqds_aggregate_f1": mlqds.get("aggregate_f1")
+                if isinstance(mlqds, dict)
+                else None,
                 "mlqds_range_usefulness_score": (
                     mlqds.get("range_usefulness_score") if isinstance(mlqds, dict) else None
                 ),
@@ -439,7 +444,9 @@ def _batch_size_sweep_summary(steps: list[dict[str, Any]]) -> list[dict[str, Any
     return rows
 
 
-def _runtime_child_args(float32_matmul_precision: str, allow_tf32: bool, amp_mode: str) -> list[str]:
+def _runtime_child_args(
+    float32_matmul_precision: str, allow_tf32: bool, amp_mode: str
+) -> list[str]:
     """Return precision args forwarded to benchmark child entrypoints."""
     return [
         "--float32_matmul_precision",
@@ -484,7 +491,7 @@ def _run_child_step(
 
 def _build_parser() -> argparse.ArgumentParser:
     """Build benchmark CLI parser."""
-    default_profile = benchmark_profile(DEFAULT_PROFILE)
+    default_profile = benchmark_profile(RANGE_WORKLOAD_V1_WORKLOAD_BLIND_V2_PROFILE)
     parser = argparse.ArgumentParser(
         description="Run stable AIS-QDS runtime benchmarks and write a JSON artifact.",
     )
@@ -497,10 +504,12 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--profile",
         choices=PROFILE_CHOICES,
-        default=DEFAULT_PROFILE,
+        default=RANGE_WORKLOAD_V1_WORKLOAD_BLIND_V2_PROFILE,
         help="Training profile for runtime benchmarking. Training modes require CSV data in --train_extra_args.",
     )
-    parser.add_argument("--seed", type=int, default=42, help="Seed recorded and passed to default profile commands.")
+    parser.add_argument(
+        "--seed", type=int, default=42, help="Seed recorded and passed to default profile commands."
+    )
     parser.add_argument(
         "--results_dir",
         type=str,
@@ -523,7 +532,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--train_extra_args",
         type=str,
         default=None,
-        help="Quoted extra args appended to run_ais_experiment.py, e.g. \"--csv_path ../AISDATA/cleaned/x.csv\".",
+        help='Quoted extra args appended to run_ais_experiment.py, e.g. "--csv_path ../AISDATA/cleaned/x.csv".',
     )
     parser.add_argument(
         "--train_batch_sizes",
@@ -580,9 +589,11 @@ def main() -> None:
         raise SystemExit("--inference_csv_path is required for --mode inference and --mode both.")
     if args.mode == "inference" and not args.checkpoint:
         raise SystemExit("--checkpoint is required for --mode inference.")
-    if args.mode in {"train", "both"} and not _extra_args_include_training_data_source(args.train_extra_args):
+    if args.mode in {"train", "both"} and not _extra_args_include_training_data_source(
+        args.train_extra_args
+    ):
         raise SystemExit(
-            "--mode train/both with --profile range_workload_aware_diagnostic requires --train_extra_args "
+            f"--mode train/both with --profile {args.profile} requires --train_extra_args "
             "containing --csv_path or --train_csv_path/--eval_csv_path."
         )
     try:
@@ -596,7 +607,9 @@ def main() -> None:
         float32_matmul_precision=args.float32_matmul_precision,
         allow_tf32=args.allow_tf32,
     )
-    runtime_child_args = _runtime_child_args(args.float32_matmul_precision, bool(args.allow_tf32), args.amp_mode)
+    runtime_child_args = _runtime_child_args(
+        args.float32_matmul_precision, bool(args.allow_tf32), args.amp_mode
+    )
 
     wrapper_command = [sys.executable, "-m", "experiments.benchmark_runtime", *sys.argv[1:]]
     artifact: dict[str, Any] = {
@@ -618,18 +631,24 @@ def main() -> None:
     if args.mode == "train" and train_batch_sizes is not None:
         for batch_size in train_batch_sizes:
             train_results = results_dir / f"train_bs{batch_size}"
-            checkpoint_for_step = checkpoint.with_name(f"{checkpoint.stem}_bs{batch_size}{checkpoint.suffix or '.pt'}")
+            checkpoint_for_step = checkpoint.with_name(
+                f"{checkpoint.stem}_bs{batch_size}{checkpoint.suffix or '.pt'}"
+            )
             train_command = [
                 sys.executable,
                 "-m",
                 "experiments.run_ais_experiment",
-                *_profile_train_args(args.profile, int(args.seed), train_results, checkpoint_for_step),
+                *_profile_train_args(
+                    args.profile, int(args.seed), train_results, checkpoint_for_step
+                ),
                 "--train_batch_size",
                 str(batch_size),
                 *runtime_child_args,
                 *_split_extra_args(args.train_extra_args),
             ]
-            step = _run_child_step(f"train_bs{batch_size}", train_command, train_results, "example_run.json")
+            step = _run_child_step(
+                f"train_bs{batch_size}", train_command, train_results, "example_run.json"
+            )
             step["train_batch_size"] = int(batch_size)
             artifact["steps"].append(step)
             failed = int(step["returncode"] != 0)
@@ -669,7 +688,9 @@ def main() -> None:
             *runtime_child_args,
             *_split_extra_args(args.inference_extra_args),
         ]
-        step = _run_child_step("inference", inference_command, inference_results, "inference_run.json")
+        step = _run_child_step(
+            "inference", inference_command, inference_results, "inference_run.json"
+        )
         artifact["steps"].append(step)
         failures += int(step["returncode"] != 0)
 

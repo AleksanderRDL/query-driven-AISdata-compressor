@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 import torch
 
-from experiments.experiment_config import SeedBundle, build_experiment_config
+from config.experiment_config import SeedBundle, build_experiment_config
 from experiments.experiment_data import prepare_experiment_split
 
 
@@ -82,7 +82,7 @@ def test_single_dataset_split_respects_configured_fractions() -> None:
 def test_single_dataset_split_rejects_fractions_without_eval_holdout() -> None:
     cfg = build_experiment_config(train_fraction=0.80, val_fraction=0.20)
 
-    with pytest.raises(ValueError, match="less than 1.0"):
+    with pytest.raises(ValueError, match=r"less than 1\.0"):
         prepare_experiment_split(
             config=cfg,
             seeds=_seeds(),

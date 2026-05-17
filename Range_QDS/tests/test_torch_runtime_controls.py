@@ -7,8 +7,14 @@ from argparse import Namespace
 import pytest
 import torch
 
+from config.experiment_config import (
+    DEFAULT_BUDGET_LOSS_RATIOS,
+    DEFAULT_BUDGET_LOSS_TEMPERATURE,
+    ExperimentConfig,
+    build_experiment_config,
+)
+from experiments.benchmark_profiles import DEFAULT_PROFILE
 from experiments.benchmark_runtime import (
-    DEFAULT_PROFILE,
     _batch_size_sweep_summary,
     _extra_args_include_training_data_source,
     _parse_train_batch_sizes,
@@ -16,14 +22,8 @@ from experiments.benchmark_runtime import (
     _runtime_child_args,
 )
 from experiments.experiment_cli import build_parser
-from experiments.experiment_config import (
-    DEFAULT_BUDGET_LOSS_RATIOS,
-    DEFAULT_BUDGET_LOSS_TEMPERATURE,
-    ExperimentConfig,
-    build_experiment_config,
-)
 from experiments.run_ais_experiment import _split_max_segments
-from experiments.torch_runtime import (
+from runtime.torch_runtime import (
     amp_runtime_snapshot,
     apply_torch_runtime_settings,
     normalize_amp_mode,
@@ -813,7 +813,9 @@ def test_checkpoint_config_payload_filters_stale_section_keys() -> None:
 
 
 def test_checkpoint_config_payload_supplies_missing_sections() -> None:
-    restored = ExperimentConfig.from_dict(_checkpoint_config_payload({"model": {"model_type": "baseline"}}))
+    restored = ExperimentConfig.from_dict(
+        _checkpoint_config_payload({"model": {"model_type": "baseline"}})
+    )
 
     assert restored.data.min_points_per_segment == 4
     assert restored.query.workload == "range"
@@ -854,7 +856,9 @@ def test_parse_train_batch_sizes() -> None:
 
 
 def test_runtime_profile_uses_workload_aware_diagnostic_shape(tmp_path) -> None:
-    args = _profile_train_args(DEFAULT_PROFILE, seed=42, results_dir=tmp_path / "run", checkpoint=tmp_path / "m.pt")
+    args = _profile_train_args(
+        DEFAULT_PROFILE, seed=42, results_dir=tmp_path / "run", checkpoint=tmp_path / "m.pt"
+    )
 
     assert "--n_queries" in args
     assert args[args.index("--n_queries") + 1] == "80"

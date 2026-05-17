@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import csv
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-
 
 RUN_INDEX_FIELDS = [
     "run_id",
@@ -64,7 +63,7 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
 
 def utc_now() -> str:
     """Return an ISO UTC timestamp."""
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def family_root(results_dir: Path) -> Path:
@@ -109,7 +108,7 @@ def _first_float(row: dict[str, Any], keys: tuple[str, ...]) -> float | None:
             continue
         try:
             return float(value)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             continue
     return None
 
@@ -161,7 +160,9 @@ def _best_mlqds(rows: list[dict[str, Any]]) -> dict[str, Any]:
             best_row,
             ("mlqds_range_usefulness", "mlqds_range_usefulness_score"),
         ),
-        "run_label": str(best_row.get("run_label")) if best_row.get("run_label") is not None else None,
+        "run_label": str(best_row.get("run_label"))
+        if best_row.get("run_label") is not None
+        else None,
     }
 
 
@@ -212,7 +213,9 @@ def index_entry(
 def write_family_indexes(family_root: Path, entry: dict[str, Any]) -> None:
     """Update current run index CSV and append an event JSONL row."""
     family_root.mkdir(parents=True, exist_ok=True)
-    (family_root / "latest_run.txt").write_text(str(entry.get("results_dir", "")) + "\n", encoding="utf-8")
+    (family_root / "latest_run.txt").write_text(
+        str(entry.get("results_dir", "")) + "\n", encoding="utf-8"
+    )
     csv_path = family_root / "runs_index.csv"
     rows: list[dict[str, Any]] = []
     if csv_path.exists():
@@ -237,7 +240,9 @@ def write_family_indexes(family_root: Path, entry: dict[str, Any]) -> None:
         f.write(json.dumps(event, sort_keys=True) + "\n")
 
 
-def artifact_index(results_dir: Path, artifact: dict[str, Any], rows: list[dict[str, Any]]) -> dict[str, Any]:
+def artifact_index(
+    results_dir: Path, artifact: dict[str, Any], rows: list[dict[str, Any]]
+) -> dict[str, Any]:
     """Build a readable index of benchmark artifacts and child run outputs."""
     return {
         "schema_version": 1,
@@ -252,7 +257,9 @@ def artifact_index(results_dir: Path, artifact: dict[str, Any], rows: list[dict[
             "benchmark_report_markdown": str(results_dir / "benchmark_report.md"),
             "artifact_index_json": str(results_dir / "artifact_index.json"),
             "family_runs_index_csv": str(family_root(results_dir) / "runs_index.csv"),
-            "family_runs_index_events_jsonl": str(family_root(results_dir) / "runs_index_events.jsonl"),
+            "family_runs_index_events_jsonl": str(
+                family_root(results_dir) / "runs_index_events.jsonl"
+            ),
         },
         "logs": {
             "console_log": str(results_dir / "logs" / "console.log"),
@@ -267,11 +274,15 @@ def artifact_index(results_dir: Path, artifact: dict[str, Any], rows: list[dict[
                 "run_dir": row.get("run_dir"),
                 "example_run_json": row.get("example_run_path"),
                 "stdout_log": row.get("stdout_path"),
-                "matched_table": str(Path(str(row.get("run_dir"))) / "matched_table.txt") if row.get("run_dir") else None,
+                "matched_table": str(Path(str(row.get("run_dir"))) / "matched_table.txt")
+                if row.get("run_dir")
+                else None,
                 "simplified_eval_dir": str(Path(str(row.get("run_dir"))) / "simplified_eval")
                 if row.get("run_dir")
                 else None,
-                "range_diagnostics": str(Path(str(row.get("run_dir"))) / "range_workload_diagnostics.json")
+                "range_diagnostics": str(
+                    Path(str(row.get("run_dir"))) / "range_workload_diagnostics.json"
+                )
                 if row.get("run_dir")
                 else None,
                 "workload_distribution_comparison": str(
@@ -279,7 +290,9 @@ def artifact_index(results_dir: Path, artifact: dict[str, Any], rows: list[dict[
                 )
                 if row.get("run_dir")
                 else None,
-                "learned_fill_diagnostics": str(Path(str(row.get("run_dir"))) / "learned_fill_diagnostics.json")
+                "learned_fill_diagnostics": str(
+                    Path(str(row.get("run_dir"))) / "learned_fill_diagnostics.json"
+                )
                 if row.get("run_dir")
                 else None,
             }

@@ -1,8 +1,8 @@
 import pytest
 import torch
 
+from config.experiment_config import build_experiment_config
 from evaluation.baselines import MLQDSMethod
-from experiments.experiment_config import build_experiment_config
 from models.workload_blind_qds_model import WorkloadBlindRangeQDSModel
 from queries.query_types import NUM_QUERY_TYPES, pad_query_features
 from queries.workload import TypedQueryWorkload
@@ -39,7 +39,9 @@ def _workload_with_query_features(query_features: torch.Tensor) -> TypedQueryWor
         }
     ]
     _features, type_ids = pad_query_features(queries)
-    return TypedQueryWorkload(query_features=query_features, typed_queries=queries, type_ids=type_ids)
+    return TypedQueryWorkload(
+        query_features=query_features, typed_queries=queries, type_ids=type_ids
+    )
 
 
 def _trained_blind(points: torch.Tensor) -> TrainingOutputs:
@@ -99,7 +101,9 @@ def test_workload_blind_simplify_does_not_read_eval_query_features() -> None:
     assert retained.dtype == torch.bool
 
 
-def test_mlqds_method_reuses_scores_across_compression_ratios(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_mlqds_method_reuses_scores_across_compression_ratios(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     points = _points()
     boundaries = [(0, points.shape[0])]
     trained = _trained_blind(points)
@@ -113,7 +117,9 @@ def test_mlqds_method_reuses_scores_across_compression_ratios(monkeypatch: pytes
     method = MLQDSMethod(
         name="MLQDS",
         trained=trained,
-        workload=_workload_with_query_features(torch.full((1, 12), float("nan"), dtype=torch.float32)),
+        workload=_workload_with_query_features(
+            torch.full((1, 12), float("nan"), dtype=torch.float32)
+        ),
         workload_type="range",
         temporal_fraction=0.0,
         inference_device="cpu",

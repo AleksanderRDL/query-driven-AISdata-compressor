@@ -59,14 +59,16 @@ def _spearman(xs: list[float], ys: list[float]) -> float | None:
 
 def _segment_top_mean(values: torch.Tensor, start: int, end: int) -> float:
     """Return top-20% mean for one segment, matching selector segment aggregation."""
-    local = values[int(start):int(end)].detach().cpu().float()
+    local = values[int(start) : int(end)].detach().cpu().float()
     if int(local.numel()) <= 0:
         return 0.0
     top_count = min(int(local.numel()), max(1, math.ceil(0.20 * int(local.numel()))))
     return float(torch.topk(local, k=top_count).values.mean().item())
 
 
-def _factorized_head_probability_sources_from_logits(head_logits: torch.Tensor | None) -> dict[str, torch.Tensor]:
+def _factorized_head_probability_sources_from_logits(
+    head_logits: torch.Tensor | None,
+) -> dict[str, torch.Tensor]:
     """Return diagnostic-only per-head probability score sources from frozen logits."""
     if head_logits is None:
         return {}
@@ -109,7 +111,9 @@ def _segment_oracle_alignment_for_scores(
                 "top_fraction": float(fraction),
                 "segment_count": int(top_count),
                 "oracle_mass_recall": (
-                    0.0 if total_oracle_mass <= 1e-12 else float(selected_oracle_mass / total_oracle_mass)
+                    0.0
+                    if total_oracle_mass <= 1e-12
+                    else float(selected_oracle_mass / total_oracle_mass)
                 ),
                 "mean_oracle_mass": float(selected_oracle_mass / float(top_count)),
             }
@@ -143,7 +147,9 @@ def _segment_transfer_rows(
     segment_count = len(segment_rows)
     if segment_count <= 0 or len(oracle_mass_by_segment) != segment_count:
         return {"available": False, "reason": "segment_rows_or_oracle_missing"}
-    source_names = [name for name, values in source_segment_scores.items() if len(values) == segment_count]
+    source_names = [
+        name for name, values in source_segment_scores.items() if len(values) == segment_count
+    ]
     if not source_names:
         return {"available": False, "reason": "source_scores_missing"}
 
@@ -193,10 +199,15 @@ def _segment_transfer_rows(
         for name in source_names:
             row[f"{name}_score"] = float(source_segment_scores[name][int(idx)])
             row[f"{name}_rank"] = int(source_ranks[name][int(idx)])
-        if retained_count_by_segment is not None and len(retained_count_by_segment) == segment_count:
+        if (
+            retained_count_by_segment is not None
+            and len(retained_count_by_segment) == segment_count
+        ):
             retained_count = int(retained_count_by_segment[int(idx)])
             row["frozen_primary_retained_count"] = retained_count
-            row["frozen_primary_retained_fraction"] = float(retained_count / max(1, int(base["length"])))
+            row["frozen_primary_retained_fraction"] = float(
+                retained_count / max(1, int(base["length"]))
+            )
             if retained_ranks is not None:
                 row["frozen_primary_retained_count_rank"] = int(retained_ranks[int(idx)])
         rows.append(row)
@@ -222,10 +233,16 @@ def _segment_transfer_rows(
             "segments_with_any_frozen_primary_retained_point": int(
                 sum(1 for count in retained_count_by_segment if int(count) > 0)
             ),
-            "retained_count_spearman_vs_oracle_mass": _spearman(retained_float, oracle_mass_by_segment),
-            "retained_count_pearson_vs_oracle_mass": _pearson(retained_float, oracle_mass_by_segment),
+            "retained_count_spearman_vs_oracle_mass": _spearman(
+                retained_float, oracle_mass_by_segment
+            ),
+            "retained_count_pearson_vs_oracle_mass": _pearson(
+                retained_float, oracle_mass_by_segment
+            ),
             "oracle_mass_recall_in_segments_with_any_retained_point": (
-                0.0 if total_oracle_mass <= 1e-12 else float(retained_oracle_mass / total_oracle_mass)
+                0.0
+                if total_oracle_mass <= 1e-12
+                else float(retained_oracle_mass / total_oracle_mass)
             ),
         }
     else:
@@ -244,7 +261,9 @@ def _all_segment_transfer_rows(
     segment_count = len(segment_rows)
     if segment_count <= 0 or len(oracle_mass_by_segment) != segment_count:
         return {"available": False, "reason": "segment_rows_or_oracle_missing"}
-    source_names = [name for name, values in source_segment_scores.items() if len(values) == segment_count]
+    source_names = [
+        name for name, values in source_segment_scores.items() if len(values) == segment_count
+    ]
     if not source_names:
         return {"available": False, "reason": "source_scores_missing"}
 
@@ -254,7 +273,9 @@ def _all_segment_transfer_rows(
     }
     retained_ranks: list[int] | None = None
     if retained_count_by_segment is not None and len(retained_count_by_segment) == segment_count:
-        retained_ranks = _descending_rank_and_order([float(value) for value in retained_count_by_segment])[0]
+        retained_ranks = _descending_rank_and_order(
+            [float(value) for value in retained_count_by_segment]
+        )[0]
 
     rows: list[dict[str, Any]] = []
     for idx, base in enumerate(segment_rows):
@@ -275,10 +296,15 @@ def _all_segment_transfer_rows(
         for name in source_names:
             row[f"{name}_score"] = float(source_segment_scores[name][int(idx)])
             row[f"{name}_rank"] = int(source_ranks[name][int(idx)])
-        if retained_count_by_segment is not None and len(retained_count_by_segment) == segment_count:
+        if (
+            retained_count_by_segment is not None
+            and len(retained_count_by_segment) == segment_count
+        ):
             retained_count = int(retained_count_by_segment[int(idx)])
             row["frozen_primary_retained_count"] = retained_count
-            row["frozen_primary_retained_fraction"] = float(retained_count / max(1, int(base["length"])))
+            row["frozen_primary_retained_fraction"] = float(
+                retained_count / max(1, int(base["length"]))
+            )
             if retained_ranks is not None:
                 row["frozen_primary_retained_count_rank"] = int(retained_ranks[int(idx)])
         rows.append(row)
@@ -328,11 +354,17 @@ def _segment_oracle_allocation_audit(
         if int(retained_candidate.numel()) == point_count:
             retained_values = retained_candidate
 
-    score_sources: dict[str, torch.Tensor] = {"point_score_top20_mean": point_scores.detach().cpu().float()}
+    score_sources: dict[str, torch.Tensor] = {
+        "point_score_top20_mean": point_scores.detach().cpu().float()
+    }
     if segment_budget_scores is not None and int(segment_budget_scores.numel()) == point_count:
-        score_sources["segment_budget_head_top20_mean"] = segment_budget_scores.detach().cpu().float()
+        score_sources["segment_budget_head_top20_mean"] = (
+            segment_budget_scores.detach().cpu().float()
+        )
     if selector_segment_scores is not None and int(selector_segment_scores.numel()) == point_count:
-        score_sources["selector_allocation_score_top20_mean"] = selector_segment_scores.detach().cpu().float()
+        score_sources["selector_allocation_score_top20_mean"] = (
+            selector_segment_scores.detach().cpu().float()
+        )
     if isinstance(head_scores_by_name, dict):
         for raw_name, raw_values in head_scores_by_name.items():
             if not isinstance(raw_name, str) or raw_name in score_sources:
@@ -364,7 +396,9 @@ def _segment_oracle_allocation_audit(
             oracle_mass_by_segment.append(oracle_mass)
             oracle_top_mean_by_segment.append(oracle_top_mean)
             if retained_count_by_segment is not None and retained_values is not None:
-                retained_count_by_segment.append(int(retained_values[seg_start:seg_end].sum().item()))
+                retained_count_by_segment.append(
+                    int(retained_values[seg_start:seg_end].sum().item())
+                )
             for name, values in score_sources.items():
                 source_segment_scores[name].append(_segment_top_mean(values, seg_start, seg_end))
             segment_rows.append(
@@ -391,7 +425,9 @@ def _segment_oracle_allocation_audit(
         rows = alignment.get("top_fraction_rows") if isinstance(alignment, dict) else None
         if not isinstance(rows, list):
             continue
-        top25 = next((row for row in rows if abs(float(row.get("top_fraction", 0.0)) - 0.25) <= 1e-9), None)
+        top25 = next(
+            (row for row in rows if abs(float(row.get("top_fraction", 0.0)) - 0.25) <= 1e-9), None
+        )
         if not isinstance(top25, dict):
             continue
         recall = float(top25.get("oracle_mass_recall", 0.0))
@@ -496,9 +532,13 @@ def _target_segment_oracle_alignment_audit(
             "target_range_query_count": target_diagnostics.get("range_query_count"),
             "source_semantics": source_semantics,
             "target_diagnostics_summary": {
-                "final_label_positive_fraction": target_diagnostics.get("final_label_positive_fraction"),
+                "final_label_positive_fraction": target_diagnostics.get(
+                    "final_label_positive_fraction"
+                ),
                 "final_label_mass": target_diagnostics.get("final_label_mass"),
-                "segment_budget_target_base_source": target_diagnostics.get("segment_budget_target_base_source"),
+                "segment_budget_target_base_source": target_diagnostics.get(
+                    "segment_budget_target_base_source"
+                ),
                 "final_label_formula": target_diagnostics.get("final_label_formula"),
             },
         }

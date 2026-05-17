@@ -36,8 +36,8 @@ from experiments.benchmark_inputs import (
 )
 from experiments.benchmark_process import _run_capture_streaming
 from experiments.benchmark_profiles import (
-    DEFAULT_PROFILE,
     PROFILE_CHOICES,
+    RANGE_WORKLOAD_V1_WORKLOAD_BLIND_V2_PROFILE,
 )
 from experiments.benchmark_report import _child_run_dir, _row_from_run
 from experiments.benchmark_runtime import (
@@ -143,7 +143,9 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Run a range-focused AIS-QDS benchmark and write compact comparison tables.",
     )
-    parser.add_argument("--profile", choices=PROFILE_CHOICES, default=DEFAULT_PROFILE)
+    parser.add_argument(
+        "--profile", choices=PROFILE_CHOICES, default=RANGE_WORKLOAD_V1_WORKLOAD_BLIND_V2_PROFILE
+    )
     parser.add_argument("--workloads", type=str, default=",".join(DEFAULT_WORKLOADS))
     parser.add_argument(
         "--run_label",
@@ -164,7 +166,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--results_dir",
         type=str,
-        default="artifacts/benchmarks/range_workload_aware_diagnostic/runs/manual_benchmark",
+        default="artifacts/benchmarks/query_driven_workload_blind_v2/runs/manual_benchmark",
     )
     parser.add_argument(
         "--run_id",

@@ -6,8 +6,8 @@ import importlib.util
 from pathlib import Path
 
 import pytest
-import training.query_useful_targets as query_useful_targets
 
+import training.query_useful_targets as query_useful_targets
 from experiments.benchmark_profiles import (
     BLIND_EXPECTED_USEFULNESS_PROFILE,
     BLIND_RETAINED_FREQUENCY_PROFILE,
@@ -21,8 +21,8 @@ from experiments.benchmark_profiles import (
 )
 from experiments.benchmark_report import _row_from_run
 from training.model_features import model_type_metadata
-from training.training_targets import LEGACY_RANGE_TARGET_MODES, QUERY_USEFUL_V1_TARGET_MODES
-
+from training.query_useful_targets import QUERY_USEFUL_V1_TARGET_MODES
+from training.target_modes import LEGACY_RANGE_TARGET_MODES
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 

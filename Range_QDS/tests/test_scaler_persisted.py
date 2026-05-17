@@ -7,11 +7,11 @@ from pathlib import Path
 import pytest
 import torch
 
-from experiments.experiment_config import build_experiment_config
+from config.experiment_config import build_experiment_config
 from models.trajectory_qds_model import TrajectoryQDSModel
-from training.scaler import FeatureScaler
 from training.checkpoints import ModelArtifacts, load_checkpoint, save_checkpoint
 from training.inference import forward_predict, windowed_predict
+from training.scaler import FeatureScaler
 
 
 def test_scaler_persisted(tmp_path: Path) -> None:

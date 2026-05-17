@@ -8,8 +8,8 @@ from typing import Any
 
 import torch
 
-from queries.range_geometry import points_in_range_box, segment_box_bracket_indices
 from queries.query_types import NUM_QUERY_TYPES, QUERY_TYPE_ID_RANGE
+from queries.range_geometry import points_in_range_box, segment_box_bracket_indices
 from training.factorized_target_diagnostics import (
     factorized_target_diagnostics,
     support_fraction_by_threshold,
@@ -50,7 +50,9 @@ def _normalize_0_1(values: torch.Tensor, mask: torch.Tensor | None = None) -> to
     return (out / max_value).clamp(0.0, 1.0)
 
 
-def _trajectory_change_weights(points: torch.Tensor, boundaries: list[tuple[int, int]]) -> torch.Tensor:
+def _trajectory_change_weights(
+    points: torch.Tensor, boundaries: list[tuple[int, int]]
+) -> torch.Tensor:
     """Return sparse query-free behavior-change weights per point."""
     n_points = int(points.shape[0])
     if n_points <= 0:
@@ -83,7 +85,9 @@ def _trajectory_change_weights(points: torch.Tensor, boundaries: list[tuple[int,
         if float((max_value - min_value).item()) <= 1e-6:
             continue
         threshold = torch.quantile(local, 0.70)
-        sparse[int(start) : int(end)] = ((local - threshold) / (max_value - threshold).clamp(min=1e-6)).clamp(0.0, 1.0)
+        sparse[int(start) : int(end)] = (
+            (local - threshold) / (max_value - threshold).clamp(min=1e-6)
+        ).clamp(0.0, 1.0)
     return sparse
 
 
@@ -142,7 +146,9 @@ def _segment_budget_targets(
     return out
 
 
-def _lat_lon_distance_km(points: torch.Tensor, left_idx: torch.Tensor, right_idx: torch.Tensor) -> torch.Tensor:
+def _lat_lon_distance_km(
+    points: torch.Tensor, left_idx: torch.Tensor, right_idx: torch.Tensor
+) -> torch.Tensor:
     """Return approximate lat/lon distance in km for local index pairs."""
     left = points[left_idx.long()]
     right = points[right_idx.long()]
@@ -178,7 +184,9 @@ def _path_length_support_targets(
         mid_idx = torch.arange(1, count - 1, dtype=torch.long, device=points.device)
         prev_idx = mid_idx - 1
         next_idx = mid_idx + 1
-        via_mid = _lat_lon_distance_km(local, prev_idx, mid_idx) + _lat_lon_distance_km(local, mid_idx, next_idx)
+        via_mid = _lat_lon_distance_km(local, prev_idx, mid_idx) + _lat_lon_distance_km(
+            local, mid_idx, next_idx
+        )
         shortcut = _lat_lon_distance_km(local, prev_idx, next_idx)
         raw[start_i + mid_idx] = torch.clamp(via_mid - shortcut, min=0.0)
 
@@ -231,7 +239,7 @@ def _query_replacement_support(
             run_len = int(run_end - run_start)
             if run_len <= 0:
                 continue
-            keep_count = min(run_len, max(1, int(math.ceil(ratio * run_len))))
+            keep_count = min(run_len, max(1, math.ceil(ratio * run_len)))
             local_values = query_value[run_start:run_end]
             local_idx = torch.topk(local_values, k=keep_count, largest=True).indices
             support[run_start + local_idx] = True
@@ -245,7 +253,10 @@ def _rank_correlation(x: torch.Tensor, y: torch.Tensor, valid: torch.Tensor) -> 
         return None
     xv = x[valid].float()
     yv = y[valid].float()
-    if float(xv.std(unbiased=False).item()) <= 1e-12 or float(yv.std(unbiased=False).item()) <= 1e-12:
+    if (
+        float(xv.std(unbiased=False).item()) <= 1e-12
+        or float(yv.std(unbiased=False).item()) <= 1e-12
+    ):
         return None
     x_order = torch.argsort(xv, stable=True)
     y_order = torch.argsort(yv, stable=True)
@@ -274,7 +285,7 @@ def _topk_overlap_and_mass_recall(
     valid_count = int(valid.sum().item())
     if valid_count <= 0:
         return {"overlap": 0.0, "reference_mass_recall": 0.0}
-    keep = min(valid_count, max(1, int(math.ceil(float(ratio) * valid_count))))
+    keep = min(valid_count, max(1, math.ceil(float(ratio) * valid_count)))
     ranker_values = ranker[valid].float()
     reference_values = reference[valid].float().clamp(min=0.0)
     reference_mass = float(reference_values.sum().item())
@@ -342,7 +353,7 @@ def _ship_query_pair_coverage_at_topk(
     if valid_count <= 0 or not query_hit_masks:
         return out
 
-    keep = min(valid_count, max(1, int(math.ceil(float(ratio) * valid_count))))
+    keep = min(valid_count, max(1, math.ceil(float(ratio) * valid_count)))
     valid_indices = torch.where(valid)[0]
     top_local = torch.topk(ranker[valid].float(), k=keep, largest=True).indices
     selected = torch.zeros_like(valid, dtype=torch.bool)
@@ -407,9 +418,13 @@ def _conditional_behavior_candidate_diagnostics(
         )
         row["support_fraction_by_threshold"] = support_fraction_by_threshold(candidate, valid)
         row["target_mass"] = float(valid_candidate.sum().item())
-        row["target_mean"] = float(valid_candidate.mean().item()) if int(valid_candidate.numel()) > 0 else 0.0
+        row["target_mean"] = (
+            float(valid_candidate.mean().item()) if int(valid_candidate.numel()) > 0 else 0.0
+        )
         row["target_std"] = (
-            float(valid_candidate.std(unbiased=False).item()) if int(valid_candidate.numel()) > 0 else 0.0
+            float(valid_candidate.std(unbiased=False).item())
+            if int(valid_candidate.numel()) > 0
+            else 0.0
         )
         if query_hit_masks is not None and boundaries is not None:
             row.update(
@@ -437,11 +452,17 @@ def build_query_useful_v1_targets(
     device = points.device
     labels = torch.zeros((n_points, NUM_QUERY_TYPES), dtype=torch.float32, device=device)
     labelled_mask = torch.zeros((n_points, NUM_QUERY_TYPES), dtype=torch.bool, device=device)
-    head_targets = torch.zeros((n_points, len(QUERY_USEFUL_V1_HEAD_NAMES)), dtype=torch.float32, device=device)
+    head_targets = torch.zeros(
+        (n_points, len(QUERY_USEFUL_V1_HEAD_NAMES)), dtype=torch.float32, device=device
+    )
     head_mask = torch.zeros_like(head_targets, dtype=torch.bool)
-    range_queries = [query for query in typed_queries if str(query.get("type", "")).lower() == "range"]
+    range_queries = [
+        query for query in typed_queries if str(query.get("type", "")).lower() == "range"
+    ]
     if n_points <= 0 or not range_queries:
-        diagnostics = factorized_target_diagnostics(head_targets, head_mask, QUERY_USEFUL_V1_HEAD_NAMES, boundaries)
+        diagnostics = factorized_target_diagnostics(
+            head_targets, head_mask, QUERY_USEFUL_V1_HEAD_NAMES, boundaries
+        )
         return QueryUsefulTargetBundle(labels, labelled_mask, head_targets, head_mask, diagnostics)
 
     behavior_base = _trajectory_change_weights(points, boundaries)
@@ -472,7 +493,9 @@ def build_query_useful_v1_targets(
         boundary_idx = _boundary_indices_for_query(mask, boundaries)
         if int(boundary_idx.numel()) > 0:
             boundary_mass[boundary_idx] += 1.0
-        crossing_idx = segment_box_bracket_indices(points_cpu, boundaries, query["params"]).to(device=device)
+        crossing_idx = segment_box_bracket_indices(points_cpu, boundaries, query["params"]).to(
+            device=device
+        )
         if int(crossing_idx.numel()) > 0:
             boundary_mass[crossing_idx] += 1.0
         query_value = torch.zeros_like(query_hit_count)
@@ -497,7 +520,9 @@ def build_query_useful_v1_targets(
         replacement_mass[hit_positive] / query_hit_count[hit_positive].clamp(min=1.0)
     ).clamp(0.0, 1.0)
     ship_query_evidence = (ship_query_evidence_mass / query_count).clamp(0.0, 1.0)
-    final_score = (q_hit * (0.5 + behavior) * (0.75 + 0.25 * replacement) + 0.25 * boundary).clamp(0.0, 1.0)
+    final_score = (q_hit * (0.5 + behavior) * (0.75 + 0.25 * replacement) + 0.25 * boundary).clamp(
+        0.0, 1.0
+    )
     segment_budget = _segment_budget_targets(
         final_score,
         boundaries,
@@ -529,7 +554,7 @@ def build_query_useful_v1_targets(
     diagnostics.update(
         {
             "target_family": "QueryUsefulV1Factorized",
-            "range_query_count": int(len(range_queries)),
+            "range_query_count": len(range_queries),
             "segment_size_points": int(segment_size),
             "segment_budget_target_training": "point_repeated_plus_segment_level_listwise_loss",
             "segment_budget_target_base_source": "query_useful_v1_final_score",

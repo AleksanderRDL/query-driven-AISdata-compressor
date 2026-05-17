@@ -278,7 +278,9 @@ def _format_report_table(rows: list[dict[str, Any]]) -> str:
     for row in rows:
         lines.append(
             "| "
-            + " | ".join(_format_value(row.get(column)) for column in BENCHMARK_REPORT_TABLE_COLUMNS)
+            + " | ".join(
+                _format_value(row.get(column)) for column in BENCHMARK_REPORT_TABLE_COLUMNS
+            )
             + " |"
         )
     return "\n".join(lines) + "\n"

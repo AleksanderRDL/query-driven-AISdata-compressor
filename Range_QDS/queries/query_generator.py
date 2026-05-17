@@ -9,8 +9,8 @@ from typing import Any
 import torch
 
 from data.trajectory_index import boundaries_from_trajectories
-from queries.range_geometry import points_in_range_box
 from queries.query_types import normalize_pure_workload_map, pad_query_features
+from queries.range_geometry import points_in_range_box
 from queries.workload import TypedQueryWorkload
 from queries.workload_diagnostics import compute_range_workload_diagnostics, range_query_diagnostic
 from queries.workload_profiles import (
@@ -77,7 +77,9 @@ def _density_anchor_weights(points: torch.Tensor, bins: int = DENSITY_GRID_BINS)
     weights = cell_counts[bin_ids]
     total = weights.sum()
     if float(total.item()) <= 0.0:
-        return torch.ones((points.shape[0],), dtype=torch.float32, device=points.device) / max(1, points.shape[0])
+        return torch.ones((points.shape[0],), dtype=torch.float32, device=points.device) / max(
+            1, points.shape[0]
+        )
     return weights / total
 
 
@@ -104,7 +106,9 @@ def _sparse_anchor_weights(points: torch.Tensor, bins: int = DENSITY_GRID_BINS) 
     weights = 1.0 / torch.clamp(cell_counts[bin_ids], min=1.0)
     total = weights.sum()
     if float(total.item()) <= 0.0:
-        return torch.ones((points.shape[0],), dtype=torch.float32, device=points.device) / max(1, points.shape[0])
+        return torch.ones((points.shape[0],), dtype=torch.float32, device=points.device) / max(
+            1, points.shape[0]
+        )
     return weights / total
 
 
@@ -237,7 +241,7 @@ def _deterministic_unit_from_payload(*parts: object) -> float:
     payload = "|".join(str(part) for part in parts)
     digest = hashlib.sha256(payload.encode("utf-8")).digest()
     raw = int.from_bytes(digest[:8], byteorder="big", signed=False)
-    return (raw / float(1 << 64))
+    return raw / float(1 << 64)
 
 
 def _weighted_choice_with_deterministic_key(
@@ -278,7 +282,7 @@ def _largest_remainder_counts(mapping: dict[str, float], count: int) -> dict[str
         remainder = total_count - base * len(keys)
         return {key: base + (1 if idx < remainder else 0) for idx, key in enumerate(keys)}
     exact = [total_count * weight / total_weight for weight in weights]
-    floors = [int(math.floor(value)) for value in exact]
+    floors = [math.floor(value) for value in exact]
     remainder = total_count - sum(floors)
     order = sorted(
         range(len(keys)),
@@ -291,7 +295,9 @@ def _largest_remainder_counts(mapping: dict[str, float], count: int) -> dict[str
     return counts
 
 
-def _quota_sequence(mapping: dict[str, float], count: int, *, seed: int, namespace: str) -> list[str]:
+def _quota_sequence(
+    mapping: dict[str, float], count: int, *, seed: int, namespace: str
+) -> list[str]:
     """Return a deterministic prefix-balanced sequence matching weighted quotas exactly."""
     quotas = _largest_remainder_counts(mapping, count)
     total_count = sum(int(value) for value in quotas.values())
@@ -301,14 +307,12 @@ def _quota_sequence(mapping: dict[str, float], count: int, *, seed: int, namespa
     sequence: list[str] = []
     for slot_index in range(total_count):
         candidates = [
-            str(family)
-            for family, quota in quotas.items()
-            if used[str(family)] < int(quota)
+            str(family) for family, quota in quotas.items() if used[str(family)] < int(quota)
         ]
         if not candidates:
             break
 
-        def candidate_key(family: str) -> tuple[float, int, float]:
+        def candidate_key(family: str, slot_index: int = slot_index) -> tuple[float, int, float]:
             quota = int(quotas[family])
             desired = float(slot_index + 1) * float(quota) / float(total_count)
             deficit = desired - float(used[family])
@@ -355,8 +359,12 @@ def _profile_query_plan(
         "requested_queries": int(count),
         "anchor_family_sequence": anchor_sequence,
         "footprint_family_sequence": footprint_sequence,
-        "anchor_family_planned_counts": _largest_remainder_counts(profile.anchor_family_weights, count),
-        "footprint_family_planned_counts": _largest_remainder_counts(profile.footprint_family_weights, count),
+        "anchor_family_planned_counts": _largest_remainder_counts(
+            profile.anchor_family_weights, count
+        ),
+        "footprint_family_planned_counts": _largest_remainder_counts(
+            profile.footprint_family_weights, count
+        ),
     }
 
 
@@ -375,7 +383,9 @@ def _profile_query_settings(
         anchor_value: float | None = None
         footprint_value: float | None = None
     else:
-        anchor_value = _deterministic_unit_from_payload(profile.profile_id, "anchor", query_key, query_index)
+        anchor_value = _deterministic_unit_from_payload(
+            profile.profile_id, "anchor", query_key, query_index
+        )
         footprint_value = _deterministic_unit_from_payload(
             profile.profile_id,
             "footprint",
@@ -383,16 +393,17 @@ def _profile_query_settings(
             query_index,
         )
     anchor_sequence = (
-        query_plan.get("anchor_family_sequence")
-        if isinstance(query_plan, dict)
-        else None
+        query_plan.get("anchor_family_sequence") if isinstance(query_plan, dict) else None
     )
     footprint_sequence = (
-        query_plan.get("footprint_family_sequence")
-        if isinstance(query_plan, dict)
-        else None
+        query_plan.get("footprint_family_sequence") if isinstance(query_plan, dict) else None
     )
-    if isinstance(query_index, int) and query_index >= 0 and isinstance(anchor_sequence, list) and query_index < len(anchor_sequence):
+    if (
+        isinstance(query_index, int)
+        and query_index >= 0
+        and isinstance(anchor_sequence, list)
+        and query_index < len(anchor_sequence)
+    ):
         anchor_family = str(anchor_sequence[query_index])
     else:
         anchor_family = _weighted_choice_with_deterministic_key(
@@ -401,7 +412,12 @@ def _profile_query_settings(
             fallback="density_route",
             deterministic_value=anchor_value,
         )
-    if isinstance(query_index, int) and query_index >= 0 and isinstance(footprint_sequence, list) and query_index < len(footprint_sequence):
+    if (
+        isinstance(query_index, int)
+        and query_index >= 0
+        and isinstance(footprint_sequence, list)
+        and query_index < len(footprint_sequence)
+    ):
         footprint_family = str(footprint_sequence[query_index])
     else:
         footprint_family = _weighted_choice_with_deterministic_key(
@@ -476,7 +492,9 @@ def _sample_anchor_point(
                 return points[sampled_point_idx]
 
     if candidate_indices is not None:
-        candidate_offset = int(torch.randint(0, candidate_indices.shape[0], (1,), generator=generator).item())
+        candidate_offset = int(
+            torch.randint(0, candidate_indices.shape[0], (1,), generator=generator).item()
+        )
         point_idx = int(candidate_indices[candidate_offset].item())
     else:
         point_idx = int(torch.randint(0, points.shape[0], (1,), generator=generator).item())
@@ -559,7 +577,9 @@ def _make_range_query(
     time_fraction = float(range_time_fraction)
     spatial_km = None if range_spatial_km is None else float(range_spatial_km)
     time_hours = None if range_time_hours is None else float(range_time_hours)
-    if (spatial_km is None and spatial_fraction <= 0.0) or (time_hours is None and time_fraction <= 0.0):
+    if (spatial_km is None and spatial_fraction <= 0.0) or (
+        time_hours is None and time_fraction <= 0.0
+    ):
         raise ValueError("range_spatial_fraction and range_time_fraction must be positive.")
     if spatial_km is not None and spatial_km <= 0.0:
         raise ValueError("range_spatial_km must be positive when provided.")
@@ -666,7 +686,9 @@ def _normalize_target_coverage(target_coverage: float | None) -> float | None:
         if target <= 100.0:
             target = target / 100.0
         else:
-            raise ValueError("target_coverage must be a fraction in (0, 1] or a percent in (0, 100].")
+            raise ValueError(
+                "target_coverage must be a fraction in (0, 1] or a percent in (0, 100]."
+            )
     if target <= 0.0 or target > 1.0:
         raise ValueError("target_coverage must be a fraction in (0, 1] or a percent in (0, 100].")
     return target
@@ -681,7 +703,9 @@ def _normalize_coverage_overshoot(range_max_coverage_overshoot: float | None) ->
         if tolerance <= 100.0:
             tolerance = tolerance / 100.0
         else:
-            raise ValueError("range_max_coverage_overshoot must be a non-negative fraction or percent.")
+            raise ValueError(
+                "range_max_coverage_overshoot must be a non-negative fraction or percent."
+            )
     if tolerance < 0.0:
         raise ValueError("range_max_coverage_overshoot must be non-negative when provided.")
     return tolerance
@@ -712,7 +736,7 @@ def _finalize_workload(
         type_counts[query_type] = int(type_counts.get(query_type, 0)) + 1
     query_generation.update(
         {
-            "final_query_count": int(len(typed_queries)),
+            "final_query_count": len(typed_queries),
             "type_counts": type_counts,
             "covered_points": covered_points,
             "total_points": total_points,
@@ -720,7 +744,9 @@ def _finalize_workload(
         }
     )
     diagnostics["query_generation"] = query_generation
-    if typed_queries and all(str(query.get("type", "")).lower() == "range" for query in typed_queries):
+    if typed_queries and all(
+        str(query.get("type", "")).lower() == "range" for query in typed_queries
+    ):
         profile_metadata = diagnostics.get("workload_profile")
         diagnostics["workload_signature"] = _range_workload_signature(
             points=points,
@@ -777,7 +803,9 @@ def _range_workload_signature(
     for query in typed_queries:
         metadata = query.get("_metadata") or {}
         params = query["params"]
-        spatial_radii.append(float(metadata.get("spatial_radius_km", metadata.get("range_spatial_km", 0.0)) or 0.0))
+        spatial_radii.append(
+            float(metadata.get("spatial_radius_km", metadata.get("range_spatial_km", 0.0)) or 0.0)
+        )
         time_spans.append(float(params["t_end"] - params["t_start"]) / 3600.0)
 
     def quantiles(values: list[float]) -> dict[str, float]:
@@ -796,9 +824,9 @@ def _range_workload_signature(
     return {
         "profile_id": profile_id,
         "coverage_actual": float(coverage_fraction),
-        "query_count": int(len(typed_queries)),
+        "query_count": len(typed_queries),
         "total_points": int(points.shape[0]),
-        "total_trajectories": int(len(boundaries)),
+        "total_trajectories": len(boundaries),
         "anchor_family_counts": _counts_from_metadata(typed_queries, "anchor_family"),
         "footprint_family_counts": _counts_from_metadata(typed_queries, "footprint_family"),
         "point_hits_per_query": {
@@ -853,7 +881,9 @@ def _range_acceptance_enabled(
     )
 
 
-def _range_acceptance_state(enabled: bool, max_attempts: int | None, requested_queries: int) -> dict[str, Any]:
+def _range_acceptance_state(
+    enabled: bool, max_attempts: int | None, requested_queries: int
+) -> dict[str, Any]:
     """Create JSON-safe acceptance counters for workload generation."""
     return {
         "enabled": bool(enabled),
@@ -922,7 +952,9 @@ def _accept_range_query(
     )
     if range_min_point_hits is not None and diagnostic["point_hits"] < int(range_min_point_hits):
         return False, "too_few_point_hits"
-    if range_min_trajectory_hits is not None and diagnostic["trajectory_hits"] < int(range_min_trajectory_hits):
+    if range_min_trajectory_hits is not None and diagnostic["trajectory_hits"] < int(
+        range_min_trajectory_hits
+    ):
         return False, "too_few_trajectory_hits"
     if diagnostic["is_too_broad"]:
         return False, "too_broad"
@@ -987,7 +1019,9 @@ def generate_typed_query_workload(
         if range_duplicate_iou_threshold is None:
             range_duplicate_iou_threshold = profile.max_near_duplicate_hitset_jaccard
         if range_acceptance_max_attempts is None:
-            range_acceptance_max_attempts = max(1, int(profile.max_attempt_multiplier) * max(1, int(n_queries)))
+            range_acceptance_max_attempts = max(
+                1, int(profile.max_attempt_multiplier) * max(1, int(n_queries))
+            )
     coverage_guard_enabled = coverage_target is not None and coverage_overshoot is not None
     max_allowed_coverage = (
         min(1.0, float(coverage_target) + float(coverage_overshoot))
@@ -1012,7 +1046,9 @@ def generate_typed_query_workload(
     )
     if max_range_attempts is not None and max_range_attempts <= 0:
         raise ValueError("range_acceptance_max_attempts must be positive when provided.")
-    range_acceptance = _range_acceptance_state(acceptance_enabled, max_range_attempts, requested_for_attempts)
+    range_acceptance = _range_acceptance_state(
+        acceptance_enabled, max_range_attempts, requested_for_attempts
+    )
     accepted_range_queries: list[dict[str, Any]] = []
     profile_query_plan_slots = requested_for_attempts
     if coverage_target is not None and max_queries is not None and int(max_queries) > 0:
@@ -1026,7 +1062,9 @@ def generate_typed_query_workload(
         if not acceptance_enabled:
             return
         range_acceptance["accepted"] = int(range_acceptance["accepted"]) + 1
-        accepted_range_queries.append({"params": query["params"], "query_index": len(accepted_range_queries)})
+        accepted_range_queries.append(
+            {"params": query["params"], "query_index": len(accepted_range_queries)}
+        )
 
     def build_query(
         anchor_mask: torch.Tensor | None = None,
@@ -1034,7 +1072,10 @@ def generate_typed_query_workload(
     ) -> dict[str, Any] | None:
         """Build one query, applying optional range acceptance filters."""
         if acceptance_enabled:
-            if max_range_attempts is not None and int(range_acceptance["attempts"]) >= max_range_attempts:
+            if (
+                max_range_attempts is not None
+                and int(range_acceptance["attempts"]) >= max_range_attempts
+            ):
                 range_acceptance["exhausted"] = True
                 return None
             range_acceptance["attempts"] = int(range_acceptance["attempts"]) + 1
@@ -1114,7 +1155,9 @@ def generate_typed_query_workload(
         target_reached_query_count: int | None = None
         coverage_at_target_reached: float | None = None
 
-        query_limit = max(requested_queries, int(max_queries) if max_queries is not None else requested_queries)
+        query_limit = max(
+            requested_queries, int(max_queries) if max_queries is not None else requested_queries
+        )
         stop_reason = "max_queries_reached"
         calibrated_query_count_mode = profile.query_count_mode == "calibrated_to_coverage"
 
@@ -1129,7 +1172,8 @@ def generate_typed_query_workload(
                 break
             anchor_mask = (
                 (~covered)
-                if coverage_mode == "uncovered_anchor_chasing" and current_coverage < coverage_target
+                if coverage_mode == "uncovered_anchor_chasing"
+                and current_coverage < coverage_target
                 else None
             )
             query = build_query(anchor_mask=anchor_mask, query_index=len(generated_queries))
@@ -1141,7 +1185,9 @@ def generate_typed_query_workload(
             query_mask = point_coverage_mask_for_query(points, query)
             if coverage_guard_enabled and max_allowed_coverage is not None:
                 candidate_coverage = (
-                    float((covered | query_mask).float().mean().item()) if points.shape[0] > 0 else 0.0
+                    float((covered | query_mask).float().mean().item())
+                    if points.shape[0] > 0
+                    else 0.0
                 )
                 if candidate_coverage > max_allowed_coverage:
                     _record_rejection_for_query(range_acceptance, "coverage_overshoot", query)
@@ -1158,7 +1204,7 @@ def generate_typed_query_workload(
             covered |= query_mask
             new_coverage = float(covered.float().mean().item()) if points.shape[0] > 0 else 0.0
             if target_reached_query_count is None and new_coverage >= coverage_target:
-                target_reached_query_count = int(len(generated_queries))
+                target_reached_query_count = len(generated_queries)
                 coverage_at_target_reached = float(new_coverage)
                 if calibrated_query_count_mode and len(generated_queries) >= requested_queries:
                     stop_reason = "target_coverage_reached"
@@ -1210,9 +1256,15 @@ def generate_typed_query_workload(
             ),
             "profile_query_plan": {
                 "enabled": bool(profile_query_plan.get("enabled", False)),
-                "requested_queries": int(profile_query_plan.get("requested_queries", requested_queries)),
-                "anchor_family_planned_counts": dict(profile_query_plan.get("anchor_family_planned_counts") or {}),
-                "footprint_family_planned_counts": dict(profile_query_plan.get("footprint_family_planned_counts") or {}),
+                "requested_queries": int(
+                    profile_query_plan.get("requested_queries", requested_queries)
+                ),
+                "anchor_family_planned_counts": dict(
+                    profile_query_plan.get("anchor_family_planned_counts") or {}
+                ),
+                "footprint_family_planned_counts": dict(
+                    profile_query_plan.get("footprint_family_planned_counts") or {}
+                ),
             },
         }
         return _finalize_workload(
@@ -1271,9 +1323,15 @@ def generate_typed_query_workload(
                 "stop_reason": stop_reason,
                 "profile_query_plan": {
                     "enabled": bool(profile_query_plan.get("enabled", False)),
-                    "requested_queries": int(profile_query_plan.get("requested_queries", requested_queries)),
-                    "anchor_family_planned_counts": dict(profile_query_plan.get("anchor_family_planned_counts") or {}),
-                    "footprint_family_planned_counts": dict(profile_query_plan.get("footprint_family_planned_counts") or {}),
+                    "requested_queries": int(
+                        profile_query_plan.get("requested_queries", requested_queries)
+                    ),
+                    "anchor_family_planned_counts": dict(
+                        profile_query_plan.get("anchor_family_planned_counts") or {}
+                    ),
+                    "footprint_family_planned_counts": dict(
+                        profile_query_plan.get("footprint_family_planned_counts") or {}
+                    ),
                 },
             },
         },

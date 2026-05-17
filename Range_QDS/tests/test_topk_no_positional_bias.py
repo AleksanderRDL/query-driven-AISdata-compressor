@@ -20,7 +20,7 @@ def _ks_pvalue_uniform01(samples: torch.Tensor) -> float:
     d_minus = torch.max(x - (torch.arange(0, n, dtype=torch.float32) / n)).item()
     d = max(d_plus, d_minus)
     lam = (math.sqrt(n) + 0.12 + 0.11 / math.sqrt(n)) * d
-    p = 2.0 * sum(((-1) ** (k - 1)) * math.exp(-2.0 * (k ** 2) * (lam ** 2)) for k in range(1, 8))
+    p = 2.0 * sum(((-1) ** (k - 1)) * math.exp(-2.0 * (k**2) * (lam**2)) for k in range(1, 8))
     return max(0.0, min(1.0, p))
 
 
