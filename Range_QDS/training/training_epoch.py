@@ -13,7 +13,7 @@ import torch.nn.functional as F
 from config.experiment_config import ModelConfig
 from queries.query_types import NUM_QUERY_TYPES
 from runtime.torch_runtime import torch_autocast_context
-from training.query_useful_targets import QUERY_USEFUL_V1_HEAD_NAMES
+from training.targets.query_useful_v1 import QUERY_USEFUL_V1_HEAD_NAMES
 from training.training_losses import (
     _balanced_pointwise_loss_rows,
     _budget_stratified_recall_loss_rows,

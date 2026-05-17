@@ -24,8 +24,11 @@ from training.inference import (
     windowed_predict_with_heads,
 )
 from training.model_features import build_model_point_features_for_dim
-from training.query_useful_targets import QUERY_USEFUL_V1_HEAD_NAMES, build_query_useful_v1_targets
 from training.scaler import FeatureScaler
+from training.targets.query_useful_v1 import (
+    QUERY_USEFUL_V1_HEAD_NAMES,
+    build_query_useful_v1_targets,
+)
 from training.training_diagnostics import _discriminative_sample, _kendall_tau
 from training.training_setup import _pure_query_type_id
 

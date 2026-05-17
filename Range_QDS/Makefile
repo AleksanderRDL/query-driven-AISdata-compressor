@@ -6,9 +6,9 @@ UV_GROUP ?= dev
 UV_GROUP_FLAGS ?= --group $(UV_GROUP)
 UV_RUN := cd $(REPO_ROOT) && $(UV) run $(UV_GROUP_FLAGS) --
 
-TYPECHECK_PATHS ?= Range_QDS/config Range_QDS/data Range_QDS/evaluation Range_QDS/experiments Range_QDS/models Range_QDS/queries Range_QDS/runtime Range_QDS/simplification Range_QDS/training Range_QDS/scripts Range_QDS/tests
+TYPECHECK_PATHS ?= Range_QDS/benchmarking Range_QDS/config Range_QDS/data Range_QDS/evaluation Range_QDS/models Range_QDS/orchestration Range_QDS/queries Range_QDS/runtime Range_QDS/simplification Range_QDS/training Range_QDS/scripts Range_QDS/tests
 TEST_PATHS ?= Range_QDS/tests
-LINT_PATHS ?= Range_QDS/config Range_QDS/data Range_QDS/evaluation Range_QDS/experiments Range_QDS/models Range_QDS/queries Range_QDS/runtime Range_QDS/simplification Range_QDS/training Range_QDS/scripts Range_QDS/tests
+LINT_PATHS ?= Range_QDS/benchmarking Range_QDS/config Range_QDS/data Range_QDS/evaluation Range_QDS/models Range_QDS/orchestration Range_QDS/queries Range_QDS/runtime Range_QDS/simplification Range_QDS/training Range_QDS/scripts Range_QDS/tests
 LINT_SELECT ?= F401,F821,F822,F823
 RUN ?= artifacts/results/latest/example_run.json
 
@@ -110,7 +110,7 @@ typecheck:
 	$(UV_RUN) pyright $(TYPECHECK_PATHS)
 
 smoke:
-	$(UV_RUN) python -m experiments.run_ais_experiment \
+	$(UV_RUN) python -m orchestration.run_ais_experiment \
 		--n_ships 4 \
 		--n_points 24 \
 		--n_queries 4 \
@@ -121,7 +121,7 @@ smoke:
 
 smoke-csv:
 	@if [ -z "$(CLEANED_CSV)" ]; then echo "Set CLEANED_CSV to a cleaned AIS file, for example: make smoke-csv CLEANED_CSV=$(REPO_ROOT)/AISDATA/cleaned/<file-or-directory>"; exit 2; fi
-	$(UV_RUN) python -m experiments.run_ais_experiment \
+	$(UV_RUN) python -m orchestration.run_ais_experiment \
 		--csv_path "$(CLEANED_CSV)" \
 		--cache_dir Range_QDS/artifacts/cache/smoke_cleaned_csv \
 		--max_segments 8 \

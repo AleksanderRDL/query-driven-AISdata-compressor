@@ -905,7 +905,7 @@ Goal:
 
 Changes:
 - Removed unused compatibility modules: `training/training_pipeline.py`, `simplification/selector_diagnostics.py`, and `simplification/legacy_temporal_hybrid.py`.
-- Removed the unused `training.query_useful_targets.build` wrapper; active code imports `build_query_useful_v1_targets` directly.
+- Removed the unused `training.targets.query_useful_v1.build` wrapper; active code imports `build_query_useful_v1_targets` directly.
 - Dropped unimplemented benchmark-profile stubs from `PROFILE_CHOICES` so CLIs no longer advertise profiles that immediately fail.
 - Renamed historical-prior route-context feature constants/functions away from misleading `legacy`/`old` wording.
 - Renamed benchmark-profile settings from `profile_legacy_diagnostic` / `legacy_reason` to `profile_diagnostic_only` / `profile_note`.
@@ -1345,7 +1345,7 @@ Stop condition:
 
 Changes:
 - Added `experiments/benchmark_table.py` with `BENCHMARK_REPORT_TABLE_COLUMNS`, `_format_value`, and `_format_report_table`.
-- Updated `benchmark_runner.py` to import `_format_report_table` from `experiments.benchmark_table`.
+- Updated `benchmark_runner.py` to import `_format_report_table` from `benchmarking.benchmark_table`.
 - Removed table formatting from `benchmark_report.py`.
 - Updated `CODE_LAYOUT.md` to mark table-formatting extraction done and keep remaining benchmark-report split targets focused on final-grid summary and row-field builders.
 
@@ -1400,7 +1400,7 @@ Stop condition:
 Changes:
 - Added `experiments/benchmark_common.py` for shared benchmark numeric coercion, low-compression threshold, and audit-ratio prefix helpers.
 - Added `experiments/benchmark_final_grid.py` for QueryUsefulV1 final-grid targets, acceptance thresholds, grid normalization, and `query_driven_final_grid_summary`.
-- Updated `benchmark_runner.py` and tests to import final-grid logic from `experiments.benchmark_final_grid` instead of `experiments.benchmark_report`.
+- Updated `benchmark_runner.py` and tests to import final-grid logic from `benchmarking.benchmark_final_grid` instead of `benchmarking.benchmark_report`.
 - Kept `benchmark_report.py` focused on child-run row shaping and audit-field flattening; no compatibility alias was left behind.
 - Fixed audit-summary `zip()` calls to use `strict=True` while the touched function was under Ruff.
 - Updated `test_benchmark_runner.py` subprocess capture style to satisfy the active lint rules.
@@ -1562,8 +1562,8 @@ Tests:
 - `bash -n Range_QDS/scripts/benchmark_preflight.sh Range_QDS/scripts/run_range_benchmark_tmux.sh Range_QDS/scripts/run_benchmark_queue_tmux.sh`
 - `uv run --group dev -- yamllint .`
 - `git diff --check -- Range_QDS Makefile pyproject.toml`
-- `uv run --group dev -- python -m experiments.benchmark_runner --help`
-- `uv run --group dev -- python -m experiments.benchmark_runtime --help`
+- `uv run --group dev -- python -m benchmarking.benchmark_runner --help`
+- `uv run --group dev -- python -m benchmarking.benchmark_runtime --help`
 - `uv run --group dev -- python Range_QDS/scripts/list_benchmark_runs.py --help`
 - `uv run --group dev -- pytest Range_QDS/tests/test_rework_guardrails.py Range_QDS/tests/test_model_features.py::test_workload_blind_range_v2_checkpoint_accepts_missing_prior_feature_encoder Range_QDS/tests/test_query_driven_rework.py::test_factorized_head_ablation_uses_neutral_multiplicative_heads -q`
 
@@ -1599,5 +1599,112 @@ Extra discoveries:
 Decision:
 - The codebase is in a better checkpoint-save state: full lint, full
   typecheck, YAML lint, whitespace checks, and full tests pass.
+- No scientific success claim is made. No probe or final-grid evidence was
+  generated.
+
+## Checkpoint 5.01 — High-Level Structure, Benchmarking, And Test Layout
+
+Status: completed
+
+Hypothesis:
+- The project can absorb the high-level structure change without behavior
+  changes if ownership moves in three layers: single-run orchestration to
+  `orchestration/`, benchmark campaigns/reports to `benchmarking/`, and large
+  stage areas into direct subpackages with no compatibility facades.
+
+Expected files:
+- `Range_QDS/benchmarking/`
+- `Range_QDS/orchestration/`
+- `Range_QDS/queries/generation/`
+- `Range_QDS/simplification/learned_segment_budget/`
+- `Range_QDS/training/targets/`
+- `Range_QDS/tests/unit/`
+- `Range_QDS/tests/integration/`
+- `Range_QDS/tests/guardrails/`
+- `Range_QDS/CODE_LAYOUT.md`
+- package READMEs
+- `Range_QDS/Makefile`
+- `Range_QDS/pyrightconfig.json`
+- `pyproject.toml`
+
+Stop condition:
+- Stop after full static/test verification and CLI import checks pass. Do not
+  run scientific probes or the final grid in this structure checkpoint.
+
+Changes:
+- Removed the old `experiments/` package and split its ownership:
+  `orchestration/` owns single-run CLI, pipeline wiring, data/workload assembly,
+  artifacts, diagnostics, and gates; `benchmarking/` owns profiles, queue
+  runners, runtime benchmarks, reports, tables, and final-grid summaries.
+- Renamed the last main-flow component in docs from `experiments/reports` to
+  `benchmarking`.
+- Moved query generation into `queries/generation/`, target construction into
+  `training/targets/`, and the learned segment-budget selector into
+  `simplification/learned_segment_budget/`.
+- Reorganized tests into `tests/unit/<component>/`, `tests/integration/`,
+  `tests/guardrails/`, `tests/property/`, and `tests/regression/`.
+- Updated package discovery, Ruff first-party imports, Pyright paths, Makefile
+  paths, scripts, docs, and import sites for the new layout.
+- Honored the manual deletion of `models/turn_aware_qds_model.py` by removing
+  remaining `turn_aware` model dispatch, supported-type metadata, feature
+  builder behavior, docs, and tests.
+- Removed the stale archived benchmark-plan validation test that referenced
+  `benchmark_plans/archive/range_aware_coverage_compression_grid.tsv`; that TSV
+  is not present in the repository.
+- Restored the dev-tooling guide's Hypothesis target guidance with updated
+  paths while preserving the tooling principles, good/bad usage guidance,
+  pytest-regressions guidance, and risks.
+
+Tests:
+- `uv run --group dev -- ruff check --fix Range_QDS/benchmarking Range_QDS/config Range_QDS/data Range_QDS/evaluation Range_QDS/models Range_QDS/orchestration Range_QDS/queries Range_QDS/runtime Range_QDS/simplification Range_QDS/training Range_QDS/scripts Range_QDS/tests`
+- `uv run --group dev -- pyright Range_QDS/benchmarking Range_QDS/config Range_QDS/data Range_QDS/evaluation Range_QDS/models Range_QDS/orchestration Range_QDS/queries Range_QDS/runtime Range_QDS/simplification Range_QDS/training Range_QDS/scripts Range_QDS/tests`
+- `uv run --group dev -- pytest Range_QDS/tests/unit/benchmarking Range_QDS/tests/unit/orchestration Range_QDS/tests/guardrails -q`
+- `make -C Range_QDS lint`
+- `make -C Range_QDS lint-full`
+- `make -C Range_QDS typecheck`
+- `make -C Range_QDS test`
+- `uv run --group dev -- yamllint .`
+- `git diff --check -- Range_QDS Makefile pyproject.toml`
+- `uv run --group dev -- python -m orchestration.run_ais_experiment --help`
+- `uv run --group dev -- python -m orchestration.run_inference --help`
+- `uv run --group dev -- python -m benchmarking.benchmark_runner --help`
+- `uv run --group dev -- python -m benchmarking.benchmark_runtime --help`
+- `uv run --group dev -- python Range_QDS/scripts/list_benchmark_runs.py --help`
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was a structure and cleanup
+  checkpoint.
+
+Key results:
+- Focused Ruff passed.
+- Full Pyright passed with `0 errors, 0 warnings, 0 informations`.
+- Focused moved-layout tests passed: `175 passed, 1 warning`.
+- Scoped Ruff and full Ruff both passed.
+- yamllint passed.
+- Whitespace diff check passed.
+- Full pytest passed: `420 passed, 1 warning`.
+- CLI/import checks passed for orchestration, inference, benchmark runner,
+  runtime benchmark, and benchmark listing entrypoints.
+
+Extra discoveries:
+- `turn_aware_qds_model.py` was a real stale model path: deleting only the file
+  would have left live config choices, checkpoint loading branches, feature
+  builders, and docs pointing at a runtime failure. Those references are now
+  removed.
+- The archived benchmark queue-plan test was misleading. It asserted validation
+  of an archived TSV that is not tracked in the repository, so it was testing a
+  missing artifact rather than production behavior.
+- Moving tests exposed brittle repository-root assumptions in guardrails. Those
+  are fixed for the component-scoped test layout.
+- Historical progress-log entries still mention old `experiments/` paths. They
+  are intentionally left as history; active docs and code no longer use the old
+  package path.
+
+Decision:
+- The high-level structure now matches the intended flow:
+  `data -> queries -> training -> simplification -> evaluation -> benchmarking`.
+- No compatibility shims were left for the moved packages or deleted
+  `turn_aware` model.
 - No scientific success claim is made. No probe or final-grid evidence was
   generated.

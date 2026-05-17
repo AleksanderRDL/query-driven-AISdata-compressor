@@ -20,7 +20,6 @@ from models.historical_prior_qds_model import (
     HistoricalPriorStudentRangeQDSModel,
 )
 from models.trajectory_qds_model import TrajectoryQDSModel
-from models.turn_aware_qds_model import TurnAwareQDSModel
 from models.workload_blind_qds_model import SegmentContextRangeQDSModel, WorkloadBlindRangeQDSModel
 from models.workload_blind_range_v2 import WorkloadBlindRangeV2Model
 from training.model_features import (
@@ -114,9 +113,6 @@ def load_checkpoint(path: str) -> ModelArtifacts:
         prior_feature_count = 0
     elif is_workload_blind_model_type(model_type):
         model_cls = WorkloadBlindRangeQDSModel
-        prior_feature_count = 0
-    elif model_type == "turn_aware":
-        model_cls = TurnAwareQDSModel
         prior_feature_count = 0
     else:
         model_cls = TrajectoryQDSModel

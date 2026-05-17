@@ -8,7 +8,10 @@ from typing import Any
 import torch
 
 from training.query_prior_fields import QUERY_PRIOR_FIELD_NAMES, sample_query_prior_fields
-from training.query_useful_targets import QUERY_USEFUL_V1_HEAD_NAMES, build_query_useful_v1_targets
+from training.targets.query_useful_v1 import (
+    QUERY_USEFUL_V1_HEAD_NAMES,
+    build_query_useful_v1_targets,
+)
 
 PREDICTABILITY_AUDIT_SCHEMA_VERSION = 2
 PREDICTABILITY_GATE_THRESHOLDS = {

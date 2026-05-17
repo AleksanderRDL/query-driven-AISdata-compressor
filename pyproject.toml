@@ -34,11 +34,12 @@ dev = [
 where = [".", "Range_QDS"]
 include = [
     "ais_pipeline*",
+    "benchmarking*",
     "config*",
     "data*",
     "evaluation*",
-    "experiments*",
     "models*",
+    "orchestration*",
     "queries*",
     "runtime*",
     "simplification*",
@@ -118,11 +119,12 @@ select = [
 [tool.ruff.lint.isort]
 known-first-party = [
     "ais_pipeline",
+    "benchmarking",
     "config",
     "data",
     "evaluation",
-    "experiments",
     "models",
+    "orchestration",
     "queries",
     "runtime",
     "simplification",

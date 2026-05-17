@@ -260,7 +260,7 @@ run_one() {
     --group "$UV_GROUP"
     --
     python
-    -m experiments.benchmark_runner
+    -m benchmarking.benchmark_runner
     --profile "$PROFILE"
     --workloads "$WORKLOADS"
     --csv_path "$CSV_PATH"

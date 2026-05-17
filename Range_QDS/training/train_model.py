@@ -15,7 +15,6 @@ from models.historical_prior_qds_model import (
     HistoricalPriorStudentRangeQDSModel,
 )
 from models.trajectory_qds_model import TrajectoryQDSModel
-from models.turn_aware_qds_model import TurnAwareQDSModel
 from models.workload_blind_qds_model import SegmentContextRangeQDSModel, WorkloadBlindRangeQDSModel
 from models.workload_blind_range_v2 import WorkloadBlindRangeV2Model
 from queries.query_types import (
@@ -43,8 +42,15 @@ from training.query_prior_fields import (
     build_train_query_prior_fields,
     query_prior_field_metadata,
 )
-from training.query_useful_targets import QUERY_USEFUL_V1_HEAD_NAMES, build_query_useful_v1_targets
 from training.scaler import FeatureScaler
+from training.targets.legacy import (
+    _apply_temporal_residual_labels,
+    _scaled_training_target_for_type,
+)
+from training.targets.query_useful_v1 import (
+    QUERY_USEFUL_V1_HEAD_NAMES,
+    build_query_useful_v1_targets,
+)
 from training.training_diagnostics import (
     _discriminative_sample,
     _kendall_tau,
@@ -66,10 +72,6 @@ from training.training_setup import (
     _query_frequency_workload_map,
     _single_active_type_id,
     _workload_map_tensor,
-)
-from training.training_targets import (
-    _apply_temporal_residual_labels,
-    _scaled_training_target_for_type,
 )
 from training.training_validation import _validation_checkpoint_scores, _validation_uniform_score
 from training.training_windows import _filter_supervised_windows, _trajectory_batch_to_device
@@ -860,8 +862,6 @@ def train_model(
         model_cls = WorkloadBlindRangeV2Model
     elif is_workload_blind_model_type(model_config.model_type):
         model_cls = WorkloadBlindRangeQDSModel
-    elif model_config.model_type == "turn_aware":
-        model_cls = TurnAwareQDSModel
     else:
         model_cls = TrajectoryQDSModel
     model_kwargs = {

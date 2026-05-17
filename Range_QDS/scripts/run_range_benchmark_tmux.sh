@@ -123,7 +123,7 @@ benchmark_cmd=(
   --group "$UV_GROUP"
   --
   python
-  -m experiments.benchmark_runner
+  -m benchmarking.benchmark_runner
   --profile "$PROFILE"
   --workloads range
   --csv_path "$CSV_PATH"

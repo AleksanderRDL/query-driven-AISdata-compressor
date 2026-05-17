@@ -7,11 +7,11 @@ checkpoints, and persists model artifacts.
 
 | File | Purpose |
 | --- | --- |
-| `query_useful_targets.py` | Factorized QueryUsefulV1 label construction. |
+| `targets/query_useful_v1.py` | Factorized QueryUsefulV1 label construction. |
+| `targets/modes.py` | Public range target mode registries for CLI/config choices. |
+| `targets/legacy.py` | Legacy RangeUseful/scalar target transforms. |
 | `query_prior_fields.py` | Train-only query-prior field construction and sampling. |
 | `model_features.py` | Query-free and query-conditioned point feature builders. |
-| `target_modes.py` | Public range target mode registries for CLI/config choices. |
-| `training_targets.py` | Legacy RangeUseful/scalar target transforms. |
 | `training_losses.py` | Budget, ranking, pointwise, and auxiliary losses. |
 | `training_validation.py` | Validation scoring and checkpoint selection support. |
 | `train_model.py` | Main training loop and checkpoint selection flow. |
@@ -53,7 +53,7 @@ query-hit, behavior, replacement, segment-budget, and prior-related signals
 rather than one legacy scalar.
 
 Legacy `range_training_target_mode` values are retained for diagnostics,
-regression, and teacher experiments. They are not final-success evidence:
+regression, and teacher runs. They are not final-success evidence:
 
 - `retained_frequency`
 - `global_budget_retained_frequency`
@@ -76,7 +76,7 @@ Use legacy modes only when the checkpoint hypothesis explicitly needs them.
 - `checkpoint_selection_metric="uniform_gap"` scores validation performance
   against fair uniform, with penalties for active-type deficits.
 - `validation_length_preservation_min` controls checkpoint-selection sanity
-  pressure; the strict global sanity gate is enforced later in experiment
+  pressure; the strict global sanity gate is enforced later in run
   outputs.
 - `training_fit_diagnostics` is train-data-only. It is useful for target-fit
   debugging, not final evidence.

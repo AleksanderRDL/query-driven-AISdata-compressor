@@ -5,13 +5,13 @@ from typing import Any
 
 import pytest
 
-from experiments.benchmark_common import audit_ratio_prefix
-from experiments.benchmark_final_grid import (
+from benchmarking.benchmark_common import audit_ratio_prefix
+from benchmarking.benchmark_final_grid import (
     QUERY_DRIVEN_FINAL_COMPRESSION_RATIOS,
     QUERY_DRIVEN_FINAL_COVERAGE_TARGETS,
     query_driven_final_grid_summary,
 )
-from experiments.benchmark_report import (
+from benchmarking.benchmark_report import (
     _row_from_run,
 )
 
@@ -171,7 +171,7 @@ def test_benchmark_row_field_set_regression(data_regression: Any, tmp_path: Path
             "--",
             "python",
             "-m",
-            "experiments.run_ais_experiment",
+            "orchestration.run_ais_experiment",
         ],
         returncode=0,
         elapsed_seconds=1.0,

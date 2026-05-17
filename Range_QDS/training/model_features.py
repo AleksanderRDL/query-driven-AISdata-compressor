@@ -72,7 +72,7 @@ HISTORICAL_PRIOR_MMSI_POINT_DIM = (
     + HISTORICAL_PRIOR_CLOCK_DIM
     + HISTORICAL_PRIOR_DENSITY_DIM
 )
-QUERY_AWARE_MODEL_TYPES = ("baseline", "turn_aware", "range_aware")
+QUERY_AWARE_MODEL_TYPES = ("baseline", "range_aware")
 WORKLOAD_BLIND_MODEL_TYPE_CHOICES = (
     "workload_blind_range",
     "range_prior",
@@ -93,11 +93,6 @@ NONPARAMETRIC_HISTORICAL_PRIOR_MODEL_TYPES = frozenset(
 )
 MODEL_TYPE_METADATA: dict[str, dict[str, object]] = {
     "baseline": {
-        "model_family": "legacy_query_aware_diagnostic",
-        "trainable_final_candidate": False,
-        "final_success_allowed": False,
-    },
-    "turn_aware": {
         "model_family": "legacy_query_aware_diagnostic",
         "trainable_final_candidate": False,
         "final_success_allowed": False,
@@ -629,8 +624,6 @@ def build_model_point_features(
     normalized_type = str(model_type).lower()
     if normalized_type == "baseline":
         return points[:, :7].float()
-    if normalized_type == "turn_aware":
-        return points[:, :8].float()
     if normalized_type == "workload_blind_range":
         return build_workload_blind_point_features(points)
     if normalized_type == "range_prior":

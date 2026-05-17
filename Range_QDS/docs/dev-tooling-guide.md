@@ -16,12 +16,12 @@ checks are workflow and protocol invariants:
 - zero-prior ablations must preserve extent and metadata
 - selector diagnostics must prove learned control is material
 - benchmark summaries must expose all required gates
-- experiment commands must be reproducible
+- run and benchmark commands must be reproducible
 
 Use `uv` as the single Python execution layer. Do not mix active command styles
 between `uv`, bare Python, pip, and hard-coded virtualenv paths.
 
-Do not turn experiment metrics into brittle tests. Training runs are noisy; use
+Do not turn learned metrics into brittle tests. Training runs are noisy; use
 regression testing for stable schema/report shape, not stochastic model scores.
 
 Keep tooling out of hot model paths. Tool imports should not slow model forward
@@ -40,8 +40,8 @@ Run project Python commands through `uv` from the repository root:
 uv sync --group dev
 uv lock --check
 uv run --group dev -- pytest Range_QDS/tests
-uv run --group dev -- pyright Range_QDS/data Range_QDS/evaluation Range_QDS/experiments Range_QDS/models Range_QDS/queries Range_QDS/simplification Range_QDS/training Range_QDS/scripts Range_QDS/tests
-uv run --group dev -- python -m experiments.run_ais_experiment --help
+uv run --group dev -- pyright Range_QDS/benchmarking Range_QDS/config Range_QDS/data Range_QDS/evaluation Range_QDS/models Range_QDS/orchestration Range_QDS/queries Range_QDS/runtime Range_QDS/simplification Range_QDS/training Range_QDS/scripts Range_QDS/tests
+uv run --group dev -- python -m orchestration.run_ais_experiment --help
 ```
 
 From `Range_QDS/`, prefer Make targets:
@@ -59,8 +59,7 @@ make lint-yaml
 
 `make lint` is intentionally scoped to high-signal correctness checks
 (`F401,F821,F822,F823`) so it is a reliable checkpoint save gate. `make
-lint-full` runs the full Ruff rule set and still exposes known style/modernizer
-debt in older code; use it only for dedicated lint cleanup checkpoints.
+lint-full` runs the full Ruff rule set across active QDS packages.
 
 ## Artifact Inspection
 
@@ -101,14 +100,14 @@ miss.
 
 Good targets:
 
-- `queries/query_generator.py`
-- `queries/workload_profiles.py`
+- `queries/generation/workload.py`
+- `queries/generation/profiles.py`
 - `training/query_prior_fields.py`
 - `training/model_features.py`
-- `simplification/learned_segment_budget.py`
+- `simplification/learned_segment_budget/core.py`
 - `evaluation/query_useful_v1.py`
 - `evaluation/evaluate_methods.py`
-- `experiments/range_diagnostics.py`
+- `orchestration/range_diagnostics.py`
 
 Good properties:
 
@@ -232,7 +231,7 @@ uv lock --check
 git diff --check
 uv run --group dev -- yamllint .
 uv run --group dev -- pytest Range_QDS/tests/property Range_QDS/tests/regression -q
-uv run --group dev -- pytest Range_QDS/tests/test_query_driven_rework.py Range_QDS/tests/test_benchmark_runner.py -q
+uv run --group dev -- pytest Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/unit/benchmarking/test_benchmark_runner.py -q
 ```
 
 For code checkpoints touching model, selector, query generation, metrics, or
@@ -245,5 +244,5 @@ blast radius justifies it.
 - Keep tooling out of hot model, selector, metric, and training loops.
 - Keep acceptance logic in Python code/tests, not jq or shell wrappers.
 - Update regression snapshots only after reviewing an intentional schema change.
-- Keep one-off experiment hacks out of production paths.
+- Keep one-off run or benchmark hacks out of production paths.
 - Record extra discoveries in `query-driven-rework-progress.md`.

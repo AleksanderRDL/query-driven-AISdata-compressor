@@ -49,7 +49,7 @@ Direct CLI example:
 
 ```bash
 cd ..
-uv run --group dev -- python -m experiments.run_ais_experiment \
+uv run --group dev -- python -m orchestration.run_ais_experiment \
   --csv_path AISDATA/cleaned/<cleaned-ais-file.csv> \
   --cache_dir Range_QDS/artifacts/cache/manual_csv \
   --workload range \
@@ -65,7 +65,8 @@ uv run --group dev -- python -m experiments.run_ais_experiment \
 | --- | --- |
 | Redesign objective and acceptance criteria | [`docs/query-driven-rework-guide.md`](docs/query-driven-rework-guide.md) |
 | Code layout | [`CODE_LAYOUT.md`](CODE_LAYOUT.md) |
-| Experiment CLI, benchmark profiles, artifact names | [`experiments/README.md`](experiments/README.md) |
+| Single-run orchestration | [`orchestration/README.md`](orchestration/README.md) |
+| Benchmark profiles, queues, reports, artifact names | [`benchmarking/README.md`](benchmarking/README.md) |
 | Generated artifact layout and cleanup | [`artifacts/README.md`](artifacts/README.md) |
 | Training labels, loss, checkpoint selection | [`training/README.md`](training/README.md) |
 | Query generation and execution | [`queries/README.md`](queries/README.md) |

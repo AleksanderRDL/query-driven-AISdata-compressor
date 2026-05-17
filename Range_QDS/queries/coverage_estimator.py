@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass
 
 import torch
 
-from queries.query_generator import (
+from queries.generation.workload import (
     DEFAULT_RANGE_ANCHOR_MODE,
     DEFAULT_RANGE_FOOTPRINT_JITTER,
     DEFAULT_RANGE_SPATIAL_FRACTION,

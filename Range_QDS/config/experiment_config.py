@@ -39,12 +39,12 @@ class DataConfig:
     validation_split_mode: str = "random"
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialize config to a dictionary. See experiments/README.md for details."""
+        """Serialize config to a dictionary. See orchestration/README.md for details."""
         return asdict(self)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> DataConfig:
-        """Deserialize config from a dictionary. See experiments/README.md for details."""
+        """Deserialize config from a dictionary. See orchestration/README.md for details."""
         return cls(**data)
 
 
@@ -79,12 +79,12 @@ class QueryConfig:
     workload_stability_gate_mode: str = "final"
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialize config to a dictionary. See experiments/README.md for details."""
+        """Serialize config to a dictionary. See orchestration/README.md for details."""
         return asdict(self)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> QueryConfig:
-        """Deserialize config from a dictionary. See experiments/README.md for details."""
+        """Deserialize config from a dictionary. See orchestration/README.md for details."""
         payload = dict(data)
         raw_train_anchor_modes = payload.get("range_train_anchor_modes", [])
         if isinstance(raw_train_anchor_modes, str):
@@ -207,12 +207,12 @@ class ModelConfig:
     amp_mode: str = "off"
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialize config to a dictionary. See experiments/README.md for details."""
+        """Serialize config to a dictionary. See orchestration/README.md for details."""
         return asdict(self)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ModelConfig:
-        """Deserialize config from a dictionary. See experiments/README.md for details."""
+        """Deserialize config from a dictionary. See orchestration/README.md for details."""
         return cls(**data)
 
 
@@ -224,18 +224,18 @@ class BaselineConfig:
     final_metrics_mode: str = "diagnostic"
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialize config to a dictionary. See experiments/README.md for details."""
+        """Serialize config to a dictionary. See orchestration/README.md for details."""
         return asdict(self)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> BaselineConfig:
-        """Deserialize config from a dictionary. See experiments/README.md for details."""
+        """Deserialize config from a dictionary. See orchestration/README.md for details."""
         return cls(**data)
 
 
 @dataclass
 class ExperimentConfig:
-    """Top-level experiment config container. See experiments/README.md for details."""
+    """Top-level experiment config container. See orchestration/README.md for details."""
 
     data: DataConfig = field(default_factory=DataConfig)
     query: QueryConfig = field(default_factory=QueryConfig)
@@ -243,7 +243,7 @@ class ExperimentConfig:
     baselines: BaselineConfig = field(default_factory=BaselineConfig)
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialize config to a dictionary. See experiments/README.md for details."""
+        """Serialize config to a dictionary. See orchestration/README.md for details."""
         return {
             "data": self.data.to_dict(),
             "query": self.query.to_dict(),
@@ -253,7 +253,7 @@ class ExperimentConfig:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ExperimentConfig:
-        """Deserialize config from a dictionary. See experiments/README.md for details."""
+        """Deserialize config from a dictionary. See orchestration/README.md for details."""
         expected_keys = {"data", "query", "model", "baselines"}
         unknown_keys = set(data) - expected_keys
         if unknown_keys:
@@ -268,7 +268,7 @@ class ExperimentConfig:
 
 @dataclass
 class SeedBundle:
-    """Derived deterministic sub-seeds for experiment stages. See experiments/README.md for details."""
+    """Derived deterministic sub-seeds for experiment stages. See orchestration/README.md for details."""
 
     split_seed: int
     train_query_seed: int
@@ -413,7 +413,7 @@ def build_experiment_config(
     allow_tf32: bool = False,
     amp_mode: str = "off",
 ) -> ExperimentConfig:
-    """Build a structured experiment config from flat arguments. See experiments/README.md for details."""
+    """Build a structured experiment config from flat arguments. See orchestration/README.md for details."""
     uses_csv = bool(csv_path or train_csv_path or validation_csv_path or eval_csv_path)
     return ExperimentConfig(
         data=DataConfig(
@@ -565,7 +565,7 @@ def build_experiment_config(
 
 
 def derive_seed_bundle(master_seed: int) -> SeedBundle:
-    """Derive deterministic sub-seeds from a master seed. See experiments/README.md for details."""
+    """Derive deterministic sub-seeds from a master seed. See orchestration/README.md for details."""
     return SeedBundle(
         split_seed=(master_seed * LCG_MULTIPLIER + 1) & 0xFFFF_FFFF,
         train_query_seed=(master_seed * LCG_MULTIPLIER + 3) & 0xFFFF_FFFF,

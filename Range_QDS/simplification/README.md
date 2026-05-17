@@ -8,7 +8,7 @@ Turns per-point scores into retained-point masks.
 | --- | --- |
 | `mlqds_scoring.py` | Canonical score conversion used by validation and final evaluation. |
 | `simplify_trajectories.py` | Per-trajectory top-k retention with endpoint preservation. |
-| `learned_segment_budget.py` | Active learned-segment selector and attribution diagnostics. |
+| `learned_segment_budget/` | Active learned-segment selector and attribution diagnostics. |
 
 ## Rules
 

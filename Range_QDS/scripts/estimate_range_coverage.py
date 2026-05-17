@@ -24,7 +24,7 @@ from queries.coverage_estimator import (
     best_query_count,
     estimate_range_coverage,
 )
-from queries.query_generator import RANGE_ANCHOR_MODES, RANGE_TIME_DOMAIN_MODES
+from queries.generation.workload import RANGE_ANCHOR_MODES, RANGE_TIME_DOMAIN_MODES
 
 
 def _parse_int_list(value: str) -> list[int]:

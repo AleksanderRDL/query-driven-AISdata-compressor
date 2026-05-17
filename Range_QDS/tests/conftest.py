@@ -1,4 +1,4 @@
-"""Pytest fixtures for the AIS-QDS test suite. See experiments/README.md for details."""
+"""Pytest fixtures for the AIS-QDS test suite. See orchestration/README.md for details."""
 
 from __future__ import annotations
 
