@@ -11,30 +11,13 @@ import torch
 
 from config.experiment_config import ExperimentConfig, derive_seed_bundle
 from evaluation.baselines import (
-    Method,
     MLQDSMethod,
-    OracleMethod,
 )
-from evaluation.evaluate_methods import evaluate_method
-from evaluation.metrics import MethodEvaluation
 from evaluation.range_usefulness import range_usefulness_weight_summary
-from evaluation.tables import (
-    print_geometric_distortion_table,
-    print_method_comparison_table,
-    print_range_usefulness_table,
-    print_shift_table,
-)
-from orchestration.causality import (
-    _retained_mask_comparison,
-)
+from orchestration.evaluation_stage import run_evaluation_stage
 from orchestration.experiment_data import build_experiment_datasets, prepare_experiment_split
 from orchestration.experiment_methods import (
-    attach_range_geometry_scores,
-    build_learned_fill_methods,
     build_primary_methods,
-    evaluate_shift_pairs,
-    prepare_eval_labels,
-    prepare_eval_query_cache,
 )
 from orchestration.experiment_outputs import ExperimentOutputs, write_experiment_results
 from orchestration.experiment_workloads import (
@@ -48,7 +31,7 @@ from orchestration.geojson_writers import (
     write_queries_geojson,
     write_simplified_csv,
 )
-from orchestration.range_cache import RangeRuntimeCache, range_only_queries
+from orchestration.range_cache import RangeRuntimeCache
 from orchestration.range_diagnostics import (
     _evaluation_metrics_payload,
     _print_range_diagnostics_summary,
@@ -59,11 +42,6 @@ from orchestration.range_diagnostics import (
     _range_workload_distribution_comparison,
 )
 from orchestration.retained_masks import freeze_workload_blind_retained_masks
-from orchestration.segment_audits import (
-    _factorized_head_probability_sources_from_logits,
-    _segment_oracle_allocation_audit,
-    _target_segment_oracle_alignment_audit,
-)
 from orchestration.selection_causality import _selection_causality_diagnostics
 from orchestration.target_preparation import prepare_training_targets
 from queries.query_types import single_workload_type
@@ -362,242 +340,48 @@ def run_experiment_pipeline(
         retained_mask_freezing.head_ablation_sensitivity_diagnostics
     )
     segment_budget_head_ablation_mode = retained_mask_freezing.segment_budget_head_ablation_mode
-    matched: dict[str, MethodEvaluation] = {}
-    oracle_method: OracleMethod | None = None
-    eval_labels: torch.Tensor | None = None
-    segment_oracle_allocation_audit: dict[str, Any] = {"available": False, "reason": "not_run"}
-    target_segment_oracle_alignment_audit: dict[str, Any] = {
-        "available": False,
-        "reason": "not_run",
-    }
-    save_masks = bool(save_simplified_dir)
-    eval_is_range_only = len(range_only_queries(eval_workload.typed_queries)) == len(
-        eval_workload.typed_queries
+    evaluation_stage = run_evaluation_stage(
+        config=config,
+        seeds=seeds,
+        trained=trained,
+        methods=methods,
+        retention_methods=retention_methods,
+        workload_blind_eval=workload_blind_eval,
+        audit_ratios=audit_ratios,
+        frozen_primary_masks=frozen_primary_masks,
+        frozen_audit_methods_by_ratio=frozen_audit_methods_by_ratio,
+        frozen_primary_scores=frozen_primary_scores,
+        frozen_primary_head_logits=frozen_primary_head_logits,
+        frozen_primary_segment_scores=frozen_primary_segment_scores,
+        frozen_primary_selector_segment_scores=frozen_primary_selector_segment_scores,
+        causality_ablation_methods=causality_ablation_methods,
+        train_workload=train_workload,
+        train_workload_map=train_workload_map,
+        eval_workload=eval_workload,
+        eval_workload_map=eval_workload_map,
+        test_points=test_points,
+        test_boundaries=test_boundaries,
+        test_mmsis=test_mmsis,
+        range_runtime_caches=range_runtime_caches,
+        save_masks=bool(save_simplified_dir),
+        mlqds_range_geometry_blend=mlqds_range_geometry_blend,
+        phase=_phase,
     )
-    final_metrics_mode = str(getattr(config.baselines, "final_metrics_mode", "diagnostic")).lower()
-    if final_metrics_mode not in {"diagnostic", "core"}:
-        raise ValueError("final_metrics_mode must be either 'diagnostic' or 'core'.")
-    run_final_diagnostics = final_metrics_mode == "diagnostic"
-    run_oracle_baseline = bool(config.baselines.include_oracle and run_final_diagnostics)
-    run_learned_fill_diagnostics = bool(eval_is_range_only and run_final_diagnostics)
-    with _phase("eval-query-cache-prep"):
-        eval_query_cache = prepare_eval_query_cache(
-            test_points=test_points,
-            test_boundaries=test_boundaries,
-            eval_workload=eval_workload,
-            eval_is_range_only=eval_is_range_only,
-            runtime_cache=range_runtime_caches["eval"],
-        )
-    if run_oracle_baseline or run_learned_fill_diagnostics or mlqds_range_geometry_blend > 0.0:
-        with _phase("eval-label-prep"):
-            eval_labels = prepare_eval_labels(
-                test_points=test_points,
-                test_boundaries=test_boundaries,
-                eval_workload=eval_workload,
-                eval_workload_map=eval_workload_map,
-                config=config,
-                seeds=seeds,
-                eval_is_range_only=eval_is_range_only,
-                run_oracle_baseline=run_oracle_baseline,
-                runtime_cache=range_runtime_caches["eval"],
-            )
-    if mlqds_range_geometry_blend > 0.0:
-        if eval_labels is None:
-            raise RuntimeError(
-                "MLQDS range geometry blend requested but eval labels were not prepared."
-            )
-        attach_range_geometry_scores(
-            methods=methods,
-            eval_labels=eval_labels,
-            eval_workload_map=eval_workload_map,
-        )
-    if (
-        workload_blind_eval
-        and str(getattr(config.model, "selector_type", "")).lower() == "learned_segment_budget_v1"
-    ):
-        segment_oracle_allocation_audit = _segment_oracle_allocation_audit(
-            point_scores=frozen_primary_scores.get("MLQDS"),
-            segment_budget_scores=frozen_primary_segment_scores.get("MLQDS"),
-            selector_segment_scores=frozen_primary_selector_segment_scores.get("MLQDS"),
-            eval_labels=eval_labels,
-            boundaries=test_boundaries,
-            workload_type=single_workload_type(eval_workload_map),
-            head_scores_by_name=_factorized_head_probability_sources_from_logits(
-                frozen_primary_head_logits.get("MLQDS")
-            ),
-            retained_mask=frozen_primary_masks.get("MLQDS"),
-        )
-        try:
-            target_segment_oracle_alignment_audit = _target_segment_oracle_alignment_audit(
-                points=test_points,
-                boundaries=test_boundaries,
-                typed_queries=eval_workload.typed_queries,
-                eval_labels=eval_labels,
-                workload_type=single_workload_type(eval_workload_map),
-                retained_mask=frozen_primary_masks.get("MLQDS"),
-            )
-        except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
-            target_segment_oracle_alignment_audit = {
-                "available": False,
-                "reason": "target_alignment_failed",
-                "diagnostic_only": True,
-                "error": str(exc),
-            }
-    with _phase("evaluate-matched"):
-        for method in methods:
-            with _phase(f"  eval {method.name}"):
-                matched[method.name] = evaluate_method(
-                    method=method,
-                    points=test_points,
-                    boundaries=test_boundaries,
-                    typed_queries=eval_workload.typed_queries,
-                    workload_map=eval_workload_map,
-                    compression_ratio=config.model.compression_ratio,
-                    return_mask=method.name == "MLQDS" or save_masks,
-                    query_cache=eval_query_cache,
-                )
-
-        if run_oracle_baseline:
-            if eval_labels is None:
-                raise RuntimeError("Oracle baseline requested but eval labels were not prepared.")
-            oracle_method = OracleMethod(
-                labels=eval_labels, workload_type=single_workload_type(eval_workload_map)
-            )
-            with _phase(f"  eval {oracle_method.name}"):
-                matched[oracle_method.name] = evaluate_method(
-                    method=oracle_method,
-                    points=test_points,
-                    boundaries=test_boundaries,
-                    typed_queries=eval_workload.typed_queries,
-                    workload_map=eval_workload_map,
-                    compression_ratio=config.model.compression_ratio,
-                    query_cache=eval_query_cache,
-                )
-
-    causality_ablation_evaluations: dict[str, MethodEvaluation] = {}
-    causality_ablation_mask_diagnostics: dict[str, dict[str, Any]] = {}
-    if causality_ablation_methods:
-        primary_ablation_mask = frozen_primary_masks.get("MLQDS")
-        with _phase("learning-causality-ablations"):
-            for method in causality_ablation_methods:
-                causality_ablation_mask_diagnostics[method.name] = _retained_mask_comparison(
-                    primary_mask=primary_ablation_mask,
-                    ablation_mask=method.retained_mask,
-                    expected_shape=(
-                        primary_ablation_mask.shape
-                        if isinstance(primary_ablation_mask, torch.Tensor)
-                        else method.retained_mask.shape
-                    ),
-                )
-                with _phase(f"  ablation {method.name}"):
-                    causality_ablation_evaluations[method.name] = evaluate_method(
-                        method=method,
-                        points=test_points,
-                        boundaries=test_boundaries,
-                        typed_queries=eval_workload.typed_queries,
-                        workload_map=eval_workload_map,
-                        compression_ratio=config.model.compression_ratio,
-                        query_cache=eval_query_cache,
-                    )
-
-    learned_fill_diagnostics: dict[str, MethodEvaluation] = {"MLQDS": matched["MLQDS"]}
-    learned_fill_table = ""
-    diagnostic_methods: list[Method] = []
-    if run_learned_fill_diagnostics:
-        if eval_labels is None:
-            raise RuntimeError(
-                "Learned-fill diagnostics requested but eval labels were not prepared."
-            )
-        diagnostic_methods = build_learned_fill_methods(
-            test_points=test_points,
-            eval_labels=eval_labels,
-            eval_workload_map=eval_workload_map,
-            config=config,
-            seeds=seeds,
-        )
-        with _phase("learned-fill-diagnostics"):
-            for method in diagnostic_methods:
-                with _phase(f"  fill {method.name}"):
-                    learned_fill_diagnostics[method.name] = evaluate_method(
-                        method=method,
-                        points=test_points,
-                        boundaries=test_boundaries,
-                        typed_queries=eval_workload.typed_queries,
-                        workload_map=eval_workload_map,
-                        compression_ratio=config.model.compression_ratio,
-                        query_cache=eval_query_cache,
-                    )
-        learned_fill_table = print_range_usefulness_table(learned_fill_diagnostics)
-
-    matched_table = print_method_comparison_table(matched)
-    geometric_table = print_geometric_distortion_table(matched)
-    range_usefulness_table = print_range_usefulness_table(matched)
-    range_compression_audit: dict[str, dict[str, Any]] = {}
-    range_compression_audit_table = ""
-    if audit_ratios:
-        audit_methods = [
-            *(retention_methods if workload_blind_eval else methods),
-            *diagnostic_methods,
-        ]
-        if oracle_method is not None:
-            audit_methods.append(oracle_method)
-        audit_sections: list[str] = []
-        with _phase("range-compression-audit"):
-            for ratio in audit_ratios:
-                if abs(float(ratio) - float(config.model.compression_ratio)) <= 1e-9:
-                    ratio_results = {
-                        **matched,
-                        **{
-                            name: metrics
-                            for name, metrics in learned_fill_diagnostics.items()
-                            if name not in matched
-                        },
-                    }
-                else:
-                    ratio_results: dict[str, MethodEvaluation] = {}
-                    ratio_key = f"{float(ratio):.4f}"
-                    ratio_audit_methods = audit_methods
-                    if workload_blind_eval and ratio_key in frozen_audit_methods_by_ratio:
-                        ratio_audit_methods = [
-                            *frozen_audit_methods_by_ratio[ratio_key],
-                            *diagnostic_methods,
-                        ]
-                        if oracle_method is not None:
-                            ratio_audit_methods.append(oracle_method)
-                    for method in ratio_audit_methods:
-                        with _phase(f"  audit {method.name} ratio={ratio:.4f}"):
-                            ratio_results[method.name] = evaluate_method(
-                                method=method,
-                                points=test_points,
-                                boundaries=test_boundaries,
-                                typed_queries=eval_workload.typed_queries,
-                                workload_map=eval_workload_map,
-                                compression_ratio=float(ratio),
-                                query_cache=eval_query_cache,
-                            )
-                ratio_key = f"{float(ratio):.4f}"
-                range_compression_audit[ratio_key] = {
-                    name: _evaluation_metrics_payload(metrics)
-                    for name, metrics in ratio_results.items()
-                }
-                audit_sections.append(
-                    f"compression_ratio={ratio_key}\n{print_range_usefulness_table(ratio_results)}"
-                )
-        range_compression_audit_table = "\n\n".join(audit_sections)
-
-    with _phase("evaluate-shift"):
-        shift_pairs = evaluate_shift_pairs(
-            matched_mlqds_score=float(matched["MLQDS"].aggregate_f1),
-            trained=trained,
-            train_workload=train_workload,
-            train_workload_map=train_workload_map,
-            eval_workload_map=eval_workload_map,
-            config=config,
-            test_points=test_points,
-            test_boundaries=test_boundaries,
-            test_mmsis=test_mmsis,
-        )
-    shift_table = print_shift_table(shift_pairs)
+    matched = evaluation_stage.matched
+    matched_table = evaluation_stage.matched_table
+    geometric_table = evaluation_stage.geometric_table
+    range_usefulness_table = evaluation_stage.range_usefulness_table
+    learned_fill_diagnostics = evaluation_stage.learned_fill_diagnostics
+    learned_fill_table = evaluation_stage.learned_fill_table
+    causality_ablation_evaluations = evaluation_stage.causality_ablation_evaluations
+    causality_ablation_mask_diagnostics = evaluation_stage.causality_ablation_mask_diagnostics
+    range_compression_audit = evaluation_stage.range_compression_audit
+    range_compression_audit_table = evaluation_stage.range_compression_audit_table
+    shift_pairs = evaluation_stage.shift_pairs
+    shift_table = evaluation_stage.shift_table
+    segment_oracle_allocation_audit = evaluation_stage.segment_oracle_allocation_audit
+    target_segment_oracle_alignment_audit = evaluation_stage.target_segment_oracle_alignment_audit
+    run_oracle_baseline = evaluation_stage.run_oracle_baseline
 
     with _phase("range-diagnostics"):
         train_summary, train_rows = _range_workload_diagnostics(

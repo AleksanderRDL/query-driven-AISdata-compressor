@@ -2591,3 +2591,94 @@ Decision:
   owner.
 - No scientific success claim is made. No probe or final-grid evidence was
   generated.
+
+## Checkpoint 5.12 — Evaluation Stage Extraction
+
+Status: completed
+
+Hypothesis:
+- Matched evaluation, ablation evaluation, learned-fill diagnostics,
+  compression audit evaluation, and shift evaluation can move out of
+  `orchestration/experiment_pipeline.py` without changing result fields or
+  protocol behavior.
+
+Expected files:
+- `Range_QDS/orchestration/evaluation_stage.py`
+- `Range_QDS/orchestration/experiment_pipeline.py`
+- focused orchestration tests
+- `Range_QDS/orchestration/README.md`
+- `Range_QDS/CODE_LAYOUT.md`
+
+Stop condition:
+- Stop when the pipeline delegates evaluation mechanics to the new stage,
+  public artifact fields remain assembled in the pipeline, focused and broad
+  gates pass, docs/log are accurate, and no scientific probe or final grid has
+  been run.
+
+Changes:
+- Added `orchestration/evaluation_stage.py` with `EvaluationStageOutputs` and
+  `run_evaluation_stage`.
+- Moved eval query-cache prep, eval label prep, geometry-score attachment,
+  matched method evaluation, causality ablation evaluation, learned-fill
+  diagnostics, compression audit evaluation, segment oracle/audit diagnostics,
+  and workload-shift evaluation out of `experiment_pipeline.py`.
+- Kept final summary assembly, metrics-dump field assembly, result writing, and
+  simplified CSV export in `experiment_pipeline.py`.
+- Added focused coverage for the new evaluation-stage boundary, including core
+  matched evaluation, same-ratio audit payloads, same-workload shift output,
+  and invalid `final_metrics_mode` rejection.
+- Updated orchestration and layout docs so active documentation names the new
+  evaluation-stage owner and no longer describes the pipeline as owning
+  evaluation mechanics.
+
+Tests:
+- `uv run --group dev -- ruff check --fix Range_QDS/orchestration/experiment_pipeline.py Range_QDS/orchestration/evaluation_stage.py Range_QDS/tests/unit/orchestration/test_evaluation_stage.py`
+- `uv run --group dev -- pyright Range_QDS/orchestration/experiment_pipeline.py Range_QDS/orchestration/evaluation_stage.py Range_QDS/tests/unit/orchestration/test_evaluation_stage.py`
+- `uv run --group dev -- pytest Range_QDS/tests/unit/orchestration/test_evaluation_stage.py -q`
+- `uv run --group dev -- pytest Range_QDS/tests/unit/orchestration/test_evaluation_stage.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/unit/orchestration/test_retained_masks.py -q`
+- `make -C Range_QDS lint`
+- `make -C Range_QDS lint-full`
+- `make -C Range_QDS typecheck`
+- `make -C Range_QDS test`
+- `uv run --group dev -- yamllint .`
+- `git diff --check -- Range_QDS pyproject.toml .gitignore`
+- `uv run --group dev -- ruff format --check Range_QDS/orchestration/experiment_pipeline.py Range_QDS/orchestration/evaluation_stage.py Range_QDS/tests/unit/orchestration/test_evaluation_stage.py`
+- Import smoke for `EvaluationStageOutputs`, `run_evaluation_stage`, and
+  `run_experiment_pipeline`.
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was a structural refactor.
+
+Key results:
+- Focused Ruff passed.
+- Focused Pyright passed with `0 errors, 0 warnings, 0 informations`.
+- Direct evaluation-stage tests passed: `2 passed`.
+- Focused orchestration tests passed: `101 passed`.
+- Full Ruff passed.
+- Full Pyright passed with `0 errors, 0 warnings, 0 informations`.
+- Full pytest passed: `438 passed, 1 warning`.
+- yamllint, whitespace diff check, Ruff format check, and import smoke passed.
+- `experiment_pipeline.py` is now `710` lines, down from `926`.
+- `evaluation_stage.py` is `349` lines and owns single-run evaluation-stage
+  mechanics.
+
+Extra discoveries:
+- The next structural pressure in the pipeline is no longer evaluation. It is
+  metrics-dump/artifact assembly plus simplified CSV export. That boundary
+  should only move with exact field-name tests because it is artifact-contract
+  sensitive.
+- `evaluation_stage.py` imports private helpers from `range_diagnostics`,
+  `causality`, and `segment_audits`. That is acceptable for this checkpoint
+  because it preserves behavior, but those underscore-prefixed helpers are a
+  sign that diagnostic APIs are still not clean package boundaries.
+- `experiment_cli.py` remains large, but it is lower-leverage than artifact
+  assembly. CLI cleanup should wait unless CLI flag ownership starts blocking
+  rework.
+
+Decision:
+- Evaluation-stage ownership is split and verified.
+- No compatibility shim was introduced; `experiment_pipeline.py` imports the
+  direct owner.
+- No scientific success claim is made. No probe or final-grid evidence was
+  generated.

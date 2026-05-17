@@ -20,10 +20,11 @@ implementation checks.
 | File | Purpose |
 | --- | --- |
 | `experiment_cli.py` | CLI flags over shared config dataclasses. |
-| `experiment_pipeline.py` | End-to-end single-run train/eval orchestration. |
+| `experiment_pipeline.py` | End-to-end single-run stage ordering and handoffs. |
 | `experiment_data.py` | Train, validation, selection, and eval data splits. |
 | `experiment_workloads.py` | Workload generation and workload-map resolution. |
 | `experiment_methods.py` | Evaluation method construction. |
+| `evaluation_stage.py` | Matched evaluation, ablation evaluation, learned-fill diagnostics, compression audit evaluation, and shift evaluation. |
 | `experiment_outputs.py` | Run artifact payloads and writers. |
 | `target_preparation.py` | Training-label preparation, target transforms, teacher distillation, and validation query caches. |
 | `retained_masks.py` | Workload-blind primary/audit retained-mask freezing and selector-trace capture. |
