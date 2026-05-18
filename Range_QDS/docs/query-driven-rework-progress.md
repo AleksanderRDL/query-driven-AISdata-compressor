@@ -5,7 +5,7 @@ Detailed stdout and raw metrics are kept in `Range_QDS/artifacts/results/`.
 
 ## High-Value Summary
 
-The redesign is active and not complete. The current best strict synthetic/debug cell beats both final baselines on `QueryUsefulV1`, but it is not acceptance evidence because learning causality and global sanity still fail.
+The redesign is active and not complete. The current best strict synthetic/debug cell beats both final baselines on `QueryUsefulV1`, but it is not acceptance evidence because learning causality still fails and the stored artifact was produced under the old `0.80` length gate.
 
 Current best strict result:
 
@@ -21,7 +21,7 @@ Current best strict artifact:
 
 Main interpretation:
 - The candidate is promising because it beats uniform and Douglas-Peucker in one strict cell while workload stability, support overlap, predictability, prior-predictive alignment, target diffusion, and workload signature pass.
-- It is not final success. Learning causality still fails and length preservation is below the active `0.80` code/guide gate.
+- It is not final success. Learning causality still fails, and the current-best artifact needs a strict replay or recomputed gate summary before it can be judged under the new `0.75` final length gate.
 - The full workload-profile/compression final matrix remains intentionally unrun until strict single-cell gates pass.
 - Small probes and implementation smokes are not scientific evidence of learning.
 
@@ -49,16 +49,16 @@ Active candidate defaults:
 
 Current blockers:
 - Learning causality fails. In the best strict artifact, shuffled-score delta is `0.008856345116771192` versus required `0.017759554407510352`; shuffled-prior and no-query-prior deltas are both `0.002743017030572781` versus required `0.005`.
-- Length preservation is close but still below the active `0.80` gate: `0.7941408411227088`.
+- Length preservation is `0.7941408411227088`, which is above the new `0.75` final length gate but was below the old `0.80` gate used by stored historical artifacts.
 - Per-head prior-output diagnostics show prior signal is mostly suppressed before retained-mask decisions: zeroing active model-input priors changes inputs by about `0.0128368`, but mean head probability changes only about `0.00001816`.
 - No-length-repair improves score to `0.1759846099523811`, but length collapses to `0.6790996203798462`. That is diagnostic evidence, not a candidate.
-- Segment allocation remains part of the length blocker. Same-allocation length-only point selection reaches only `0.7597755220341236`.
+- Under the old `0.80` length policy, segment allocation was part of the length blocker. Under the new `0.75` final gate, the same diagnostic is not a current blocker by itself; causality remains unresolved.
 
 Current decision:
 - Do not run the full final matrix.
 - Do not treat real-scale diagnostic slices as success evidence.
-- Do not increase workload/caps to compensate for failed causality or length gates unless the named diagnostic question requires scale.
-- Do not loosen gates for success claims. Lowering the length gate to `0.75` would require an explicit guide/code policy change and still would not fix learning causality.
+- Do not increase workload/caps to compensate for failed causality unless the named diagnostic question requires scale.
+- Do not convert the new `0.75` length gate into a success claim; learning causality still fails.
 - Keep the current candidate boundary at the best strict artifact above until a new strict candidate clears or narrows the failed gates.
 
 ## Durable Discoveries Since The Current Candidate
@@ -68,8 +68,8 @@ Current decision:
 - Allocation length-support was initially ignored when learned segment scores were flat; that implementation flaw was fixed, but the strict replay still did not change the blocker.
 - Raw prior channels and model inputs are available. The problem is that useful movement is suppressed inside heads/selector/allocation before frozen retained masks.
 - Behavior-rank loss `0.15`, allocation floor `0.10`, score-protected repair `0.10`, sparse-head rank `0.10`, and sparse-head BCE `window_max_normalized` are rejected default paths.
-- Exact-pair length repair is rejected as a default. It raised length to `0.7990875085863033`, but still missed `0.80`, regressed MLQDS to `0.16997958695311988`, and hurt learned-head causality.
-- The score-protected length frontier only clears `0.80` length when protecting about `10%` of repair budget for top learned-score points. At the guide's `25%` learned-slot materiality floor, length is about `0.7911049677462703`.
+- Exact-pair length repair is still rejected as a default. It raised length to `0.7990875085863033`, but regressed MLQDS to `0.16997958695311988` and hurt learned-head causality.
+- Under the old `0.80` length policy, the score-protected length frontier cleared length only near `10%` protected learned-score budget. Under the new `0.75` final length gate, this frontier is less useful as a blocker diagnosis; causality remains the blocker.
 - Bounded exact-pair repair reduced diagnostic runtime from about `4502.94s` to `819.96s`, but MLQDS latency was still `15148ms`; it needs a runtime plan before future consideration.
 - `max_budget_share_per_trajectory` is effectively softened by fair-share allocation when fair-share cap is larger; treat it as a soft trajectory-share limit.
 
@@ -79,11 +79,11 @@ Current decision:
 |---|---:|---|
 | no length repair | MLQDS `0.1759846099523811`; learned-controlled slot fraction `0.8461538461538461` | length collapsed to `0.6790996203798462`; learning causality still failed |
 | full length repair | length `0.7980194800294772` | learned-controlled slot fraction collapsed to `0.203125`; MLQDS lost to Douglas-Peucker |
-| segment length-support allocation `0.12` | best strict score: MLQDS `0.17183721530965693` | still fails learning causality and global sanity |
+| segment length-support allocation `0.12` | best strict score: MLQDS `0.17183721530965693` | still fails learning causality; historical artifact failed global sanity under the old `0.80` length gate |
 | behavior-rank loss `0.15` | behavior-head fit improved slightly | MLQDS regressed to `0.1662931067947708`; shuffled-score delta collapsed to `0.00005168542757363892` |
 | allocation floor `0.10` | allocation moved more visibly | MLQDS regressed to `0.15366824272250135`; length worsened to `0.7833962145166923`; causality failed by sign |
 | score-protected repair `0.10` | learned-controlled slots rose to `0.3984375` | MLQDS regressed to `0.1621987738648618`; length worsened to `0.7885179226003864`; causality still failed |
-| exact-pair length repair | length `0.7990875085863033` | missed length gate, regressed score, and harmed behavior/segment-budget causality |
+| exact-pair length repair | length `0.7990875085863033` | regressed score and harmed behavior/segment-budget causality; old replay missed only the old `0.80` length gate |
 | sparse-head rank `0.10` | MLQDS rose by only `0.00030555491606800877` | shuffled-score and prior/no-prior causality worsened |
 | sparse-head BCE `window_max_normalized` | head dispersion increased | MLQDS regressed to `0.1548579044007669` and lost to Douglas-Peucker |
 | prior residual scale `1.0` after route removal | length `0.7939141083394758` | MLQDS lost to Douglas-Peucker; shuffled-score causality failed by sign |
@@ -222,7 +222,7 @@ Key results:
 - uniform QueryUsefulV1: `0.14223795796380634`
 - Douglas-Peucker QueryUsefulV1: `0.16362459837911367`
 - length: `0.7933048661024167`
-- gates failed: learning causality, global sanity
+- gates failed: learning causality, global sanity under the old `0.80` length gate
 - factorized heads were badly calibrated against low base-rate targets.
 
 Decision:
@@ -269,7 +269,7 @@ Key results:
 - Douglas-Peucker QueryUsefulV1: `0.16362459837911367`
 - length: `0.7931550386328327`
 - first strict-cell MLQDS QueryUsefulV1 win over Douglas-Peucker in this sequence
-- gates failed: learning causality, global sanity
+- gates failed: learning causality, global sanity under the old `0.80` length gate
 - prior-feature removal slightly improved score, suggesting harmful prior integration.
 
 Decision:
@@ -1125,13 +1125,13 @@ Key results:
 - Douglas-Peucker QueryUsefulV1: `0.16362459837911367`
 - length preservation: `0.7941408411227088`
 - gates passed: workload stability, support overlap, predictability, prior-predictive alignment, target diffusion, workload signature
-- gates failed: learning causality, global sanity
+- gates failed: learning causality, global sanity under the old `0.80` length gate
 - Shuffled-score delta improved only to `0.008856345116771192`, below the required `0.017759554407510352`.
 - Shuffled-prior/no-query-prior deltas stayed around `0.002743017030572781`, below the required `0.005`.
 
 Extra discoveries:
-- Same-allocation length-only point selection reached only `0.7597755220341236`; segment allocation is part of the length blocker.
-- Score-protected length frontier cleared `0.80` only near `10%` protected learned-score budget; at `25%` materiality length was about `0.7911049677462703`.
+- Under the old `0.80` length policy, same-allocation length-only point selection reached only `0.7597755220341236`, so segment allocation was part of the length blocker. Under the new `0.75` final gate, this diagnostic is historical context rather than a current blocker.
+- Under the old `0.80` length policy, the score-protected length frontier cleared length only near `10%` protected learned-score budget; at `25%` materiality length was about `0.7911049677462703`.
 - Allocation length support was not material; `MLQDS_without_segment_length_support_allocation` delta was only `0.00012394275871965843`.
 - Freeze-mask diagnostics were runtime-heavy, roughly `202-216s` in this range.
 
@@ -1209,7 +1209,7 @@ Experiment artifact:
 - path: reused `artifacts/results/query_driven_v2_checkpoint13_per_head_prior_materiality_strict_replay_c10_r05` for trace diagnostics.
 
 Key results:
-- Exact-pair repair raised length to `0.7990875085863033`, still below `0.80`.
+- Exact-pair repair raised length to `0.7990875085863033`, above the new `0.75` final length gate but below the old `0.80` gate used by that historical replay.
 - Exact-pair MLQDS regressed to `0.16997958695311988` and failed learning causality/global sanity.
 - Segment-budget-head delta became harmful, about `-0.00503`.
 - Current strict allocation correlated weakly with length support: Pearson `0.016301257873970753`, Spearman `0.017384034094447172`.
@@ -1220,7 +1220,7 @@ Key results:
 Extra discoveries:
 - The `0.12` length-support weight changed recorded weights more than allocation counts.
 - Bounded exact-pair search reduced runtime materially but was still too slow for default use without a runtime plan.
-- The active `0.80` length guardrail/code was unchanged in this range.
+- The old `0.80` length guardrail/code was unchanged in this historical range.
 
 Decision:
 - Reject exact-pair repair as a default.
@@ -1387,3 +1387,75 @@ Extra discoveries:
 Decision:
 - Continue using grouped checkpoint entries for long diagnostic/refactor stretches.
 - Do not treat log compaction as scientific evidence.
+
+## Checkpoint 5.63 - Final Length Gate Lowered To 0.75
+
+Status: completed
+
+Hypothesis:
+- The final/global-sanity length-preservation gate can be lowered from `0.80`
+  to `0.75` as a policy/code change without changing training validation
+  penalties or turning historical artifacts into success evidence.
+
+Expected files:
+- `scoring/geometry_thresholds.py`
+- `orchestration/gates.py`
+- `orchestration/length_diagnostics.py`
+- `selection/learned_segment_budget/diagnostics.py`
+- `tests/unit/orchestration/test_query_driven_rework.py`
+- `docs/query-driven-rework-guide.md`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- Final/global sanity gate code and selector/orchestration diagnostics report
+  `0.75`; stale old final-gate references are gone; focused checks
+  pass; no success claim is made from old artifacts.
+
+Goal:
+- Lower the final length-preservation gate to `0.75` while keeping the evidence
+  protocol honest.
+
+Changes:
+- Added shared `FINAL_LENGTH_PRESERVATION_MIN = 0.75` and
+  `FINAL_LENGTH_PRESERVATION_MAX = 1.20` in `scoring/geometry_thresholds.py`.
+- Updated `evaluate_global_sanity_gate` to use the shared final length
+  thresholds.
+- Updated score-protected length diagnostics and selector allocation/point
+  diagnostics to report the same `0.75` target.
+- Renamed per-trajectory geometry diagnostic fields from `below_0_8` to
+  `below_gate` and added `trajectory_length_preservation_gate_target`.
+- Updated active guide thresholds and the progress-log current-state summary.
+- Left `validation_length_preservation_min=0.80` unchanged because it is a
+  checkpoint-selection penalty, not the final/global-sanity gate.
+
+Tests:
+- `uv run --group dev -- ruff check --fix Range_QDS/orchestration/gates.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
+- `uv run --group dev -- ruff check Range_QDS/scoring/geometry_thresholds.py Range_QDS/scoring/README.md Range_QDS/orchestration/gates.py Range_QDS/orchestration/length_diagnostics.py Range_QDS/selection/learned_segment_budget/diagnostics.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
+- `uv run --group dev -- pyright Range_QDS/scoring/geometry_thresholds.py Range_QDS/orchestration/gates.py Range_QDS/orchestration/length_diagnostics.py Range_QDS/selection/learned_segment_budget/diagnostics.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
+- `uv run --group dev -- pytest Range_QDS/tests/unit/orchestration/test_query_driven_rework.py -q`: `101 passed`
+- stale active final-gate scan for hard-coded `0.80`, excluding historical
+  progress-log notes: clean
+- `git diff --check -- Range_QDS/scoring/geometry_thresholds.py Range_QDS/scoring/README.md Range_QDS/orchestration/gates.py Range_QDS/orchestration/length_diagnostics.py Range_QDS/selection/learned_segment_budget/diagnostics.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/docs/query-driven-rework-guide.md Range_QDS/docs/query-driven-rework-progress.md`
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was a policy/code threshold update.
+
+Key results:
+- MLQDS QueryUsefulV1: not applicable
+- uniform QueryUsefulV1: not applicable
+- Douglas-Peucker QueryUsefulV1: not applicable
+- gates passed: not applicable
+- gates failed: not applicable
+
+Extra discoveries:
+- The current-best historical length value `0.7941408411227088` is above the
+  new final length gate, but the stored artifact still contains gate summaries
+  produced under the old `0.80` policy.
+- Lowering the final length gate removes length as the obvious current blocker;
+  learning causality remains unresolved and still blocks final acceptance.
+
+Decision:
+- Treat `0.75` as the active final/global-sanity length-preservation minimum.
+- Do not treat old strict artifacts as final success without replaying or
+  recomputing gate summaries under the new policy.

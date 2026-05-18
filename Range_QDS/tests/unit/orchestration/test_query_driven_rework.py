@@ -95,6 +95,7 @@ from orchestration.selector_diagnostics import (
     segment_score_quantile_bands_for_ablation,
     segment_score_top_band_for_ablation,
 )
+from scoring.geometry_thresholds import FINAL_LENGTH_PRESERVATION_MIN
 from scoring.method_scoring import score_range_usefulness
 from scoring.metrics import MethodScore, compute_length_preservation
 from scoring.query_useful_v1 import query_useful_v1_from_range_audit
@@ -1601,6 +1602,7 @@ def test_score_protected_length_feasibility_reports_protected_score_upper_bound(
     assert diagnostic["retained_count"] == 4
     assert diagnostic["protected_score_point_count"] == 1
     assert diagnostic["protected_score_point_fraction_of_budget"] == pytest.approx(0.25)
+    assert diagnostic["length_gate_target"] == pytest.approx(FINAL_LENGTH_PRESERVATION_MIN)
     assert diagnostic["length_preservation"] > compute_length_preservation(
         points,
         [(0, 5)],
@@ -1633,6 +1635,7 @@ def test_score_protected_length_frontier_reports_materiality_floor() -> None:
     assert frontier["available"] is True
     assert frontier["diagnostic_only"] is True
     assert frontier["learned_slot_fraction_min"] == pytest.approx(0.25)
+    assert frontier["length_gate_target"] == pytest.approx(FINAL_LENGTH_PRESERVATION_MIN)
     assert len(frontier["rows"]) == 3
     assert frontier["materiality_floor_length_preservation"] == pytest.approx(
         frontier["rows"][1]["length_preservation"]
@@ -1684,7 +1687,10 @@ def test_learned_segment_budget_trace_reports_geometry_diagnostics_without_chang
         compute_length_preservation(points, boundaries, endpoint_only)
     )
     assert geometry["learned_length_gain_over_skeleton"] > 0.0
-    assert geometry["trajectory_length_preservation_below_0_8_count"] in {0, 1}
+    assert geometry["trajectory_length_preservation_gate_target"] == pytest.approx(
+        FINAL_LENGTH_PRESERVATION_MIN
+    )
+    assert geometry["trajectory_length_preservation_below_gate_count"] in {0, 1}
     assert geometry["worst_trajectories"][0]["trajectory_id"] == 0
 
 
@@ -3761,6 +3767,7 @@ def test_global_sanity_gate_enforces_endpoint_length_and_sed_ratio() -> None:
     gate = evaluate_global_sanity_gate(primary=primary, uniform=uniform, compression_ratio=0.05)
 
     assert gate["gate_pass"] is True
+    assert gate["length_preservation_min"] == pytest.approx(FINAL_LENGTH_PRESERVATION_MIN)
     assert gate["avg_sed_ratio_vs_uniform"] == 1.5
     assert gate["catastrophic_geometry_outlier_status"] == "not_available_report_only"
 

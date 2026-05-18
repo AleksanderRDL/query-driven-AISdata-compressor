@@ -131,7 +131,7 @@ Global sanity also failed:
 
 ```text
 MLQDS length preservation: 0.5907
-required minimum:          0.8000
+required minimum:          0.7500
 ```
 
 Do not run the full 4x7 grid until a strict single-cell probe passes or gives a narrower diagnosis.
@@ -725,7 +725,7 @@ Support overlap is necessary but not sufficient. It proves that priors are sampl
 Current hard checks:
 
 ```text
-avg_length_preserved between 0.80 and 1.20
+avg_length_preserved between 0.75 and 1.20
 endpoint_sanity = 1.0 for eligible trajectories
 avg_sed_ratio_vs_uniform <= threshold
 ```

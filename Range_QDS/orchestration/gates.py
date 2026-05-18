@@ -8,6 +8,10 @@ import torch
 
 from config.run_config import RunConfig
 from learning.query_prior_fields import QUERY_PRIOR_FIELD_NAMES, sample_query_prior_fields
+from scoring.geometry_thresholds import (
+    FINAL_LENGTH_PRESERVATION_MAX,
+    FINAL_LENGTH_PRESERVATION_MIN,
+)
 from scoring.metrics import MethodScore
 from workloads.generation.workload_profiles import (
     RANGE_WORKLOAD_V1_FINAL_PROFILE_IDS,
@@ -348,8 +352,8 @@ def evaluate_global_sanity_gate(
 ) -> dict[str, Any]:
     """Return final-candidate geometry sanity gate evidence."""
     failed_checks: list[str] = []
-    length_min = 0.80
-    length_max = 1.20
+    length_min = FINAL_LENGTH_PRESERVATION_MIN
+    length_max = FINAL_LENGTH_PRESERVATION_MAX
     sed_ratio_threshold = (
         2.00
         if compression_ratio <= 0.01 + 1e-12

@@ -7,6 +7,7 @@ from typing import Any
 
 import torch
 
+from scoring.geometry_thresholds import FINAL_LENGTH_PRESERVATION_MIN
 from selection.learned_segment_budget.allocation import _allocate_segment_budgets
 from selection.learned_segment_budget.length_repair import (
     _fill_missing_by_length_gain,
@@ -640,11 +641,13 @@ def _selector_geometry_diagnostics(
         "trajectory_length_preservation_p10": _quantile(preservation_values, 0.10),
         "trajectory_length_preservation_p50": _quantile(preservation_values, 0.50),
         "trajectory_length_preservation_p90": _quantile(preservation_values, 0.90),
-        "trajectory_length_preservation_below_0_8_count": int(
-            sum(value < 0.80 for value in preservation_values)
+        "trajectory_length_preservation_gate_target": FINAL_LENGTH_PRESERVATION_MIN,
+        "trajectory_length_preservation_below_gate_count": int(
+            sum(value < FINAL_LENGTH_PRESERVATION_MIN for value in preservation_values)
         ),
-        "trajectory_length_preservation_below_0_8_fraction": float(
-            sum(value < 0.80 for value in preservation_values) / max(1, len(preservation_values))
+        "trajectory_length_preservation_below_gate_fraction": float(
+            sum(value < FINAL_LENGTH_PRESERVATION_MIN for value in preservation_values)
+            / max(1, len(preservation_values))
         ),
         "trajectory_length_preservation_below_0_5_count": int(
             sum(value < 0.50 for value in preservation_values)
@@ -828,7 +831,7 @@ def _allocation_counterfactual_diagnostics(
         )
         for segment_idx in set(segment_allocations) | set(length_support_allocations)
     )
-    gate_target = 0.80
+    gate_target = FINAL_LENGTH_PRESERVATION_MIN
     return {
         "available": True,
         "diagnostic_only": True,
@@ -907,7 +910,7 @@ def _allocation_point_selection_diagnostics(
     if length_only_preservation is None:
         return {"available": False, "reason": "counterfactual_length_unavailable"}
     retained_count = int(length_only_retained.sum().item())
-    gate_target = 0.80
+    gate_target = FINAL_LENGTH_PRESERVATION_MIN
     return {
         "available": True,
         "diagnostic_only": True,

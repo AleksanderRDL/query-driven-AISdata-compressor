@@ -9,6 +9,7 @@ with baseline and diagnostic methods.
 | --- | --- |
 | `methods.py` | MLQDS, uniform temporal, Douglas-Peucker, oracle, and score-hybrid methods. |
 | `metrics.py` | F1 helpers, range audits, and `MethodScore`. |
+| `geometry_thresholds.py` | Shared final-candidate geometric gate thresholds used by scoring-adjacent diagnostics. |
 | `query_cache.py` | Retained-independent query/audit cache. |
 | `method_scoring.py` | Method execution and retained-mask scoring. |
 | `score_tables.py` | Text tables for reports. |
