@@ -11,6 +11,9 @@ Status: active, not complete.
 Latest strict single-cell artifact:
 - `artifacts/results/query_driven_v2_checkpoint42_mode_aware_current_best_strict_local/example_run.json`
 
+Latest derived diagnostic artifact:
+- `artifacts/results/query_driven_v2_checkpoint43_prior_head_selector_marginal_diagnosis/prior_head_selector_marginal_diagnosis.json`
+
 Current strict result:
 - MLQDS QueryUsefulV1: `0.1662115143`
 - uniform QueryUsefulV1: `0.1421296610`
@@ -38,6 +41,8 @@ Current interpretation:
   signature invariant.
 - Train-derived priors show useful local lift, but the learned heads/selector do
   not turn that signal into enough marginal retained-mask value.
+- Checkpoint43 classifies the current blocker as score-composition and selector
+  marginal alignment, with prior-to-head transfer as a contributing failure.
 - Exact retained-decision marginal diagnostics are more informative than generic
   head-fit metrics right now. Checkpoint42 retained-marginal alignment: selector
   Spearman `-0.0077522559`, raw-score Spearman `-0.0248828079`.
@@ -53,7 +58,8 @@ Do not do next:
 - Do not tune model/selector from generation-only artifacts.
 
 Next rational work:
-- Focused artifact diagnostics on prior/head/selector marginal alignment.
+- Focused artifact diagnostics on exact marginal rows by source/decision and
+  final selector score composition for high-marginal under-ranked points.
 - If code changes are needed, prefer root fixes to priors, targets, score
   propagation, or selector marginal alignment, not compatibility shims.
 
@@ -342,3 +348,28 @@ Changes:
 Decision:
 - Keep future entries short. Add only the hypothesis, artifact path, gate result,
   key numbers, extra discoveries, and decision.
+
+### Checkpoint 5.100 - Prior/Head/Selector Marginal Diagnosis
+
+Status: completed / blocked by gates.
+
+Hypothesis:
+- Checkpoint42 already contains enough strict evidence to classify the remaining
+  failure without another training run.
+
+Artifact:
+- `artifacts/results/query_driven_v2_checkpoint43_prior_head_selector_marginal_diagnosis/prior_head_selector_marginal_diagnosis.json`
+
+Key results:
+- Evidence level: `derived_strict_artifact_diagnostic_no_new_probe`.
+- No new probe, training run, or grid run.
+- Predictability still blocks: aggregate Spearman and PR-AUC lift miss gates.
+- Prior-to-head transfer blocks: prior inputs change materially, but head
+  probabilities, selector scores, and retained masks barely move.
+- Selector marginal alignment blocks: exact retained-decision marginal alignment
+  is weak or negative across raw, selector, and segment scores.
+
+Decision:
+- Do not run the final grid.
+- Next checkpoint should inspect exact marginal rows by source/decision and the
+  final score composition for high-marginal under-ranked candidates.
