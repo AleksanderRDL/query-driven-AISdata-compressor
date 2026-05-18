@@ -2,13 +2,13 @@
   "include": [
     "benchmarking",
     "config",
-    "data",
-    "evaluation",
+    "data_preparation",
+    "scoring",
     "models",
     "orchestration",
-    "queries",
+    "workloads",
     "runtime",
-    "simplification",
+    "selection",
     "training",
     "scripts",
     "tests"

@@ -6,7 +6,7 @@ import torch
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from training.query_prior_fields import QUERY_PRIOR_FIELD_NAMES, zero_query_prior_field_like
+from learning.query_prior_fields import QUERY_PRIOR_FIELD_NAMES, zero_query_prior_field_like
 
 pytestmark = pytest.mark.property
 

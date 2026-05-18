@@ -1,4 +1,4 @@
-"""Range diagnostics and range-specific experiment payload helpers."""
+"""Range diagnostics and range-specific run payload helpers."""
 
 from __future__ import annotations
 
@@ -7,12 +7,8 @@ from typing import Any
 
 import torch
 
-from config.experiment_config import ExperimentConfig
-from evaluation.baselines import DouglasPeuckerMethod, Method, OracleMethod, UniformTemporalMethod
-from evaluation.evaluate_methods import score_retained_mask
-from evaluation.metrics import MethodEvaluation
-from evaluation.query_cache import EvaluationQueryCache
-from orchestration.range_cache import (
+from config.run_config import RunConfig
+from orchestration.range_runtime_cache import (
     RangeRuntimeCache,
     ensure_range_runtime_labels,
     load_range_diagnostics_cache,
@@ -20,11 +16,15 @@ from orchestration.range_cache import (
     range_diagnostics_cache_key,
     range_diagnostics_cache_payload,
     range_only_queries,
-    runtime_evaluation_query_cache,
+    runtime_scoring_query_cache,
     write_range_diagnostics_cache,
 )
-from queries.workload import TypedQueryWorkload
-from queries.workload_diagnostics import (
+from scoring.method_scoring import score_retained_mask
+from scoring.methods import DouglasPeuckerMethod, Method, OracleMethod, UniformTemporalMethod
+from scoring.metrics import MethodScore
+from scoring.query_cache import ScoringQueryCache
+from workloads.typed_workload import TypedQueryWorkload
+from workloads.workload_diagnostics import (
     compute_range_label_diagnostics,
     compute_range_workload_diagnostics,
     range_box_mask,
@@ -88,7 +88,7 @@ def _range_signal_diagnostics(
     ]
     method_scores: dict[str, dict[str, float]] = {}
     scored_queries = cache_typed_queries if cache_typed_queries is not None else range_queries
-    query_cache = runtime_evaluation_query_cache(
+    query_cache = runtime_scoring_query_cache(
         runtime_cache,
         points,
         boundaries,
@@ -143,7 +143,7 @@ def range_workload_diagnostics(
     boundaries: list[tuple[int, int]],
     workload: TypedQueryWorkload,
     workload_map: dict[str, float],
-    config: ExperimentConfig,
+    config: RunConfig,
     seed: int,
     runtime_cache: RangeRuntimeCache | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -151,10 +151,10 @@ def range_workload_diagnostics(
     range_queries = range_only_queries(workload.typed_queries)
     is_pure_range_workload = len(range_queries) == len(workload.typed_queries)
     scored_queries = workload.typed_queries if is_pure_range_workload else range_queries
-    query_cache: EvaluationQueryCache | None = None
+    query_cache: ScoringQueryCache | None = None
     mask_provider: Callable[[int, dict[str, Any]], torch.Tensor] | None = None
     if is_pure_range_workload:
-        query_cache = runtime_evaluation_query_cache(
+        query_cache = runtime_scoring_query_cache(
             runtime_cache,
             points,
             boundaries,
@@ -578,13 +578,13 @@ def range_workload_distribution_comparison(summaries: dict[str, Any]) -> dict[st
     }
 
 
-def range_audit_ratios(config: ExperimentConfig) -> list[float]:
+def range_audit_ratios(config: RunConfig) -> list[float]:
     """Return configured multi-budget range-audit ratios, deduped and sorted."""
     raw = getattr(config.model, "range_audit_compression_ratios", []) or []
     return sorted({float(value) for value in raw if 0.0 < float(value) <= 1.0})
 
 
-def evaluation_metrics_payload(metrics: MethodEvaluation) -> dict[str, Any]:
+def method_score_payload(metrics: MethodScore) -> dict[str, Any]:
     """Serialize method metrics with explicit range fields."""
     return {
         "aggregate_f1": metrics.aggregate_f1,
@@ -656,7 +656,7 @@ def _optional_delta(left: float | None, right: float | None) -> float | None:
     return float(left) - float(right)
 
 
-def _metric_value(metrics: MethodEvaluation | None, field_name: str) -> float | None:
+def _metric_value(metrics: MethodScore | None, field_name: str) -> float | None:
     """Read one float field from optional method metrics."""
     if metrics is None:
         return None
@@ -666,7 +666,7 @@ def _metric_value(metrics: MethodEvaluation | None, field_name: str) -> float | 
 
 def build_range_learned_fill_summary(
     *,
-    learned_fill_diagnostics: dict[str, MethodEvaluation],
+    learned_fill_diagnostics: dict[str, MethodScore],
     training_target_diagnostics: dict[str, Any],
     range_diagnostics_summary: dict[str, Any],
     compression_ratio: float,

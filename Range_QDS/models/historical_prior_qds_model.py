@@ -5,12 +5,12 @@ from __future__ import annotations
 import torch
 import torch.nn as nn
 
-from models.workload_blind_qds_model import WorkloadBlindRangeQDSModel
-from training.model_features import (
+from learning.model_features import (
     HISTORICAL_PRIOR_DENSITY_POINT_DIM,
     HISTORICAL_PRIOR_MMSI_POINT_DIM,
     HISTORICAL_PRIOR_POINT_DIM,
 )
+from models.workload_blind_qds_model import WorkloadBlindRangeQDSModel
 
 _SOURCE_AGGREGATIONS = {"none", "mean", "min", "median"}
 

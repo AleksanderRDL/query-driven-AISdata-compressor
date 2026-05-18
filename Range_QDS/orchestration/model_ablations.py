@@ -1,4 +1,4 @@
-"""Model and prior-field ablation helpers for experiment diagnostics."""
+"""Model and prior-field ablation helpers for run diagnostics."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from typing import Any, cast
 
 import torch
 
-from simplification.mlqds_scoring import mlqds_simplification_scores
+from selection.model_score_conversion import mlqds_simplification_scores
 
 
 def reset_module_parameters(module: torch.nn.Module, seed: int) -> torch.nn.Module:

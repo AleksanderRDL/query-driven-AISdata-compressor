@@ -1,4 +1,4 @@
-"""Selector diagnostic helpers used by experiment orchestration."""
+"""Selector diagnostic helpers used by run orchestration."""
 
 from __future__ import annotations
 
@@ -7,9 +7,9 @@ from typing import Any
 
 import torch
 
-from evaluation.baselines import FrozenMaskMethod
 from orchestration.segment_audits import segment_top_mean
-from simplification.learned_segment_budget import (
+from scoring.methods import FrozenMaskMethod
+from selection.learned_segment_budget import (
     blend_segment_support_scores,
     simplify_with_learned_segment_budget_v1,
 )
@@ -31,6 +31,7 @@ def learned_segment_frozen_method(
     learned_segment_score_blend_weight: float = 0.05,
     learned_segment_fairness_preallocation: bool = True,
     learned_segment_length_repair_fraction: float = 0.0,
+    learned_segment_length_repair_score_protection_fraction: float = 0.0,
     learned_segment_length_support_blend_weight: float = 0.0,
 ) -> FrozenMaskMethod:
     """Freeze a score-based learned-segment diagnostic mask before query scoring."""
@@ -55,6 +56,9 @@ def learned_segment_frozen_method(
         segment_score_point_blend_weight=float(learned_segment_score_blend_weight),
         fairness_preallocation_enabled=bool(learned_segment_fairness_preallocation),
         length_repair_fraction=float(learned_segment_length_repair_fraction),
+        length_repair_score_protection_fraction=float(
+            learned_segment_length_repair_score_protection_fraction
+        ),
     )
     return FrozenMaskMethod(name=name, retained_mask=retained_mask.detach().cpu())
 

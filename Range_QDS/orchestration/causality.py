@@ -1,4 +1,4 @@
-"""Causality and ablation diagnostic helpers for experiment reporting."""
+"""Causality and ablation diagnostic helpers for run reporting."""
 
 from __future__ import annotations
 
@@ -6,13 +6,14 @@ from typing import Any
 
 import torch
 
-from evaluation.metrics import MethodEvaluation
-from evaluation.query_useful_v1 import QUERY_USEFUL_V1_COMPONENT_WEIGHTS
-from training.model_features import (
+from learning.model_features import (
     WORKLOAD_BLIND_RANGE_V2_MODEL_DISABLED_PRIOR_FIELDS,
     build_query_free_point_features_for_dim,
 )
-from training.query_prior_fields import QUERY_PRIOR_FIELD_NAMES, sample_query_prior_fields
+from learning.query_prior_fields import QUERY_PRIOR_FIELD_NAMES, sample_query_prior_fields
+from learning.targets.query_useful_v1 import QUERY_USEFUL_V1_HEAD_NAMES
+from scoring.metrics import MethodScore
+from scoring.query_useful_v1 import QUERY_USEFUL_V1_COMPONENT_WEIGHTS
 
 
 def build_learned_slot_summary(
@@ -115,8 +116,8 @@ def build_learned_slot_summary(
 
 
 def query_useful_delta(
-    primary: MethodEvaluation,
-    ablations: dict[str, MethodEvaluation],
+    primary: MethodScore,
+    ablations: dict[str, MethodScore],
     name: str,
 ) -> float | None:
     """Return primary minus ablation QueryUsefulV1 if the ablation exists."""
@@ -128,8 +129,8 @@ def query_useful_delta(
 
 def query_useful_component_delta_summary(
     *,
-    primary: MethodEvaluation,
-    ablations: dict[str, MethodEvaluation],
+    primary: MethodScore,
+    ablations: dict[str, MethodScore],
     top_k: int = 5,
 ) -> dict[str, Any]:
     """Return component-level QueryUsefulV1 deltas for causality ablations."""
@@ -305,8 +306,8 @@ def causality_ablation_tradeoff_summary(
 
 def causality_ablation_diagnostics_payload(
     *,
-    primary: MethodEvaluation,
-    ablations: dict[str, MethodEvaluation],
+    primary: MethodScore,
+    ablations: dict[str, MethodScore],
     mask_diagnostics: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
     """Return reusable score, component, and mask diagnostics for ablations."""
@@ -341,8 +342,8 @@ SHUFFLED_SCORE_DELTA_FRACTION_OF_UNIFORM_GAP_MIN = 0.60
 
 def learning_causality_delta_gate_config(
     *,
-    primary: MethodEvaluation,
-    uniform: MethodEvaluation | None,
+    primary: MethodScore,
+    uniform: MethodScore | None,
 ) -> dict[str, Any]:
     """Return material QueryUsefulV1 delta thresholds for learning-causality checks."""
     min_delta = float(LEARNING_CAUSALITY_MIN_MATERIAL_DELTA)
@@ -476,6 +477,84 @@ def head_ablation_sensitivity(
             ablation_mask=ablation_mask,
         )
     return diagnostics
+
+
+def _head_logit_matrix(head_logits: torch.Tensor) -> torch.Tensor:
+    """Return head logits as [point, head] for sensitivity diagnostics."""
+    logits = head_logits.detach().cpu().float()
+    if logits.ndim == 3 and int(logits.shape[0]) == 1:
+        logits = logits.squeeze(0)
+    return logits
+
+
+def head_output_sensitivity(
+    *,
+    primary_head_logits: torch.Tensor | None,
+    ablation_head_logits: torch.Tensor | None,
+) -> dict[str, Any]:
+    """Return per-head logit and probability sensitivity for one model ablation."""
+    if primary_head_logits is None or ablation_head_logits is None:
+        return {"available": False, "reason": "missing_head_logits"}
+    primary = _head_logit_matrix(primary_head_logits)
+    ablation = _head_logit_matrix(ablation_head_logits)
+    if primary.ndim != 2 or ablation.ndim != 2 or primary.shape != ablation.shape:
+        return {
+            "available": False,
+            "reason": "head_logit_shape_mismatch",
+            "primary_shape": list(primary.shape),
+            "ablation_shape": list(ablation.shape),
+        }
+    head_names: list[str] = [str(name) for name in QUERY_USEFUL_V1_HEAD_NAMES]
+    logit = _feature_matrix_sensitivity(
+        primary=primary,
+        ablation=ablation,
+        feature_names=head_names,
+        point_count=int(primary.shape[0]),
+    )
+    probability = _feature_matrix_sensitivity(
+        primary=torch.sigmoid(primary),
+        ablation=torch.sigmoid(ablation),
+        feature_names=head_names,
+        point_count=int(primary.shape[0]),
+    )
+    per_head: dict[str, dict[str, float | int | bool | None]] = {}
+    logit_per_feature = logit.get("per_feature") if isinstance(logit, dict) else {}
+    probability_per_feature = (
+        probability.get("per_feature") if isinstance(probability, dict) else {}
+    )
+    for head_name in head_names:
+        logit_row = (
+            logit_per_feature.get(head_name, {}) if isinstance(logit_per_feature, dict) else {}
+        )
+        probability_row = (
+            probability_per_feature.get(head_name, {})
+            if isinstance(probability_per_feature, dict)
+            else {}
+        )
+        per_head[head_name] = {
+            "finite_count": logit_row.get("finite_count"),
+            "mean_abs_logit_delta": logit_row.get("mean_abs_delta"),
+            "max_abs_logit_delta": logit_row.get("max_abs_delta"),
+            "mean_abs_probability_delta": probability_row.get("mean_abs_delta"),
+            "max_abs_probability_delta": probability_row.get("max_abs_delta"),
+            "primary_probability_mean": probability_row.get("primary_mean"),
+            "ablation_probability_mean": probability_row.get("ablation_mean"),
+        }
+    return {
+        "available": bool(logit.get("available") and probability.get("available")),
+        "point_count": int(primary.shape[0]),
+        "head_count": int(primary.shape[1]),
+        "head_names": head_names,
+        "head_logits_changed": bool(logit.get("sampled_inputs_changed", False)),
+        "head_probabilities_changed": bool(probability.get("sampled_inputs_changed", False)),
+        "mean_abs_head_logit_delta": logit.get("mean_abs_feature_delta"),
+        "max_abs_head_logit_delta": logit.get("max_abs_feature_delta"),
+        "mean_abs_head_probability_delta": probability.get("mean_abs_feature_delta"),
+        "max_abs_head_probability_delta": probability.get("max_abs_feature_delta"),
+        "logit": logit,
+        "probability": probability,
+        "per_head": per_head,
+    }
 
 
 def retained_mask_comparison(

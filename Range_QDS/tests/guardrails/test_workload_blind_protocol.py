@@ -1,14 +1,14 @@
 import pytest
 import torch
 
-from config.experiment_config import build_experiment_config
-from evaluation.baselines import MLQDSMethod
+from config.run_config import build_run_config
+from learning.checkpoint_validation import _validation_query_score
+from learning.outputs import TrainingOutputs
+from learning.scaler import FeatureScaler
 from models.workload_blind_qds_model import WorkloadBlindRangeQDSModel
-from queries.query_types import NUM_QUERY_TYPES, pad_query_features
-from queries.workload import TypedQueryWorkload
-from training.scaler import FeatureScaler
-from training.training_outputs import TrainingOutputs
-from training.training_validation import _validation_query_score
+from scoring.methods import MLQDSMethod
+from workloads.query_types import NUM_QUERY_TYPES, pad_query_features
+from workloads.typed_workload import TypedQueryWorkload
 
 
 def _points() -> torch.Tensor:
@@ -113,7 +113,7 @@ def test_mlqds_method_reuses_scores_across_compression_ratios(
         calls["count"] += 1
         return torch.linspace(-1.0, 1.0, steps=points.shape[0])
 
-    monkeypatch.setattr("evaluation.baselines.windowed_predict", fake_predict)
+    monkeypatch.setattr("scoring.methods.windowed_predict", fake_predict)
     method = MLQDSMethod(
         name="MLQDS",
         trained=trained,
@@ -141,7 +141,7 @@ def test_workload_blind_validation_scoring_does_not_read_validation_query_featur
     trajectories = [points]
     trained = _trained_blind(points)
     bad_validation_features = torch.full((1, 12), float("nan"), dtype=torch.float32)
-    cfg = build_experiment_config(
+    cfg = build_run_config(
         model_type="workload_blind_range",
         compression_ratio=0.4,
         checkpoint_score_variant="range_usefulness",

@@ -6,9 +6,9 @@ UV_GROUP ?= dev
 UV_GROUP_FLAGS ?= --group $(UV_GROUP)
 UV_RUN := cd $(REPO_ROOT) && $(UV) run $(UV_GROUP_FLAGS) --
 
-TYPECHECK_PATHS ?= Range_QDS/benchmarking Range_QDS/config Range_QDS/data Range_QDS/evaluation Range_QDS/models Range_QDS/orchestration Range_QDS/queries Range_QDS/runtime Range_QDS/simplification Range_QDS/training Range_QDS/scripts Range_QDS/tests
+TYPECHECK_PATHS ?= Range_QDS/benchmarking Range_QDS/config Range_QDS/data_preparation Range_QDS/scoring Range_QDS/models Range_QDS/orchestration Range_QDS/workloads Range_QDS/runtime Range_QDS/selection Range_QDS/learning Range_QDS/scripts Range_QDS/tests
 TEST_PATHS ?= Range_QDS/tests
-LINT_PATHS ?= Range_QDS/benchmarking Range_QDS/config Range_QDS/data Range_QDS/evaluation Range_QDS/models Range_QDS/orchestration Range_QDS/queries Range_QDS/runtime Range_QDS/simplification Range_QDS/training Range_QDS/scripts Range_QDS/tests
+LINT_PATHS ?= Range_QDS/benchmarking Range_QDS/config Range_QDS/data_preparation Range_QDS/scoring Range_QDS/models Range_QDS/orchestration Range_QDS/workloads Range_QDS/runtime Range_QDS/selection Range_QDS/learning Range_QDS/scripts Range_QDS/tests
 LINT_SELECT ?= F401,F821,F822,F823
 RUN ?= Range_QDS/artifacts/results/latest/example_run.json
 
@@ -44,9 +44,9 @@ help:
 	@echo "  lint-yaml   Run yamllint on repository YAML files"
 	@echo "  test        Run the QDS pytest suite"
 	@echo "  typecheck   Run Pyright on TYPECHECK_PATHS"
-	@echo "  smoke       Run a tiny synthetic training/evaluation experiment"
-	@echo "  smoke-csv   Run a tiny cleaned-CSV training/evaluation experiment"
-	@echo "  benchmark-preflight  Check tmux/GPU/data/artifact prerequisites"
+	@echo "  smoke       Run a tiny synthetic learning/scoring experiment"
+	@echo "  smoke-csv   Run a tiny cleaned-CSV learning/scoring experiment"
+	@echo "  benchmark-preflight  Check tmux/GPU/data_preparation/artifact prerequisites"
 	@echo "  benchmark-queue-preflight  Check prerequisites using BENCHMARK_QUEUE_SESSION"
 	@echo "  list-runs   List benchmark runs from BENCHMARK_FAMILY"
 	@echo "  clean-smoke-artifacts  Dry-run smoke artifact cleanup; set CONFIRM=1 to delete"
@@ -112,7 +112,7 @@ typecheck:
 	$(UV_RUN) pyright $(TYPECHECK_PATHS)
 
 smoke:
-	$(UV_RUN) python -m orchestration.run_ais_experiment \
+	$(UV_RUN) python -m orchestration.train_and_score \
 		--n_ships 4 \
 		--n_points 24 \
 		--n_queries 4 \
@@ -123,7 +123,7 @@ smoke:
 
 smoke-csv:
 	@if [ -z "$(CLEANED_CSV)" ]; then echo "Set CLEANED_CSV to a cleaned AIS file, for example: make smoke-csv CLEANED_CSV=$(REPO_ROOT)/AISDATA/cleaned/<file-or-directory>"; exit 2; fi
-	$(UV_RUN) python -m orchestration.run_ais_experiment \
+	$(UV_RUN) python -m orchestration.train_and_score \
 		--csv_path "$(CLEANED_CSV)" \
 		--cache_dir Range_QDS/artifacts/cache/smoke_cleaned_csv \
 		--max_segments 8 \

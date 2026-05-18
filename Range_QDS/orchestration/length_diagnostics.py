@@ -1,4 +1,4 @@
-"""Length-feasibility diagnostics for query-driven experiment reporting."""
+"""Length-feasibility diagnostics for query-driven run reporting."""
 
 from __future__ import annotations
 
@@ -7,7 +7,8 @@ from typing import Any
 
 import torch
 
-from evaluation.metrics import compute_length_preservation
+from scoring.geometry_thresholds import FINAL_LENGTH_PRESERVATION_MIN
+from scoring.metrics import compute_length_preservation
 
 
 def _local_distance_matrix_km(local_points: torch.Tensor) -> torch.Tensor:
@@ -186,8 +187,8 @@ def score_protected_length_feasibility(
         "protected_score_point_fraction_of_budget": float(protected_total / max(1, total_budget)),
         "protected_score_point_fraction_min": float(learned_slot_fraction_min),
         "length_preservation": float(length_preservation),
-        "length_gate_target": 0.80,
-        "length_gate_would_pass": bool(length_preservation >= 0.80),
+        "length_gate_target": FINAL_LENGTH_PRESERVATION_MIN,
+        "length_gate_would_pass": bool(length_preservation >= FINAL_LENGTH_PRESERVATION_MIN),
     }
 
 
@@ -267,7 +268,7 @@ def score_protected_length_frontier(
         "description": "Max-length upper-bound frontier while protecting increasing fractions of top learned-score points.",
         "compression_ratio": float(compression_ratio),
         "learned_slot_fraction_min": materiality_floor,
-        "length_gate_target": 0.80,
+        "length_gate_target": FINAL_LENGTH_PRESERVATION_MIN,
         "rows": rows,
         "max_protected_fraction_passing_length_gate": max_passing_fraction,
         "materiality_floor_length_gate_would_pass": (

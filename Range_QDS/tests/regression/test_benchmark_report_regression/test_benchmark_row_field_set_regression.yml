@@ -1,4 +1,4 @@
-field_count: 622
+field_count: 633
 fields:
 - actual_learned_controlled_retained_slot_fraction
 - allow_tf32
@@ -203,6 +203,7 @@ fields:
 - learned_segment_fairness_preallocation_enabled
 - learned_segment_geometry_gain_weight
 - learned_segment_length_repair_fraction
+- learned_segment_length_repair_score_protection_fraction
 - learned_segment_length_support_blend_weight
 - learned_segment_score_blend_weight
 - learning_causality_ablation_status
@@ -234,6 +235,8 @@ fields:
 - mlqds_diversity_bonus
 - mlqds_effective_diversity_bonus
 - mlqds_hybrid_mode
+- mlqds_inference_only_latency_ms
+- mlqds_inference_only_latency_seconds
 - mlqds_latency_ms
 - mlqds_max_ped_km
 - mlqds_max_sed_km
@@ -305,6 +308,9 @@ fields:
 - no_geometry_retained_mask_jaccard
 - no_geometry_retained_symmetric_difference_count
 - no_geometry_tie_breaker_ablation_delta
+- no_prior_head_logit_mean_abs_delta
+- no_prior_head_logits_changed
+- no_prior_head_probability_mean_abs_delta
 - no_prior_model_input_mean_abs_feature_delta
 - no_prior_model_inputs_changed
 - no_prior_normalized_model_inputs_changed
@@ -452,6 +458,9 @@ fields:
 - selector_claim_status
 - selector_trace_retained_mask_matches_primary
 - shuffled_prior_field_ablation_delta
+- shuffled_prior_head_logit_mean_abs_delta
+- shuffled_prior_head_logits_changed
+- shuffled_prior_head_probability_mean_abs_delta
 - shuffled_prior_model_input_mean_abs_feature_delta
 - shuffled_prior_model_inputs_changed
 - shuffled_prior_normalized_model_inputs_changed
@@ -615,6 +624,8 @@ fields:
 - workload_signature_gate_pass
 - workload_signature_pair_count
 - workload_stability_configured_target_coverage
+- workload_stability_configured_workload_profile_id
+- workload_stability_configured_workload_profile_in_grid
 - workload_stability_failed_checks
 - workload_stability_gate_mode
 - workload_stability_gate_mode_config

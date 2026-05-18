@@ -6,8 +6,8 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from queries.generation.profile_planning import _profile_query_plan
-from queries.generation.profiles import range_workload_profile
+from workloads.generation.profile_query_plan import _profile_query_plan
+from workloads.generation.workload_profiles import range_workload_profile
 
 pytestmark = pytest.mark.property
 

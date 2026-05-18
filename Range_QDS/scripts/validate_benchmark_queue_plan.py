@@ -16,7 +16,7 @@ QDS_ROOT = Path(__file__).resolve().parents[1]
 if str(QDS_ROOT) not in sys.path:
     sys.path.insert(0, str(QDS_ROOT))
 
-from orchestration.experiment_cli import build_parser as build_child_parser
+from orchestration.learning_scoring_cli import build_parser as build_child_parser
 
 
 def _iter_plan_rows(path: Path) -> list[tuple[int, str, int, str]]:
@@ -67,7 +67,7 @@ def validate_plan(path: Path) -> list[str]:
         except SystemExit as exc:
             errors.append(
                 f"{path}:{lineno} {run_id}: child_extra_args are invalid for "
-                f"run_ais_experiment: {extra_args!r} (argparse exit {exc.code})"
+                f"train_and_score: {extra_args!r} (argparse exit {exc.code})"
             )
     return errors
 

@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-import training.targets.query_useful_v1 as query_useful_targets
-from benchmarking.benchmark_profiles import (
+import learning.targets.query_useful_v1 as query_useful_targets
+from benchmarking.profiles import (
     BLIND_EXPECTED_USEFULNESS_PROFILE,
     BLIND_RETAINED_FREQUENCY_PROFILE,
     BLIND_TEACHER_DISTILL_PROFILE,
@@ -21,9 +21,9 @@ from benchmarking.benchmark_profiles import (
     benchmark_profile_settings,
 )
 from benchmarking.reporting.row_fields import _row_from_run
-from training.model_features import model_type_metadata
-from training.targets.modes import SCALAR_RANGE_TARGET_MODES
-from training.targets.query_useful_v1 import QUERY_USEFUL_V1_TARGET_MODES
+from learning.model_features import model_type_metadata
+from learning.targets.modes import SCALAR_RANGE_TARGET_MODES
+from learning.targets.query_useful_v1 import QUERY_USEFUL_V1_TARGET_MODES
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -31,10 +31,12 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 @pytest.mark.parametrize(
     "module_name",
     [
-        "training.training_pipeline",
-        "training.targets.legacy",
-        "simplification.selector_diagnostics",
-        "simplification.legacy_temporal_hybrid",
+        "config.experiment_config",
+        "learning.training_pipeline",
+        "learning.targets.legacy",
+        "selection.selector_diagnostics",
+        "selection.legacy_temporal_hybrid",
+        "simplification",
     ],
 )
 def test_removed_compatibility_shims_stay_removed(module_name: str) -> None:
@@ -127,7 +129,16 @@ def test_query_driven_v2_profile_is_final_candidate() -> None:
     assert profile.workload_profile_id == "range_workload_v1"
     assert profile.selector_type == "learned_segment_budget_v1"
     assert profile.range_train_workload_replicates == 4
-    assert profile.range_max_coverage_overshoot == 0.0075
+    assert profile.query_coverage is None
+    assert profile.range_max_coverage_overshoot is None
+    assert settings["workload_profile_default_target_coverage"] == 0.30
+    assert settings["workload_profile_default_max_coverage_overshoot"] == 0.020
+    assert settings["range_workload_profile_sweep_ids"] == [
+        "range_workload_v1_focused",
+        "range_workload_v1_local",
+        "range_workload_v1_operational",
+        "range_workload_v1",
+    ]
     assert settings["primary_metric_family"] == "QueryUsefulV1"
     assert settings["final_success_allowed"] is True
     assert settings["range_train_workload_replicates"] == 4
@@ -159,7 +170,7 @@ def test_benchmark_row_separates_final_claim_from_legacy_range_useful(tmp_path: 
     row = _row_from_run(
         workload="range",
         run_label="legacy",
-        command=["python", "-m", "orchestration.run_ais_experiment"],
+        command=["python", "-m", "orchestration.train_and_score"],
         returncode=0,
         elapsed_seconds=1.0,
         run_dir=tmp_path,

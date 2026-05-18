@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: scripts/run_range_benchmark_tmux.sh [launcher options] [benchmark_runner args...]
+Usage: scripts/run_range_benchmark_tmux.sh [launcher options] [runner args...]
 
 Launch the query-driven workload-blind v2 range benchmark in tmux with a second pane
 logging lightweight system/GPU telemetry.
@@ -16,7 +16,7 @@ Launcher options:
 Environment overrides:
   UV                           uv executable. Default: uv.
   UV_GROUP                     uv dependency group. Default: dev.
-  PROFILE                      benchmark_runner profile. Default: range_workload_v1_workload_blind_v2.
+  PROFILE                      runner profile. Default: range_workload_v1_workload_blind_v2.
   CSV_PATH                     Cleaned CSV file/directory. Default: ../AISDATA/cleaned.
   CACHE_DIR                    Cache directory, relative to Range_QDS when not absolute.
   ARTIFACT_ROOT                Benchmark family directory. Default:
@@ -30,7 +30,7 @@ Environment overrides:
   MONITOR_INTERVAL             Monitor sample interval in seconds. Default: 10.
   ATTACH                       Attach to tmux after start. Default: 1.
 
-Any remaining arguments are appended to the benchmark_runner command.
+Any remaining arguments are appended to the runner command.
 EOF
 }
 
@@ -123,7 +123,7 @@ benchmark_cmd=(
   --group "$UV_GROUP"
   --
   python
-  -m benchmarking.benchmark_runner
+  -m benchmarking.runner
   --profile "$PROFILE"
   --workloads range
   --csv_path "$CSV_PATH"
