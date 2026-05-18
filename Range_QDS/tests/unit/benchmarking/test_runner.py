@@ -516,6 +516,11 @@ def test_benchmark_row_records_effective_child_torch_runtime(tmp_path) -> None:
                         "mean_abs_head_logit_delta": 0.006,
                         "mean_abs_head_probability_delta": 0.0015,
                     },
+                    "score_output": {
+                        "mean_abs_score_delta": 0.012,
+                        "max_abs_score_delta": 0.08,
+                        "score_topk_jaccard_at_retained_count": 0.72,
+                    },
                 },
                 "without_query_prior_features": {
                     "sampled_prior_features": {
@@ -537,6 +542,11 @@ def test_benchmark_row_records_effective_child_torch_runtime(tmp_path) -> None:
                         "head_logits_changed": False,
                         "mean_abs_head_logit_delta": 0.0,
                         "mean_abs_head_probability_delta": 0.0,
+                    },
+                    "score_output": {
+                        "mean_abs_score_delta": 0.0,
+                        "max_abs_score_delta": 0.0,
+                        "score_topk_jaccard_at_retained_count": 1.0,
                     },
                 },
             },
@@ -1120,6 +1130,9 @@ def test_benchmark_row_records_effective_child_torch_runtime(tmp_path) -> None:
     assert row["shuffled_prior_head_logits_changed"] is True
     assert row["shuffled_prior_head_logit_mean_abs_delta"] == 0.006
     assert row["shuffled_prior_head_probability_mean_abs_delta"] == 0.0015
+    assert row["shuffled_prior_score_output_mean_abs_delta"] == 0.012
+    assert row["shuffled_prior_score_output_max_abs_delta"] == 0.08
+    assert row["shuffled_prior_score_output_topk_jaccard_at_retained_count"] == 0.72
     assert row["no_prior_sampled_primary_nonzero_fraction"] == 0.0
     assert row["no_prior_sampled_mean_abs_feature_delta"] == 0.0
     assert row["no_prior_sampled_outside_extent_fraction"] == 0.75
@@ -1130,6 +1143,9 @@ def test_benchmark_row_records_effective_child_torch_runtime(tmp_path) -> None:
     assert row["no_prior_head_logits_changed"] is False
     assert row["no_prior_head_logit_mean_abs_delta"] == 0.0
     assert row["no_prior_head_probability_mean_abs_delta"] == 0.0
+    assert row["no_prior_score_output_mean_abs_delta"] == 0.0
+    assert row["no_prior_score_output_max_abs_delta"] == 0.0
+    assert row["no_prior_score_output_topk_jaccard_at_retained_count"] == 1.0
     assert row["workload_blind_candidate"] is False
     assert row["workload_blind_protocol_enabled"] is False
     assert row["primary_masks_frozen_before_eval_query_scoring"] is False

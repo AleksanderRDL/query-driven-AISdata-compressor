@@ -22,6 +22,9 @@ Current best strict artifact:
 Current best gate reclassification artifact:
 - `artifacts/results/query_driven_v2_checkpoint18_current_best_gate_reclassification_len075/gate_reclassification_summary.json`
 
+Current best learning-causality diagnosis artifact:
+- `artifacts/results/query_driven_v2_checkpoint19_learning_causality_failure_diagnosis_current_best/learning_causality_failure_diagnosis.json`
+
 Main interpretation:
 - The candidate is promising because it beats uniform and Douglas-Peucker in one strict cell while workload stability, support overlap, predictability, prior-predictive alignment, target diffusion, workload signature, and recomputed global sanity pass.
 - It is not final success. Learning causality still fails, and the global-sanity update is a policy reclassification of a stored strict artifact, not a replay.
@@ -52,6 +55,9 @@ Active candidate defaults:
 
 Current blockers:
 - Learning causality fails. In the best strict artifact, shuffled-score delta is `0.008856345116771192` versus required `0.017759554407510352`; shuffled-prior and no-query-prior deltas are both `0.002743017030572781` versus required `0.005`.
+- A focused diagnosis ranks the child-gate shortfalls as: shuffled scores
+  `0.00890320929073916`, shuffled priors `0.002256982969427219`,
+  no-query-prior `0.002256982969427219`.
 - Recomputed global sanity under the current `0.75` length gate passes with no failed checks: length `0.7941408411227088`, endpoint sanity `1.0`, SED ratio `0.9173337766436357` versus max `1.5`.
 - Per-head prior-output diagnostics show prior signal is mostly suppressed before retained-mask decisions: zeroing active model-input priors changes inputs by about `0.0128368`, but mean head probability changes only about `0.00001816`.
 - No-length-repair improves score to `0.1759846099523811`, but length collapses to `0.6790996203798462`. That is diagnostic evidence, not a candidate.
@@ -70,6 +76,11 @@ Current decision:
 - Query-free segment length-support allocation at weight `0.12` had only tiny effect: MLQDS `+0.00012394275871965843`, length `+0.000013005202913918268`, shuffled-score causality delta `+0.002352417155629921` versus the prior strict cell.
 - Allocation length-support was initially ignored when learned segment scores were flat; that implementation flaw was fixed, but the strict replay still did not change the blocker.
 - Raw prior channels and model inputs are available. The problem is that useful movement is suppressed inside heads/selector/allocation before frozen retained masks.
+- The current-best causality diagnosis narrows that statement: score shuffling
+  moves masks substantially but does not lose enough quality, while prior
+  ablations move only `36` retained decisions with retained-mask Jaccard about
+  `0.9786`. The next blocker is score/prior materiality, not basic learned-slot
+  availability.
 - Behavior-rank loss `0.15`, allocation floor `0.10`, score-protected repair `0.10`, sparse-head rank `0.10`, and sparse-head BCE `window_max_normalized` are rejected default paths.
 - Exact-pair length repair is still rejected as a default. It raised length to `0.7990875085863033`, but regressed MLQDS to `0.16997958695311988` and hurt learned-head causality.
 - Under the old `0.80` length policy, the score-protected length frontier cleared length only near `10%` protected learned-score budget. Under the new `0.75` final length gate, this frontier is less useful as a blocker diagnosis; causality remains the blocker.
@@ -1761,3 +1772,316 @@ Decision:
 - Keep shared local geometry primitives in `workloads/range_geometry.py`.
 - Continue with learning-causality work; this checkpoint does not change the
   current acceptance blocker.
+
+## Checkpoint 5.68 - Learning-Causality Failure Diagnosis
+
+Status: completed
+
+Hypothesis:
+- With global sanity reclassified as passing under the active `0.75` length
+  policy, the next useful step is diagnosing the failed learning-causality child
+  gates from the current-best strict artifact before changing model or selector
+  code.
+
+Expected files:
+- `artifacts/results/query_driven_v2_checkpoint19_learning_causality_failure_diagnosis_current_best/learning_causality_failure_diagnosis.json`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- Failed causality child gates are ranked by threshold gap, mapped to likely
+  component failures, and the next code/probe direction is recorded; no final
+  matrix or scientific replay is run; no final success claim is made.
+
+Goal:
+- Convert the remaining strict blocker from a generic learning-causality failure
+  into a component-level diagnosis.
+
+Changes:
+- Added a derived diagnostic artifact from the current-best strict run.
+- Ranked child-gate margins and shortfalls for every required causality
+  ablation.
+- Recorded prior-path sensitivity, selected mask-movement diagnostics, selector
+  state, and a recommended next checkpoint.
+- Updated the progress-log summary and durable discoveries.
+
+Tests:
+- `python3 - <<'PY' ...` generated
+  `learning_causality_failure_diagnosis.json` from the stored strict artifact.
+- The source artifact and learning-causality summary were inspected before
+  diagnosis.
+- no scientific replay, probe, or final matrix was run.
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint19_learning_causality_failure_diagnosis_current_best/learning_causality_failure_diagnosis.json`
+- command: derived diagnostic extraction from
+  `artifacts/results/query_driven_v2_checkpoint13_per_head_prior_materiality_strict_replay_c10_r05/example_run.json`
+
+Key results:
+- MLQDS QueryUsefulV1: `0.17183721530965693`
+- uniform QueryUsefulV1: `0.14223795796380634`
+- Douglas-Peucker QueryUsefulV1: `0.16362459837911367`
+- gates passed in the stored strict cell after `0.75` reclassification:
+  workload stability, support overlap, predictability,
+  prior-predictive alignment, target diffusion, workload signature, global
+  sanity
+- gates failed: learning causality
+- failed child gate shortfalls:
+  - shuffled scores: `0.00890320929073916` shortfall; achieved
+    `0.4986805926293919` of required delta
+  - shuffled prior fields: `0.002256982969427219` shortfall; achieved
+    `0.5486034061145562` of required delta
+  - without query-prior features: `0.002256982969427219` shortfall; achieved
+    `0.5486034061145562` of required delta
+- passing child gate margins:
+  - untrained model: `0.0150725509132888`
+  - without behavior head: `0.00466018148201922`
+  - without segment-budget head: `0.009543435541987698`
+  - prior-field-only mismatch: `0.01788860641060822`
+- learned-controlled slot fraction: `0.33834134615384615` versus required
+  `0.25`
+
+Extra discoveries:
+- Shuffling scores causes large retained-mask movement
+  (`1864` symmetric-difference decisions, Jaccard about `0.282`), but the
+  quality loss is still only about half the required relative causality
+  threshold. The learned score controls masks, but the ordering advantage is
+  too weak.
+- Prior ablations have the opposite shape: raw sampled priors change
+  substantially and model-input priors change nontrivially, but mean head
+  probability changes only about `0.00001816` and retained-mask movement is only
+  `36` decisions with Jaccard about `0.9786`. The prior signal is available but
+  mostly attenuated before score/mask decisions.
+- Behavior and segment-budget heads pass the current materiality checks, so the
+  next fix should preserve them while improving score/prior materiality.
+- The pre-repair diagnostic remains higher scoring but length-broken, so simply
+  weakening repair or adding temporal scaffold is the wrong direction.
+
+Decision:
+- Do not increase workload scale or run the final matrix for this blocker yet.
+- Next checkpoint should inspect where prior perturbations collapse between
+  model-input features, head outputs, score composition, and selector decisions.
+- Expected next focus is `learning/model_features.py`,
+  `models/workload_blind_range_v2.py`, `selection/model_score_conversion.py`,
+  `orchestration/model_ablations.py`, and retained-mask ablation plumbing.
+
+## Checkpoint 5.69 - Prior-Ablation Diagnostic Centralization
+
+Status: completed
+
+Hypothesis:
+- The current learning-causality blocker needs cleaner instrumentation before
+  model tuning. The prior-ablation diagnostic chain was duplicated across
+  final-eval and checkpoint-selection paths, and the score-level stage was
+  recorded under the less explicit `selector_score` name only.
+
+Expected files:
+- `orchestration/causality.py`
+- `orchestration/retained_mask_ablation_stage.py`
+- `orchestration/selection_causality_diagnostics.py`
+- `tests/unit/orchestration/test_query_driven_rework.py`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- Prior-ablation diagnostics report sampled-prior, model-prior, head-output,
+  raw-prediction, score-output, and retained-mask movement through one shared
+  chain; focused static and unit checks pass; no probe or final matrix is run.
+
+Goal:
+- Remove duplicate diagnostic payload construction and make future prior
+  materiality artifacts easier to interpret without changing acceptance gates.
+
+Changes:
+- Added shared prior-ablation diagnostic constants and payload builders in
+  `orchestration/causality.py`.
+- Renamed the prior-ablation score stage to `score_output`; no compatibility
+  alias is emitted for that prior-ablation payload.
+- Centralized query-prior `TrainingOutputs` cloning so swapped prior fields
+  always carry matching `query_prior_field_metadata`.
+- Replaced duplicated prior-sensitivity payload construction in final-eval
+  retained-mask ablations and checkpoint-selection causality diagnostics.
+- Added focused unit tests for the diagnostic chain, tensor-derived sensitivity
+  payloads, and query-prior metadata alignment.
+
+Tests:
+- `python3 -m py_compile Range_QDS/orchestration/causality.py
+  Range_QDS/orchestration/retained_mask_ablation_stage.py
+  Range_QDS/orchestration/selection_causality_diagnostics.py
+  Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
+- `../.venv/bin/ruff check orchestration/causality.py
+  orchestration/retained_mask_ablation_stage.py
+  orchestration/selection_causality_diagnostics.py
+  tests/unit/orchestration/test_query_driven_rework.py`
+- `../.venv/bin/pyright orchestration/causality.py
+  orchestration/retained_mask_ablation_stage.py
+  orchestration/selection_causality_diagnostics.py
+  tests/unit/orchestration/test_query_driven_rework.py`
+- `../.venv/bin/pytest tests/unit/orchestration/test_query_driven_rework.py -q`
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was diagnostic cleanup and
+  duplicate-centralization work.
+
+Key results:
+- MLQDS QueryUsefulV1: not applicable
+- uniform QueryUsefulV1: not applicable
+- Douglas-Peucker QueryUsefulV1: not applicable
+- gates passed: not applicable
+- gates failed: not applicable
+
+Extra discoveries:
+- Existing future-run instrumentation already had score sensitivity under
+  `selector_score`; the root issue was schema naming, so the prior-ablation
+  payload now exposes that stage only as `score_output`.
+- The shuffled-prior final-eval ablation rebuilt `TrainingOutputs` without
+  refreshing `query_prior_field_metadata`, while zero/channel ablations did.
+  The centralized helper removes that inconsistency.
+
+Decision:
+- Keep this as instrumentation cleanup only. It does not prove learning
+  causality and does not justify a final matrix.
+- Next scientific step remains a focused prior/score materiality run using the
+  updated diagnostic chain to locate where prior perturbations collapse.
+
+## Checkpoint 5.70 - Prior Score-Output Schema Cleanup
+
+Status: completed
+
+Hypothesis:
+- Keeping both `selector_score` and `score_output` in prior-ablation payloads is
+  compatibility clutter. The root fix is to make `score_output` the only
+  prior-ablation score-stage key and update active extraction paths.
+
+Expected files:
+- `orchestration/causality.py`
+- `benchmarking/reporting/row_fields.py`
+- `scripts/jq/causality.jq`
+- `tests/unit/orchestration/test_query_driven_rework.py`
+- `tests/unit/benchmarking/test_runner.py`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- Prior-ablation artifacts and reporting use `score_output` without emitting
+  `selector_score`; focused static and unit checks pass; no probe or final
+  matrix is run.
+
+Goal:
+- Fix the diagnostic naming issue at the source instead of layering a
+  compatibility alias over it.
+
+Changes:
+- Removed the prior-ablation `selector_score` compatibility key.
+- Renamed the helper argument to `score_output`.
+- Added score-output extraction to benchmark row fields and the causality jq
+  summary script.
+- Updated focused tests to assert that prior-ablation payloads do not emit
+  `selector_score`.
+
+Tests:
+- `python3 -m py_compile Range_QDS/orchestration/causality.py
+  Range_QDS/orchestration/retained_mask_ablation_stage.py
+  Range_QDS/orchestration/selection_causality_diagnostics.py
+  Range_QDS/tests/unit/orchestration/test_query_driven_rework.py
+  Range_QDS/benchmarking/reporting/row_fields.py
+  Range_QDS/tests/unit/benchmarking/test_runner.py`
+- `../.venv/bin/ruff check orchestration/causality.py
+  orchestration/retained_mask_ablation_stage.py
+  orchestration/selection_causality_diagnostics.py
+  benchmarking/reporting/row_fields.py
+  tests/unit/orchestration/test_query_driven_rework.py
+  tests/unit/benchmarking/test_runner.py`
+- `../.venv/bin/pyright orchestration/causality.py
+  orchestration/retained_mask_ablation_stage.py
+  orchestration/selection_causality_diagnostics.py
+  benchmarking/reporting/row_fields.py
+  tests/unit/orchestration/test_query_driven_rework.py
+  tests/unit/benchmarking/test_runner.py`
+- `../.venv/bin/pytest tests/unit/orchestration/test_query_driven_rework.py
+  tests/unit/benchmarking/test_runner.py -q`
+- `jq -n -f Range_QDS/scripts/jq/causality.jq`
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was schema cleanup.
+
+Key results:
+- MLQDS QueryUsefulV1: not applicable
+- uniform QueryUsefulV1: not applicable
+- Douglas-Peucker QueryUsefulV1: not applicable
+- gates passed: not applicable
+- gates failed: not applicable
+
+Extra discoveries:
+- Benchmark row extraction previously stopped at prior samples, model-prior
+  features, and head output. It did not expose the score-output sensitivity
+  needed to diagnose whether the prior signal collapses after the heads.
+
+Decision:
+- Treat stored artifacts that only contain `selector_score` as stale diagnostic
+  artifacts. New prior-ablation diagnostics should use `score_output` only.
+
+## Checkpoint 5.71 - Guide Section 2 Evidence Refresh
+
+Status: completed
+
+Hypothesis:
+- Section 2 of the active rework guide was stale because it still described the
+  older strict debug probe as the current blocker. The latest relevant evidence
+  is the current-best strict replay plus the `0.75` length-policy
+  reclassification and derived learning-causality diagnosis.
+
+Expected files:
+- `docs/query-driven-rework-guide.md`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- Section 2 reflects the latest relevant strict-cell evidence, names the active
+  blocker correctly, keeps final-success claims forbidden, and targeted doc
+  checks pass.
+
+Goal:
+- Prevent the guide from steering the next checkpoint toward superseded
+  workload-health/global-sanity work.
+
+Changes:
+- Replaced the stale section-2 debug-probe narrative with current-best strict
+  scores, active gate status, learning-causality child-gate failures, passing
+  child gates, selector-control status, prior-path sensitivity, and next
+  checkpoint direction.
+- Recorded that global sanity passes only after the active `0.75`
+  length-policy reclassification, and that the reclassification is diagnostic,
+  not final acceptance evidence.
+- Recorded `score_output` as the canonical prior-ablation score-stage key.
+
+Tests:
+- `git diff --check -- Range_QDS/docs/query-driven-rework-guide.md
+  Range_QDS/docs/query-driven-rework-progress.md`
+- `python3 - <<'PY' ...` verified that section 2 contains current-best
+  markers and does not contain stale debug-probe markers.
+- `rg -n "0\.0645|0\.1190|0\.1478|first active blocker is|Global sanity
+  also failed|train accepted|dominant rejection reason"
+  Range_QDS/docs/query-driven-rework-guide.md` returned no stale matches.
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was guide maintenance.
+
+Key results:
+- MLQDS QueryUsefulV1: `0.17183721530965693`
+- uniform QueryUsefulV1: `0.14223795796380634`
+- Douglas-Peucker QueryUsefulV1: `0.16362459837911367`
+- gates passed after `0.75` reclassification: workload stability, support
+  overlap, predictability, prior-predictive alignment, target diffusion,
+  workload signature, global sanity
+- gates failed: learning causality
+
+Extra discoveries:
+- Section 2 was materially misleading. It identified workload
+  generation/signature stability and global sanity as the active first blocker,
+  but the current-best strict cell has moved past those gates under the active
+  policy.
+
+Decision:
+- Treat learning causality as the active blocker.
+- Do not run the final matrix or increase workload scale before the narrower
+  score/prior materiality diagnosis is resolved.

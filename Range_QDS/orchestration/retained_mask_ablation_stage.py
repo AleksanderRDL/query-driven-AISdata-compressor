@@ -12,16 +12,15 @@ from learning.outputs import TrainingOutputs
 from learning.predictability_audit import query_prior_predictability_scores
 from learning.query_prior_fields import (
     QUERY_PRIOR_FIELD_NAMES,
-    query_prior_field_metadata,
     zero_query_prior_field_channels,
     zero_query_prior_field_like,
 )
 from orchestration.causality import (
     head_ablation_sensitivity,
-    head_output_sensitivity,
     model_prior_feature_sensitivity,
+    prior_ablation_sensitivity_from_tensors,
     prior_feature_sample_sensitivity,
-    score_ablation_sensitivity,
+    training_outputs_with_query_prior_field,
 )
 from orchestration.mlqds_method_factory import build_mlqds_method
 from orchestration.model_ablations import (
@@ -762,22 +761,9 @@ def freeze_retained_mask_ablations(
                 boundaries=test_boundaries,
                 trajectory_mmsis=test_mmsis,
             )
-            shuffled_prior_trained = TrainingOutputs(
-                model=trained.model,
-                scaler=trained.scaler,
-                labels=trained.labels,
-                labelled_mask=trained.labelled_mask,
-                history=trained.history,
-                epochs_trained=trained.epochs_trained,
-                best_epoch=trained.best_epoch,
-                best_loss=trained.best_loss,
-                best_selection_score=trained.best_selection_score,
-                target_diagnostics=trained.target_diagnostics,
-                fit_diagnostics=trained.fit_diagnostics,
-                feature_context={
-                    **trained.feature_context,
-                    "query_prior_field": shuffled_prior_field,
-                },
+            shuffled_prior_trained = training_outputs_with_query_prior_field(
+                trained,
+                shuffled_prior_field,
             )
             shuffled_prior_method = build_mlqds_method(
                 name="MLQDS_shuffled_prior_fields",
@@ -796,36 +782,26 @@ def freeze_retained_mask_ablations(
             shuffled_prior_scores = getattr(shuffled_prior_method, "_score_cache", None)
             shuffled_prior_raw_preds = getattr(shuffled_prior_method, "_raw_pred_cache", None)
             shuffled_prior_head_logits = getattr(shuffled_prior_method, "_head_logit_cache", None)
-            score_sensitivity = score_ablation_sensitivity(
-                primary_scores=primary_scores,
-                ablation_scores=shuffled_prior_scores
-                if isinstance(shuffled_prior_scores, torch.Tensor)
-                else None,
-                primary_mask=frozen_primary_masks.get("MLQDS"),
-                ablation_mask=shuffled_prior_mask,
-            )
-            raw_sensitivity = score_ablation_sensitivity(
-                primary_scores=primary_raw_preds,
-                ablation_scores=(
-                    shuffled_prior_raw_preds
+            prior_sensitivity_diagnostics["shuffled_prior_fields"] = (
+                prior_ablation_sensitivity_from_tensors(
+                    sampled_prior_features=shuffled_prior_feature_sensitivity,
+                    model_prior_features=shuffled_model_prior_sensitivity,
+                    primary_scores=primary_scores,
+                    ablation_scores=shuffled_prior_scores
+                    if isinstance(shuffled_prior_scores, torch.Tensor)
+                    else None,
+                    primary_raw_predictions=primary_raw_preds,
+                    ablation_raw_predictions=shuffled_prior_raw_preds
                     if isinstance(shuffled_prior_raw_preds, torch.Tensor)
-                    else None
-                ),
-                primary_mask=frozen_primary_masks.get("MLQDS"),
-                ablation_mask=shuffled_prior_mask,
-            )
-            prior_sensitivity_diagnostics["shuffled_prior_fields"] = {
-                "sampled_prior_features": shuffled_prior_feature_sensitivity,
-                "model_prior_features": shuffled_model_prior_sensitivity,
-                "selector_score": score_sensitivity,
-                "raw_prediction": raw_sensitivity,
-                "head_output": head_output_sensitivity(
+                    else None,
                     primary_head_logits=primary_head_logits,
                     ablation_head_logits=shuffled_prior_head_logits
                     if isinstance(shuffled_prior_head_logits, torch.Tensor)
                     else None,
-                ),
-            }
+                    primary_mask=frozen_primary_masks.get("MLQDS"),
+                    ablation_mask=shuffled_prior_mask,
+                )
+            )
             causality_ablation_methods.append(
                 FrozenMaskMethod(
                     name="MLQDS_shuffled_prior_fields",
@@ -850,23 +826,9 @@ def freeze_retained_mask_ablations(
                 boundaries=test_boundaries,
                 trajectory_mmsis=test_mmsis,
             )
-            zero_prior_trained = TrainingOutputs(
-                model=trained.model,
-                scaler=trained.scaler,
-                labels=trained.labels,
-                labelled_mask=trained.labelled_mask,
-                history=trained.history,
-                epochs_trained=trained.epochs_trained,
-                best_epoch=trained.best_epoch,
-                best_loss=trained.best_loss,
-                best_selection_score=trained.best_selection_score,
-                target_diagnostics=trained.target_diagnostics,
-                fit_diagnostics=trained.fit_diagnostics,
-                feature_context={
-                    **trained.feature_context,
-                    "query_prior_field": zero_prior_field,
-                    "query_prior_field_metadata": query_prior_field_metadata(zero_prior_field),
-                },
+            zero_prior_trained = training_outputs_with_query_prior_field(
+                trained,
+                zero_prior_field,
             )
             zero_prior_method = build_mlqds_method(
                 name="MLQDS_without_query_prior_features",
@@ -885,34 +847,26 @@ def freeze_retained_mask_ablations(
             zero_prior_scores = getattr(zero_prior_method, "_score_cache", None)
             zero_prior_raw_preds = getattr(zero_prior_method, "_raw_pred_cache", None)
             zero_prior_head_logits = getattr(zero_prior_method, "_head_logit_cache", None)
-            score_sensitivity = score_ablation_sensitivity(
-                primary_scores=primary_scores,
-                ablation_scores=zero_prior_scores
-                if isinstance(zero_prior_scores, torch.Tensor)
-                else None,
-                primary_mask=frozen_primary_masks.get("MLQDS"),
-                ablation_mask=zero_prior_mask,
-            )
-            raw_sensitivity = score_ablation_sensitivity(
-                primary_scores=primary_raw_preds,
-                ablation_scores=zero_prior_raw_preds
-                if isinstance(zero_prior_raw_preds, torch.Tensor)
-                else None,
-                primary_mask=frozen_primary_masks.get("MLQDS"),
-                ablation_mask=zero_prior_mask,
-            )
-            prior_sensitivity_diagnostics["without_query_prior_features"] = {
-                "sampled_prior_features": zero_prior_feature_sensitivity,
-                "model_prior_features": zero_model_prior_sensitivity,
-                "selector_score": score_sensitivity,
-                "raw_prediction": raw_sensitivity,
-                "head_output": head_output_sensitivity(
+            prior_sensitivity_diagnostics["without_query_prior_features"] = (
+                prior_ablation_sensitivity_from_tensors(
+                    sampled_prior_features=zero_prior_feature_sensitivity,
+                    model_prior_features=zero_model_prior_sensitivity,
+                    primary_scores=primary_scores,
+                    ablation_scores=zero_prior_scores
+                    if isinstance(zero_prior_scores, torch.Tensor)
+                    else None,
+                    primary_raw_predictions=primary_raw_preds,
+                    ablation_raw_predictions=zero_prior_raw_preds
+                    if isinstance(zero_prior_raw_preds, torch.Tensor)
+                    else None,
                     primary_head_logits=primary_head_logits,
                     ablation_head_logits=zero_prior_head_logits
                     if isinstance(zero_prior_head_logits, torch.Tensor)
                     else None,
-                ),
-            }
+                    primary_mask=frozen_primary_masks.get("MLQDS"),
+                    ablation_mask=zero_prior_mask,
+                )
+            )
             causality_ablation_methods.append(
                 FrozenMaskMethod(
                     name="MLQDS_without_query_prior_features",
@@ -942,25 +896,9 @@ def freeze_retained_mask_ablations(
                     boundaries=test_boundaries,
                     trajectory_mmsis=test_mmsis,
                 )
-                channel_trained = TrainingOutputs(
-                    model=trained.model,
-                    scaler=trained.scaler,
-                    labels=trained.labels,
-                    labelled_mask=trained.labelled_mask,
-                    history=trained.history,
-                    epochs_trained=trained.epochs_trained,
-                    best_epoch=trained.best_epoch,
-                    best_loss=trained.best_loss,
-                    best_selection_score=trained.best_selection_score,
-                    target_diagnostics=trained.target_diagnostics,
-                    fit_diagnostics=trained.fit_diagnostics,
-                    feature_context={
-                        **trained.feature_context,
-                        "query_prior_field": channel_prior_field,
-                        "query_prior_field_metadata": query_prior_field_metadata(
-                            channel_prior_field
-                        ),
-                    },
+                channel_trained = training_outputs_with_query_prior_field(
+                    trained,
+                    channel_prior_field,
                 )
                 channel_method = build_mlqds_method(
                     name=channel_method_name,
@@ -979,35 +917,27 @@ def freeze_retained_mask_ablations(
                 channel_scores = getattr(channel_method, "_score_cache", None)
                 channel_raw_preds = getattr(channel_method, "_raw_pred_cache", None)
                 channel_head_logits = getattr(channel_method, "_head_logit_cache", None)
+                channel_sensitivity = prior_ablation_sensitivity_from_tensors(
+                    sampled_prior_features=channel_feature_sensitivity,
+                    model_prior_features=channel_model_prior_sensitivity,
+                    primary_scores=primary_scores,
+                    ablation_scores=channel_scores
+                    if isinstance(channel_scores, torch.Tensor)
+                    else None,
+                    primary_raw_predictions=primary_raw_preds,
+                    ablation_raw_predictions=channel_raw_preds
+                    if isinstance(channel_raw_preds, torch.Tensor)
+                    else None,
+                    primary_head_logits=primary_head_logits,
+                    ablation_head_logits=channel_head_logits
+                    if isinstance(channel_head_logits, torch.Tensor)
+                    else None,
+                    primary_mask=frozen_primary_masks.get("MLQDS"),
+                    ablation_mask=channel_mask,
+                )
                 prior_channel_ablation_diagnostics[prior_channel_name] = {
-                    "available": True,
+                    **channel_sensitivity,
                     "method_name": channel_method_name,
-                    "sampled_prior_features": channel_feature_sensitivity,
-                    "model_prior_features": channel_model_prior_sensitivity,
-                    "selector_score": score_ablation_sensitivity(
-                        primary_scores=primary_scores,
-                        ablation_scores=channel_scores
-                        if isinstance(channel_scores, torch.Tensor)
-                        else None,
-                        primary_mask=frozen_primary_masks.get("MLQDS"),
-                        ablation_mask=channel_mask,
-                    ),
-                    "raw_prediction": score_ablation_sensitivity(
-                        primary_scores=primary_raw_preds,
-                        ablation_scores=(
-                            channel_raw_preds
-                            if isinstance(channel_raw_preds, torch.Tensor)
-                            else None
-                        ),
-                        primary_mask=frozen_primary_masks.get("MLQDS"),
-                        ablation_mask=channel_mask,
-                    ),
-                    "head_output": head_output_sensitivity(
-                        primary_head_logits=primary_head_logits,
-                        ablation_head_logits=channel_head_logits
-                        if isinstance(channel_head_logits, torch.Tensor)
-                        else None,
-                    ),
                 }
                 causality_ablation_methods.append(
                     FrozenMaskMethod(

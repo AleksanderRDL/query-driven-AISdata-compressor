@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 import torch
@@ -10,10 +11,25 @@ from learning.model_features import (
     WORKLOAD_BLIND_RANGE_V2_MODEL_DISABLED_PRIOR_FIELDS,
     build_query_free_point_features_for_dim,
 )
-from learning.query_prior_fields import QUERY_PRIOR_FIELD_NAMES, sample_query_prior_fields
+from learning.outputs import TrainingOutputs
+from learning.query_prior_fields import (
+    QUERY_PRIOR_FIELD_NAMES,
+    query_prior_field_metadata,
+    sample_query_prior_fields,
+)
 from learning.targets.query_useful_v1 import QUERY_USEFUL_V1_HEAD_NAMES
 from scoring.metrics import MethodScore
 from scoring.query_useful_v1 import QUERY_USEFUL_V1_COMPONENT_WEIGHTS
+
+PRIOR_ABLATION_SCORE_OUTPUT_SEMANTICS = "final_selector_score_after_mlqds_score_conversion"
+PRIOR_ABLATION_DIAGNOSTIC_CHAIN = (
+    "sampled_prior_features",
+    "model_prior_features",
+    "head_output",
+    "raw_prediction",
+    "score_output",
+    "retained_mask",
+)
 
 
 def build_learned_slot_summary(
@@ -555,6 +571,79 @@ def head_output_sensitivity(
         "probability": probability,
         "per_head": per_head,
     }
+
+
+def prior_ablation_sensitivity_payload(
+    *,
+    sampled_prior_features: dict[str, Any],
+    model_prior_features: dict[str, Any],
+    score_output: dict[str, Any],
+    raw_prediction: dict[str, Any],
+    head_output: dict[str, Any],
+) -> dict[str, Any]:
+    """Return one canonical prior-ablation sensitivity chain for run artifacts."""
+    named_score_output = dict(score_output)
+    named_score_output["semantics"] = PRIOR_ABLATION_SCORE_OUTPUT_SEMANTICS
+    return {
+        "available": True,
+        "diagnostic_chain": list(PRIOR_ABLATION_DIAGNOSTIC_CHAIN),
+        "sampled_prior_features": sampled_prior_features,
+        "model_prior_features": model_prior_features,
+        "score_output": named_score_output,
+        "raw_prediction": raw_prediction,
+        "head_output": head_output,
+    }
+
+
+def prior_ablation_sensitivity_from_tensors(
+    *,
+    sampled_prior_features: dict[str, Any],
+    model_prior_features: dict[str, Any],
+    primary_scores: torch.Tensor | None,
+    ablation_scores: torch.Tensor | None,
+    primary_raw_predictions: torch.Tensor | None,
+    ablation_raw_predictions: torch.Tensor | None,
+    primary_head_logits: torch.Tensor | None,
+    ablation_head_logits: torch.Tensor | None,
+    primary_mask: torch.Tensor | None,
+    ablation_mask: torch.Tensor | None,
+) -> dict[str, Any]:
+    """Return the full prior-ablation sensitivity chain from cached tensors."""
+    return prior_ablation_sensitivity_payload(
+        sampled_prior_features=sampled_prior_features,
+        model_prior_features=model_prior_features,
+        score_output=score_ablation_sensitivity(
+            primary_scores=primary_scores,
+            ablation_scores=ablation_scores,
+            primary_mask=primary_mask,
+            ablation_mask=ablation_mask,
+        ),
+        raw_prediction=score_ablation_sensitivity(
+            primary_scores=primary_raw_predictions,
+            ablation_scores=ablation_raw_predictions,
+            primary_mask=primary_mask,
+            ablation_mask=ablation_mask,
+        ),
+        head_output=head_output_sensitivity(
+            primary_head_logits=primary_head_logits,
+            ablation_head_logits=ablation_head_logits,
+        ),
+    )
+
+
+def training_outputs_with_query_prior_field(
+    trained: TrainingOutputs,
+    query_prior_field: dict[str, Any],
+) -> TrainingOutputs:
+    """Return training outputs with a swapped query-prior field and matching metadata."""
+    return replace(
+        trained,
+        feature_context={
+            **trained.feature_context,
+            "query_prior_field": query_prior_field,
+            "query_prior_field_metadata": query_prior_field_metadata(query_prior_field),
+        },
+    )
 
 
 def retained_mask_comparison(

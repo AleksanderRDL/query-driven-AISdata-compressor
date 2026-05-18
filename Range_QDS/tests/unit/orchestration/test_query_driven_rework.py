@@ -41,6 +41,7 @@ from learning.optimization_epoch import (
     _segment_budget_head_segment_level_loss,
     _sparse_head_rank_loss,
 )
+from learning.outputs import TrainingOutputs
 from learning.predictability_audit import (
     _prior_channel_scores,
     _rankdata,
@@ -61,6 +62,8 @@ from learning.targets.query_useful_v1 import (
 )
 from models.workload_blind_range_v2 import WorkloadBlindRangeV2Model
 from orchestration.causality import (
+    PRIOR_ABLATION_DIAGNOSTIC_CHAIN,
+    PRIOR_ABLATION_SCORE_OUTPUT_SEMANTICS,
     build_learned_slot_summary,
     causality_ablation_diagnostics_payload,
     causality_ablation_tradeoff_summary,
@@ -68,11 +71,14 @@ from orchestration.causality import (
     head_output_sensitivity,
     learning_causality_delta_gate_config,
     model_prior_feature_sensitivity,
+    prior_ablation_sensitivity_from_tensors,
+    prior_ablation_sensitivity_payload,
     prior_feature_sample_sensitivity,
     prior_sample_gate_failures,
     query_useful_component_delta_summary,
     retained_mask_comparison,
     score_ablation_sensitivity,
+    training_outputs_with_query_prior_field,
 )
 from orchestration.final_gate_summary import build_final_run_summaries
 from orchestration.gates import (
@@ -3079,6 +3085,92 @@ def test_score_ablation_sensitivity_reports_score_and_mask_changes() -> None:
     assert diagnostics["retained_mask_changed"] is True
     assert diagnostics["retained_mask_jaccard"] == 1.0 / 3.0
     assert diagnostics["score_topk_jaccard_at_retained_count"] == 1.0 / 3.0
+
+
+def test_prior_ablation_sensitivity_payload_exposes_score_output_chain() -> None:
+    score_output = {"available": True, "mean_abs_score_delta": 0.25}
+
+    payload = prior_ablation_sensitivity_payload(
+        sampled_prior_features={"available": True, "mean_abs_feature_delta": 0.75},
+        model_prior_features={"available": True, "mean_abs_feature_delta": 0.5},
+        score_output=score_output,
+        raw_prediction={"available": True, "mean_abs_score_delta": 0.4},
+        head_output={"available": True, "mean_abs_head_probability_delta": 0.01},
+    )
+
+    assert payload["available"] is True
+    assert payload["diagnostic_chain"] == list(PRIOR_ABLATION_DIAGNOSTIC_CHAIN)
+    assert "selector_score" not in payload
+    assert payload["score_output"]["mean_abs_score_delta"] == pytest.approx(0.25)
+    assert payload["score_output"]["semantics"] == PRIOR_ABLATION_SCORE_OUTPUT_SEMANTICS
+
+
+def test_prior_ablation_sensitivity_from_tensors_builds_consistent_chain() -> None:
+    primary_scores = torch.tensor([0.9, 0.8, 0.1, 0.0], dtype=torch.float32)
+    ablation_scores = torch.tensor([0.1, 0.8, 0.9, 0.0], dtype=torch.float32)
+    primary_raw = torch.tensor([3.0, 2.0, 1.0, 0.0], dtype=torch.float32)
+    ablation_raw = torch.tensor([2.0, 2.0, 2.0, 0.0], dtype=torch.float32)
+    primary_heads = torch.tensor([[2.0, -1.0, 0.0, 0.5, 1.0, -0.5]], dtype=torch.float32)
+    ablation_heads = primary_heads + 0.1
+    primary_mask = torch.tensor([True, True, False, False])
+    ablation_mask = torch.tensor([False, True, True, False])
+
+    payload = prior_ablation_sensitivity_from_tensors(
+        sampled_prior_features={"available": True},
+        model_prior_features={"available": True},
+        primary_scores=primary_scores,
+        ablation_scores=ablation_scores,
+        primary_raw_predictions=primary_raw,
+        ablation_raw_predictions=ablation_raw,
+        primary_head_logits=primary_heads,
+        ablation_head_logits=ablation_heads,
+        primary_mask=primary_mask,
+        ablation_mask=ablation_mask,
+    )
+
+    assert "selector_score" not in payload
+    assert payload["score_output"]["retained_mask_changed"] is True
+    assert payload["score_output"]["retained_mask_jaccard"] == pytest.approx(1.0 / 3.0)
+    assert payload["raw_prediction"]["mean_abs_score_delta"] > 0.0
+    assert payload["head_output"]["head_probabilities_changed"] is True
+
+
+def test_training_outputs_with_query_prior_field_keeps_metadata_aligned() -> None:
+    base_prior = {
+        "schema_version": 3,
+        "field_names": ["spatial_query_hit_probability"],
+        "contains_eval_queries": False,
+    }
+    ablation_prior = {
+        **base_prior,
+        "ablation": "zero_query_prior_features",
+        "diagnostics": {"zeroed_prior_features_preserve_train_extent": True},
+    }
+    trained = TrainingOutputs(
+        model=torch.nn.Linear(1, 1),
+        scaler=cast(Any, object()),
+        labels=torch.ones(1),
+        labelled_mask=torch.ones(1, dtype=torch.bool),
+        history=[{"loss": 1.0}],
+        epochs_trained=3,
+        feature_context={
+            "query_prior_field": base_prior,
+            "query_prior_field_metadata": {"stale": True},
+            "other": "kept",
+        },
+    )
+
+    updated = training_outputs_with_query_prior_field(trained, ablation_prior)
+
+    assert updated is not trained
+    assert updated.model is trained.model
+    assert updated.history is trained.history
+    assert updated.feature_context["other"] == "kept"
+    assert updated.feature_context["query_prior_field"] is ablation_prior
+    assert updated.feature_context["query_prior_field_metadata"]["ablation"] == (
+        "zero_query_prior_features"
+    )
+    assert "stale" not in updated.feature_context["query_prior_field_metadata"]
 
 
 def test_head_ablation_sensitivity_reports_selector_raw_and_segment_channels() -> None:
