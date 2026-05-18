@@ -20,6 +20,7 @@ from selection.learned_segment_budget.diagnostics import (
     _selector_geometry_diagnostics,
     _trajectory_counts,
 )
+from selection.selector_types import LEARNED_SEGMENT_BUDGET_SELECTOR_TYPE
 
 
 def _selector_trace(
@@ -73,7 +74,7 @@ def _selector_trace(
     entropy, entropy_normalized = _entropy(list(segment_allocations.values()))
     return {
         "schema_version": int(LEARNED_SEGMENT_BUDGET_TRACE_SCHEMA_VERSION),
-        "selector_type": "learned_segment_budget_v1",
+        "selector_type": LEARNED_SEGMENT_BUDGET_SELECTOR_TYPE,
         "compression_ratio": float(compression_ratio),
         "total_point_count": int(retained.numel()),
         "total_budget_count": int(budget),

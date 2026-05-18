@@ -6,10 +6,23 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from scoring.geometry_thresholds import FINAL_LENGTH_PRESERVATION_MIN
+from selection.learned_segment_budget.constants import (
+    GEOMETRY_TIE_BREAKER_WEIGHT,
+    SEGMENT_ALLOCATION_WEIGHT_FLOOR,
+    SEGMENT_LENGTH_SUPPORT_ALLOCATION_WEIGHT,
+    SEGMENT_SCORE_POINT_BLEND_WEIGHT,
+)
+from selection.selector_types import TEMPORAL_HYBRID_SELECTOR_TYPE
 
 LCG_MULTIPLIER = 6364136223846793005
 DEFAULT_BUDGET_LOSS_RATIOS = [0.01, 0.02, 0.05, 0.10, 0.15, 0.20, 0.30]
 DEFAULT_BUDGET_LOSS_TEMPERATURE = 0.25
+DEFAULT_LEARNED_SEGMENT_GEOMETRY_GAIN_WEIGHT = GEOMETRY_TIE_BREAKER_WEIGHT
+DEFAULT_LEARNED_SEGMENT_ALLOCATION_LENGTH_SUPPORT_WEIGHT = (
+    SEGMENT_LENGTH_SUPPORT_ALLOCATION_WEIGHT
+)
+DEFAULT_LEARNED_SEGMENT_ALLOCATION_WEIGHT_FLOOR = SEGMENT_ALLOCATION_WEIGHT_FLOOR
+DEFAULT_LEARNED_SEGMENT_SCORE_BLEND_WEIGHT = SEGMENT_SCORE_POINT_BLEND_WEIGHT
 DEFAULT_VALIDATION_GLOBAL_SANITY_PENALTY_WEIGHT = 0.10
 DEFAULT_VALIDATION_SED_PENALTY_WEIGHT = 0.05
 DEFAULT_VALIDATION_ENDPOINT_PENALTY_WEIGHT = 0.10
@@ -177,11 +190,15 @@ class ModelConfig:
     mlqds_temporal_fraction: float = 0.0
     mlqds_diversity_bonus: float = 0.0
     mlqds_hybrid_mode: str = "fill"
-    selector_type: str = "temporal_hybrid"
-    learned_segment_geometry_gain_weight: float = 0.12
-    learned_segment_allocation_length_support_weight: float = 0.12
-    learned_segment_allocation_weight_floor: float = 0.50
-    learned_segment_score_blend_weight: float = 0.05
+    selector_type: str = TEMPORAL_HYBRID_SELECTOR_TYPE
+    learned_segment_geometry_gain_weight: float = DEFAULT_LEARNED_SEGMENT_GEOMETRY_GAIN_WEIGHT
+    learned_segment_allocation_length_support_weight: float = (
+        DEFAULT_LEARNED_SEGMENT_ALLOCATION_LENGTH_SUPPORT_WEIGHT
+    )
+    learned_segment_allocation_weight_floor: float = (
+        DEFAULT_LEARNED_SEGMENT_ALLOCATION_WEIGHT_FLOOR
+    )
+    learned_segment_score_blend_weight: float = DEFAULT_LEARNED_SEGMENT_SCORE_BLEND_WEIGHT
     learned_segment_fairness_preallocation: bool = True
     learned_segment_length_repair_fraction: float = 0.0
     learned_segment_length_repair_score_protection_fraction: float = 0.0
@@ -391,11 +408,15 @@ def build_run_config(
     mlqds_temporal_fraction: float = 0.0,
     mlqds_diversity_bonus: float = 0.0,
     mlqds_hybrid_mode: str = "fill",
-    selector_type: str = "temporal_hybrid",
-    learned_segment_geometry_gain_weight: float = 0.12,
-    learned_segment_allocation_length_support_weight: float = 0.12,
-    learned_segment_allocation_weight_floor: float = 0.50,
-    learned_segment_score_blend_weight: float = 0.05,
+    selector_type: str = TEMPORAL_HYBRID_SELECTOR_TYPE,
+    learned_segment_geometry_gain_weight: float = DEFAULT_LEARNED_SEGMENT_GEOMETRY_GAIN_WEIGHT,
+    learned_segment_allocation_length_support_weight: float = (
+        DEFAULT_LEARNED_SEGMENT_ALLOCATION_LENGTH_SUPPORT_WEIGHT
+    ),
+    learned_segment_allocation_weight_floor: float = (
+        DEFAULT_LEARNED_SEGMENT_ALLOCATION_WEIGHT_FLOOR
+    ),
+    learned_segment_score_blend_weight: float = DEFAULT_LEARNED_SEGMENT_SCORE_BLEND_WEIGHT,
     learned_segment_fairness_preallocation: bool = True,
     learned_segment_length_repair_fraction: float = 0.0,
     learned_segment_length_repair_score_protection_fraction: float = 0.0,

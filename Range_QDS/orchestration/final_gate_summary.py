@@ -7,8 +7,14 @@ from typing import Any
 
 import torch
 
-from config.run_config import RunConfig
+from config.run_config import (
+    DEFAULT_LEARNED_SEGMENT_ALLOCATION_LENGTH_SUPPORT_WEIGHT,
+    DEFAULT_LEARNED_SEGMENT_ALLOCATION_WEIGHT_FLOOR,
+    RunConfig,
+)
+from learning.model_features import WORKLOAD_BLIND_RANGE_V2_MODEL_TYPE
 from learning.outputs import TrainingOutputs
+from learning.targets.query_useful_v1 import QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE
 from orchestration.causality import (
     LEARNING_CAUSALITY_MIN_MATERIAL_DELTA,
     build_learned_slot_summary,
@@ -25,6 +31,10 @@ from orchestration.gates import (
     evaluate_workload_stability_gate,
 )
 from scoring.metrics import MethodScore
+from selection.selector_types import (
+    LEARNED_SEGMENT_BUDGET_SELECTOR_TYPE,
+    TEMPORAL_HYBRID_SELECTOR_TYPE,
+)
 from workloads.generation.workload_profiles import RANGE_WORKLOAD_V1_FINAL_PROFILE_IDS
 
 
@@ -102,9 +112,11 @@ def build_final_run_summaries(
     target_diffusion_gate_pass = bool(target_diffusion_gate.get("gate_pass", False))
     final_candidate = (
         str(config.query.workload_profile_id or "").lower() in RANGE_WORKLOAD_V1_FINAL_PROFILE_IDS
-        and str(config.model.model_type).lower() == "workload_blind_range_v2"
-        and str(config.model.range_training_target_mode).lower() == "query_useful_v1_factorized"
-        and str(getattr(config.model, "selector_type", "")).lower() == "learned_segment_budget_v1"
+        and str(config.model.model_type).lower() == WORKLOAD_BLIND_RANGE_V2_MODEL_TYPE
+        and str(config.model.range_training_target_mode).lower()
+        == QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE
+        and str(getattr(config.model, "selector_type", "")).lower()
+        == LEARNED_SEGMENT_BUDGET_SELECTOR_TYPE
     )
     legacy_range_useful_summary = {
         "metric": "RangeUsefulLegacy",
@@ -168,10 +180,18 @@ def build_final_run_summaries(
         "MLQDS_without_geometry_tie_breaker",
     )
     allocation_length_support_weight = float(
-        getattr(config.model, "learned_segment_allocation_length_support_weight", 0.12)
+        getattr(
+            config.model,
+            "learned_segment_allocation_length_support_weight",
+            DEFAULT_LEARNED_SEGMENT_ALLOCATION_LENGTH_SUPPORT_WEIGHT,
+        )
     )
     allocation_weight_floor = float(
-        getattr(config.model, "learned_segment_allocation_weight_floor", 0.50)
+        getattr(
+            config.model,
+            "learned_segment_allocation_weight_floor",
+            DEFAULT_LEARNED_SEGMENT_ALLOCATION_WEIGHT_FLOOR,
+        )
     )
     no_segment_length_support_allocation_delta = query_useful_delta(
         primary_score,
@@ -276,9 +296,11 @@ def build_final_run_summaries(
     learning_causality_summary = {
         "selector_diagnostics_present": bool(selector_budget_diagnostics),
         "training_fit_diagnostics_present": bool(trained.fit_diagnostics),
-        "selector_type": str(getattr(config.model, "selector_type", "temporal_hybrid")),
-        "selector_final_candidate": str(getattr(config.model, "selector_type", "temporal_hybrid"))
-        == "learned_segment_budget_v1",
+        "selector_type": str(getattr(config.model, "selector_type", TEMPORAL_HYBRID_SELECTOR_TYPE)),
+        "selector_final_candidate": str(
+            getattr(config.model, "selector_type", TEMPORAL_HYBRID_SELECTOR_TYPE)
+        )
+        == LEARNED_SEGMENT_BUDGET_SELECTOR_TYPE,
         "query_prior_field_available": bool(trained.feature_context.get("query_prior_field")),
         **learned_slot_summary,
         "shuffled_score_ablation_delta": shuffled_delta,

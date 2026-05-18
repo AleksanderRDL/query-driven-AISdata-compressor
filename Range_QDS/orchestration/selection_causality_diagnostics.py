@@ -34,6 +34,7 @@ from scoring.methods import FrozenMaskMethod, MLQDSMethod
 from scoring.metrics import MethodScore
 from scoring.query_cache import ScoringQueryCache
 from selection.learned_segment_budget import blend_segment_support_scores
+from selection.selector_types import LEARNED_SEGMENT_BUDGET_SELECTOR_TYPE
 from workloads.query_types import single_workload_type
 
 
@@ -51,7 +52,7 @@ def build_selection_causality_diagnostics(
     """Return checkpoint-validation ablation diagnostics without changing selection."""
     if selection_points is None or selection_boundaries is None or selection_workload is None:
         return {"available": False, "reason": "missing_selection_split"}
-    if str(getattr(config.model, "selector_type", "")).lower() != "learned_segment_budget_v1":
+    if str(getattr(config.model, "selector_type", "")).lower() != LEARNED_SEGMENT_BUDGET_SELECTOR_TYPE:
         return {"available": False, "reason": "requires_learned_segment_budget_v1"}
 
     workload_type = single_workload_type(eval_workload_map)

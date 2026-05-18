@@ -10,6 +10,10 @@ import torch
 from orchestration.segment_audits import segment_top_mean
 from scoring.methods import FrozenMaskMethod
 from selection.learned_segment_budget import (
+    GEOMETRY_TIE_BREAKER_WEIGHT,
+    SEGMENT_ALLOCATION_WEIGHT_FLOOR,
+    SEGMENT_LENGTH_SUPPORT_ALLOCATION_WEIGHT,
+    SEGMENT_SCORE_POINT_BLEND_WEIGHT,
     blend_segment_support_scores,
     simplify_with_learned_segment_budget_v1,
 )
@@ -25,10 +29,12 @@ def learned_segment_frozen_method(
     segment_point_scores: torch.Tensor | None = None,
     path_length_support_scores: torch.Tensor | None = None,
     points: torch.Tensor | None = None,
-    learned_segment_geometry_gain_weight: float = 0.12,
-    learned_segment_allocation_length_support_weight: float = 0.12,
-    learned_segment_allocation_weight_floor: float = 0.50,
-    learned_segment_score_blend_weight: float = 0.05,
+    learned_segment_geometry_gain_weight: float = GEOMETRY_TIE_BREAKER_WEIGHT,
+    learned_segment_allocation_length_support_weight: float = (
+        SEGMENT_LENGTH_SUPPORT_ALLOCATION_WEIGHT
+    ),
+    learned_segment_allocation_weight_floor: float = SEGMENT_ALLOCATION_WEIGHT_FLOOR,
+    learned_segment_score_blend_weight: float = SEGMENT_SCORE_POINT_BLEND_WEIGHT,
     learned_segment_fairness_preallocation: bool = True,
     learned_segment_length_repair_fraction: float = 0.0,
     learned_segment_length_repair_score_protection_fraction: float = 0.0,

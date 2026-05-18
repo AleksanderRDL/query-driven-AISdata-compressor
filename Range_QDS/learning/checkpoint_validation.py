@@ -9,6 +9,10 @@ from typing import Any, cast
 import torch
 
 from config.run_config import (
+    DEFAULT_LEARNED_SEGMENT_ALLOCATION_LENGTH_SUPPORT_WEIGHT,
+    DEFAULT_LEARNED_SEGMENT_ALLOCATION_WEIGHT_FLOOR,
+    DEFAULT_LEARNED_SEGMENT_GEOMETRY_GAIN_WEIGHT,
+    DEFAULT_LEARNED_SEGMENT_SCORE_BLEND_WEIGHT,
     DEFAULT_VALIDATION_ENDPOINT_PENALTY_WEIGHT,
     DEFAULT_VALIDATION_GLOBAL_SANITY_PENALTY_WEIGHT,
     DEFAULT_VALIDATION_LENGTH_PRESERVATION_MIN,
@@ -39,6 +43,7 @@ from scoring.metrics import compute_geometric_distortion, compute_length_preserv
 from scoring.query_useful_v1 import query_useful_v1_from_range_audit
 from selection.learned_segment_budget import blend_segment_support_scores
 from selection.model_score_conversion import simplify_mlqds_predictions
+from selection.selector_types import TEMPORAL_HYBRID_SELECTOR_TYPE
 from workloads.query_types import single_workload_type
 from workloads.typed_workload import TypedQueryWorkload
 
@@ -460,21 +465,37 @@ def _validation_retained_mask_from_scores(
             getattr(model_config, "mlqds_stratified_center_weight", 0.0)
         ),
         min_learned_swaps=int(getattr(model_config, "mlqds_min_learned_swaps", 0)),
-        selector_type=str(getattr(model_config, "selector_type", "temporal_hybrid")),
+        selector_type=str(getattr(model_config, "selector_type", TEMPORAL_HYBRID_SELECTOR_TYPE)),
         segment_scores=segment_scores,
         segment_point_scores=segment_point_scores,
         points=points,
         learned_segment_geometry_gain_weight=float(
-            getattr(model_config, "learned_segment_geometry_gain_weight", 0.12)
+            getattr(
+                model_config,
+                "learned_segment_geometry_gain_weight",
+                DEFAULT_LEARNED_SEGMENT_GEOMETRY_GAIN_WEIGHT,
+            )
         ),
         learned_segment_allocation_length_support_weight=float(
-            getattr(model_config, "learned_segment_allocation_length_support_weight", 0.12)
+            getattr(
+                model_config,
+                "learned_segment_allocation_length_support_weight",
+                DEFAULT_LEARNED_SEGMENT_ALLOCATION_LENGTH_SUPPORT_WEIGHT,
+            )
         ),
         learned_segment_allocation_weight_floor=float(
-            getattr(model_config, "learned_segment_allocation_weight_floor", 0.50)
+            getattr(
+                model_config,
+                "learned_segment_allocation_weight_floor",
+                DEFAULT_LEARNED_SEGMENT_ALLOCATION_WEIGHT_FLOOR,
+            )
         ),
         learned_segment_score_blend_weight=float(
-            getattr(model_config, "learned_segment_score_blend_weight", 0.05)
+            getattr(
+                model_config,
+                "learned_segment_score_blend_weight",
+                DEFAULT_LEARNED_SEGMENT_SCORE_BLEND_WEIGHT,
+            )
         ),
         learned_segment_fairness_preallocation=bool(
             getattr(model_config, "learned_segment_fairness_preallocation", True)

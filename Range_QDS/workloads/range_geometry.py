@@ -8,6 +8,8 @@ from collections.abc import Mapping
 import torch
 
 EARTH_RADIUS_KM = 6371.0
+KM_PER_DEG_LAT = 111.32
+MIN_EQUIRECTANGULAR_COS_LAT = 0.10
 
 
 def haversine_km_to_point(
@@ -29,6 +31,23 @@ def haversine_km_to_point(
         torch.sqrt(torch.clamp(1.0 - haversine, min=1e-9)),
     )
     return EARTH_RADIUS_KM * central_angle
+
+
+def local_equirectangular_distance_km(
+    lat1: torch.Tensor,
+    lon1: torch.Tensor,
+    lat2: torch.Tensor,
+    lon2: torch.Tensor,
+) -> torch.Tensor:
+    """Return local lat/lon distance in km using the shared equirectangular approximation."""
+    lat_mid = torch.deg2rad((lat1.float() + lat2.float()) * 0.5)
+    dy = (lat2.float() - lat1.float()) * KM_PER_DEG_LAT
+    dx = (
+        (lon2.float() - lon1.float())
+        * KM_PER_DEG_LAT
+        * torch.clamp(torch.cos(lat_mid).abs(), min=MIN_EQUIRECTANGULAR_COS_LAT)
+    )
+    return torch.sqrt(dx * dx + dy * dy)
 
 
 def _range_box_bounds(

@@ -19,6 +19,7 @@ from selection.learned_segment_budget.constants import (
     LEARNED_SEGMENT_BUDGET_SCHEMA_VERSION,
     LEARNED_SEGMENT_BUDGET_TRACE_SCHEMA_VERSION,
     SEGMENT_ALLOCATION_WEIGHT_FLOOR,
+    SEGMENT_LENGTH_SUPPORT_ALLOCATION_WEIGHT,
     SEGMENT_SCORE_POINT_BLEND_WEIGHT,
 )
 from selection.learned_segment_budget.diagnostics import (
@@ -32,12 +33,14 @@ from selection.learned_segment_budget.length_repair import (
 )
 from selection.learned_segment_budget.trace import _selector_trace
 from selection.retained_mask_selectors import deterministic_topk_with_jitter
+from selection.selector_types import LEARNED_SEGMENT_BUDGET_SELECTOR_TYPE
 
 __all__ = [
     "GEOMETRY_TIE_BREAKER_WEIGHT",
     "LEARNED_SEGMENT_BUDGET_SCHEMA_VERSION",
     "LEARNED_SEGMENT_BUDGET_TRACE_SCHEMA_VERSION",
     "SEGMENT_ALLOCATION_WEIGHT_FLOOR",
+    "SEGMENT_LENGTH_SUPPORT_ALLOCATION_WEIGHT",
     "SEGMENT_SCORE_POINT_BLEND_WEIGHT",
     "blend_segment_support_scores",
     "learned_segment_budget_diagnostics",
@@ -80,7 +83,7 @@ def simplify_with_learned_segment_budget_v1_with_trace(
     segment_point_scores: torch.Tensor | None = None,
     points: torch.Tensor | None = None,
     geometry_gain_weight: float = GEOMETRY_TIE_BREAKER_WEIGHT,
-    segment_length_support_weight: float = GEOMETRY_TIE_BREAKER_WEIGHT,
+    segment_length_support_weight: float = SEGMENT_LENGTH_SUPPORT_ALLOCATION_WEIGHT,
     segment_allocation_weight_floor: float = SEGMENT_ALLOCATION_WEIGHT_FLOOR,
     segment_score_point_blend_weight: float = SEGMENT_SCORE_POINT_BLEND_WEIGHT,
     fairness_preallocation_enabled: bool = True,
@@ -403,7 +406,7 @@ def simplify_with_learned_segment_budget_v1(
     segment_point_scores: torch.Tensor | None = None,
     points: torch.Tensor | None = None,
     geometry_gain_weight: float = GEOMETRY_TIE_BREAKER_WEIGHT,
-    segment_length_support_weight: float = GEOMETRY_TIE_BREAKER_WEIGHT,
+    segment_length_support_weight: float = SEGMENT_LENGTH_SUPPORT_ALLOCATION_WEIGHT,
     segment_allocation_weight_floor: float = SEGMENT_ALLOCATION_WEIGHT_FLOOR,
     segment_score_point_blend_weight: float = SEGMENT_SCORE_POINT_BLEND_WEIGHT,
     fairness_preallocation_enabled: bool = True,
@@ -458,6 +461,6 @@ def learned_segment_budget_diagnostics(
         )
     return {
         "schema_version": int(LEARNED_SEGMENT_BUDGET_SCHEMA_VERSION),
-        "selector_type": "learned_segment_budget_v1",
+        "selector_type": LEARNED_SEGMENT_BUDGET_SELECTOR_TYPE,
         "budget_rows": rows,
     }

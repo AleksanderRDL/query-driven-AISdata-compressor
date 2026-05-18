@@ -34,6 +34,7 @@ from workloads.generation.workload_profiles import (
     workload_profile_metadata,
 )
 from workloads.query_types import normalize_pure_workload_map, pad_query_features
+from workloads.range_geometry import KM_PER_DEG_LAT, MIN_EQUIRECTANGULAR_COS_LAT
 from workloads.typed_workload import TypedQueryWorkload
 
 DEFAULT_RANGE_SPATIAL_FRACTION = 0.08
@@ -156,9 +157,12 @@ def _make_range_query(
         lat_w = spatial_fraction * (bounds["lat_max"] - bounds["lat_min"]) * lat_jitter
         lon_w = spatial_fraction * (bounds["lon_max"] - bounds["lon_min"]) * lon_jitter
     else:
-        lat_w = (spatial_km / 111.32) * lat_jitter
-        cos_lat = max(0.10, abs(math.cos(math.radians(float(anchor_point[1].item())))))
-        lon_w = (spatial_km / (111.32 * cos_lat)) * lon_jitter
+        lat_w = (spatial_km / KM_PER_DEG_LAT) * lat_jitter
+        cos_lat = max(
+            MIN_EQUIRECTANGULAR_COS_LAT,
+            abs(math.cos(math.radians(float(anchor_point[1].item())))),
+        )
+        lon_w = (spatial_km / (KM_PER_DEG_LAT * cos_lat)) * lon_jitter
     corridor_axis = "none"
     elongation_factor = 1.0
     cross_axis_factor = 1.0

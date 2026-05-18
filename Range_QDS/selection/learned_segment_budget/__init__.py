@@ -5,6 +5,8 @@ from selection.learned_segment_budget.constants import (
     LEARNED_SEGMENT_BUDGET_SCHEMA_VERSION,
     LEARNED_SEGMENT_BUDGET_TRACE_SCHEMA_VERSION,
     SEGMENT_ALLOCATION_WEIGHT_FLOOR,
+    SEGMENT_LENGTH_SUPPORT_ALLOCATION_WEIGHT,
+    SEGMENT_SCORE_POINT_BLEND_WEIGHT,
 )
 from selection.learned_segment_budget.core import (
     blend_segment_support_scores,
@@ -18,6 +20,8 @@ __all__ = [
     "LEARNED_SEGMENT_BUDGET_SCHEMA_VERSION",
     "LEARNED_SEGMENT_BUDGET_TRACE_SCHEMA_VERSION",
     "SEGMENT_ALLOCATION_WEIGHT_FLOOR",
+    "SEGMENT_LENGTH_SUPPORT_ALLOCATION_WEIGHT",
+    "SEGMENT_SCORE_POINT_BLEND_WEIGHT",
     "blend_segment_support_scores",
     "learned_segment_budget_diagnostics",
     "simplify_with_learned_segment_budget_v1",

@@ -8,6 +8,10 @@ from pathlib import Path
 from config.run_config import (
     DEFAULT_BUDGET_LOSS_RATIOS,
     DEFAULT_BUDGET_LOSS_TEMPERATURE,
+    DEFAULT_LEARNED_SEGMENT_ALLOCATION_LENGTH_SUPPORT_WEIGHT,
+    DEFAULT_LEARNED_SEGMENT_ALLOCATION_WEIGHT_FLOOR,
+    DEFAULT_LEARNED_SEGMENT_GEOMETRY_GAIN_WEIGHT,
+    DEFAULT_LEARNED_SEGMENT_SCORE_BLEND_WEIGHT,
     DEFAULT_VALIDATION_ENDPOINT_PENALTY_WEIGHT,
     DEFAULT_VALIDATION_GLOBAL_SANITY_PENALTY_WEIGHT,
     DEFAULT_VALIDATION_LENGTH_PRESERVATION_MIN,
@@ -20,6 +24,7 @@ from learning.targets.modes import RANGE_TARGET_BALANCE_MODES, RANGE_TRAINING_TA
 from learning.teacher_distillation import RANGE_TEACHER_DISTILLATION_MODES
 from runtime.torch_runtime import AMP_MODE_CHOICES, FLOAT32_MATMUL_PRECISION_CHOICES
 from selection.model_score_conversion import MLQDS_SCORE_MODES
+from selection.selector_types import SELECTOR_TYPE_CHOICES, TEMPORAL_HYBRID_SELECTOR_TYPE
 from workloads.generation.anchors import RANGE_ANCHOR_MODES
 from workloads.generation.generator import RANGE_TIME_DOMAIN_MODES
 from workloads.generation.workload_profiles import WORKLOAD_PROFILE_CHOICES
@@ -782,8 +787,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--selector_type",
         type=str,
-        default="temporal_hybrid",
-        choices=["temporal_hybrid", "learned_segment_budget_v1"],
+        default=TEMPORAL_HYBRID_SELECTOR_TYPE,
+        choices=SELECTOR_TYPE_CHOICES,
         help=(
             "Retained-mask selector. Use learned_segment_budget_v1 for query-driven final-candidate runs; "
             "temporal_hybrid is diagnostic-only selector behavior."
@@ -792,7 +797,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--learned_segment_geometry_gain_weight",
         type=float,
-        default=0.12,
+        default=DEFAULT_LEARNED_SEGMENT_GEOMETRY_GAIN_WEIGHT,
         help=(
             "Geometry-gain tie-breaker weight for learned_segment_budget_v1. "
             "This is query-free selector structure for within-segment point choice "
@@ -802,7 +807,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--learned_segment_allocation_length_support_weight",
         type=float,
-        default=0.12,
+        default=DEFAULT_LEARNED_SEGMENT_ALLOCATION_LENGTH_SUPPORT_WEIGHT,
         help=(
             "Query-free path-length support blend weight for learned_segment_budget_v1 "
             "segment allocation. This is separate from the within-segment "
@@ -812,7 +817,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--learned_segment_allocation_weight_floor",
         type=float,
-        default=0.50,
+        default=DEFAULT_LEARNED_SEGMENT_ALLOCATION_WEIGHT_FLOOR,
         help=(
             "Base positive floor added to normalized learned_segment_budget_v1 "
             "segment allocation weights. Lower values increase score contrast; "
@@ -822,7 +827,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--learned_segment_score_blend_weight",
         type=float,
-        default=0.05,
+        default=DEFAULT_LEARNED_SEGMENT_SCORE_BLEND_WEIGHT,
         help=(
             "Within-segment blend weight for the segment-budget head in "
             "learned_segment_budget_v1. Exposed so it cannot silently mask weak heads."

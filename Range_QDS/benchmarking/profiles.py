@@ -4,7 +4,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from learning.model_features import is_workload_blind_model_type
+from learning.model_features import (
+    WORKLOAD_BLIND_RANGE_V2_MODEL_TYPE,
+    is_workload_blind_model_type,
+)
+from learning.targets.query_useful_v1 import QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE
+from selection.selector_types import (
+    LEARNED_SEGMENT_BUDGET_SELECTOR_TYPE,
+    TEMPORAL_HYBRID_SELECTOR_TYPE,
+)
 from workloads.generation.workload_profiles import (
     RANGE_WORKLOAD_V1_FINAL_PROFILE_IDS,
     RANGE_WORKLOAD_V1_PROFILE_ID,
@@ -106,7 +114,7 @@ class BenchmarkProfile:
     profile_note: str = LEGACY_DIAGNOSTIC_PROFILE_NOTE
     mlqds_stratified_center_weight: float = 0.0
     workload_profile_id: str | None = None
-    selector_type: str = "temporal_hybrid"
+    selector_type: str = TEMPORAL_HYBRID_SELECTOR_TYPE
     range_train_workload_replicates: int = 1
 
 
@@ -377,7 +385,7 @@ RANGE_WORKLOAD_V1_WORKLOAD_BLIND_V2_BENCHMARK_PROFILE = BenchmarkProfile(
     query_chunk_size=2048,
     train_batch_size=64,
     inference_batch_size=64,
-    model_type="workload_blind_range_v2",
+    model_type=WORKLOAD_BLIND_RANGE_V2_MODEL_TYPE,
     compression_ratio=0.05,
     epochs=10,
     early_stopping_patience=5,
@@ -404,7 +412,7 @@ RANGE_WORKLOAD_V1_WORKLOAD_BLIND_V2_BENCHMARK_PROFILE = BenchmarkProfile(
     temporal_residual_label_mode="none",
     validation_score_every=1,
     range_label_mode="usefulness",
-    range_training_target_mode="query_useful_v1_factorized",
+    range_training_target_mode=QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE,
     range_temporal_target_blend=0.0,
     range_target_budget_weight_power=0.0,
     range_marginal_target_radius_scale=0.50,
@@ -421,7 +429,7 @@ RANGE_WORKLOAD_V1_WORKLOAD_BLIND_V2_BENCHMARK_PROFILE = BenchmarkProfile(
     final_success_allowed=True,
     profile_note="QueryUsefulV1/range_workload_v1 final-candidate profile.",
     workload_profile_id=RANGE_WORKLOAD_V1_PROFILE_ID,
-    selector_type="learned_segment_budget_v1",
+    selector_type=LEARNED_SEGMENT_BUDGET_SELECTOR_TYPE,
     range_train_workload_replicates=4,
 )
 
@@ -604,7 +612,7 @@ def benchmark_profile_settings(name: str) -> dict[str, ProfileSetting]:
     )
     profile_role = (
         "query_driven_workload_blind_v2"
-        if profile.range_training_target_mode == "query_useful_v1_factorized"
+        if profile.range_training_target_mode == QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE
         else "workload_blind_teacher_distill"
         if profile.range_teacher_distillation_mode != "none"
         else "workload_blind_marginal_coverage"

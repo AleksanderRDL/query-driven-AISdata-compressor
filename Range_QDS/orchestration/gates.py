@@ -8,6 +8,7 @@ import torch
 
 from config.run_config import RunConfig
 from learning.query_prior_fields import QUERY_PRIOR_FIELD_NAMES, sample_query_prior_fields
+from learning.targets.query_useful_v1 import QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE
 from scoring.geometry_thresholds import (
     FINAL_LENGTH_PRESERVATION_MAX,
     FINAL_LENGTH_PRESERVATION_MIN,
@@ -423,7 +424,7 @@ def evaluate_target_diffusion_gate(target_diagnostics: dict[str, Any]) -> dict[s
     low_budget_key = "0.05"
     failed_checks: list[str] = []
 
-    factorized = target_diagnostics.get("query_useful_v1_factorized")
+    factorized = target_diagnostics.get(QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE)
     if not isinstance(factorized, dict):
         return {
             "schema_version": 1,

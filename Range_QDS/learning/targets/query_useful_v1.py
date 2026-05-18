@@ -13,9 +13,14 @@ from learning.factorized_target_diagnostics import (
     support_fraction_by_threshold,
 )
 from workloads.query_types import NUM_QUERY_TYPES, QUERY_TYPE_ID_RANGE
-from workloads.range_geometry import points_in_range_box, segment_box_bracket_indices
+from workloads.range_geometry import (
+    local_equirectangular_distance_km,
+    points_in_range_box,
+    segment_box_bracket_indices,
+)
 
-QUERY_USEFUL_V1_TARGET_MODES = frozenset({"query_useful_v1_factorized"})
+QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE = "query_useful_v1_factorized"
+QUERY_USEFUL_V1_TARGET_MODES = frozenset({QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE})
 QUERY_USEFUL_V1_HEAD_NAMES = (
     "query_hit_probability",
     "conditional_behavior_utility",
@@ -156,10 +161,7 @@ def _lat_lon_distance_km(
     lon1 = left[:, 2].float()
     lat2 = right[:, 1].float()
     lon2 = right[:, 2].float()
-    lat_mid = torch.deg2rad((lat1 + lat2) * 0.5)
-    dy = (lat2 - lat1) * 111.32
-    dx = (lon2 - lon1) * 111.32 * torch.clamp(torch.cos(lat_mid).abs(), min=0.10)
-    return torch.sqrt(dx * dx + dy * dy)
+    return local_equirectangular_distance_km(lat1, lon1, lat2, lon2)
 
 
 def _path_length_support_targets(

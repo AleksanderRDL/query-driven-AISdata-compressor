@@ -4,7 +4,9 @@ import pytest
 import torch
 
 from workloads.range_geometry import (
+    KM_PER_DEG_LAT,
     haversine_km_to_point,
+    local_equirectangular_distance_km,
     points_in_range_box,
     segment_box_bracket_mask,
     segment_box_crossings,
@@ -107,3 +109,14 @@ def test_haversine_km_to_point_matches_equator_degree_scale() -> None:
 
     assert distances[0].item() == pytest.approx(0.0, abs=1e-6)
     assert distances[1].item() == pytest.approx(111.19, abs=0.05)
+
+
+def test_local_equirectangular_distance_uses_shared_degree_scale() -> None:
+    distances = local_equirectangular_distance_km(
+        torch.tensor([0.0, 0.0], dtype=torch.float32),
+        torch.tensor([0.0, 0.0], dtype=torch.float32),
+        torch.tensor([0.0, 1.0], dtype=torch.float32),
+        torch.tensor([0.0, 0.0], dtype=torch.float32),
+    )
+
+    assert distances.tolist() == pytest.approx([0.0, KM_PER_DEG_LAT])

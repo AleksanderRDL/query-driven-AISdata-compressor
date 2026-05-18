@@ -5,7 +5,7 @@ Detailed stdout and raw metrics are kept in `Range_QDS/artifacts/results/`.
 
 ## High-Value Summary
 
-The redesign is active and not complete. The current best strict synthetic/debug cell beats both final baselines on `QueryUsefulV1`, but it is not acceptance evidence because learning causality still fails and the stored artifact was produced under the old `0.80` length gate.
+The redesign is active and not complete. The current best strict synthetic/debug cell beats both final baselines on `QueryUsefulV1`, and its stored global-sanity gate reclassifies as passing under the current `0.75` length policy. It is still not acceptance evidence because learning causality fails and the final matrix remains unrun.
 
 Current best strict result:
 
@@ -19,9 +19,12 @@ length preservation:           0.7941408411227088
 Current best strict artifact:
 - `artifacts/results/query_driven_v2_checkpoint13_per_head_prior_materiality_strict_replay_c10_r05`
 
+Current best gate reclassification artifact:
+- `artifacts/results/query_driven_v2_checkpoint18_current_best_gate_reclassification_len075/gate_reclassification_summary.json`
+
 Main interpretation:
-- The candidate is promising because it beats uniform and Douglas-Peucker in one strict cell while workload stability, support overlap, predictability, prior-predictive alignment, target diffusion, and workload signature pass.
-- It is not final success. Learning causality still fails, and the current-best artifact needs a strict replay or recomputed gate summary before it can be judged under the new `0.75` final length gate.
+- The candidate is promising because it beats uniform and Douglas-Peucker in one strict cell while workload stability, support overlap, predictability, prior-predictive alignment, target diffusion, workload signature, and recomputed global sanity pass.
+- It is not final success. Learning causality still fails, and the global-sanity update is a policy reclassification of a stored strict artifact, not a replay.
 - The full workload-profile/compression final matrix remains intentionally unrun until strict single-cell gates pass.
 - Small probes and implementation smokes are not scientific evidence of learning.
 
@@ -49,7 +52,7 @@ Active candidate defaults:
 
 Current blockers:
 - Learning causality fails. In the best strict artifact, shuffled-score delta is `0.008856345116771192` versus required `0.017759554407510352`; shuffled-prior and no-query-prior deltas are both `0.002743017030572781` versus required `0.005`.
-- Length preservation is `0.7941408411227088`, which is above the new `0.75` final length gate but was below the old `0.80` gate used by stored historical artifacts.
+- Recomputed global sanity under the current `0.75` length gate passes with no failed checks: length `0.7941408411227088`, endpoint sanity `1.0`, SED ratio `0.9173337766436357` versus max `1.5`.
 - Per-head prior-output diagnostics show prior signal is mostly suppressed before retained-mask decisions: zeroing active model-input priors changes inputs by about `0.0128368`, but mean head probability changes only about `0.00001816`.
 - No-length-repair improves score to `0.1759846099523811`, but length collapses to `0.6790996203798462`. That is diagnostic evidence, not a candidate.
 - Under the old `0.80` length policy, segment allocation was part of the length blocker. Under the new `0.75` final gate, the same diagnostic is not a current blocker by itself; causality remains unresolved.
@@ -59,11 +62,11 @@ Current decision:
 - Do not treat real-scale diagnostic slices as success evidence.
 - Do not increase workload/caps to compensate for failed causality unless the named diagnostic question requires scale.
 - Do not convert the new `0.75` final and validation length thresholds into a success claim; learning causality still fails.
-- Keep the current candidate boundary at the best strict artifact above until a new strict candidate clears or narrows the failed gates.
+- Keep the current candidate boundary at the best strict artifact plus its `0.75` gate reclassification until a new strict candidate clears or narrows learning causality.
 
 ## Durable Discoveries Since The Current Candidate
 
-- Global net-gain length repair improved the current strict score boundary, but did not clear learning causality or length.
+- Global net-gain length repair improved the current strict score boundary. After the `0.75` policy reclassification, length is no longer the current strict-cell blocker; learning causality remains the blocker.
 - Query-free segment length-support allocation at weight `0.12` had only tiny effect: MLQDS `+0.00012394275871965843`, length `+0.000013005202913918268`, shuffled-score causality delta `+0.002352417155629921` versus the prior strict cell.
 - Allocation length-support was initially ignored when learned segment scores were flat; that implementation flaw was fixed, but the strict replay still did not change the blocker.
 - Raw prior channels and model inputs are available. The problem is that useful movement is suppressed inside heads/selector/allocation before frozen retained masks.
@@ -1603,3 +1606,158 @@ Decision:
 - Keep geometry gate thresholds in `scoring/geometry_thresholds.py`.
 - Keep validation sanity defaults in `config/run_config.py`.
 - Do not treat this cleanup as scientific evidence.
+
+## Checkpoint 5.66 - Current-Best Gate Reclassification Under 0.75
+
+Status: completed
+
+Hypothesis:
+- After lowering the final and validation length thresholds to `0.75`, the
+  immediate evidence gap is whether the current-best strict artifact can be
+  reclassified under the new gate policy. This should narrow the blocker
+  without rerunning training or claiming final success.
+
+Expected files:
+- `artifacts/results/query_driven_v2_checkpoint18_current_best_gate_reclassification_len075/gate_reclassification_summary.json`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- The current-best strict artifact schema is inspected; global sanity is
+  recomputed through current code; the reclassified gate status and remaining
+  blocker are recorded; no full matrix is run; no final success claim is made.
+
+Goal:
+- Clarify whether length/global sanity remains a strict single-cell blocker
+  under the active `0.75` policy.
+
+Changes:
+- Added a derived diagnostic artifact that recomputes the current-best stored
+  run's global sanity gate with current code and thresholds.
+- Updated the progress-log current-state summary.
+- Left the historical source artifact unchanged.
+
+Tests:
+- `uv run --group dev -- python - <<'PY' ...` generated
+  `gate_reclassification_summary.json` from the stored strict artifact using
+  `evaluate_global_sanity_gate`.
+- inspected the generated summary for policy, scores, recomputed global sanity,
+  recomputed final claim summary, and interpretation.
+- no scientific replay or final matrix was run.
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint18_current_best_gate_reclassification_len075/gate_reclassification_summary.json`
+- command: derived diagnostic recomputation from
+  `artifacts/results/query_driven_v2_checkpoint13_per_head_prior_materiality_strict_replay_c10_r05/example_run.json`
+
+Key results:
+- MLQDS QueryUsefulV1: `0.17183721530965693`
+- uniform QueryUsefulV1: `0.14223795796380634`
+- Douglas-Peucker QueryUsefulV1: `0.16362459837911367`
+- recomputed global sanity gate: pass
+- recomputed global sanity failed checks: `[]`
+- length preservation: `0.7941408411227088`
+- endpoint sanity: `1.0`
+- SED ratio vs uniform: `0.9173337766436357` versus max `1.5`
+- gates passed after reclassification: workload stability, support overlap,
+  predictability, prior-predictive alignment, target diffusion, workload
+  signature, global sanity
+- gates failed after reclassification: learning causality
+
+Extra discoveries:
+- The current-best strict artifact's stored final claim blocked on both
+  `learning_causality_ablations` and `global_sanity_gates`; under the current
+  gate policy it blocks only on `learning_causality_ablations` before the full
+  workload-profile/compression grid.
+- This is a policy reclassification, not a replay. It is strong enough to
+  clarify the next blocker, but not enough for final acceptance.
+
+Decision:
+- Treat learning causality as the current strict single-cell blocker.
+- Do not run the full final matrix until learning causality clears on strict
+  evidence.
+
+## Checkpoint 5.67 - Centralized Duplicate Policy And Geometry Constants
+
+Status: completed
+
+Hypothesis:
+- Remaining high-risk hard-coded duplication is concentrated in selector
+  defaults, active v2 model/target/selector identifiers, and local
+  equirectangular geometry constants. Centralizing these should reduce drift
+  risk without changing the current candidate or scientific evidence.
+
+Expected files:
+- `config/run_config.py`
+- `orchestration/learning_scoring_cli.py`
+- `selection/selector_types.py`
+- `selection/learned_segment_budget/constants.py`
+- selector/scoring/orchestration callers that repeated selector defaults
+- active model/target/workload modules that repeated product ids
+- `workloads/range_geometry.py`
+- geometry consumers in scoring, workload generation, target building, and
+  learned-segment selection
+- focused tests and this progress log
+
+Stop condition:
+- Shared selector defaults and active ids are used by config, CLI, scoring,
+  diagnostics, and gate code; shared local-geometry constants/helper replace
+  duplicated `111.32` distance logic; focused static checks and tests pass; no
+  probe or benchmark evidence is claimed.
+
+Goal:
+- Remove centralization debt that could make later probe results depend on
+  inconsistent defaults or subtly different geometry approximations.
+
+Changes:
+- Added `selection/selector_types.py` for canonical selector ids and choices.
+- Added shared learned-segment default constants for geometry tie-breaker,
+  allocation length-support, allocation weight floor, and score blend weight;
+  wired them through config defaults, CLI defaults, validation fallback logic,
+  scoring methods, selector diagnostics, and final-gate summaries.
+- Added canonical `WORKLOAD_BLIND_RANGE_V2_MODEL_TYPE` and
+  `QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE` constants, then replaced production
+  comparisons/defaults that previously repeated those strings.
+- Moved the local km-per-degree scale and minimum cosine clamp into
+  `workloads/range_geometry.py` and added
+  `local_equirectangular_distance_km`; updated workload generation,
+  QueryUseful target building, learned-segment allocation/repair, and scoring
+  geometry to use the shared source.
+- Added focused assertions that direct config defaults and CLI defaults stay
+  aligned for learned-segment selector knobs.
+
+Tests:
+- `../.venv/bin/ruff check ...` on all changed Python files: passed
+- `../.venv/bin/python -m pyright ...` on all changed Python files: `0 errors`
+- `../.venv/bin/pytest tests/unit/runtime/test_torch_runtime_controls.py tests/unit/workloads/test_range_geometry.py tests/unit/selection/test_learned_segment_budget.py tests/unit/orchestration/test_retained_mask_stage.py tests/unit/orchestration/test_learning_target_stage.py tests/unit/learning/test_model_factory.py tests/unit/learning/test_model_features.py -q`: `77 passed`
+- `../.venv/bin/pytest tests/unit/orchestration/test_query_driven_rework.py tests/unit/benchmarking/test_runner.py tests/guardrails/test_rework_guardrails.py -q`: `157 passed`
+- `../.venv/bin/pytest tests/unit/scoring/test_metrics.py tests/unit/workloads/test_range_geometry.py -q`: `59 passed`
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was cleanup/refactor work.
+
+Key results:
+- MLQDS QueryUsefulV1: not applicable
+- uniform QueryUsefulV1: not applicable
+- Douglas-Peucker QueryUsefulV1: not applicable
+- gates passed: not applicable
+- gates failed: not applicable
+
+Extra discoveries:
+- `GEOMETRY_TIE_BREAKER_WEIGHT` had also been serving as the default
+  segment-length-support allocation weight. The numeric value stays `0.12`,
+  but it now has a separate named constant so future tuning cannot silently
+  couple two different selector mechanisms.
+- The duplicate-literal scan remains noisy for valid fixture values, schema
+  keys, quantiles, metric field names, and target coefficients. Those were left
+  local because centralizing them would reduce readability without reducing
+  policy drift.
+
+Decision:
+- Keep active selector ids in `selection/selector_types.py`.
+- Keep learned-segment selector defaults in
+  `selection/learned_segment_budget/constants.py` and expose config/CLI
+  defaults from `config/run_config.py`.
+- Keep shared local geometry primitives in `workloads/range_geometry.py`.
+- Continue with learning-causality work; this checkpoint does not change the
+  current acceptance blocker.
