@@ -8,6 +8,7 @@ from pathlib import Path
 from config.run_config import (
     DEFAULT_BUDGET_LOSS_RATIOS,
     DEFAULT_BUDGET_LOSS_TEMPERATURE,
+    DEFAULT_VALIDATION_LENGTH_PRESERVATION_MIN,
     VALIDATION_SPLIT_MODES,
 )
 from learning.importance_labels import RANGE_LABEL_MODES
@@ -733,7 +734,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--validation_length_preservation_min",
         type=float,
-        default=0.80,
+        default=DEFAULT_VALIDATION_LENGTH_PRESERVATION_MIN,
         help="Minimum validation length preservation used by query_useful_v1 checkpoint penalties.",
     )
     parser.add_argument(

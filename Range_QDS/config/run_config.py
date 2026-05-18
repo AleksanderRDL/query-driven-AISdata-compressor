@@ -5,9 +5,12 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+from scoring.geometry_thresholds import FINAL_LENGTH_PRESERVATION_MIN
+
 LCG_MULTIPLIER = 6364136223846793005
 DEFAULT_BUDGET_LOSS_RATIOS = [0.01, 0.02, 0.05, 0.10, 0.15, 0.20, 0.30]
 DEFAULT_BUDGET_LOSS_TEMPERATURE = 0.25
+DEFAULT_VALIDATION_LENGTH_PRESERVATION_MIN = FINAL_LENGTH_PRESERVATION_MIN
 VALIDATION_SPLIT_MODES = ("random", "source_stratified")
 
 
@@ -165,7 +168,7 @@ class ModelConfig:
     validation_global_sanity_penalty_weight: float = 0.35
     validation_sed_penalty_weight: float = 0.15
     validation_endpoint_penalty_weight: float = 0.10
-    validation_length_preservation_min: float = 0.80
+    validation_length_preservation_min: float = DEFAULT_VALIDATION_LENGTH_PRESERVATION_MIN
     mlqds_temporal_fraction: float = 0.0
     mlqds_diversity_bonus: float = 0.0
     mlqds_hybrid_mode: str = "fill"
@@ -377,7 +380,7 @@ def build_run_config(
     validation_global_sanity_penalty_weight: float = 0.35,
     validation_sed_penalty_weight: float = 0.15,
     validation_endpoint_penalty_weight: float = 0.10,
-    validation_length_preservation_min: float = 0.80,
+    validation_length_preservation_min: float = DEFAULT_VALIDATION_LENGTH_PRESERVATION_MIN,
     mlqds_temporal_fraction: float = 0.0,
     mlqds_diversity_bonus: float = 0.0,
     mlqds_hybrid_mode: str = "fill",

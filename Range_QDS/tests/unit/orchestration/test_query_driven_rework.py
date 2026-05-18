@@ -8,6 +8,7 @@ from typing import Any, cast
 import pytest
 import torch
 
+from config.run_config import DEFAULT_VALIDATION_LENGTH_PRESERVATION_MIN
 from data_preparation.ais_loader import generate_synthetic_ais_data
 from learning.checkpoint_validation import (
     _validation_factorized_target_fit_metrics,
@@ -379,7 +380,7 @@ def test_validation_query_useful_penalizes_bad_global_sanity() -> None:
         validation_global_sanity_penalty_weight=0.10,
         validation_sed_penalty_weight=0.05,
         validation_endpoint_penalty_weight=0.10,
-        validation_length_preservation_min=0.80,
+        validation_length_preservation_min=DEFAULT_VALIDATION_LENGTH_PRESERVATION_MIN,
     )
     good = {
         "avg_length_preserved": 0.90,

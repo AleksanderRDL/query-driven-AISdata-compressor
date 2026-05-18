@@ -78,9 +78,9 @@ when the checkpoint hypothesis explicitly needs that diagnostic path.
 - `ranking_bce` and `pointwise_bce` are diagnostics.
 - `checkpoint_selection_metric="uniform_gap"` scores validation performance
   against fair uniform, with penalties for active-type deficits.
-- `validation_length_preservation_min` controls checkpoint-selection sanity
-  pressure; the strict global sanity gate is enforced later in run
-  outputs.
+- `validation_length_preservation_min` defaults to `0.75` and controls
+  checkpoint-selection sanity pressure; the strict global sanity gate is
+  enforced later in run outputs.
 - `training_fit_diagnostics` is train-data-only. It is useful for target-fit
   debugging, not final evidence.
 

@@ -58,7 +58,7 @@ Current decision:
 - Do not run the full final matrix.
 - Do not treat real-scale diagnostic slices as success evidence.
 - Do not increase workload/caps to compensate for failed causality unless the named diagnostic question requires scale.
-- Do not convert the new `0.75` length gate into a success claim; learning causality still fails.
+- Do not convert the new `0.75` final and validation length thresholds into a success claim; learning causality still fails.
 - Keep the current candidate boundary at the best strict artifact above until a new strict candidate clears or narrows the failed gates.
 
 ## Durable Discoveries Since The Current Candidate
@@ -1425,8 +1425,9 @@ Changes:
 - Renamed per-trajectory geometry diagnostic fields from `below_0_8` to
   `below_gate` and added `trajectory_length_preservation_gate_target`.
 - Updated active guide thresholds and the progress-log current-state summary.
-- Left `validation_length_preservation_min=0.80` unchanged because it is a
-  checkpoint-selection penalty, not the final/global-sanity gate.
+- At this checkpoint, `validation_length_preservation_min=0.80` was left
+  unchanged because it was treated as a separate checkpoint-selection penalty.
+  Checkpoint 5.64 supersedes this and aligns the validation default to `0.75`.
 
 Tests:
 - `uv run --group dev -- ruff check --fix Range_QDS/orchestration/gates.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
@@ -1459,3 +1460,69 @@ Decision:
 - Treat `0.75` as the active final/global-sanity length-preservation minimum.
 - Do not treat old strict artifacts as final success without replaying or
   recomputing gate summaries under the new policy.
+
+## Checkpoint 5.64 - Validation Length Default Aligned To 0.75
+
+Status: completed
+
+Hypothesis:
+- `validation_length_preservation_min` should match the new `0.75`
+  final/global-sanity length threshold so checkpoint selection is not still
+  optimizing against the retired `0.80` policy.
+
+Expected files:
+- `config/run_config.py`
+- `orchestration/learning_scoring_cli.py`
+- `learning/checkpoint_validation.py`
+- `learning/README.md`
+- `tests/unit/orchestration/test_query_driven_rework.py`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- Config defaults, CLI defaults, validation fallback behavior, active docs, and
+  validation tests use `0.75`; active references to the retired validation
+  default are gone; focused checks pass.
+
+Goal:
+- Align validation/checkpoint-selection length pressure with the active final
+  length gate.
+
+Changes:
+- Added `DEFAULT_VALIDATION_LENGTH_PRESERVATION_MIN` in `config/run_config.py`
+  and set it to the shared final length threshold.
+- Updated `ModelConfig`, `build_run_config`, and the
+  `--validation_length_preservation_min` CLI default to use that constant.
+- Updated checkpoint-validation fallback behavior for older config-like
+  objects that do not carry the field.
+- Updated the focused validation-penalty test to use the shared default.
+- Updated `learning/README.md` and this progress log.
+
+Tests:
+- `uv run --group dev -- ruff check Range_QDS/config/run_config.py Range_QDS/orchestration/learning_scoring_cli.py Range_QDS/learning/checkpoint_validation.py Range_QDS/learning/README.md Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
+- `uv run --group dev -- pyright Range_QDS/config/run_config.py Range_QDS/orchestration/learning_scoring_cli.py Range_QDS/learning/checkpoint_validation.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
+- `uv run --group dev -- pytest Range_QDS/tests/unit/orchestration/test_query_driven_rework.py -q`: `101 passed`
+- `uv run --group dev -- python -m orchestration.train_and_score --help`
+- config/CLI/fallback default smoke: constant `0.75`, CLI `0.75`, config
+  `0.75`, fallback penalty matches a `0.75` length minimum
+- stale active validation-default scan for the retired `0.80` value: clean
+- `git diff --check -- Range_QDS/config/run_config.py Range_QDS/orchestration/learning_scoring_cli.py Range_QDS/learning/checkpoint_validation.py Range_QDS/learning/README.md Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/docs/query-driven-rework-progress.md`
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was a validation-default policy update.
+
+Key results:
+- MLQDS QueryUsefulV1: not applicable
+- uniform QueryUsefulV1: not applicable
+- Douglas-Peucker QueryUsefulV1: not applicable
+- gates passed: not applicable
+- gates failed: not applicable
+
+Extra discoveries:
+- `ranking_top_quantile=0.80`, test fixture values, and historical progress-log
+  references still legitimately contain `0.80`; they are not validation length
+  defaults.
+
+Decision:
+- Treat `validation_length_preservation_min=0.75` as the active default.
+- Continue requiring learning-causality evidence before any success claim.

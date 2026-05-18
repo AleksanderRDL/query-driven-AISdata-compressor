@@ -8,7 +8,7 @@ from typing import Any, cast
 
 import torch
 
-from config.run_config import ModelConfig
+from config.run_config import DEFAULT_VALIDATION_LENGTH_PRESERVATION_MIN, ModelConfig
 from learning.fit_diagnostics import _discriminative_sample, _kendall_tau
 from learning.inference import (
     _is_workload_blind_model,
@@ -114,7 +114,13 @@ def _validation_query_useful_selection_score(
     """Apply a light validation-only penalty for global sanity failures."""
     if not bool(getattr(model_config, "validation_global_sanity_penalty_enabled", True)):
         return float(raw_query_useful_v1)
-    length_min = float(getattr(model_config, "validation_length_preservation_min", 0.80))
+    length_min = float(
+        getattr(
+            model_config,
+            "validation_length_preservation_min",
+            DEFAULT_VALIDATION_LENGTH_PRESERVATION_MIN,
+        )
+    )
     length_penalty = max(0.0, length_min - float(sanity.get("avg_length_preserved", 1.0)))
     sed_penalty = max(
         0.0,
