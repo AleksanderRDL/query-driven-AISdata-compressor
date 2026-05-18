@@ -1,4 +1,4 @@
-field_count: 631
+field_count: 633
 fields:
 - actual_learned_controlled_retained_slot_fraction
 - allow_tf32
@@ -235,6 +235,8 @@ fields:
 - mlqds_diversity_bonus
 - mlqds_effective_diversity_bonus
 - mlqds_hybrid_mode
+- mlqds_inference_only_latency_ms
+- mlqds_inference_only_latency_seconds
 - mlqds_latency_ms
 - mlqds_max_ped_km
 - mlqds_max_sed_km

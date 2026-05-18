@@ -3745,3 +3745,74 @@ Decision:
   `orchestration.train_and_score`, `orchestration.score_checkpoint`,
   `benchmarking.runner`, and `benchmarking.runtime_benchmark`.
 - Do not run scientific probes for this checkpoint.
+
+## Checkpoint 5.54 - Inference-Only Benchmark Latency
+
+Status: completed
+
+Hypothesis:
+- Benchmark children already time retained-mask application separately from
+  query scoring and diagnostics. The missing piece is an explicit report field
+  that makes the inference-only meaning unambiguous.
+
+Expected files:
+- `benchmarking/reporting/row_fields.py`
+- `benchmarking/table.py`
+- `benchmarking/README.md`
+- `docs/query-driven-rework-guide.md`
+- benchmark report regression and unit tests
+
+Stop condition:
+- Benchmark report rows expose inference-only MLQDS latency without adding a
+  diagnostic pass or a new benchmark child run, affected tests pass, and the
+  guide documents the semantics.
+
+Changes:
+- Added `mlqds_inference_only_latency_ms` and
+  `mlqds_inference_only_latency_seconds` to benchmark report rows.
+- Kept existing `mlqds_latency_ms` as a compatibility alias for the same child
+  `matched.MLQDS.latency_ms` value.
+- Changed the compact markdown table to show the explicit
+  `mlqds_inference_only_latency_ms` column instead of the ambiguous legacy
+  latency name.
+- Updated the benchmark row field-set regression from 631 to 633 fields.
+- Documented that inference-only latency is retained-mask application time and
+  excludes query scoring, range diagnostics, report construction, and
+  matched-evaluation phase time.
+
+Tests:
+- `uv run --group dev -- pytest Range_QDS/tests/unit/benchmarking/test_runner.py::test_benchmark_row_records_effective_child_torch_runtime Range_QDS/tests/unit/benchmarking/test_runner.py::test_benchmark_markdown_table_is_compact Range_QDS/tests/regression/test_benchmark_report_regression.py -q`:
+  `4 passed`.
+- `uv run --group dev -- pytest Range_QDS/tests/unit/benchmarking Range_QDS/tests/regression/test_benchmark_report_regression.py -q`:
+  `42 passed`.
+- `uv run --group dev -- ruff check Range_QDS/benchmarking/reporting/row_fields.py Range_QDS/benchmarking/table.py Range_QDS/tests/unit/benchmarking/test_runner.py`:
+  passed.
+- `uv run --group dev -- pyright Range_QDS/benchmarking Range_QDS/tests/unit/benchmarking/test_runner.py`:
+  `0 errors, 0 warnings, 0 informations`.
+- `git diff --check`: passed.
+
+Experiment artifact:
+- path: none
+- command: none; reporting/schema checkpoint only.
+
+Key results:
+- MLQDS QueryUsefulV1: not applicable
+- uniform QueryUsefulV1: not applicable
+- Douglas-Peucker QueryUsefulV1: not applicable
+- gates passed: not applicable
+- gates failed: not applicable
+
+Extra discoveries:
+- The value the user wanted was already captured in child artifacts:
+  `scoring.method_scoring.score_method` times `method.simplify(...)`, and
+  workload-blind runs preserve the same timer when masks are frozen before
+  matched scoring.
+- `evaluate_matched_seconds` is not an inference-only measurement. It is a
+  phase duration for matched-method scoring work and must not be used as model
+  inference latency.
+
+Decision:
+- Treat `mlqds_inference_only_latency_ms` as the clean benchmark-facing latency
+  field for "how long does it take to apply inference".
+- Keep `mlqds_latency_ms` only as a stable artifact compatibility alias.
+- Do not run scientific probes for this checkpoint.

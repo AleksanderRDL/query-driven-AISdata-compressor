@@ -1030,6 +1030,11 @@ all component/runtime/latency fields reported
 real AIS held-out-day evidence included
 ```
 
+Benchmark rows must include inference-only MLQDS latency as
+`mlqds_inference_only_latency_ms` and `mlqds_inference_only_latency_seconds`.
+This is retained-mask application time only. It must not include query scoring,
+range diagnostics, report construction, or matched-evaluation phase time.
+
 ### Scale-specific interpretation rules
 
 Use these rules when deciding what to do next:

@@ -260,7 +260,7 @@ BENCHMARK_REPORT_TABLE_COLUMNS = (
     "mlqds_range_gap_distance_coverage",
     "mlqds_range_gap_min_coverage",
     "mlqds_range_turn_coverage",
-    "mlqds_latency_ms",
+    "mlqds_inference_only_latency_ms",
     "best_epoch_collapse_warning",
     "collapse_warning_count",
 )

@@ -1007,6 +1007,10 @@ def test_benchmark_row_records_effective_child_torch_runtime(tmp_path) -> None:
     assert row["runtime_bottleneck_phase"] == "train-model"
     assert row["runtime_bottleneck_seconds"] == 6.0
     assert row["runtime_bottleneck_fraction"] == pytest.approx(0.6)
+    assert row["evaluate_matched_seconds"] == 2.0
+    assert row["mlqds_latency_ms"] == 8.0
+    assert row["mlqds_inference_only_latency_ms"] == 8.0
+    assert row["mlqds_inference_only_latency_seconds"] == pytest.approx(0.008)
     assert row["single_cell_range_status"] == "diagnostic_upper_bound"
     assert row["final_claim_status"] == "candidate_blocked_by_required_gates"
     assert row["final_success_allowed"] is False
@@ -2168,6 +2172,7 @@ def test_benchmark_markdown_table_is_compact() -> None:
                 "mlqds_vs_douglas_peucker_range_point_f1": 0.2,
                 "mlqds_vs_douglas_peucker_range_usefulness": 0.19,
                 "mlqds_latency_ms": 10.0,
+                "mlqds_inference_only_latency_ms": 10.0,
                 "collapse_warning": False,
             }
         ]
@@ -2183,6 +2188,7 @@ def test_benchmark_markdown_table_is_compact() -> None:
     assert "mlqds_avg_sed_km" in table
     assert "mlqds_primary_score" in table
     assert "mlqds_range_usefulness" in table
+    assert "mlqds_inference_only_latency_ms" in table
     assert "| range | custom | 0 | 12.3457 |" in table
 
 

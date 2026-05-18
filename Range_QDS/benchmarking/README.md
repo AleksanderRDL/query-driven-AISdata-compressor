@@ -84,6 +84,12 @@ Start with:
 - `benchmark_report.json`
 - child `example_run.json`
 
+Benchmark report rows expose `mlqds_inference_only_latency_ms` and
+`mlqds_inference_only_latency_seconds`. These are copied from child
+`matched.MLQDS.latency_ms`, which times retained-mask application only. Do not
+interpret them as `evaluate_matched_seconds`; that phase includes matched-method
+scoring work.
+
 Artifact layout and cleanup rules live in
 [`../artifacts/README.md`](../artifacts/README.md). JSON inspection helpers
 live in [`../docs/dev-tooling-guide.md`](../docs/dev-tooling-guide.md).

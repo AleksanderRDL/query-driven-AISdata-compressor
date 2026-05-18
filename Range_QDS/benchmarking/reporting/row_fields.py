@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from benchmarking.common import as_float
 from benchmarking.reporting.audit_extractors import (
     _audit_summary,
     _data_source_row_fields,
@@ -33,6 +34,11 @@ from benchmarking.row_runtime import (
     phase_seconds_with_prefix,
 )
 from training.model_features import is_workload_blind_model_type, model_type_metadata
+
+
+def _milliseconds_to_seconds(value: Any) -> float | None:
+    milliseconds = as_float(value)
+    return None if milliseconds is None else milliseconds / 1000.0
 
 
 def _row_from_run(
@@ -173,6 +179,7 @@ def _row_from_run(
     mlqds_aggregate_f1 = mlqds.get("aggregate_f1")
     mlqds_range_point_f1 = mlqds.get("range_point_f1", mlqds_aggregate_f1)
     mlqds_range_usefulness = mlqds.get("range_usefulness_score")
+    mlqds_inference_only_latency_ms = mlqds.get("latency_ms")
     mlqds_query_useful_v1 = mlqds.get("query_useful_v1_score")
     mlqds_gap_time_usefulness = mlqds.get("range_usefulness_gap_time_score")
     mlqds_gap_distance_usefulness = mlqds.get("range_usefulness_gap_distance_score")
@@ -749,7 +756,11 @@ def _row_from_run(
             uniform,
             "avg_length_preserved",
         ),
-        "mlqds_latency_ms": mlqds.get("latency_ms"),
+        "mlqds_latency_ms": mlqds_inference_only_latency_ms,
+        "mlqds_inference_only_latency_ms": mlqds_inference_only_latency_ms,
+        "mlqds_inference_only_latency_seconds": _milliseconds_to_seconds(
+            mlqds_inference_only_latency_ms
+        ),
         "avg_length_preserved": mlqds.get("avg_length_preserved"),
         "combined_query_shape_score": mlqds.get("combined_query_shape_score"),
         "temporal_random_fill_range_point_f1": temporal_random_fill.get("range_point_f1"),
