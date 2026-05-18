@@ -125,6 +125,9 @@ def _row_from_run(
     shuffled_prior_head_output = (prior_sensitivity.get("shuffled_prior_fields") or {}).get(
         "head_output"
     ) or {}
+    shuffled_prior_score_output = (prior_sensitivity.get("shuffled_prior_fields") or {}).get(
+        "score_output"
+    ) or {}
     shuffled_prior_model_input = shuffled_prior_model.get("model_input_prior_features") or {}
     shuffled_prior_normalized = shuffled_prior_model.get("normalized_model_prior_features") or {}
     no_prior_sample = (prior_sensitivity.get("without_query_prior_features") or {}).get(
@@ -135,6 +138,9 @@ def _row_from_run(
     ) or {}
     no_prior_head_output = (prior_sensitivity.get("without_query_prior_features") or {}).get(
         "head_output"
+    ) or {}
+    no_prior_score_output = (prior_sensitivity.get("without_query_prior_features") or {}).get(
+        "score_output"
     ) or {}
     no_prior_model_input = no_prior_model.get("model_input_prior_features") or {}
     no_prior_normalized = no_prior_model.get("normalized_model_prior_features") or {}
@@ -576,6 +582,15 @@ def _row_from_run(
         "shuffled_prior_head_probability_mean_abs_delta": shuffled_prior_head_output.get(
             "mean_abs_head_probability_delta"
         ),
+        "shuffled_prior_score_output_mean_abs_delta": shuffled_prior_score_output.get(
+            "mean_abs_score_delta"
+        ),
+        "shuffled_prior_score_output_max_abs_delta": shuffled_prior_score_output.get(
+            "max_abs_score_delta"
+        ),
+        "shuffled_prior_score_output_topk_jaccard_at_retained_count": (
+            shuffled_prior_score_output.get("score_topk_jaccard_at_retained_count")
+        ),
         "no_prior_sampled_primary_nonzero_fraction": no_prior_sample.get(
             "primary_nonzero_fraction"
         ),
@@ -597,6 +612,15 @@ def _row_from_run(
         "no_prior_head_logit_mean_abs_delta": no_prior_head_output.get("mean_abs_head_logit_delta"),
         "no_prior_head_probability_mean_abs_delta": no_prior_head_output.get(
             "mean_abs_head_probability_delta"
+        ),
+        "no_prior_score_output_mean_abs_delta": no_prior_score_output.get(
+            "mean_abs_score_delta"
+        ),
+        "no_prior_score_output_max_abs_delta": no_prior_score_output.get(
+            "max_abs_score_delta"
+        ),
+        "no_prior_score_output_topk_jaccard_at_retained_count": (
+            no_prior_score_output.get("score_topk_jaccard_at_retained_count")
         ),
         "legacy_range_useful_diagnostic_only": bool(
             legacy_range_useful_summary.get("diagnostic_only", True)

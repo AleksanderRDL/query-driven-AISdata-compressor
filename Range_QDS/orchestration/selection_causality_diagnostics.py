@@ -9,15 +9,15 @@ import torch
 from config.run_config import RunConfig
 from learning.outputs import TrainingOutputs
 from learning.predictability_audit import query_prior_predictability_scores
-from learning.query_prior_fields import query_prior_field_metadata, zero_query_prior_field_like
+from learning.query_prior_fields import zero_query_prior_field_like
 from orchestration.causality import (
     causality_ablation_diagnostics_payload,
     head_ablation_sensitivity,
-    head_output_sensitivity,
     model_prior_feature_sensitivity,
+    prior_ablation_sensitivity_from_tensors,
     prior_feature_sample_sensitivity,
     retained_mask_comparison,
-    score_ablation_sensitivity,
+    training_outputs_with_query_prior_field,
 )
 from orchestration.mlqds_method_factory import build_mlqds_method
 from orchestration.model_ablations import (
@@ -521,23 +521,9 @@ def build_selection_causality_diagnostics(
                     ablation_prior_field=ablation_field,
                     boundaries=selection_boundaries,
                 )
-                ablation_trained = TrainingOutputs(
-                    model=trained.model,
-                    scaler=trained.scaler,
-                    labels=trained.labels,
-                    labelled_mask=trained.labelled_mask,
-                    history=trained.history,
-                    epochs_trained=trained.epochs_trained,
-                    best_epoch=trained.best_epoch,
-                    best_loss=trained.best_loss,
-                    best_selection_score=trained.best_selection_score,
-                    target_diagnostics=trained.target_diagnostics,
-                    fit_diagnostics=trained.fit_diagnostics,
-                    feature_context={
-                        **trained.feature_context,
-                        "query_prior_field": ablation_field,
-                        "query_prior_field_metadata": query_prior_field_metadata(ablation_field),
-                    },
+                ablation_trained = training_outputs_with_query_prior_field(
+                    trained,
+                    ablation_field,
                 )
                 ablation_method = _mlqds_method(
                     name=ablation_name,
@@ -552,36 +538,30 @@ def build_selection_causality_diagnostics(
                 ablation_point_scores = getattr(ablation_method, "_score_cache", None)
                 ablation_raw_preds = getattr(ablation_method, "_raw_pred_cache", None)
                 ablation_head_logits = getattr(ablation_method, "_head_logit_cache", None)
-                prior_sensitivity[prior_sensitivity_key] = {
-                    "sampled_prior_features": prior_feature_sensitivity,
-                    "model_prior_features": model_prior_sensitivity,
-                    "selector_score": score_ablation_sensitivity(
+                prior_sensitivity[prior_sensitivity_key] = (
+                    prior_ablation_sensitivity_from_tensors(
+                        sampled_prior_features=prior_feature_sensitivity,
+                        model_prior_features=model_prior_sensitivity,
                         primary_scores=primary_scores,
                         ablation_scores=ablation_point_scores
                         if isinstance(ablation_point_scores, torch.Tensor)
                         else None,
-                        primary_mask=primary_mask,
-                        ablation_mask=ablation_mask,
-                    ),
-                    "raw_prediction": score_ablation_sensitivity(
-                        primary_scores=primary_raw_preds
+                        primary_raw_predictions=primary_raw_preds
                         if isinstance(primary_raw_preds, torch.Tensor)
                         else None,
-                        ablation_scores=ablation_raw_preds
+                        ablation_raw_predictions=ablation_raw_preds
                         if isinstance(ablation_raw_preds, torch.Tensor)
                         else None,
-                        primary_mask=primary_mask,
-                        ablation_mask=ablation_mask,
-                    ),
-                    "head_output": head_output_sensitivity(
                         primary_head_logits=primary_head_logits
                         if isinstance(primary_head_logits, torch.Tensor)
                         else None,
                         ablation_head_logits=ablation_head_logits
                         if isinstance(ablation_head_logits, torch.Tensor)
                         else None,
-                    ),
-                }
+                        primary_mask=primary_mask,
+                        ablation_mask=ablation_mask,
+                    )
+                )
                 ablation_methods.append(
                     FrozenMaskMethod(
                         name=ablation_name,

@@ -26,5 +26,9 @@
     shuffled_prior: .learning_causality_summary.prior_sensitivity_diagnostics.shuffled_prior_fields.sampled_prior_features,
     no_prior: .learning_causality_summary.prior_sensitivity_diagnostics.without_query_prior_features.sampled_prior_features
   },
+  prior_score_output: {
+    shuffled_prior: .learning_causality_summary.prior_sensitivity_diagnostics.shuffled_prior_fields.score_output,
+    no_prior: .learning_causality_summary.prior_sensitivity_diagnostics.without_query_prior_features.score_output
+  },
   selector_config: .learning_causality_summary.learned_segment_selector_config
 }

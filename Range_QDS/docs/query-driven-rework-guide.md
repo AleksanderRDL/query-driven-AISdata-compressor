@@ -40,101 +40,159 @@ The target product result is not “best possible geometric simplification.” I
 
 ## 2. Current evidence and active blocker
 
-The most recent strict debug probe failed. It is useful evidence, not a success claim.
+The latest relevant strict single-cell evidence is:
 
-Result:
+```text
+artifacts/results/query_driven_v2_checkpoint13_per_head_prior_materiality_strict_replay_c10_r05/example_run.json
+```
+
+The active length-preservation policy is `0.75`. The stored strict artifact was originally written under the older `0.80` global-sanity minimum, so its current gate status must be read with the policy reclassification artifact:
+
+```text
+artifacts/results/query_driven_v2_checkpoint18_current_best_gate_reclassification_len075/gate_reclassification_summary.json
+```
+
+This is still diagnostic evidence, not final acceptance evidence. The final grid has not been run, and final success is not allowed.
+
+Current strict-cell result:
 
 ```text
 QueryUsefulV1:
-  MLQDS:           0.0645
-  uniform:         0.1190
-  DouglasPeucker:  0.1478
+  MLQDS:           0.1718372153
+  uniform:         0.1422379580
+  DouglasPeucker:  0.1636245984
 
 RangeUsefulLegacy:
-  MLQDS:           0.0369
-  uniform:         0.0936
-  DouglasPeucker:  0.1228
+  not the primary decision metric
+
+Length preservation:
+  MLQDS:           0.7941408411
+  active minimum:  0.7500000000
 ```
 
-Final success was blocked by:
+Gate status after the `0.75` length-policy reclassification:
 
 ```text
-workload_stability_gate
-predictability_gate
-prior_predictive_alignment_gate
-workload_signature_gate
-learning_causality_ablations
-global_sanity_gates
-full_workload_profile_compression_grid
+Passed:
+  workload_stability_gate
+  support_overlap_gate
+  predictability_gate
+  prior_predictive_alignment_gate
+  target_diffusion_gate
+  workload_signature_gate
+  global_sanity_gates
+
+Blocked:
+  learning_causality_ablations
+  full_workload_profile_compression_grid
 ```
 
-Support overlap and target diffusion passed. That means the model had nonzero prior-field input support and labels were not obviously too diffuse. The first active blocker is **workload generation health and signature stability**, not model architecture.
+The previous workload-generation/signature blocker is no longer the first active blocker for the current-best strict cell. Do not spend the next checkpoint increasing workload scale, widening caps, or running the full matrix unless a focused probe shows those gates regressed.
 
-The strict probe showed unhealthy workload generation:
+The active blocker is **learning causality**. The model beats uniform and Douglas-Peucker in this strict cell, but the win is not yet defensible as learned workload-blind behavior.
+
+Failed causality child gates:
 
 ```text
-train accepted:      11 / 16 requested queries
-selection accepted:  11 / 16 requested queries
-eval accepted:       16 / 16 requested queries
-train/selection exhausted 6000 attempts
-eval required 3305 attempts and rejected 3289 candidates
-dominant rejection reason: too_broad
+shuffled_scores_should_lose:
+  required delta: 0.0177595544
+  observed delta: 0.0088563451
+  shortfall:      0.0089032093
+  mask movement:  1864 symmetric-difference decisions
+  mask Jaccard:   0.2819722650
+
+shuffled_prior_fields_should_lose:
+  required delta: 0.0050000000
+  observed delta: 0.0027430170
+  shortfall:      0.0022569830
+  mask movement:  36 symmetric-difference decisions
+  mask Jaccard:   0.9785969084
+
+without_query_prior_features_should_lose:
+  required delta: 0.0050000000
+  observed delta: 0.0027430170
+  shortfall:      0.0022569830
+  mask movement:  36 symmetric-difference decisions
+  mask Jaccard:   0.9785969084
 ```
 
-The accepted workloads were not clean samples from the intended profile. They were heavily filtered subsets. Planned family quotas matched, but accepted train/eval signatures diverged.
-
-Train-vs-eval signature failure examples:
+Passing causality child gates:
 
 ```text
-point-hit distribution KS:  1.0000
-ship-hit distribution KS:   0.5966
-anchor-family L1:           0.3295
-footprint-family L1:        0.1477
+untrained_model_should_lose:
+  margin: 0.0150725509
+
+without_behavior_utility_head_should_lose:
+  margin: 0.0046601815
+
+without_segment_budget_head_should_lose:
+  margin: 0.0095434355
+
+prior_field_only_should_not_match_trained:
+  margin: 0.0178886064
 ```
 
-Predictability also failed:
+Selector control is not the current blocker:
 
 ```text
-aggregate Spearman:           0.0332
-aggregate Kendall tau:       -0.0316
-PR-AUC lift:                  0.9440
-lift@1%,2%,5%,10%:            0.0
+learned-controlled retained-slot fraction: 0.3383413462
+required minimum:                         0.2500000000
 ```
 
-Per-head diagnostics showed one useful clue:
+Current interpretation:
+
+- Score ordering has material mask control, but the ordering advantage is too weak. Shuffling scores changes many retained decisions, yet QueryUsefulV1 drops by only about half of the required threshold.
+- The prior path is too weak. Raw sampled priors change substantially, model-input priors change nontrivially, but head probability changes are near zero and retained-mask movement is tiny.
+- Behavior and segment-budget heads are material enough under the current checks. Preserve that behavior while fixing score/prior materiality.
+- The pre-repair diagnostic remains higher scoring but length-broken. Do not compensate by weakening length repair, adding large temporal scaffolding, or loosening causality gates.
+
+Latest prior-path sensitivity from the derived diagnosis:
 
 ```text
-segment_budget_target:
-  Spearman: 0.3177
-  lift@5%:  1.1791
+shuffled_prior_fields:
+  sampled_prior_mean_abs_delta:       0.1336687356
+  model_input_prior_mean_abs_delta:   0.0128313117
+  head_probability_mean_abs_delta:    0.0000181609
 
-query_hit_probability:
-  lift@5%: 0.0
+without_query_prior_features:
+  sampled_prior_mean_abs_delta:       0.1352738738
+  model_input_prior_mean_abs_delta:   0.0128368139
+  head_probability_mean_abs_delta:    0.0000181643
 ```
 
-Interpretation: the current train-derived prior has weak segment-structure signal, but it does not predict held-out future query-hit mass. Query-hit transfer must improve before model tuning is likely to matter.
-
-Learning causality failed decisively:
+Future prior-ablation artifacts should expose one canonical diagnostic chain:
 
 ```text
-MLQDS:                          0.0645
-MLQDS_shuffled_scores:           0.2281
-MLQDS_untrained_model:           0.1167
-MLQDS_without_segment_budget:    0.1209
-MLQDS_prior_field_only_score:    0.0652
-MLQDS_without_query_prior:       0.0645
+sampled_prior_features
+model_prior_features
+head_output
+raw_prediction
+score_output
+retained_mask
 ```
 
-Interpretation: the trained score is actively harmful in this probe. Removing the segment-budget head improves the result, and removing query-prior features changes nothing. This is not learned success.
+Do not reintroduce `selector_score` as a compatibility alias for this prior-ablation payload. `score_output` is the canonical score-stage name.
 
-Global sanity also failed:
+Current next checkpoint direction:
 
 ```text
-MLQDS length preservation: 0.5907
-required minimum:          0.7500
+Primary hypothesis:
+  Prior features reach the model but are suppressed by prior scaling/encoding
+  or by score composition before selector decisions.
+
+Expected focus:
+  learning/model_features.py
+  models/workload_blind_range_v2.py
+  selection/model_score_conversion.py
+  orchestration/model_ablations.py
+  orchestration/retained_mask_ablation_stage.py
+
+Preferred scope:
+  static/code diagnostic plus tiny controlled unit or artifact replay if needed;
+  no full matrix
 ```
 
-Do not run the full 4x7 grid until a strict single-cell probe passes or gives a narrower diagnosis.
+Do not run the full 4x7 grid until learning causality passes on required smaller evidence. Do not claim final success from this strict cell.
 
 ---
 
