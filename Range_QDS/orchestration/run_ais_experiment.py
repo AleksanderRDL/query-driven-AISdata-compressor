@@ -201,6 +201,7 @@ def main() -> None:
         query_useful_aux_loss_weight=args.query_useful_aux_loss_weight,
         query_useful_segment_budget_head_weight=args.query_useful_segment_budget_head_weight,
         query_useful_segment_level_loss_weight=args.query_useful_segment_level_loss_weight,
+        query_useful_behavior_rank_loss_weight=args.query_useful_behavior_rank_loss_weight,
         temporal_distribution_loss_weight=args.temporal_distribution_loss_weight,
         gradient_clip_norm=args.gradient_clip_norm,
         compression_ratio=args.compression_ratio,
@@ -244,6 +245,10 @@ def main() -> None:
         mlqds_hybrid_mode=args.mlqds_hybrid_mode,
         selector_type=args.selector_type,
         learned_segment_geometry_gain_weight=args.learned_segment_geometry_gain_weight,
+        learned_segment_allocation_length_support_weight=(
+            args.learned_segment_allocation_length_support_weight
+        ),
+        learned_segment_allocation_weight_floor=args.learned_segment_allocation_weight_floor,
         learned_segment_score_blend_weight=args.learned_segment_score_blend_weight,
         learned_segment_fairness_preallocation=args.learned_segment_fairness_preallocation,
         learned_segment_length_repair_fraction=args.learned_segment_length_repair_fraction,
@@ -308,6 +313,7 @@ def main() -> None:
         f"query_useful_aux_loss_weight={args.query_useful_aux_loss_weight}  "
         f"query_useful_segment_budget_head_weight={args.query_useful_segment_budget_head_weight}  "
         f"query_useful_segment_level_loss_weight={args.query_useful_segment_level_loss_weight}  "
+        f"query_useful_behavior_rank_loss_weight={args.query_useful_behavior_rank_loss_weight}  "
         f"temporal_distribution_loss_weight={args.temporal_distribution_loss_weight}  "
         f"gradient_clip_norm={args.gradient_clip_norm}  "
         f"train_batch_size={args.train_batch_size}  "
@@ -358,6 +364,8 @@ def main() -> None:
         f"mlqds_hybrid_mode={args.mlqds_hybrid_mode}  "
         f"selector_type={args.selector_type}  "
         f"learned_segment_geometry_gain_weight={args.learned_segment_geometry_gain_weight}  "
+        f"learned_segment_allocation_length_support_weight={args.learned_segment_allocation_length_support_weight}  "
+        f"learned_segment_allocation_weight_floor={args.learned_segment_allocation_weight_floor}  "
         f"learned_segment_score_blend_weight={args.learned_segment_score_blend_weight}  "
         f"learned_segment_fairness_preallocation={args.learned_segment_fairness_preallocation}  "
         f"learned_segment_length_repair_fraction={args.learned_segment_length_repair_fraction}  "

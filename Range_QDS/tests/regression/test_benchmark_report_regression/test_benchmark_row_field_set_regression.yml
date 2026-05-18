@@ -1,4 +1,4 @@
-field_count: 609
+field_count: 622
 fields:
 - actual_learned_controlled_retained_slot_fraction
 - allow_tf32
@@ -198,6 +198,8 @@ fields:
 - historical_prior_teacher_support_count
 - inference_batch_size
 - learned_controlled_retained_slot_fraction
+- learned_segment_allocation_length_support_weight
+- learned_segment_allocation_weight_floor
 - learned_segment_fairness_preallocation_enabled
 - learned_segment_geometry_gain_weight
 - learned_segment_length_repair_fraction
@@ -303,6 +305,10 @@ fields:
 - no_geometry_retained_mask_jaccard
 - no_geometry_retained_symmetric_difference_count
 - no_geometry_tie_breaker_ablation_delta
+- no_prior_model_input_mean_abs_feature_delta
+- no_prior_model_inputs_changed
+- no_prior_normalized_model_inputs_changed
+- no_prior_normalized_model_mean_abs_feature_delta
 - no_prior_sampled_mean_abs_feature_delta
 - no_prior_sampled_outside_extent_fraction
 - no_prior_sampled_primary_nonzero_fraction
@@ -312,6 +318,9 @@ fields:
 - no_segment_budget_head_ablation_delta
 - no_segment_budget_retained_mask_jaccard
 - no_segment_budget_retained_symmetric_difference_count
+- no_segment_length_support_allocation_ablation_delta
+- no_segment_length_support_allocation_retained_mask_jaccard
+- no_segment_length_support_allocation_retained_symmetric_difference_count
 - no_trajectory_fairness_preallocation_ablation_delta
 - oracle_exact_optimum
 - oracle_kind
@@ -443,6 +452,10 @@ fields:
 - selector_claim_status
 - selector_trace_retained_mask_matches_primary
 - shuffled_prior_field_ablation_delta
+- shuffled_prior_model_input_mean_abs_feature_delta
+- shuffled_prior_model_inputs_changed
+- shuffled_prior_normalized_model_inputs_changed
+- shuffled_prior_normalized_model_mean_abs_feature_delta
 - shuffled_prior_retained_mask_jaccard
 - shuffled_prior_retained_symmetric_difference_count
 - shuffled_prior_sampled_ablation_nonzero_fraction

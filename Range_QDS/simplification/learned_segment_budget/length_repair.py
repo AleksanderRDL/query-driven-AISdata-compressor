@@ -3,10 +3,36 @@
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 
 import torch
 
 from simplification.simplify_trajectories import deterministic_topk_with_jitter
+
+
+@dataclass
+class _LengthRepairState:
+    trajectory_id: int
+    start: int
+    end: int
+    points: torch.Tensor
+    scores: torch.Tensor
+    retained: torch.Tensor
+    learned: torch.Tensor
+    fallback: torch.Tensor
+    repair: torch.Tensor
+    removable: torch.Tensor
+    swaps: int = 0
+
+
+@dataclass(frozen=True)
+class _LengthRepairCandidate:
+    state_index: int
+    add_idx: int
+    remove_idx: int
+    net_gain: float
+    candidate_key: float
+    removal_key: float
 
 
 def _normalize_candidate_values(values: torch.Tensor, finite: torch.Tensor) -> torch.Tensor:
@@ -172,7 +198,7 @@ def _apply_length_repair_swaps(
     length_repair_mask: torch.Tensor,
     repair_fraction: float,
 ) -> int:
-    """Swap a bounded share of learned slots toward query-free path-length gain."""
+    """Swap a bounded global share of learned slots toward query-free path-length gain."""
     if (
         points is None
         or int(points.shape[0]) != int(scores.numel())
@@ -180,9 +206,10 @@ def _apply_length_repair_swaps(
     ):
         return 0
     fraction = max(0.0, min(1.0, float(repair_fraction)))
-    total_swaps = 0
     points_cpu = points.detach().cpu().float()
     scores_cpu = scores.detach().cpu().float()
+    states: list[_LengthRepairState] = []
+    total_removable = 0
 
     for trajectory_id, (start, end) in enumerate(boundaries):
         start_i = int(start)
@@ -195,80 +222,145 @@ def _apply_length_repair_swaps(
         local_repair = length_repair_mask[start_i:end_i].detach().cpu().bool().clone()
         local_removable = local_learned | local_fallback
         removable_count = int(local_removable.sum().item())
-        max_swaps = min(removable_count, math.ceil(fraction * float(removable_count)))
-        if max_swaps <= 0:
+        if removable_count <= 0:
             continue
-        local_scores = scores_cpu[start_i:end_i]
-        local_points = points_cpu[start_i:end_i]
-
-        for step in range(max_swaps):
-            retained_indices = torch.where(local_retained)[0]
-            if int(retained_indices.numel()) < 3:
-                break
-            candidate_scores = local_scores.clone()
-            candidate_scores[local_retained] = -float("inf")
-            finite_candidates = torch.isfinite(candidate_scores)
-            if not bool(finite_candidates.any().item()):
-                break
-            gain_scores = _length_gain_scores(local_points, retained_indices, candidate_scores)
-            positive_gain = finite_candidates & (gain_scores > 1e-9)
-            if not bool(positive_gain.any().item()):
-                break
-            normalized_gain = _normalize_candidate_values(gain_scores, positive_gain)
-            normalized_score = _normalize_candidate_values(candidate_scores, positive_gain)
-            candidate_key = 0.90 * normalized_gain + 0.10 * normalized_score
-            candidate_key[~positive_gain] = -float("inf")
-            add_idx_tensor = deterministic_topk_with_jitter(
-                candidate_key,
-                1,
-                trajectory_id * 65537 + step,
+        total_removable += removable_count
+        states.append(
+            _LengthRepairState(
+                trajectory_id=int(trajectory_id),
+                start=start_i,
+                end=end_i,
+                points=points_cpu[start_i:end_i],
+                scores=scores_cpu[start_i:end_i],
+                retained=local_retained,
+                learned=local_learned,
+                fallback=local_fallback,
+                repair=local_repair,
+                removable=local_removable,
             )
-            if int(add_idx_tensor.numel()) <= 0:
-                break
-            add_idx = int(add_idx_tensor[0].item())
+        )
 
-            removable_indices = torch.where(local_removable & local_retained)[0]
-            if int(removable_indices.numel()) <= 0:
-                break
-            removal_losses = _length_loss_scores(local_points, retained_indices, removable_indices)
-            finite_removable = torch.isfinite(removal_losses)
-            if not bool(finite_removable.any().item()):
-                break
-            removable_scores = local_scores[removable_indices].float()
-            normalized_loss = _normalize_candidate_values(removal_losses, finite_removable)
-            normalized_removable_score = _normalize_candidate_values(
-                removable_scores, finite_removable
-            )
-            removal_key = (1.0 - normalized_loss) + 0.10 * (1.0 - normalized_removable_score)
-            removal_key[~finite_removable] = -float("inf")
-            remove_choice = deterministic_topk_with_jitter(
-                removal_key,
-                1,
-                trajectory_id * 91733 + step,
-            )
-            if int(remove_choice.numel()) <= 0:
-                break
-            remove_idx = int(removable_indices[int(remove_choice[0].item())].item())
-            if (
-                float(gain_scores[add_idx].item())
-                <= float(removal_losses[int(remove_choice[0].item())].item()) + 1e-9
-            ):
-                break
+    max_total_swaps = min(total_removable, math.ceil(fraction * float(total_removable)))
+    total_swaps = 0
+    best_by_state = {
+        idx: candidate
+        for idx, state in enumerate(states)
+        if (candidate := _best_length_repair_candidate(idx, state)) is not None
+    }
+    while total_swaps < max_total_swaps and best_by_state:
+        _idx, candidate = max(
+            best_by_state.items(),
+            key=lambda item: _length_repair_candidate_sort_key(item[1], states[item[0]]),
+        )
+        state = states[candidate.state_index]
+        _apply_length_repair_candidate(state, candidate)
+        total_swaps += 1
+        next_candidate = _best_length_repair_candidate(candidate.state_index, state)
+        if next_candidate is None:
+            best_by_state.pop(candidate.state_index, None)
+        else:
+            best_by_state[candidate.state_index] = next_candidate
 
-            local_retained[remove_idx] = False
-            local_learned[remove_idx] = False
-            local_fallback[remove_idx] = False
-            local_removable[remove_idx] = False
-            local_retained[add_idx] = True
-            local_repair[add_idx] = True
-            total_swaps += 1
-
-        retained[start_i:end_i] = local_retained.to(device=retained.device)
-        learned_mask[start_i:end_i] = local_learned.to(device=learned_mask.device)
-        fallback_mask[start_i:end_i] = local_fallback.to(device=fallback_mask.device)
-        length_repair_mask[start_i:end_i] = local_repair.to(device=length_repair_mask.device)
+    for state in states:
+        retained[state.start : state.end] = state.retained.to(device=retained.device)
+        learned_mask[state.start : state.end] = state.learned.to(device=learned_mask.device)
+        fallback_mask[state.start : state.end] = state.fallback.to(device=fallback_mask.device)
+        length_repair_mask[state.start : state.end] = state.repair.to(
+            device=length_repair_mask.device
+        )
 
     return int(total_swaps)
+
+
+def _best_length_repair_candidate(
+    state_index: int, state: _LengthRepairState
+) -> _LengthRepairCandidate | None:
+    """Return the best positive net path-length swap for one trajectory."""
+    retained_indices = torch.where(state.retained)[0]
+    if int(retained_indices.numel()) < 3:
+        return None
+    candidate_scores = state.scores.clone()
+    candidate_scores[state.retained] = -float("inf")
+    finite_candidates = torch.isfinite(candidate_scores)
+    if not bool(finite_candidates.any().item()):
+        return None
+    gain_scores = _length_gain_scores(state.points, retained_indices, candidate_scores)
+    positive_gain = finite_candidates & (gain_scores > 1e-9)
+    if not bool(positive_gain.any().item()):
+        return None
+    normalized_gain = _normalize_candidate_values(gain_scores, positive_gain)
+    normalized_score = _normalize_candidate_values(candidate_scores, positive_gain)
+    candidate_key = 0.90 * normalized_gain + 0.10 * normalized_score
+    candidate_key[~positive_gain] = -float("inf")
+    add_idx_tensor = deterministic_topk_with_jitter(
+        candidate_key,
+        1,
+        state.trajectory_id * 65537 + state.swaps,
+    )
+    if int(add_idx_tensor.numel()) <= 0:
+        return None
+    add_idx = int(add_idx_tensor[0].item())
+
+    removable_indices = torch.where(state.removable & state.retained)[0]
+    if int(removable_indices.numel()) <= 0:
+        return None
+    removal_losses = _length_loss_scores(state.points, retained_indices, removable_indices)
+    finite_removable = torch.isfinite(removal_losses)
+    if not bool(finite_removable.any().item()):
+        return None
+    removable_scores = state.scores[removable_indices].float()
+    normalized_loss = _normalize_candidate_values(removal_losses, finite_removable)
+    normalized_removable_score = _normalize_candidate_values(removable_scores, finite_removable)
+    removal_key = (1.0 - normalized_loss) + 0.10 * (1.0 - normalized_removable_score)
+    removal_key[~finite_removable] = -float("inf")
+    remove_choice = deterministic_topk_with_jitter(
+        removal_key,
+        1,
+        state.trajectory_id * 91733 + state.swaps,
+    )
+    if int(remove_choice.numel()) <= 0:
+        return None
+    remove_choice_position = int(remove_choice[0].item())
+    remove_idx = int(removable_indices[remove_choice_position].item())
+    add_gain = float(gain_scores[add_idx].item())
+    removal_loss = float(removal_losses[remove_choice_position].item())
+    net_gain = add_gain - removal_loss
+    if net_gain <= 1e-9:
+        return None
+    return _LengthRepairCandidate(
+        state_index=int(state_index),
+        add_idx=add_idx,
+        remove_idx=remove_idx,
+        net_gain=net_gain,
+        candidate_key=float(candidate_key[add_idx].item()),
+        removal_key=float(removal_key[remove_choice_position].item()),
+    )
+
+
+def _length_repair_candidate_sort_key(
+    candidate: _LengthRepairCandidate, state: _LengthRepairState
+) -> tuple[float, float, float, int, int]:
+    """Sort candidates by global length gain with deterministic tie-breaks."""
+    return (
+        float(candidate.net_gain),
+        float(candidate.candidate_key),
+        float(candidate.removal_key),
+        -int(state.trajectory_id),
+        -int(candidate.add_idx),
+    )
+
+
+def _apply_length_repair_candidate(
+    state: _LengthRepairState, candidate: _LengthRepairCandidate
+) -> None:
+    """Apply one precomputed local repair candidate."""
+    state.retained[candidate.remove_idx] = False
+    state.learned[candidate.remove_idx] = False
+    state.fallback[candidate.remove_idx] = False
+    state.removable[candidate.remove_idx] = False
+    state.retained[candidate.add_idx] = True
+    state.repair[candidate.add_idx] = True
+    state.swaps += 1
 
 
 def _select_with_spacing(

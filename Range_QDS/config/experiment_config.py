@@ -142,6 +142,7 @@ class ModelConfig:
     query_useful_aux_loss_weight: float = 0.50
     query_useful_segment_budget_head_weight: float = 0.10
     query_useful_segment_level_loss_weight: float = 0.25
+    query_useful_behavior_rank_loss_weight: float = 0.0
     temporal_distribution_loss_weight: float = 0.0
     gradient_clip_norm: float = 1.0
     l2_score_weight: float = 1e-4
@@ -168,6 +169,8 @@ class ModelConfig:
     mlqds_hybrid_mode: str = "fill"
     selector_type: str = "temporal_hybrid"
     learned_segment_geometry_gain_weight: float = 0.12
+    learned_segment_allocation_length_support_weight: float = 0.12
+    learned_segment_allocation_weight_floor: float = 0.50
     learned_segment_score_blend_weight: float = 0.05
     learned_segment_fairness_preallocation: bool = True
     learned_segment_length_repair_fraction: float = 0.0
@@ -329,6 +332,7 @@ def build_experiment_config(
     query_useful_aux_loss_weight: float = 0.50,
     query_useful_segment_budget_head_weight: float = 0.10,
     query_useful_segment_level_loss_weight: float = 0.25,
+    query_useful_behavior_rank_loss_weight: float = 0.0,
     temporal_distribution_loss_weight: float = 0.0,
     gradient_clip_norm: float = 1.0,
     compression_ratio: float = 0.2,
@@ -374,6 +378,8 @@ def build_experiment_config(
     mlqds_hybrid_mode: str = "fill",
     selector_type: str = "temporal_hybrid",
     learned_segment_geometry_gain_weight: float = 0.12,
+    learned_segment_allocation_length_support_weight: float = 0.12,
+    learned_segment_allocation_weight_floor: float = 0.50,
     learned_segment_score_blend_weight: float = 0.05,
     learned_segment_fairness_preallocation: bool = True,
     learned_segment_length_repair_fraction: float = 0.0,
@@ -483,6 +489,7 @@ def build_experiment_config(
             query_useful_aux_loss_weight=query_useful_aux_loss_weight,
             query_useful_segment_budget_head_weight=query_useful_segment_budget_head_weight,
             query_useful_segment_level_loss_weight=query_useful_segment_level_loss_weight,
+            query_useful_behavior_rank_loss_weight=query_useful_behavior_rank_loss_weight,
             temporal_distribution_loss_weight=temporal_distribution_loss_weight,
             gradient_clip_norm=gradient_clip_norm,
             compression_ratio=compression_ratio,
@@ -520,6 +527,10 @@ def build_experiment_config(
             mlqds_hybrid_mode=mlqds_hybrid_mode,
             selector_type=selector_type,
             learned_segment_geometry_gain_weight=learned_segment_geometry_gain_weight,
+            learned_segment_allocation_length_support_weight=(
+                learned_segment_allocation_length_support_weight
+            ),
+            learned_segment_allocation_weight_floor=learned_segment_allocation_weight_floor,
             learned_segment_score_blend_weight=learned_segment_score_blend_weight,
             learned_segment_fairness_preallocation=learned_segment_fairness_preallocation,
             learned_segment_length_repair_fraction=learned_segment_length_repair_fraction,

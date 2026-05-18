@@ -79,6 +79,8 @@ def simplify_with_learned_segment_budget_v1_with_trace(
     segment_point_scores: torch.Tensor | None = None,
     points: torch.Tensor | None = None,
     geometry_gain_weight: float = GEOMETRY_TIE_BREAKER_WEIGHT,
+    segment_length_support_weight: float = GEOMETRY_TIE_BREAKER_WEIGHT,
+    segment_allocation_weight_floor: float = SEGMENT_ALLOCATION_WEIGHT_FLOOR,
     segment_score_point_blend_weight: float = SEGMENT_SCORE_POINT_BLEND_WEIGHT,
     fairness_preallocation_enabled: bool = True,
     length_repair_fraction: float = 0.0,
@@ -109,6 +111,8 @@ def simplify_with_learned_segment_budget_v1_with_trace(
             segment_budget_allocation_method="none",
             fairness_preallocation_enabled=fairness_preallocation_enabled,
             geometry_gain_weight=geometry_gain_weight,
+            segment_length_support_weight=segment_length_support_weight,
+            segment_allocation_weight_floor=segment_allocation_weight_floor,
             segment_score_point_blend_weight=segment_score_point_blend_weight,
             length_repair_fraction=0.0,
             length_repair_swap_count=0,
@@ -170,6 +174,8 @@ def simplify_with_learned_segment_budget_v1_with_trace(
             segment_budget_allocation_method="none",
             fairness_preallocation_enabled=fairness_preallocation_enabled,
             geometry_gain_weight=geometry_gain_weight,
+            segment_length_support_weight=segment_length_support_weight,
+            segment_allocation_weight_floor=segment_allocation_weight_floor,
             segment_score_point_blend_weight=segment_score_point_blend_weight,
             length_repair_fraction=0.0,
             length_repair_swap_count=0,
@@ -188,7 +194,13 @@ def simplify_with_learned_segment_budget_v1_with_trace(
             f"got {int(segment_point_scores.numel())}, expected {point_total}."
         )
     point_segment_scores = segment_scores if segment_point_scores is None else segment_point_scores
-    segment_rows = _segment_rows(scores, boundaries, segment_size, segment_scores=segment_scores)
+    segment_rows = _segment_rows(
+        scores,
+        boundaries,
+        segment_size,
+        segment_scores=segment_scores,
+        points=points,
+    )
     segment_rows.sort(key=lambda row: (float(row["score"]), -int(row["start"])), reverse=True)
     segment_score_source = (
         str(segment_score_source_label)
@@ -206,6 +218,10 @@ def simplify_with_learned_segment_budget_v1_with_trace(
         boundaries=boundaries,
         max_budget_share_per_trajectory=max_budget_share_per_trajectory,
         fairness_preallocation_enabled=fairness_preallocation_enabled,
+        segment_length_support_weight=(
+            float(segment_length_support_weight) if points is not None else 0.0
+        ),
+        segment_allocation_weight_floor=float(segment_allocation_weight_floor),
     )
     skeleton_retained_for_diagnostic = retained.detach().cpu().bool().clone()
 
@@ -332,6 +348,10 @@ def simplify_with_learned_segment_budget_v1_with_trace(
         segment_budget_allocation_method="score_weighted_diminishing_priority",
         fairness_preallocation_enabled=fairness_preallocation_enabled,
         geometry_gain_weight=geometry_gain_weight,
+        segment_length_support_weight=(
+            float(segment_length_support_weight) if points is not None else 0.0
+        ),
+        segment_allocation_weight_floor=float(segment_allocation_weight_floor),
         segment_score_point_blend_weight=segment_score_point_blend_weight,
         length_repair_fraction=float(length_repair_fraction),
         length_repair_swap_count=length_repair_swap_count,
@@ -355,6 +375,8 @@ def simplify_with_learned_segment_budget_v1(
     segment_point_scores: torch.Tensor | None = None,
     points: torch.Tensor | None = None,
     geometry_gain_weight: float = GEOMETRY_TIE_BREAKER_WEIGHT,
+    segment_length_support_weight: float = GEOMETRY_TIE_BREAKER_WEIGHT,
+    segment_allocation_weight_floor: float = SEGMENT_ALLOCATION_WEIGHT_FLOOR,
     segment_score_point_blend_weight: float = SEGMENT_SCORE_POINT_BLEND_WEIGHT,
     fairness_preallocation_enabled: bool = True,
     length_repair_fraction: float = 0.0,
@@ -372,6 +394,8 @@ def simplify_with_learned_segment_budget_v1(
         segment_point_scores=segment_point_scores,
         points=points,
         geometry_gain_weight=geometry_gain_weight,
+        segment_length_support_weight=segment_length_support_weight,
+        segment_allocation_weight_floor=segment_allocation_weight_floor,
         segment_score_point_blend_weight=segment_score_point_blend_weight,
         fairness_preallocation_enabled=fairness_preallocation_enabled,
         length_repair_fraction=length_repair_fraction,

@@ -9,6 +9,7 @@ import torch
 from simplification.learned_segment_budget.constants import (
     GEOMETRY_TIE_BREAKER_WEIGHT,
     LEARNED_SEGMENT_BUDGET_TRACE_SCHEMA_VERSION,
+    SEGMENT_ALLOCATION_WEIGHT_FLOOR,
     SEGMENT_SCORE_POINT_BLEND_WEIGHT,
 )
 from simplification.learned_segment_budget.diagnostics import (
@@ -39,6 +40,8 @@ def _selector_trace(
     segment_budget_allocation_method: str = "none",
     fairness_preallocation_enabled: bool = True,
     geometry_gain_weight: float = GEOMETRY_TIE_BREAKER_WEIGHT,
+    segment_length_support_weight: float = 0.0,
+    segment_allocation_weight_floor: float = SEGMENT_ALLOCATION_WEIGHT_FLOOR,
     segment_score_point_blend_weight: float = SEGMENT_SCORE_POINT_BLEND_WEIGHT,
     length_repair_fraction: float = 0.0,
     length_repair_swap_count: int = 0,
@@ -98,6 +101,8 @@ def _selector_trace(
         "segment_budget_allocation_method": str(segment_budget_allocation_method),
         "trajectory_fairness_preallocation_enabled": bool(fairness_preallocation_enabled),
         "geometry_tie_breaker_weight": float(geometry_gain_weight),
+        "segment_length_support_weight": float(segment_length_support_weight),
+        "segment_allocation_weight_floor": float(segment_allocation_weight_floor),
         "segment_score_point_blend_weight": float(segment_score_point_blend_weight),
         "no_fixed_85_percent_temporal_scaffold": True,
         "point_attribution_available": True,

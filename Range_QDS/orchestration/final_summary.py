@@ -164,6 +164,17 @@ def build_final_run_summaries(
         causality_ablation_evaluations,
         "MLQDS_without_geometry_tie_breaker",
     )
+    allocation_length_support_weight = float(
+        getattr(config.model, "learned_segment_allocation_length_support_weight", 0.12)
+    )
+    allocation_weight_floor = float(
+        getattr(config.model, "learned_segment_allocation_weight_floor", 0.50)
+    )
+    no_segment_length_support_allocation_delta = query_useful_delta(
+        primary_eval,
+        causality_ablation_evaluations,
+        "MLQDS_without_segment_length_support_allocation",
+    )
     causality_ablation_component_deltas = query_useful_component_delta_summary(
         primary=primary_eval,
         ablations=causality_ablation_evaluations,
@@ -273,9 +284,14 @@ def build_final_run_summaries(
         "no_segment_budget_head_ablation_delta": no_segment_budget_head_delta,
         "no_trajectory_fairness_preallocation_ablation_delta": no_fairness_preallocation_delta,
         "no_geometry_tie_breaker_ablation_delta": no_geometry_tie_breaker_delta,
+        "no_segment_length_support_allocation_ablation_delta": (
+            no_segment_length_support_allocation_delta
+        ),
         "segment_budget_head_ablation_mode": segment_budget_head_ablation_mode,
         "learned_segment_selector_config": {
             "geometry_gain_weight": float(config.model.learned_segment_geometry_gain_weight),
+            "allocation_length_support_weight": allocation_length_support_weight,
+            "allocation_weight_floor": allocation_weight_floor,
             "segment_score_blend_weight": float(config.model.learned_segment_score_blend_weight),
             "fairness_preallocation_enabled": bool(
                 config.model.learned_segment_fairness_preallocation

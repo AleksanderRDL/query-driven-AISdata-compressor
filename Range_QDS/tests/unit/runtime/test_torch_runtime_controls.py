@@ -94,6 +94,7 @@ def test_experiment_config_roundtrips_precision_controls() -> None:
         query_useful_aux_loss_weight=0.75,
         query_useful_segment_budget_head_weight=0.35,
         query_useful_segment_level_loss_weight=0.90,
+        query_useful_behavior_rank_loss_weight=0.40,
         temporal_distribution_loss_weight=0.07,
         ranking_pairs_per_type=192,
         ranking_top_quantile=0.9,
@@ -172,6 +173,7 @@ def test_experiment_config_roundtrips_precision_controls() -> None:
     assert restored.model.query_useful_aux_loss_weight == 0.75
     assert restored.model.query_useful_segment_budget_head_weight == 0.35
     assert restored.model.query_useful_segment_level_loss_weight == 0.90
+    assert restored.model.query_useful_behavior_rank_loss_weight == 0.40
     assert restored.model.temporal_distribution_loss_weight == 0.07
     assert restored.model.ranking_pairs_per_type == 192
     assert restored.model.ranking_top_quantile == 0.9
@@ -293,6 +295,8 @@ def test_cli_exposes_training_and_scoring_tuning_controls() -> None:
             "0.35",
             "--query_useful_segment_level_loss_weight",
             "0.90",
+            "--query_useful_behavior_rank_loss_weight",
+            "0.40",
             "--temporal_distribution_loss_weight",
             "0.20",
             "--checkpoint_full_score_every",
@@ -375,6 +379,7 @@ def test_cli_exposes_training_and_scoring_tuning_controls() -> None:
         query_useful_aux_loss_weight=args.query_useful_aux_loss_weight,
         query_useful_segment_budget_head_weight=args.query_useful_segment_budget_head_weight,
         query_useful_segment_level_loss_weight=args.query_useful_segment_level_loss_weight,
+        query_useful_behavior_rank_loss_weight=args.query_useful_behavior_rank_loss_weight,
         temporal_distribution_loss_weight=args.temporal_distribution_loss_weight,
         checkpoint_full_score_every=args.checkpoint_full_score_every,
         checkpoint_candidate_pool_size=args.checkpoint_candidate_pool_size,
@@ -441,6 +446,7 @@ def test_cli_exposes_training_and_scoring_tuning_controls() -> None:
     assert args.query_useful_aux_loss_weight == 0.75
     assert args.query_useful_segment_budget_head_weight == 0.35
     assert args.query_useful_segment_level_loss_weight == 0.90
+    assert args.query_useful_behavior_rank_loss_weight == 0.40
     assert args.temporal_distribution_loss_weight == 0.20
     assert args.checkpoint_full_score_every == 3
     assert args.checkpoint_candidate_pool_size == 2
@@ -502,6 +508,7 @@ def test_cli_exposes_training_and_scoring_tuning_controls() -> None:
     assert cfg.model.query_useful_aux_loss_weight == 0.75
     assert cfg.model.query_useful_segment_budget_head_weight == 0.35
     assert cfg.model.query_useful_segment_level_loss_weight == 0.90
+    assert cfg.model.query_useful_behavior_rank_loss_weight == 0.40
     assert cfg.model.temporal_distribution_loss_weight == 0.20
     assert cfg.model.checkpoint_full_score_every == 3
     assert cfg.model.checkpoint_candidate_pool_size == 2
@@ -553,6 +560,7 @@ def test_experiment_config_loads_missing_runtime_and_mlqds_defaults() -> None:
     payload["model"].pop("loss_objective")
     payload["model"].pop("budget_loss_ratios")
     payload["model"].pop("budget_loss_temperature")
+    payload["model"].pop("query_useful_behavior_rank_loss_weight")
     payload["model"].pop("temporal_distribution_loss_weight")
     payload["model"].pop("range_audit_compression_ratios")
     payload["model"].pop("mlqds_score_mode")
@@ -654,6 +662,8 @@ def test_validation_score_config_uses_current_names() -> None:
         checkpoint_full_score_every=4,
         checkpoint_score_variant="answer",
         learned_segment_length_repair_fraction=0.25,
+        learned_segment_allocation_length_support_weight=0.5,
+        learned_segment_allocation_weight_floor=0.35,
         learned_segment_length_support_blend_weight=0.75,
         query_prior_grid_bins=128,
         query_prior_smoothing_passes=0,
@@ -670,6 +680,10 @@ def test_validation_score_config_uses_current_names() -> None:
             "combined",
             "--learned_segment_length_repair_fraction",
             "0.5",
+            "--learned_segment_allocation_length_support_weight",
+            "0.25",
+            "--learned_segment_allocation_weight_floor",
+            "0.2",
             "--learned_segment_length_support_blend_weight",
             "1.0",
             "--query_prior_grid_bins",
@@ -685,9 +699,12 @@ def test_validation_score_config_uses_current_names() -> None:
     assert restored.model.checkpoint_full_score_every == 4
     assert restored.model.checkpoint_score_variant == "answer"
     assert restored.model.learned_segment_length_repair_fraction == pytest.approx(0.25)
+    assert restored.model.learned_segment_allocation_length_support_weight == pytest.approx(0.5)
+    assert restored.model.learned_segment_allocation_weight_floor == pytest.approx(0.35)
     assert restored.model.learned_segment_length_support_blend_weight == pytest.approx(0.75)
     assert restored.model.query_prior_grid_bins == 128
     assert restored.model.query_prior_smoothing_passes == 0
+    assert restored.model.query_useful_behavior_rank_loss_weight == 0.0
     assert restored.model.temporal_residual_label_mode == "none"
     assert not hasattr(restored.model, "f1_diagnostic_every")
     assert not hasattr(restored.model, "residual_label_mode")
@@ -695,6 +712,8 @@ def test_validation_score_config_uses_current_names() -> None:
     assert args.checkpoint_full_score_every == 5
     assert args.checkpoint_score_variant == "combined"
     assert args.learned_segment_length_repair_fraction == pytest.approx(0.5)
+    assert args.learned_segment_allocation_length_support_weight == pytest.approx(0.25)
+    assert args.learned_segment_allocation_weight_floor == pytest.approx(0.2)
     assert args.learned_segment_length_support_blend_weight == pytest.approx(1.0)
     assert args.query_prior_grid_bins == 96
     assert args.query_prior_smoothing_passes == 1
@@ -706,7 +725,11 @@ def test_direct_config_and_cli_default_to_non_residual_training() -> None:
     args = build_parser().parse_args([])
 
     assert cfg.model.temporal_residual_label_mode == "none"
+    assert cfg.model.query_useful_behavior_rank_loss_weight == 0.0
+    assert cfg.model.learned_segment_allocation_weight_floor == pytest.approx(0.50)
     assert args.temporal_residual_label_mode == "none"
+    assert args.query_useful_behavior_rank_loss_weight == 0.0
+    assert args.learned_segment_allocation_weight_floor == pytest.approx(0.50)
 
 
 def test_cli_model_type_choices_use_supported_model_registry() -> None:

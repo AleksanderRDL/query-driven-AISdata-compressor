@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -62,6 +63,7 @@ def _factorized_query_useful_loss(
     segment_size: int = 32,
     segment_budget_head_weight: float = 0.10,
     segment_level_loss_weight: float = 0.25,
+    behavior_rank_loss_weight: float = 0.0,
 ) -> torch.Tensor:
     """Return auxiliary multi-head QueryUsefulV1 loss for v2 models."""
     if head_logits.shape != head_targets.shape or head_mask.shape != head_logits.shape:
@@ -101,7 +103,65 @@ def _factorized_query_useful_loss(
         segment_ids=segment_ids,
         segment_size=segment_size,
     )
-    return point_loss + max(0.0, float(segment_level_loss_weight)) * segment_loss
+    behavior_rank_loss = _behavior_head_rank_loss(
+        head_logits=head_logits,
+        head_targets=head_targets,
+        head_mask=head_mask,
+    )
+    return (
+        point_loss
+        + max(0.0, float(segment_level_loss_weight)) * segment_loss
+        + max(0.0, float(behavior_rank_loss_weight)) * behavior_rank_loss
+    )
+
+
+def _behavior_head_rank_loss(
+    *,
+    head_logits: torch.Tensor,
+    head_targets: torch.Tensor,
+    head_mask: torch.Tensor,
+    top_fraction: float = 0.05,
+    min_target_gap: float = 0.05,
+) -> torch.Tensor:
+    """Return a listwise loss for ranking conditional behavior utility points."""
+    if head_logits.shape != head_targets.shape or head_mask.shape != head_logits.shape:
+        raise ValueError("factorized head logits, targets, and mask must have matching shape.")
+    try:
+        behavior_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("conditional_behavior_utility")
+    except ValueError:  # pragma: no cover - constant schema guard.
+        return head_logits.new_tensor(0.0)
+    if int(head_logits.shape[-1]) <= behavior_idx:
+        return head_logits.new_tensor(0.0)
+
+    behavior_logits = head_logits[..., behavior_idx].float()
+    behavior_targets = head_targets[..., behavior_idx].float().clamp(0.0, 1.0)
+    behavior_mask = head_mask[..., behavior_idx].to(dtype=torch.bool)
+    losses: list[torch.Tensor] = []
+    fraction = min(1.0, max(0.0, float(top_fraction)))
+    min_gap = max(0.0, float(min_target_gap))
+    for row in range(int(behavior_logits.shape[0])):
+        valid_positions = torch.where(behavior_mask[row])[0]
+        valid_count = int(valid_positions.numel())
+        if valid_count < 2:
+            continue
+        local_targets = behavior_targets[row, valid_positions]
+        if float((local_targets.max() - local_targets.min()).item()) <= min_gap:
+            continue
+        local_logits = behavior_logits[row, valid_positions]
+        top_count = max(1, math.ceil(fraction * valid_count))
+        top_positions = torch.topk(local_targets, k=top_count, largest=True).indices
+        top_targets = local_targets[top_positions]
+        top_logits = local_logits[top_positions]
+        target_gap = top_targets.unsqueeze(1) - local_targets.unsqueeze(0)
+        pair_mask = target_gap > min_gap
+        if not bool(pair_mask.any().item()):
+            continue
+        logit_gap = top_logits.unsqueeze(1) - local_logits.unsqueeze(0)
+        weighted_loss = F.softplus(-logit_gap[pair_mask]) * target_gap[pair_mask]
+        losses.append(weighted_loss.mean())
+    if not losses:
+        return head_logits.new_tensor(0.0)
+    return torch.stack(losses).mean()
 
 
 def _segment_budget_head_segment_level_loss(
@@ -271,6 +331,9 @@ def _train_one_epoch(
                 ),
                 segment_level_loss_weight=float(
                     getattr(model_config, "query_useful_segment_level_loss_weight", 0.25)
+                ),
+                behavior_rank_loss_weight=float(
+                    getattr(model_config, "query_useful_behavior_rank_loss_weight", 0.0)
                 ),
             )
         positive_row_mask = (batch_label_mask & (batch_labels > 0)).any(dim=1)

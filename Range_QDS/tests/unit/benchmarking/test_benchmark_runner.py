@@ -428,6 +428,7 @@ def test_benchmark_row_records_effective_child_torch_runtime(tmp_path) -> None:
             "no_segment_budget_head_ablation_delta": 0.08,
             "no_trajectory_fairness_preallocation_ablation_delta": 0.015,
             "no_geometry_tie_breaker_ablation_delta": -0.01,
+            "no_segment_length_support_allocation_ablation_delta": 0.004,
             "causality_ablation_mask_diagnostics": {
                 "MLQDS_shuffled_prior_fields": {
                     "retained_mask_jaccard": 0.82,
@@ -449,9 +450,15 @@ def test_benchmark_row_records_effective_child_torch_runtime(tmp_path) -> None:
                     "retained_mask_jaccard": 0.62,
                     "retained_symmetric_difference_count": 30,
                 },
+                "MLQDS_without_segment_length_support_allocation": {
+                    "retained_mask_jaccard": 0.91,
+                    "retained_symmetric_difference_count": 8,
+                },
             },
             "learned_segment_selector_config": {
                 "geometry_gain_weight": 0.12,
+                "allocation_length_support_weight": 0.4,
+                "allocation_weight_floor": 0.25,
                 "segment_score_blend_weight": 0.05,
                 "fairness_preallocation_enabled": True,
                 "length_repair_fraction": 0.25,
@@ -479,14 +486,34 @@ def test_benchmark_row_records_effective_child_torch_runtime(tmp_path) -> None:
                         "mean_abs_feature_delta": 0.002,
                         "max_abs_feature_delta": 0.10,
                         "points_outside_prior_extent_fraction": 0.75,
-                    }
+                    },
+                    "model_prior_features": {
+                        "model_input_prior_features": {
+                            "sampled_inputs_changed": True,
+                            "mean_abs_feature_delta": 0.003,
+                        },
+                        "normalized_model_prior_features": {
+                            "sampled_inputs_changed": True,
+                            "mean_abs_feature_delta": 0.004,
+                        },
+                    },
                 },
                 "without_query_prior_features": {
                     "sampled_prior_features": {
                         "primary_nonzero_fraction": 0.0,
                         "mean_abs_feature_delta": 0.0,
                         "points_outside_prior_extent_fraction": 0.75,
-                    }
+                    },
+                    "model_prior_features": {
+                        "model_input_prior_features": {
+                            "sampled_inputs_changed": False,
+                            "mean_abs_feature_delta": 0.0,
+                        },
+                        "normalized_model_prior_features": {
+                            "sampled_inputs_changed": False,
+                            "mean_abs_feature_delta": 0.0,
+                        },
+                    },
                 },
             },
         },
@@ -1034,7 +1061,12 @@ def test_benchmark_row_records_effective_child_torch_runtime(tmp_path) -> None:
     assert row["no_geometry_tie_breaker_ablation_delta"] == -0.01
     assert row["no_geometry_retained_mask_jaccard"] == 0.62
     assert row["no_geometry_retained_symmetric_difference_count"] == 30
+    assert row["no_segment_length_support_allocation_ablation_delta"] == 0.004
+    assert row["no_segment_length_support_allocation_retained_mask_jaccard"] == 0.91
+    assert row["no_segment_length_support_allocation_retained_symmetric_difference_count"] == 8
     assert row["learned_segment_geometry_gain_weight"] == 0.12
+    assert row["learned_segment_allocation_length_support_weight"] == 0.4
+    assert row["learned_segment_allocation_weight_floor"] == 0.25
     assert row["learned_segment_score_blend_weight"] == 0.05
     assert row["learned_segment_fairness_preallocation_enabled"] is True
     assert row["learned_segment_length_repair_fraction"] == 0.25
@@ -1052,9 +1084,17 @@ def test_benchmark_row_records_effective_child_torch_runtime(tmp_path) -> None:
     assert row["shuffled_prior_sampled_mean_abs_feature_delta"] == 0.002
     assert row["shuffled_prior_sampled_max_abs_feature_delta"] == 0.10
     assert row["shuffled_prior_sampled_outside_extent_fraction"] == 0.75
+    assert row["shuffled_prior_model_inputs_changed"] is True
+    assert row["shuffled_prior_model_input_mean_abs_feature_delta"] == 0.003
+    assert row["shuffled_prior_normalized_model_inputs_changed"] is True
+    assert row["shuffled_prior_normalized_model_mean_abs_feature_delta"] == 0.004
     assert row["no_prior_sampled_primary_nonzero_fraction"] == 0.0
     assert row["no_prior_sampled_mean_abs_feature_delta"] == 0.0
     assert row["no_prior_sampled_outside_extent_fraction"] == 0.75
+    assert row["no_prior_model_inputs_changed"] is False
+    assert row["no_prior_model_input_mean_abs_feature_delta"] == 0.0
+    assert row["no_prior_normalized_model_inputs_changed"] is False
+    assert row["no_prior_normalized_model_mean_abs_feature_delta"] == 0.0
     assert row["workload_blind_candidate"] is False
     assert row["workload_blind_protocol_enabled"] is False
     assert row["primary_masks_frozen_before_eval_query_scoring"] is False

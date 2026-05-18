@@ -434,6 +434,16 @@ def main() -> None:
             learned_segment_geometry_gain_weight=float(
                 getattr(saved_cfg.model, "learned_segment_geometry_gain_weight", 0.12)
             ),
+            learned_segment_allocation_length_support_weight=float(
+                getattr(
+                    saved_cfg.model,
+                    "learned_segment_allocation_length_support_weight",
+                    0.12,
+                )
+            ),
+            learned_segment_allocation_weight_floor=float(
+                getattr(saved_cfg.model, "learned_segment_allocation_weight_floor", 0.50)
+            ),
             learned_segment_score_blend_weight=float(
                 getattr(saved_cfg.model, "learned_segment_score_blend_weight", 0.05)
             ),

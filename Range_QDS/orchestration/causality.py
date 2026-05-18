@@ -8,6 +8,10 @@ import torch
 
 from evaluation.metrics import MethodEvaluation
 from evaluation.query_useful_v1 import QUERY_USEFUL_V1_COMPONENT_WEIGHTS
+from training.model_features import (
+    WORKLOAD_BLIND_RANGE_V2_MODEL_DISABLED_PRIOR_FIELDS,
+    build_query_free_point_features_for_dim,
+)
 from training.query_prior_fields import QUERY_PRIOR_FIELD_NAMES, sample_query_prior_fields
 
 
@@ -538,10 +542,30 @@ def prior_feature_sample_sensitivity(
         return {"available": False, "reason": "missing_primary_prior_field"}
     primary = sample_query_prior_fields(points, primary_prior_field).detach().cpu().float()
     ablation = sample_query_prior_fields(points, ablation_prior_field).detach().cpu().float()
+    return _feature_matrix_sensitivity(
+        primary=primary,
+        ablation=ablation,
+        feature_names=QUERY_PRIOR_FIELD_NAMES,
+        point_count=int(points.shape[0]),
+        primary_prior_field=primary_prior_field,
+        points=points,
+    )
+
+
+def _feature_matrix_sensitivity(
+    *,
+    primary: torch.Tensor,
+    ablation: torch.Tensor,
+    feature_names: tuple[str, ...] | list[str],
+    point_count: int,
+    primary_prior_field: dict[str, Any] | None = None,
+    points: torch.Tensor | None = None,
+) -> dict[str, Any]:
+    """Return feature-delta diagnostics for aligned primary/ablation matrices."""
     if int(primary.numel()) == 0 or primary.shape != ablation.shape:
         return {
             "available": False,
-            "reason": "sample_shape_mismatch",
+            "reason": "feature_shape_mismatch",
             "primary_shape": list(primary.shape),
             "ablation_shape": list(ablation.shape),
         }
@@ -551,9 +575,9 @@ def prior_feature_sample_sensitivity(
     delta = primary - ablation
     finite_delta = delta[finite]
     per_feature: dict[str, dict[str, float | int]] = {}
-    feature_names = list(QUERY_PRIOR_FIELD_NAMES)
+    named_features = list(feature_names)
     for idx in range(int(primary.shape[1])):
-        name = feature_names[idx] if idx < len(feature_names) else f"feature_{idx}"
+        name = named_features[idx] if idx < len(named_features) else f"feature_{idx}"
         primary_col = primary[:, idx]
         ablation_col = ablation[:, idx]
         col_finite = torch.isfinite(primary_col) & torch.isfinite(ablation_col)
@@ -581,8 +605,8 @@ def prior_feature_sample_sensitivity(
     primary_flat = primary[torch.isfinite(primary)]
     ablation_flat = ablation[torch.isfinite(ablation)]
     outside_extent_fraction: float | None = None
-    extent = primary_prior_field.get("extent")
-    if isinstance(extent, dict) and int(points.shape[0]) > 0:
+    extent = primary_prior_field.get("extent") if isinstance(primary_prior_field, dict) else None
+    if isinstance(extent, dict) and points is not None and int(points.shape[0]) > 0:
         lat = points[:, 1].detach().cpu().float()
         lon = points[:, 2].detach().cpu().float()
         outside = (
@@ -594,7 +618,7 @@ def prior_feature_sample_sensitivity(
         outside_extent_fraction = float(outside.float().mean().item())
     return {
         "available": True,
-        "point_count": int(primary.shape[0]),
+        "point_count": int(point_count),
         "feature_count": int(primary.shape[1]),
         "finite_value_count": int(finite.sum().item()),
         "sampled_inputs_changed": bool(float(finite_delta.abs().max().item()) > 1e-9),
@@ -622,6 +646,103 @@ def prior_feature_sample_sensitivity(
     }
 
 
+def model_prior_feature_sensitivity(
+    *,
+    points: torch.Tensor,
+    point_dim: int,
+    scaler: Any,
+    primary_prior_field: dict[str, Any] | None,
+    ablation_prior_field: dict[str, Any] | None,
+    boundaries: list[tuple[int, int]] | None = None,
+    trajectory_mmsis: list[int] | None = None,
+) -> dict[str, Any]:
+    """Return prior-feature sensitivity at the actual model-input and scaler levels."""
+    if primary_prior_field is None:
+        return {"available": False, "reason": "missing_primary_prior_field"}
+    prior_dim = len(QUERY_PRIOR_FIELD_NAMES)
+    point_dim_int = int(point_dim)
+    if point_dim_int < prior_dim:
+        return {
+            "available": False,
+            "reason": "point_dim_smaller_than_prior_dim",
+            "point_dim": point_dim_int,
+            "prior_feature_count": prior_dim,
+        }
+    try:
+        primary_model_points = build_query_free_point_features_for_dim(
+            points,
+            point_dim_int,
+            boundaries=boundaries,
+            trajectory_mmsis=trajectory_mmsis,
+            query_prior_field=primary_prior_field,
+        )
+        ablation_model_points = build_query_free_point_features_for_dim(
+            points,
+            point_dim_int,
+            boundaries=boundaries,
+            trajectory_mmsis=trajectory_mmsis,
+            query_prior_field=ablation_prior_field,
+        )
+    except Exception as exc:
+        return {
+            "available": False,
+            "reason": "model_point_feature_build_failed",
+            "error": str(exc),
+            "point_dim": point_dim_int,
+        }
+    if primary_model_points.shape != ablation_model_points.shape:
+        return {
+            "available": False,
+            "reason": "model_point_feature_shape_mismatch",
+            "primary_shape": list(primary_model_points.shape),
+            "ablation_shape": list(ablation_model_points.shape),
+        }
+    try:
+        primary_normalized = scaler.transform_points(primary_model_points)
+        ablation_normalized = scaler.transform_points(ablation_model_points)
+    except Exception as exc:
+        return {
+            "available": False,
+            "reason": "model_point_feature_scaling_failed",
+            "error": str(exc),
+            "point_dim": point_dim_int,
+        }
+    prior_slice = slice(-prior_dim, None)
+    model_prior_features = _feature_matrix_sensitivity(
+        primary=primary_model_points[:, prior_slice].detach().cpu().float(),
+        ablation=ablation_model_points[:, prior_slice].detach().cpu().float(),
+        feature_names=QUERY_PRIOR_FIELD_NAMES,
+        point_count=int(points.shape[0]),
+    )
+    normalized_prior_features = _feature_matrix_sensitivity(
+        primary=primary_normalized[:, prior_slice].detach().cpu().float(),
+        ablation=ablation_normalized[:, prior_slice].detach().cpu().float(),
+        feature_names=QUERY_PRIOR_FIELD_NAMES,
+        point_count=int(points.shape[0]),
+    )
+    scaler_min = getattr(scaler, "point_min", None)
+    scaler_max = getattr(scaler, "point_max", None)
+    scaler_prior_ranges: dict[str, float] = {}
+    if isinstance(scaler_min, torch.Tensor) and isinstance(scaler_max, torch.Tensor):
+        min_prior = scaler_min.detach().cpu().float()[prior_slice]
+        max_prior = scaler_max.detach().cpu().float()[prior_slice]
+        ranges = torch.clamp(max_prior - min_prior, min=0.0)
+        for idx, name in enumerate(QUERY_PRIOR_FIELD_NAMES):
+            if idx < int(ranges.numel()):
+                scaler_prior_ranges[name] = float(ranges[idx].item())
+    return {
+        "available": bool(
+            model_prior_features.get("available") and normalized_prior_features.get("available")
+        ),
+        "point_dim": point_dim_int,
+        "prior_feature_count": prior_dim,
+        "disabled_prior_fields": list(WORKLOAD_BLIND_RANGE_V2_MODEL_DISABLED_PRIOR_FIELDS),
+        "model_input_prior_features": model_prior_features,
+        "normalized_model_prior_features": normalized_prior_features,
+        "scaler_prior_feature_ranges": scaler_prior_ranges,
+    }
+
+
 def prior_sample_gate_failures(prior_sensitivity_diagnostics: dict[str, Any]) -> list[str]:
     """Return failures showing prior-feature ablations did not exercise useful inputs."""
     shuffled = prior_sensitivity_diagnostics.get("shuffled_prior_fields")
@@ -636,6 +757,16 @@ def prior_sample_gate_failures(prior_sensitivity_diagnostics: dict[str, Any]) ->
         failures.append("sampled_query_prior_features_all_zero")
     if not bool(sampled.get("sampled_inputs_changed", False)):
         failures.append("shuffled_prior_fields_did_not_change_sampled_inputs")
+    model_prior = shuffled.get("model_prior_features")
+    if isinstance(model_prior, dict):
+        model_input = model_prior.get("model_input_prior_features")
+        if isinstance(model_input, dict) and model_input.get("available"):
+            if not bool(model_input.get("sampled_inputs_changed", False)):
+                failures.append("shuffled_prior_fields_did_not_change_model_inputs")
+        normalized = model_prior.get("normalized_model_prior_features")
+        if isinstance(normalized, dict) and normalized.get("available"):
+            if not bool(normalized.get("sampled_inputs_changed", False)):
+                failures.append("shuffled_prior_fields_did_not_change_normalized_model_inputs")
     outside_fraction = sampled.get("points_outside_prior_extent_fraction")
     if outside_fraction is not None and float(outside_fraction) > 0.50:
         failures.append("eval_points_mostly_outside_query_prior_extent")
