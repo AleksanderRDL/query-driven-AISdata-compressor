@@ -8,7 +8,10 @@ from pathlib import Path
 from config.run_config import (
     DEFAULT_BUDGET_LOSS_RATIOS,
     DEFAULT_BUDGET_LOSS_TEMPERATURE,
+    DEFAULT_VALIDATION_ENDPOINT_PENALTY_WEIGHT,
+    DEFAULT_VALIDATION_GLOBAL_SANITY_PENALTY_WEIGHT,
     DEFAULT_VALIDATION_LENGTH_PRESERVATION_MIN,
+    DEFAULT_VALIDATION_SED_PENALTY_WEIGHT,
     VALIDATION_SPLIT_MODES,
 )
 from learning.importance_labels import RANGE_LABEL_MODES
@@ -716,19 +719,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--validation_global_sanity_penalty_weight",
         type=float,
-        default=0.10,
+        default=DEFAULT_VALIDATION_GLOBAL_SANITY_PENALTY_WEIGHT,
         help="Validation checkpoint penalty weight for length preservation shortfall.",
     )
     parser.add_argument(
         "--validation_sed_penalty_weight",
         type=float,
-        default=0.05,
+        default=DEFAULT_VALIDATION_SED_PENALTY_WEIGHT,
         help="Validation checkpoint penalty weight for SED ratio above the final sanity threshold.",
     )
     parser.add_argument(
         "--validation_endpoint_penalty_weight",
         type=float,
-        default=0.10,
+        default=DEFAULT_VALIDATION_ENDPOINT_PENALTY_WEIGHT,
         help="Validation checkpoint penalty weight for endpoint retention failures.",
     )
     parser.add_argument(

@@ -10,6 +10,9 @@ from scoring.geometry_thresholds import FINAL_LENGTH_PRESERVATION_MIN
 LCG_MULTIPLIER = 6364136223846793005
 DEFAULT_BUDGET_LOSS_RATIOS = [0.01, 0.02, 0.05, 0.10, 0.15, 0.20, 0.30]
 DEFAULT_BUDGET_LOSS_TEMPERATURE = 0.25
+DEFAULT_VALIDATION_GLOBAL_SANITY_PENALTY_WEIGHT = 0.10
+DEFAULT_VALIDATION_SED_PENALTY_WEIGHT = 0.05
+DEFAULT_VALIDATION_ENDPOINT_PENALTY_WEIGHT = 0.10
 DEFAULT_VALIDATION_LENGTH_PRESERVATION_MIN = FINAL_LENGTH_PRESERVATION_MIN
 VALIDATION_SPLIT_MODES = ("random", "source_stratified")
 
@@ -165,9 +168,11 @@ class ModelConfig:
     checkpoint_candidate_pool_size: int = 1
     checkpoint_score_variant: str = "range_usefulness"
     validation_global_sanity_penalty_enabled: bool = True
-    validation_global_sanity_penalty_weight: float = 0.35
-    validation_sed_penalty_weight: float = 0.15
-    validation_endpoint_penalty_weight: float = 0.10
+    validation_global_sanity_penalty_weight: float = (
+        DEFAULT_VALIDATION_GLOBAL_SANITY_PENALTY_WEIGHT
+    )
+    validation_sed_penalty_weight: float = DEFAULT_VALIDATION_SED_PENALTY_WEIGHT
+    validation_endpoint_penalty_weight: float = DEFAULT_VALIDATION_ENDPOINT_PENALTY_WEIGHT
     validation_length_preservation_min: float = DEFAULT_VALIDATION_LENGTH_PRESERVATION_MIN
     mlqds_temporal_fraction: float = 0.0
     mlqds_diversity_bonus: float = 0.0
@@ -377,9 +382,11 @@ def build_run_config(
     checkpoint_candidate_pool_size: int = 1,
     checkpoint_score_variant: str | None = None,
     validation_global_sanity_penalty_enabled: bool = True,
-    validation_global_sanity_penalty_weight: float = 0.35,
-    validation_sed_penalty_weight: float = 0.15,
-    validation_endpoint_penalty_weight: float = 0.10,
+    validation_global_sanity_penalty_weight: float = (
+        DEFAULT_VALIDATION_GLOBAL_SANITY_PENALTY_WEIGHT
+    ),
+    validation_sed_penalty_weight: float = DEFAULT_VALIDATION_SED_PENALTY_WEIGHT,
+    validation_endpoint_penalty_weight: float = DEFAULT_VALIDATION_ENDPOINT_PENALTY_WEIGHT,
     validation_length_preservation_min: float = DEFAULT_VALIDATION_LENGTH_PRESERVATION_MIN,
     mlqds_temporal_fraction: float = 0.0,
     mlqds_diversity_bonus: float = 0.0,

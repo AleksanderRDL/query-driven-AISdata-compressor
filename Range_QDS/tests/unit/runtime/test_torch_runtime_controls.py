@@ -18,6 +18,10 @@ from benchmarking.runtime_benchmark import (
 from config.run_config import (
     DEFAULT_BUDGET_LOSS_RATIOS,
     DEFAULT_BUDGET_LOSS_TEMPERATURE,
+    DEFAULT_VALIDATION_ENDPOINT_PENALTY_WEIGHT,
+    DEFAULT_VALIDATION_GLOBAL_SANITY_PENALTY_WEIGHT,
+    DEFAULT_VALIDATION_LENGTH_PRESERVATION_MIN,
+    DEFAULT_VALIDATION_SED_PENALTY_WEIGHT,
     RunConfig,
     build_run_config,
 )
@@ -755,12 +759,34 @@ def test_direct_config_and_cli_default_to_non_residual_training() -> None:
     assert cfg.model.query_useful_sparse_head_bce_target_mode == "raw"
     assert cfg.model.learned_segment_allocation_weight_floor == pytest.approx(0.50)
     assert cfg.model.learned_segment_length_repair_score_protection_fraction == 0.0
+    assert cfg.model.validation_global_sanity_penalty_weight == pytest.approx(
+        DEFAULT_VALIDATION_GLOBAL_SANITY_PENALTY_WEIGHT
+    )
+    assert cfg.model.validation_sed_penalty_weight == pytest.approx(
+        DEFAULT_VALIDATION_SED_PENALTY_WEIGHT
+    )
+    assert cfg.model.validation_endpoint_penalty_weight == pytest.approx(
+        DEFAULT_VALIDATION_ENDPOINT_PENALTY_WEIGHT
+    )
+    assert cfg.model.validation_length_preservation_min == pytest.approx(
+        DEFAULT_VALIDATION_LENGTH_PRESERVATION_MIN
+    )
     assert args.temporal_residual_label_mode == "none"
     assert args.query_useful_behavior_rank_loss_weight == 0.0
     assert args.query_useful_sparse_head_rank_loss_weight == 0.0
     assert args.query_useful_sparse_head_bce_target_mode == "raw"
     assert args.learned_segment_allocation_weight_floor == pytest.approx(0.50)
     assert args.learned_segment_length_repair_score_protection_fraction == 0.0
+    assert args.validation_global_sanity_penalty_weight == pytest.approx(
+        DEFAULT_VALIDATION_GLOBAL_SANITY_PENALTY_WEIGHT
+    )
+    assert args.validation_sed_penalty_weight == pytest.approx(DEFAULT_VALIDATION_SED_PENALTY_WEIGHT)
+    assert args.validation_endpoint_penalty_weight == pytest.approx(
+        DEFAULT_VALIDATION_ENDPOINT_PENALTY_WEIGHT
+    )
+    assert args.validation_length_preservation_min == pytest.approx(
+        DEFAULT_VALIDATION_LENGTH_PRESERVATION_MIN
+    )
 
 
 def test_cli_model_type_choices_use_supported_model_registry() -> None:

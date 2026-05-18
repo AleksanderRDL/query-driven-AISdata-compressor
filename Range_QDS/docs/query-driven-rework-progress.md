@@ -1526,3 +1526,80 @@ Extra discoveries:
 Decision:
 - Treat `validation_length_preservation_min=0.75` as the active default.
 - Continue requiring learning-causality evidence before any success claim.
+
+## Checkpoint 5.65 - Centralized Geometry And Validation Defaults
+
+Status: completed
+
+Hypothesis:
+- The most valuable duplicate hard-coded policy left in active code is geometry
+  gate logic and validation sanity defaults, where final gates, validation
+  scoring, CLI defaults, and direct config defaults must not drift.
+
+Expected files:
+- `scoring/geometry_thresholds.py`
+- `orchestration/gates.py`
+- `learning/checkpoint_validation.py`
+- `config/run_config.py`
+- `orchestration/learning_scoring_cli.py`
+- `tests/unit/orchestration/test_query_driven_rework.py`
+- `tests/unit/runtime/test_torch_runtime_controls.py`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- SED-ratio thresholds are centralized; validation penalty defaults are shared
+  by config, CLI, and fallback logic; focused scans find no active duplicate
+  geometry-threshold or validation-default literals outside the central owners;
+  focused checks pass.
+
+Goal:
+- Reduce policy drift risk from repeated literals without changing scientific
+  evidence or running probes.
+
+Changes:
+- Added `max_sed_ratio_for_compression` and named SED-ratio threshold constants
+  to `scoring/geometry_thresholds.py`.
+- Updated final global-sanity gates and validation geometry metrics to use the
+  shared SED-ratio helper.
+- Added shared validation penalty defaults in `config/run_config.py` and used
+  them in `ModelConfig`, `build_run_config`, CLI defaults, and
+  checkpoint-validation fallback behavior.
+- Added test assertions that direct config defaults and CLI defaults stay
+  aligned.
+- Updated focused tests to reference shared geometry/default helpers instead of
+  repeating gate literals.
+
+Tests:
+- `uv run --group dev -- ruff check Range_QDS/scoring/geometry_thresholds.py Range_QDS/orchestration/gates.py Range_QDS/config/run_config.py Range_QDS/orchestration/learning_scoring_cli.py Range_QDS/learning/checkpoint_validation.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/unit/runtime/test_torch_runtime_controls.py`
+- `uv run --group dev -- pyright Range_QDS/scoring/geometry_thresholds.py Range_QDS/orchestration/gates.py Range_QDS/config/run_config.py Range_QDS/orchestration/learning_scoring_cli.py Range_QDS/learning/checkpoint_validation.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/unit/runtime/test_torch_runtime_controls.py`
+- `uv run --group dev -- pytest Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/unit/runtime/test_torch_runtime_controls.py -q`: `123 passed`
+- config/CLI/default smoke: validation defaults `0.10`, `0.05`, `0.10`,
+  `0.75`; SED thresholds `2.0`, `1.75`, `1.5`
+- focused duplicate-literal scan for active SED-threshold and validation-default
+  literals
+- `git diff --check -- Range_QDS/scoring/geometry_thresholds.py Range_QDS/orchestration/gates.py Range_QDS/config/run_config.py Range_QDS/orchestration/learning_scoring_cli.py Range_QDS/learning/checkpoint_validation.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/unit/runtime/test_torch_runtime_controls.py`
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was cleanup/refactor work.
+
+Key results:
+- MLQDS QueryUsefulV1: not applicable
+- uniform QueryUsefulV1: not applicable
+- Douglas-Peucker QueryUsefulV1: not applicable
+- gates passed: not applicable
+- gates failed: not applicable
+
+Extra discoveries:
+- Validation penalty defaults had drifted: direct config defaults were
+  `0.35/0.15/0.10`, while the active CLI and fallback behavior used
+  `0.10/0.05/0.10`. This checkpoint centralized on the active CLI/fallback
+  behavior to avoid silently strengthening future training.
+- Remaining scan hits for `1.50`, `1.75`, `0.75`, and `0.80` are unrelated
+  fixture values, target formula coefficients, or historical notes, not the
+  centralized gate/default policy addressed here.
+
+Decision:
+- Keep geometry gate thresholds in `scoring/geometry_thresholds.py`.
+- Keep validation sanity defaults in `config/run_config.py`.
+- Do not treat this cleanup as scientific evidence.

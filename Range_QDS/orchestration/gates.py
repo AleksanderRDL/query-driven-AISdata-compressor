@@ -11,6 +11,7 @@ from learning.query_prior_fields import QUERY_PRIOR_FIELD_NAMES, sample_query_pr
 from scoring.geometry_thresholds import (
     FINAL_LENGTH_PRESERVATION_MAX,
     FINAL_LENGTH_PRESERVATION_MIN,
+    max_sed_ratio_for_compression,
 )
 from scoring.metrics import MethodScore
 from workloads.generation.workload_profiles import (
@@ -354,13 +355,7 @@ def evaluate_global_sanity_gate(
     failed_checks: list[str] = []
     length_min = FINAL_LENGTH_PRESERVATION_MIN
     length_max = FINAL_LENGTH_PRESERVATION_MAX
-    sed_ratio_threshold = (
-        2.00
-        if compression_ratio <= 0.01 + 1e-12
-        else 1.75
-        if compression_ratio <= 0.02 + 1e-12
-        else 1.50
-    )
+    sed_ratio_threshold = max_sed_ratio_for_compression(compression_ratio)
 
     length_preserved = float(primary.avg_length_preserved)
     if length_preserved < length_min or length_preserved > length_max:

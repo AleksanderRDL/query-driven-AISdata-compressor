@@ -8,7 +8,12 @@ from typing import Any, cast
 import pytest
 import torch
 
-from config.run_config import DEFAULT_VALIDATION_LENGTH_PRESERVATION_MIN
+from config.run_config import (
+    DEFAULT_VALIDATION_ENDPOINT_PENALTY_WEIGHT,
+    DEFAULT_VALIDATION_GLOBAL_SANITY_PENALTY_WEIGHT,
+    DEFAULT_VALIDATION_LENGTH_PRESERVATION_MIN,
+    DEFAULT_VALIDATION_SED_PENALTY_WEIGHT,
+)
 from data_preparation.ais_loader import generate_synthetic_ais_data
 from learning.checkpoint_validation import (
     _validation_factorized_target_fit_metrics,
@@ -96,7 +101,10 @@ from orchestration.selector_diagnostics import (
     segment_score_quantile_bands_for_ablation,
     segment_score_top_band_for_ablation,
 )
-from scoring.geometry_thresholds import FINAL_LENGTH_PRESERVATION_MIN
+from scoring.geometry_thresholds import (
+    FINAL_LENGTH_PRESERVATION_MIN,
+    max_sed_ratio_for_compression,
+)
 from scoring.method_scoring import score_range_usefulness
 from scoring.metrics import MethodScore, compute_length_preservation
 from scoring.query_useful_v1 import query_useful_v1_from_range_audit
@@ -377,21 +385,21 @@ def test_query_useful_v1_has_true_query_local_interpolation_component() -> None:
 def test_validation_query_useful_penalizes_bad_global_sanity() -> None:
     cfg = SimpleNamespace(
         validation_global_sanity_penalty_enabled=True,
-        validation_global_sanity_penalty_weight=0.10,
-        validation_sed_penalty_weight=0.05,
-        validation_endpoint_penalty_weight=0.10,
+        validation_global_sanity_penalty_weight=DEFAULT_VALIDATION_GLOBAL_SANITY_PENALTY_WEIGHT,
+        validation_sed_penalty_weight=DEFAULT_VALIDATION_SED_PENALTY_WEIGHT,
+        validation_endpoint_penalty_weight=DEFAULT_VALIDATION_ENDPOINT_PENALTY_WEIGHT,
         validation_length_preservation_min=DEFAULT_VALIDATION_LENGTH_PRESERVATION_MIN,
     )
     good = {
         "avg_length_preserved": 0.90,
         "avg_sed_ratio_vs_uniform": 1.00,
-        "avg_sed_ratio_vs_uniform_max": 1.50,
+        "avg_sed_ratio_vs_uniform_max": max_sed_ratio_for_compression(0.05),
         "endpoint_sanity": 1.00,
     }
     bad = {
         "avg_length_preserved": 0.40,
         "avg_sed_ratio_vs_uniform": 2.50,
-        "avg_sed_ratio_vs_uniform_max": 1.50,
+        "avg_sed_ratio_vs_uniform_max": max_sed_ratio_for_compression(0.05),
         "endpoint_sanity": 0.00,
     }
 
@@ -3770,6 +3778,9 @@ def test_global_sanity_gate_enforces_endpoint_length_and_sed_ratio() -> None:
     assert gate["gate_pass"] is True
     assert gate["length_preservation_min"] == pytest.approx(FINAL_LENGTH_PRESERVATION_MIN)
     assert gate["avg_sed_ratio_vs_uniform"] == 1.5
+    assert gate["avg_sed_ratio_vs_uniform_max"] == pytest.approx(
+        max_sed_ratio_for_compression(0.05)
+    )
     assert gate["catastrophic_geometry_outlier_status"] == "not_available_report_only"
 
     primary.avg_length_preserved = 0.70

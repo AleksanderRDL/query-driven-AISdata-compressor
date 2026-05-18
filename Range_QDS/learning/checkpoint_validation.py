@@ -8,7 +8,13 @@ from typing import Any, cast
 
 import torch
 
-from config.run_config import DEFAULT_VALIDATION_LENGTH_PRESERVATION_MIN, ModelConfig
+from config.run_config import (
+    DEFAULT_VALIDATION_ENDPOINT_PENALTY_WEIGHT,
+    DEFAULT_VALIDATION_GLOBAL_SANITY_PENALTY_WEIGHT,
+    DEFAULT_VALIDATION_LENGTH_PRESERVATION_MIN,
+    DEFAULT_VALIDATION_SED_PENALTY_WEIGHT,
+    ModelConfig,
+)
 from learning.fit_diagnostics import _discriminative_sample, _kendall_tau
 from learning.inference import (
     _is_workload_blind_model,
@@ -23,6 +29,10 @@ from learning.targets.query_useful_v1 import (
     build_query_useful_v1_targets,
 )
 from runtime.torch_runtime import normalize_amp_mode
+from scoring.geometry_thresholds import (
+    FINAL_AVG_SED_RATIO_MAX_DEFAULT,
+    max_sed_ratio_for_compression,
+)
 from scoring.method_scoring import score_range_usefulness, score_retained_mask
 from scoring.methods import UniformTemporalMethod
 from scoring.metrics import compute_geometric_distortion, compute_length_preservation
@@ -54,16 +64,6 @@ def _validation_endpoint_sanity(
     if eligible <= 0:
         return 1.0
     return float(passing / eligible)
-
-
-def _validation_sed_ratio_threshold(compression_ratio: float) -> float:
-    """Return the same soft SED threshold used by final global sanity."""
-    ratio = float(compression_ratio)
-    if ratio <= 0.01 + 1e-12:
-        return 2.00
-    if ratio <= 0.02 + 1e-12:
-        return 1.75
-    return 1.50
 
 
 def _validation_global_sanity_metrics(
@@ -100,7 +100,7 @@ def _validation_global_sanity_metrics(
         "avg_sed_km": avg_sed,
         "uniform_avg_sed_km": uniform_avg_sed,
         "avg_sed_ratio_vs_uniform": sed_ratio,
-        "avg_sed_ratio_vs_uniform_max": _validation_sed_ratio_threshold(
+        "avg_sed_ratio_vs_uniform_max": max_sed_ratio_for_compression(
             float(model_config.compression_ratio)
         ),
     }
@@ -125,14 +125,33 @@ def _validation_query_useful_selection_score(
     sed_penalty = max(
         0.0,
         float(sanity.get("avg_sed_ratio_vs_uniform", 1.0))
-        - float(sanity.get("avg_sed_ratio_vs_uniform_max", 1.50)),
+        - float(sanity.get("avg_sed_ratio_vs_uniform_max", FINAL_AVG_SED_RATIO_MAX_DEFAULT)),
     )
     endpoint_penalty = max(0.0, 1.0 - float(sanity.get("endpoint_sanity", 1.0)))
     total_penalty = (
-        float(getattr(model_config, "validation_global_sanity_penalty_weight", 0.10))
+        float(
+            getattr(
+                model_config,
+                "validation_global_sanity_penalty_weight",
+                DEFAULT_VALIDATION_GLOBAL_SANITY_PENALTY_WEIGHT,
+            )
+        )
         * length_penalty
-        + float(getattr(model_config, "validation_sed_penalty_weight", 0.05)) * sed_penalty
-        + float(getattr(model_config, "validation_endpoint_penalty_weight", 0.10))
+        + float(
+            getattr(
+                model_config,
+                "validation_sed_penalty_weight",
+                DEFAULT_VALIDATION_SED_PENALTY_WEIGHT,
+            )
+        )
+        * sed_penalty
+        + float(
+            getattr(
+                model_config,
+                "validation_endpoint_penalty_weight",
+                DEFAULT_VALIDATION_ENDPOINT_PENALTY_WEIGHT,
+            )
+        )
         * endpoint_penalty
     )
     return float(raw_query_useful_v1 - total_penalty)
