@@ -647,20 +647,46 @@ retained_mask
 
 Do not reintroduce `selector_score` as a compatibility alias for this prior-ablation payload. `score_output` is the canonical score-stage name.
 
+checkpoint43 derived prior/head/selector marginal diagnosis:
+  artifact:
+    artifacts/results/query_driven_v2_checkpoint43_prior_head_selector_marginal_diagnosis/prior_head_selector_marginal_diagnosis.json
+  evidence level:
+    derived_strict_artifact_diagnostic_no_new_probe
+  strict source:
+    checkpoint42 mode-aware current-best strict local
+  decision:
+    no new success claim
+    final_success_allowed remains false
+    final grid remains blocked
+  blocker classification:
+    workload signature: resolved
+    predictability: still blocking but close; aggregate misses Spearman/PR-AUC
+      while several individual prior channels have useful lift
+    prior-to-head transfer: blocking; prior fields reach sampled/model inputs
+      but barely move head probabilities, scores, or retained masks
+    head fit: mixed; query-hit and segment-budget heads carry signal, while
+      behavior, boundary-event, and path-length heads are weak or flat
+    selector marginal alignment: blocking; raw, selector, and segment scores
+      rank exact retained-decision marginal QueryUsefulV1 weakly or negatively
+    learning causality: blocking; score/segment ablations move masks but do not
+      clear required material-delta gates, and prior ablations barely move masks
+
 Current next checkpoint direction:
 
 ```text
 Primary hypothesis:
-  Checkpoint42 proves workload signature is no longer the blocker. The remaining
-  failure is score/prior materiality: train-derived priors are barely below the
-  aggregate predictability gate, and learned scores/heads do not rank exact
-  retained-decision marginal value well enough.
+  Checkpoint43 classifies the remaining failure as score-composition and
+  selector-marginal alignment, with prior-to-head transfer as a contributing
+  blocker. The next useful move is to explain why high-marginal retained,
+  skeleton, length-repair, and removed candidates are under-ranked by the raw,
+  selector, and segment scores.
 
 Expected focus:
-  learning prior predictability by head/channel
-  factorized target/head dispersion
-  selector score versus retained-decision marginal QueryUsefulV1
-  query-free causality ablation mask movement
+  exact marginal rows by source and decision
+  final selector score composition for high-marginal under-ranked points
+  head output contribution to raw score versus segment allocation
+  whether behavior and segment heads are acting as broad allocation priors
+  instead of point-level marginal value signals
 
 Preferred scope:
   focused artifact diagnostics first. If code changes are needed, prefer
