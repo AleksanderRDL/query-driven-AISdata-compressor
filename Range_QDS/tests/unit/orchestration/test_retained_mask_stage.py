@@ -214,6 +214,22 @@ def test_retained_mask_freezing_captures_learned_selector_trace() -> None:
     assert outputs.primary_selector_trace is not None
     assert isinstance(outputs.primary_selector_trace["retained_mask_matches_frozen_primary"], bool)
     assert outputs.primary_selector_trace["frozen_primary_retained_count"] == 2
+    marginal = outputs.primary_selector_trace["retained_decision_marginal_query_useful_alignment"]
+    assert marginal["available"] is True
+    assert marginal["diagnostic_only"] is True
+    assert marginal["exact_query_useful_v1_marginals"] is True
+    assert marginal["performance_mode"] == "exact_cached_query_support"
+    assert marginal["elapsed_seconds"] >= 0.0
+    assert marginal["query_cache_created"] is True
+    assert marginal["query_cache_provided"] is False
+    assert marginal["masks_frozen_before_query_scoring_required"] is True
+    assert marginal["retained_count"] == 2
+    assert marginal["score_fields_available"] == {
+        "raw_score": True,
+        "selector_score": True,
+        "segment_score": True,
+    }
+    assert marginal["candidate_count"] > 0
     assert outputs.causality_ablation_methods
 
 

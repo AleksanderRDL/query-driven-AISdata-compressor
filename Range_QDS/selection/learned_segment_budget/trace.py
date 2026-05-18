@@ -121,6 +121,11 @@ def _selector_trace(
         "segment_score_point_blend_weight": float(segment_score_point_blend_weight),
         "no_fixed_85_percent_temporal_scaffold": True,
         "point_attribution_available": True,
+        "retained_mask": _mask_indices_payload(retained),
+        "skeleton_retained_mask": _mask_indices_payload(skeleton_mask & retained),
+        "learned_retained_mask": _mask_indices_payload(learned_mask & retained),
+        "fallback_retained_mask": _mask_indices_payload(fallback_mask & retained),
+        "length_repair_retained_mask": _mask_indices_payload(length_repair_mask & retained),
         "geometry_diagnostics": _selector_geometry_diagnostics(
             points=points,
             retained=retained,

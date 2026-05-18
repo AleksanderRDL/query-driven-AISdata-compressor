@@ -146,6 +146,308 @@ Current interpretation:
 - Behavior and segment-budget heads are material enough under the current checks. Preserve that behavior while fixing score/prior materiality.
 - The pre-repair diagnostic remains higher scoring but length-broken. Do not compensate by weakening length repair, adding large temporal scaffolding, or loosening causality gates.
 
+Superseding diagnostics after the current-best artifact:
+
+```text
+checkpoint23 prior sqrt transform standard strict:
+  MLQDS QueryUsefulV1: 0.1523652257
+  failed: target diffusion, learning causality
+  decision: reject sqrt_probability prior transform
+
+checkpoint24 head dispersion diagnosis:
+  current-best factorized final-score prediction_std_to_target_std: 0.0914818734
+  low-dispersion heads below 0.10 ratio:
+    conditional_behavior_utility
+    replacement_representative_value
+    segment_budget_target
+    path_length_support_target
+
+checkpoint27 dense-head rank standard strict:
+  MLQDS QueryUsefulV1: 0.1478283847
+  factorized final-score prediction_std_to_target_std: 0.1081234205
+  failed: target diffusion, workload signature, learning causality
+  shuffled-score delta: 0.0002758070
+  decision: reject dense-head rank pressure and remove its plumbing
+
+checkpoint28 score/selector alignment derived diagnosis:
+  shuffled-score delta per changed retained decision: 0.0000047513
+  without-segment-budget delta per changed decision: 0.0000160170
+  without-behavior delta per changed decision: 0.0000255560
+  decision: score movement has weak retained-set marginal value
+
+checkpoint29 retained-decision marginal instrumentation:
+  old strict artifacts cannot rank exact final retained decisions by marginal
+    QueryUsefulV1 because final/source mask indices were missing
+  learned segment-budget trace schema: 7
+  new query-free trace masks:
+    retained_mask
+    skeleton_retained_mask
+    learned_retained_mask
+    fallback_retained_mask
+    length_repair_retained_mask
+  decision: use a small replay or targeted diagnostic to compute marginal
+    alignment by raw score, selector score, segment score, source, and repair
+    stage
+
+checkpoint30 retained-marginal helper unit diagnostic:
+  added bounded diagnostic helper:
+    orchestration.selector_diagnostics.retained_decision_marginal_query_useful_diagnostics
+  retained candidates: leave-one-out QueryUsefulV1 loss
+  removed candidates: add-one QueryUsefulV1 gain
+  alignment fields:
+    raw_score
+    selector_score
+    segment_score
+    source
+    decision
+  decision: helper is implementation evidence only; next evidence needs a small
+    replay or diagnostic payload hook on a real current-best-style run
+
+checkpoint31 retained-marginal payload hook:
+  payload key:
+    selector_trace_diagnostics.eval_primary.retained_decision_marginal_query_useful_alignment
+  emitted after the primary MLQDS mask is frozen
+  candidate limits:
+    retained per source: 32
+    removed candidates: 64
+  decision: unit-validated hook only; next evidence must be the smallest
+    guide-allowed replay that emits this payload on a real learned-selector run
+
+checkpoint32 retained-marginal payload Level 1 smoke:
+  MLQDS QueryUsefulV1: 0.1003881274
+  uniform QueryUsefulV1: 0.1005303922
+  Douglas-Peucker QueryUsefulV1: 0.1042713959
+  payload:
+    available: true
+    diagnostic_only: true
+    candidate_count: 72
+    score_fields_available: raw_score, selector_score, segment_score
+  workload query counts:
+    train: 8
+    eval: 5
+    selection: 0
+  failed gates:
+    workload stability
+    predictability
+    prior-predictive alignment
+    workload signature
+    learning causality
+    global sanity
+  decision: schema/path evidence only. Zero selection queries means this smoke
+    did not cleanly exercise the selector-workload question.
+
+checkpoint33 retained-marginal payload Level 1 smoke with selection queries:
+  MLQDS QueryUsefulV1: 0.2912429205
+  uniform QueryUsefulV1: 0.2889764732
+  Douglas-Peucker QueryUsefulV1: 0.2902431939
+  workload query counts:
+    train: 8
+    train_r1: 8
+    eval: 8
+    selection: 8
+  payload:
+    available: true
+    diagnostic_only: true
+    candidate_count: 74
+    score_fields_available: raw_score, selector_score, segment_score
+  final retained sources:
+    skeleton: 4
+    learned: 2
+    length_repair: 4
+    fallback: 0
+  learned-controlled retained-slot fraction: 0.20
+  marginal summary:
+    learned retained mean removal loss: 0.0004861619
+    length-repair retained mean removal loss: 0.0007530456
+    skeleton retained mean removal loss: 0.0684498070
+    removed candidate mean add-one gain: 0.0067197904
+  decision: Level 1 implementation evidence only. The payload works with a
+    nonempty selection workload, but quality and causality claims remain
+    forbidden at this scale.
+
+checkpoint34 retained-marginal payload Level 2 minimum strict:
+  MLQDS QueryUsefulV1: 0.1380248104
+  uniform QueryUsefulV1: 0.1096775731
+  Douglas-Peucker QueryUsefulV1: 0.1386078304
+  gates passed:
+    workload stability
+    support overlap
+    global sanity
+  gates failed:
+    target diffusion
+    workload signature
+    predictability
+    prior-predictive alignment
+    learning causality
+  workload generation:
+    healthy; no row exhausted; all rows reached target coverage
+    signature failed from query-count mismatch and point/ship hit KS distances
+  learning causality:
+    shuffled-score delta: 0.0074525188 versus required 0.0170083424
+    prior ablations changed sampled/model priors but changed 0 retained decisions
+  retained-marginal payload:
+    available: true
+    diagnostic_only: true
+    candidate_count: 99
+    removed candidate positive add-one gain fraction: 0.8125
+    raw/selector scores were negatively aligned with removed-candidate gain
+  decision: do not tune model or selector from this artifact. Increase to a
+    standard strict single-cell because Level 2 failed workload signature at
+    small split/query scale.
+
+checkpoint35 retained-marginal payload standard strict v1:
+  MLQDS QueryUsefulV1: 0.1247339820
+  uniform QueryUsefulV1: 0.1404554573
+  Douglas-Peucker QueryUsefulV1: 0.1345268094
+  gates passed:
+    workload stability
+    support overlap
+    global sanity
+  gates failed:
+    target diffusion
+    workload signature
+    predictability
+    prior-predictive alignment
+    learning causality
+  workload generation:
+    healthy; no row exhausted; all rows reached target coverage
+  workload signature:
+    failed mainly from synthetic split imbalance. Train query counts were
+    89-100, eval query count was 32, and selection query count was 40.
+  split caveat:
+    this run used default 0.70/0.15/0.15 synthetic fractions. The current-best
+    strict artifact used balanced 0.34/0.33/0.33-style splits and passed
+    workload signature.
+  retained-marginal payload:
+    available: true
+    diagnostic_only: true
+    candidate_count: 137
+  decision: invalid for model tuning. Rerun one corrected standard strict
+    single-cell with balanced synthetic splits and the local 10% profile before
+    changing model, selector, or target behavior.
+
+checkpoint36 retained-marginal payload standard strict balanced local:
+  MLQDS QueryUsefulV1: 0.1549194326
+  uniform QueryUsefulV1: 0.1152263547
+  Douglas-Peucker QueryUsefulV1: 0.1749545436
+  gates passed:
+    workload stability
+    support overlap
+    target diffusion
+    global sanity
+  gates failed:
+    workload signature
+    predictability
+    prior-predictive alignment
+    learning causality
+  workload generation:
+    healthy; no row exhausted; all rows reached target coverage
+  workload signature:
+    still failed at 96 ships. Train query counts were 32-48, eval query count
+    was 32, and selection query count was 33. Some rows failed query-count
+    mismatch and point/ship-hit KS checks.
+  learning causality:
+    shuffled-score delta: -0.0235930255 versus required 0.0238158467
+    prior ablations changed sampled/model priors but changed 0 retained
+    decisions
+  retained-marginal payload:
+    available: true
+    diagnostic_only: true
+    candidate_count: 160
+  decision: not interpretable as acceptance evidence because signature still
+    fails. The next evidence step needs a larger balanced current-best-scale
+    strict cell, or a performance-aware retained-marginal diagnostic before
+    running that larger cell.
+
+checkpoint37 retained-marginal cached query support:
+  evidence level: implementation only
+  change:
+    retained-decision marginal QueryUsefulV1 diagnostics now reuse
+    ScoringQueryCache for retained-independent range-query support.
+  semantics:
+    exact QueryUsefulV1 marginals are preserved. The diagnostic still scores
+    frozen masks after retained-mask construction and remains diagnostic-only.
+  payload metadata:
+    exact_query_useful_v1_marginals
+    performance_mode
+    elapsed_seconds
+    query_cache_provided
+    query_cache_created
+    query_cache_support_mask_count
+    query_cache_range_audit_support_count
+    query_cache_range_segment_geometry_available
+  tests:
+    py_compile passed
+    ruff passed
+    pyright passed
+    focused pytest passed: 111 tests
+  decision: this removes a diagnostic scaling issue, not a learning blocker.
+    Next run should be a larger balanced current-best-scale strict single-cell
+    with the cached retained-marginal payload.
+
+checkpoint38 cached retained-marginal current-best-scale strict local:
+  MLQDS QueryUsefulV1: 0.1662115143
+  uniform QueryUsefulV1: 0.1421296610
+  Douglas-Peucker QueryUsefulV1: 0.1671038781
+  gates passed:
+    workload stability
+    support overlap
+    target diffusion
+    prior-predictive alignment
+    global sanity
+  gates failed:
+    workload signature
+    predictability
+    learning causality
+  workload generation:
+    healthy; no row exhausted; all rows reached local 10% target coverage
+    train query counts: 118, 148, 153, 139
+    eval query count: 144
+    selection query count: 126
+  workload signature:
+    failed only train-vs-eval query_count_mismatch for train_r0:
+    relative delta 0.1805555556 versus max 0.15. Anchor, footprint,
+    point-hit KS, ship-hit KS, duplicate, and broad-query checks passed.
+  predictability:
+    failed spearman_min and pr_auc_lift_over_base_rate:
+    Spearman 0.1109086186 versus min 0.15
+    PR-AUC lift 1.2304850435 versus min 1.25
+    lift@5 passed narrowly: 1.2035399978 versus min 1.2
+  learning causality:
+    failed shuffled scores, shuffled priors, no query priors, no behavior head,
+    and no segment-budget head.
+    shuffled-score delta 0.0089580664 versus required 0.0144491119
+    shuffled-prior delta -0.0001133659 versus required 0.005
+    no-query-prior delta 0.0000575989 versus required 0.005
+    no-behavior-head delta 0.0033472765 versus required 0.005
+    no-segment-budget-head delta 0.0036430341 versus required 0.005
+  retained-marginal payload:
+    available: true
+    diagnostic_only: true
+    exact_query_useful_v1_marginals: true
+    performance_mode: exact_cached_query_support
+    elapsed_seconds: 17.8225840520
+    candidate_count: 160
+    overall raw Spearman: -0.0248828079
+    overall selector Spearman: -0.0077522559
+    retained-removal selector top-minus-bottom marginal: -0.0000446724
+  runtime:
+    total pipeline runtime: 606.68s
+    freeze-retained-masks runtime: 351.32s
+    retained-marginal payload runtime: 17.82s
+  decision: failed before model conclusions are admissible because workload
+    signature failed. Do not tune model/selector from this artifact. Next work
+    should diagnose workload-profile/query-count stability at current-best scale
+    and instrument the remaining retained-mask freeze cost.
+```
+
+These diagnostics matter. Prior rescaling and generic head-fit/ranking pressure
+are not the next rational levers. The dense-head rank probe improved fit
+diagnostics while degrading retained-mask usefulness and learning causality.
+Better factorized head fit alone is not evidence of learned workload-blind
+success. The next evidence must tie scores to retained-decision marginal value,
+not only to factorized-label fit or mask movement.
+
 Latest prior-path sensitivity from the derived diagnosis:
 
 ```text
@@ -177,19 +479,30 @@ Current next checkpoint direction:
 
 ```text
 Primary hypothesis:
-  Prior features reach the model but are suppressed by prior scaling/encoding
-  or by score composition before selector decisions.
+  The local 10% workload profile is still seed/split-sensitive under the
+  strict query-count signature gate at current-best scale. The latest larger
+  probe failed before model conclusions were admissible, even though the
+  retained-marginal payload itself is now affordable.
 
 Expected focus:
-  learning/model_features.py
-  models/workload_blind_range_v2.py
-  selection/model_score_conversion.py
-  orchestration/model_ablations.py
+  workloads/generation/workload_profiles.py
+  workloads/generation/generator.py
+  orchestration/range_diagnostics.py
+  orchestration/retained_mask_stage.py
   orchestration/retained_mask_ablation_stage.py
 
 Preferred scope:
-  static/code diagnostic plus tiny controlled unit or artifact replay if needed;
-  no full matrix
+  targeted workload/profile query-count stability diagnostics first; do not use
+  raw coverage overrides to recreate stale profile behavior; do not tune
+  model/selector until workload signature passes. Separately instrument the
+  retained-mask freeze stage because most checkpoint38 freeze time was outside
+  the retained-marginal payload.
+
+Avoid:
+  re-adding sqrt_probability prior transform
+  re-adding dense-head rank pressure
+  loosening learning-causality gates
+  compensating with large temporal scaffold or weaker length guardrails
 ```
 
 Do not run the full 4x7 grid until learning causality passes on required smaller evidence. Do not claim final success from this strict cell.

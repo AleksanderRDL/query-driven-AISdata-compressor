@@ -2085,3 +2085,1630 @@ Decision:
 - Treat learning causality as the active blocker.
 - Do not run the final matrix or increase workload scale before the narrower
   score/prior materiality diagnosis is resolved.
+
+## Checkpoint 5.72 - V2 Prior Evidence Encoding
+
+Status: completed
+
+Hypothesis:
+- Enabled train-derived prior channels are reaching v2 model inputs, but their
+  raw probability scale is too small after `route_density_prior` is correctly
+  disabled, so the prior branch has little retained-mask materiality.
+
+Expected files:
+- `learning/model_features.py`
+- `models/workload_blind_range_v2.py`
+- `orchestration/causality.py`
+- `tests/unit/orchestration/test_query_driven_rework.py`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- V2 model features expose a bounded, amplified prior-evidence encoding; route
+  density remains disabled; the ablation diagnostic records the model prior
+  transform; focused Level 0 checks pass; no scientific probe or final matrix is
+  run.
+
+Goal:
+- Fix prior attenuation at the model-feature encoding layer without loosening
+  gates, adding temporal scaffold, or re-enabling the harmful route-density
+  channel.
+
+Changes:
+- Added `sqrt_probability` as the v2 model-facing prior transform.
+- Applied the transform only inside `workload_blind_range_v2` point features,
+  after sampling train-derived prior fields.
+- Kept `route_density_prior` zeroed for v2 model inputs.
+- Reported the prior transform in `model_prior_feature_sensitivity`.
+- Bumped the v2 schema version from `6` to `7`.
+- Updated focused tests for transformed prior inputs and diagnostics.
+
+Tests:
+- `python3 -m py_compile Range_QDS/learning/model_features.py
+  Range_QDS/models/workload_blind_range_v2.py Range_QDS/orchestration/causality.py
+  Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
+- `../.venv/bin/ruff check learning/model_features.py
+  models/workload_blind_range_v2.py orchestration/causality.py
+  tests/unit/orchestration/test_query_driven_rework.py`
+- `../.venv/bin/pyright learning/model_features.py
+  models/workload_blind_range_v2.py orchestration/causality.py
+  tests/unit/orchestration/test_query_driven_rework.py`
+- `../.venv/bin/pytest tests/unit/orchestration/test_query_driven_rework.py
+  tests/unit/learning/test_model_features.py -q`
+- `git diff --check -- Range_QDS/learning/model_features.py
+  Range_QDS/models/workload_blind_range_v2.py Range_QDS/orchestration/causality.py
+  Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was Level 0 code and diagnostic
+  verification.
+
+Key results:
+- MLQDS QueryUsefulV1: not applicable
+- uniform QueryUsefulV1: not applicable
+- Douglas-Peucker QueryUsefulV1: not applicable
+- gates passed: not applicable
+- gates failed: not applicable
+
+Extra discoveries:
+- The stored current-best prior sensitivity was not mainly a scaler failure.
+  The scaler prior ranges were already `1.0`. The larger issue is that the only
+  high-magnitude sampled prior channel was `route_density_prior`, and that
+  channel is intentionally excluded from v2 model inputs because it was
+  previously harmful.
+- The remaining enabled prior channels are sparse raw probabilities, so a
+  bounded evidence transform is the right layer to test before changing losses
+  or selector authority again.
+
+Decision:
+- Continue with an implementation-scale smoke or replay only. This checkpoint
+  does not prove learning causality and does not justify the final grid.
+
+## Checkpoint 5.73 - Prior Transform Level 1 Smoke And Retained-Mask Schema
+
+Status: completed
+
+Hypothesis:
+- The `sqrt_probability` prior transform is wired through the end-to-end
+  train/score path and emits the updated prior-ablation diagnostic chain without
+  tensor, cache, protocol, or report breakage.
+
+Expected files:
+- `orchestration/causality.py`
+- `tests/unit/orchestration/test_query_driven_rework.py`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- A Level 1 smoke completes with artifacts and no protocol/schema errors, or
+  fails with a specific component to diagnose. Metrics from this run are
+  implementation evidence only, not learning evidence.
+
+Goal:
+- Verify integration of the prior transform and diagnostic schema before any
+  larger strict replay.
+
+Changes:
+- Added a top-level `retained_mask` stage to prior-ablation sensitivity payloads.
+- Kept `score_output` as the canonical score-stage key and did not reintroduce
+  `selector_score`.
+- Added focused unit assertions for the explicit retained-mask stage.
+
+Tests:
+- `python3 -m py_compile Range_QDS/orchestration/causality.py
+  Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
+- `../.venv/bin/ruff check orchestration/causality.py
+  tests/unit/orchestration/test_query_driven_rework.py`
+- `../.venv/bin/pyright orchestration/causality.py
+  tests/unit/orchestration/test_query_driven_rework.py`
+- `../.venv/bin/pytest tests/unit/orchestration/test_query_driven_rework.py -q`
+- Level 1 smoke command listed below.
+
+Experiment artifact:
+- path:
+  `artifacts/results/query_driven_v2_checkpoint21_prior_sqrt_schema_level1_smoke`
+- command: tiny synthetic smoke with `n_ships=8`, `n_points=64`,
+  `synthetic_route_families=2`, `n_queries=8`, `max_queries=48`,
+  `range_train_workload_replicates=1`, `epochs=1`, `compression_ratio=0.05`,
+  `workload_profile_id=range_workload_v1`, and strict protocol flags unchanged.
+
+Key results:
+- MLQDS QueryUsefulV1: `0.08325622359769995`
+- uniform QueryUsefulV1: `0.07897667892608334`
+- Douglas-Peucker QueryUsefulV1: `0.109409196381971`
+- gates passed: support overlap, target diffusion
+- gates failed: workload stability, predictability, prior-predictive alignment,
+  learning causality, global sanity
+- prior-ablation diagnostics now expose:
+  `sampled_prior_features`, `model_prior_features`, `head_output`,
+  `raw_prediction`, `score_output`, and `retained_mask`
+- `model_prior_feature_transform`: `sqrt_probability`
+
+Extra discoveries:
+- The first smoke artifact under checkpoint20 was schema-stale: it completed but
+  lacked the top-level `retained_mask` stage. Keep checkpoint21 as the relevant
+  smoke artifact for this checkpoint.
+- Even in the tiny smoke, model-input prior deltas are amplified by the transform
+  (`without_query_prior_features` model-input mean absolute delta about
+  `0.1285`), but head probability movement remains tiny and the retained mask
+  does not move. This is not scientific evidence; it is a warning that a larger
+  replay must inspect head/score materiality before claiming progress.
+- Global sanity failed on length preservation (`0.5174`) because the smoke is
+  too small and uses no length repair. Do not tune from this run.
+
+Decision:
+- The implementation path runs and the required diagnostic chain is now present.
+- Continue to a minimum strict diagnostic only if runtime is acceptable. Do not
+  claim learning or run the final grid from this smoke.
+
+## Checkpoint 5.74 - Prior Transform Minimum Strict Diagnostic
+
+Status: failed
+
+Hypothesis:
+- At minimum strict diagnostic scale, the prior transform should preserve the
+  healthy support and target plumbing and show whether prior materiality improves
+  beyond the Level 1 smoke's no-mask-movement result.
+
+Expected files:
+- none unless the probe exposes a code defect
+
+Stop condition:
+- Classify the blocker by gate and component. If generator/signature/support
+  fails, stop there. If upstream gates pass but causality fails, inspect
+  prior/head/score/retained-mask stages.
+
+Goal:
+- Run a minimum strict synthetic single-cell before attempting any larger replay.
+
+Changes:
+- No code changes from the probe result.
+- One initial command failed before execution because it used a nonexistent
+  positive boolean CLI flag for fairness preallocation. The rerun used the
+  default enabled setting instead.
+
+Tests:
+- Level 2-style diagnostic command listed below.
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint22_prior_sqrt_level2_min_strict`
+- command: synthetic single-cell with `n_ships=32`, `n_points=128`,
+  `synthetic_route_families=3`, `n_queries=24`, `max_queries=160`,
+  `range_train_workload_replicates=4`, `epochs=3`, `compression_ratio=0.05`,
+  `learned_segment_length_repair_fraction=0.6`, `query_prior_grid_bins=128`,
+  and `query_prior_smoothing_passes=0`.
+
+Key results:
+- MLQDS QueryUsefulV1: `0.16740001363296345`
+- uniform QueryUsefulV1: `0.11810407726090348`
+- Douglas-Peucker QueryUsefulV1: `0.14867676863973497`
+- gates passed: workload stability, support overlap
+- gates failed: target diffusion, predictability, prior-predictive alignment,
+  learning causality, global sanity
+- target-diffusion failure: `replacement_representative_value` support fraction
+  above max
+- global-sanity failure: length preservation `0.6518619487336094` below active
+  `0.75` minimum
+- learning-causality failures: shuffled prior fields, without query-prior
+  features, without behavior head
+- prior ablations had amplified model-input movement
+  (`without_query_prior_features` mean absolute model-input delta about
+  `0.1075`) but retained-mask movement was still `0`
+
+Extra discoveries:
+- The probe beat uniform and Douglas-Peucker on QueryUsefulV1, but that is not
+  useful evidence because upstream gates failed.
+- Query-hit prior predictability was negative at this scale
+  (`query_hit_probability` Spearman about `-0.0935`, lift@5 about `0.8312`).
+  That blocks model-tuning conclusions under the guide.
+- The larger current-best strict cell passed predictability and target diffusion
+  before this model-feature change, and this change does not alter prior-field
+  construction or targets. Treat this minimum run as likely scale/noise
+  localization, not as evidence that the transform failed.
+
+Decision:
+- Do not tune model/loss/selector from this failed minimum probe.
+- Run one larger strict single-cell if runtime is acceptable to separate
+  undersized-probe noise from a real regression. Still no final grid and no
+  final success claim.
+
+## Checkpoint 5.75 - Prior Transform Standard Strict Diagnostic
+
+Status: failed
+
+Hypothesis:
+- The Checkpoint 5.74 upstream failures were mostly undersized-probe noise. At
+  standard strict diagnostic scale, workload/support/predictability/target gates
+  should recover, allowing the prior-transform effect on causality to be
+  evaluated.
+
+Expected files:
+- none unless the replay exposes a code defect
+
+Stop condition:
+- If upstream gates fail, stop and diagnose those gates first. If upstream gates
+  pass but causality fails, compare prior/head/score/mask movement against the
+  current-best blocker.
+
+Goal:
+- Test the `sqrt_probability` model-prior encoding at a meaningful single-cell
+  scale without running the final grid.
+
+Changes:
+- No code changes from the probe result.
+
+Tests:
+- Standard strict diagnostic command listed below.
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint23_prior_sqrt_standard_strict`
+- command: synthetic single-cell with `n_ships=96`, `n_points=192`,
+  `synthetic_route_families=4`, `n_queries=48`, `max_queries=256`,
+  `range_train_workload_replicates=4`, `epochs=3`, `compression_ratio=0.05`,
+  `learned_segment_length_repair_fraction=0.6`, `query_prior_grid_bins=128`,
+  and `query_prior_smoothing_passes=0`.
+
+Key results:
+- MLQDS QueryUsefulV1: `0.15236522565077087`
+- uniform QueryUsefulV1: `0.1260032240011255`
+- Douglas-Peucker QueryUsefulV1: `0.13374014094607353`
+- gates passed: workload stability, support overlap, predictability,
+  prior-predictive alignment, global sanity
+- gates failed: target diffusion, learning causality
+- target-diffusion failure: `replacement_representative_value` support fraction
+  above max
+- length preservation: `0.7705452796136297`
+- failed causality children: shuffled scores, shuffled prior fields, without
+  query-prior features, without behavior head, without segment-budget head,
+  prior-field-only mismatch
+- prior ablations:
+  - `shuffled_prior_fields` QueryUseful delta: `-0.0005625614079171892`
+  - `without_query_prior_features` QueryUseful delta: `-0.0005625614079171892`
+  - retained-mask symmetric difference: `8`
+  - retained-mask Jaccard: `0.9760479041916168`
+  - head probability mean absolute delta: about `0.000126`
+
+Extra discoveries:
+- The larger run recovered predictability and global sanity, so the Level 2
+  upstream failures were mostly scale noise.
+- The prior transform amplified head movement compared with the old
+  current-best artifact, but the movement did not become useful. Prior
+  shuffle/removal slightly improved the primary score, so this is not a
+  defensible causality improvement.
+- Shuffled-score causality regressed badly: observed delta `0.00757` versus
+  required `0.01582`.
+- The transform also failed the prior-field-only mismatch check by sign
+  (`-0.00117`), which is worse than the current-best blocker shape.
+
+Decision:
+- Reject `sqrt_probability` as a production/default model-prior transform.
+- Revert the transform and schema-version bump to keep the codebase clean.
+- Keep the top-level prior-ablation `retained_mask` diagnostic stage because it
+  fixed a real schema gap.
+
+## Checkpoint 5.76 - Revert Failed Prior Transform
+
+Status: completed
+
+Hypothesis:
+- Reverting the failed prior transform while keeping the retained-mask
+  diagnostic stage restores production model-feature semantics to the
+  current-best path and removes the experimental default.
+
+Expected files:
+- `learning/model_features.py`
+- `models/workload_blind_range_v2.py`
+- `tests/unit/orchestration/test_query_driven_rework.py`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- Identity prior encoding is restored, v2 schema remains at the current-best
+  value, retained-mask diagnostics remain tested, and focused checks pass.
+
+Goal:
+- Keep the codebase clean after a failed diagnostic instead of leaving a
+  one-off experiment in the production path.
+
+Changes:
+- Replaced the failed `sqrt_probability` model-prior transform with explicit
+  `identity_probability` metadata.
+- Restored v2 schema version `6`.
+- Kept disabled `route_density_prior` behavior unchanged.
+- Kept the top-level prior-ablation `retained_mask` diagnostic stage and tests.
+- Restored tests that expect non-route prior model features to equal sampled
+  prior values.
+
+Tests:
+- `python3 -m py_compile Range_QDS/learning/model_features.py
+  Range_QDS/models/workload_blind_range_v2.py Range_QDS/orchestration/causality.py
+  Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
+- `../.venv/bin/ruff check learning/model_features.py
+  models/workload_blind_range_v2.py orchestration/causality.py
+  tests/unit/orchestration/test_query_driven_rework.py`
+- `../.venv/bin/pyright learning/model_features.py
+  models/workload_blind_range_v2.py orchestration/causality.py
+  tests/unit/orchestration/test_query_driven_rework.py`
+- `../.venv/bin/pytest tests/unit/orchestration/test_query_driven_rework.py
+  tests/unit/learning/test_model_features.py -q`
+- `git diff --check`
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was cleanup after a failed
+  diagnostic.
+
+Key results:
+- MLQDS QueryUsefulV1: not applicable
+- uniform QueryUsefulV1: not applicable
+- Douglas-Peucker QueryUsefulV1: not applicable
+- gates passed: not applicable
+- gates failed: not applicable
+
+Extra discoveries:
+- The useful part of this checkpoint sequence is instrumentation, not the prior
+  transform. Future artifacts can now show whether prior ablations change
+  retained masks as a first-class stage.
+
+Decision:
+- Continue from the current-best model-feature semantics, not the rejected
+  `sqrt_probability` branch.
+- Next work should diagnose why factorized heads remain low-dispersion and why
+  prior changes fail to produce useful retained-mask changes under the existing
+  identity prior inputs.
+
+## Checkpoint 5.77 - Head Dispersion Diagnosis
+
+Status: completed
+
+Hypothesis:
+- The active causality blocker is not prior-feature scale. The learned
+  factorized heads and composed factorized probability are too compressed
+  relative to their targets to make score/prior ablations reliably lose quality.
+
+Expected files:
+- `artifacts/results/query_driven_v2_checkpoint24_head_dispersion_diagnosis/head_dispersion_diagnosis.json`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- Existing strict artifacts are summarized into a diagnostic that identifies the
+  likely weak component and recommends the next small checkpoint without making
+  an acceptance claim.
+
+Goal:
+- Use targeted artifact diagnostics before changing loss, selector behavior, or
+  prior encoding again.
+
+Changes:
+- Generated a derived head/composed-score dispersion diagnostic from the
+  current-best identity artifact and the rejected `sqrt_probability` standard
+  strict artifact.
+- No production code changed in this checkpoint.
+
+Tests:
+- Derived diagnostic generation from existing strict artifacts.
+- `git diff --check`
+
+Experiment artifact:
+- path:
+  `artifacts/results/query_driven_v2_checkpoint24_head_dispersion_diagnosis/head_dispersion_diagnosis.json`
+- command: derived JSON-only diagnostic from existing strict artifacts; no new
+  probe was run.
+
+Key results:
+- MLQDS QueryUsefulV1: not applicable for the derived diagnostic; current-best
+  source remains `0.17183721530965693`
+- uniform QueryUsefulV1: not applicable for the derived diagnostic; current-best
+  source remains `0.14223795796380634`
+- Douglas-Peucker QueryUsefulV1: not applicable for the derived diagnostic;
+  current-best source remains `0.16362459837911367`
+- gates passed: not applicable
+- gates failed: not applicable; current-best source still fails learning
+  causality
+- current-best composed factorized probability
+  `prediction_std_to_target_std`: `0.09148187337949508`
+- current-best low-dispersion heads below `0.10` ratio:
+  `conditional_behavior_utility`, `replacement_representative_value`,
+  `segment_budget_target`, `path_length_support_target`
+
+Extra discoveries:
+- The selector rank stage can manufacture high selector-score dispersion from
+  tiny factorized probability differences. That can move masks under score
+  shuffling, but it does not prove useful learned causality.
+- The rejected prior transform amplified prior-path movement but made composed
+  score dispersion worse (`0.0420` ratio), so more prior scaling is not the
+  next rational move.
+
+Decision:
+- Continue with a Level 0 loss/diagnostic checkpoint focused on factorized-head
+  or composed-probability dispersion. Do not change selector scaffold, increase
+  temporal support, or run the final grid.
+
+## Checkpoint 5.78 - Dense Head Rank Diagnostic Loss
+
+Status: completed
+
+Hypothesis:
+- The current-best blocker is low dispersion in dense factorized heads, so the
+  next probe needs explicit ranking pressure on `conditional_behavior_utility`,
+  `replacement_representative_value`, `segment_budget_target`, and
+  `path_length_support_target` rather than another prior-scale or selector
+  change.
+
+Expected files:
+- `learning/optimization_epoch.py`
+- `config/run_config.py`
+- `orchestration/learning_scoring_cli.py`
+- `orchestration/train_and_score.py`
+- `tests/unit/orchestration/test_query_driven_rework.py`
+- `tests/unit/runtime/test_torch_runtime_controls.py`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- The new loss path is default-off, only activates through an explicit CLI/config
+  weight, focused tests prove it penalizes reversed dense-head order, and no
+  strict scientific claim is made before a probe.
+
+Goal:
+- Add a clean Level 0 diagnostic knob for the specific low-dispersion heads
+  identified in Checkpoint 5.77.
+
+Changes:
+- Added `_dense_head_rank_loss` for the four dense low-dispersion QueryUsefulV1
+  heads.
+- Added default-off `query_useful_dense_head_rank_loss_weight` to config, CLI,
+  run construction, and train/score config reporting.
+- Wired the new loss into `_factorized_query_useful_loss` only when the weight
+  is positive.
+- Added unit coverage for reversed dense-head ordering and config/CLI
+  round-tripping/defaults.
+
+Tests:
+- `python3 -m py_compile Range_QDS/learning/optimization_epoch.py
+  Range_QDS/config/run_config.py Range_QDS/orchestration/learning_scoring_cli.py
+  Range_QDS/orchestration/train_and_score.py
+  Range_QDS/tests/unit/orchestration/test_query_driven_rework.py
+  Range_QDS/tests/unit/runtime/test_torch_runtime_controls.py`
+- `../.venv/bin/ruff check learning/optimization_epoch.py config/run_config.py
+  orchestration/learning_scoring_cli.py orchestration/train_and_score.py
+  tests/unit/orchestration/test_query_driven_rework.py
+  tests/unit/runtime/test_torch_runtime_controls.py`
+- `../.venv/bin/pyright learning/optimization_epoch.py config/run_config.py
+  orchestration/learning_scoring_cli.py orchestration/train_and_score.py
+  tests/unit/orchestration/test_query_driven_rework.py
+  tests/unit/runtime/test_torch_runtime_controls.py`
+- `../.venv/bin/pytest tests/unit/orchestration/test_query_driven_rework.py
+  tests/unit/runtime/test_torch_runtime_controls.py -q`
+- `../.venv/bin/pytest tests/unit/learning/test_model_learning_does_not_collapse.py
+  tests/unit/learning/test_losses.py -q`
+- `git diff --check`
+
+Experiment artifact:
+- path: not generated
+- command: no probe was run; this was Level 0 implementation and verification.
+
+Key results:
+- MLQDS QueryUsefulV1: not applicable
+- uniform QueryUsefulV1: not applicable
+- Douglas-Peucker QueryUsefulV1: not applicable
+- gates passed: not applicable
+- gates failed: not applicable
+
+Extra discoveries:
+- The code already had default-off behavior-rank and sparse-head rank losses,
+  both previously rejected as defaults. This checkpoint does not revive either
+  as accepted science; it adds a different diagnostic aimed at the dense heads
+  that Checkpoint 5.77 showed are compressed.
+
+Decision:
+- Continue to a small implementation-scale smoke or strict diagnostic with the
+  dense-head rank weight explicitly enabled. Do not run the final grid and do
+  not treat unit loss behavior as evidence of learned workload-blind success.
+
+## Checkpoint 5.79 - Dense Head Rank Level 1 Smoke
+
+Status: completed
+
+Hypothesis:
+- With `query_useful_dense_head_rank_loss_weight=0.10`, the end-to-end
+  train/score/diagnostic path should run and emit artifacts without schema or
+  runtime breakage. Metrics from this scale are implementation evidence only.
+
+Expected files:
+- `artifacts/results/query_driven_v2_checkpoint25_dense_head_rank_level1_smoke`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- The smoke completes or fails with a specific integration component. No code
+  change should be made from this tiny probe unless it exposes a bug.
+
+Goal:
+- Verify the new dense-head rank diagnostic knob is accepted by the CLI and
+  pipeline before any stricter probe.
+
+Changes:
+- No code changes from the smoke result.
+
+Tests:
+- Level 1 smoke command listed below.
+- `git diff --check`
+
+Experiment artifact:
+- path:
+  `artifacts/results/query_driven_v2_checkpoint25_dense_head_rank_level1_smoke`
+- command: tiny synthetic smoke with `n_ships=8`, `n_points=64`,
+  `synthetic_route_families=2`, `n_queries=8`, `max_queries=48`,
+  `range_train_workload_replicates=1`, `epochs=1`, `compression_ratio=0.05`,
+  `query_useful_dense_head_rank_loss_weight=0.10`, and strict protocol flags
+  unchanged.
+
+Key results:
+- MLQDS QueryUsefulV1: `0.08325622359769995`
+- uniform QueryUsefulV1: `0.07897667892608334`
+- Douglas-Peucker QueryUsefulV1: `0.109409196381971`
+- gates passed: support overlap, target diffusion
+- gates failed: workload stability, predictability, prior-predictive alignment,
+  workload signature, learning causality, global sanity
+- length preservation: `0.517401622688939`
+- factorized final-score `prediction_std_to_target_std`: `0.024829051093073946`
+- failed causality checks: untrained model, shuffled prior fields, without
+  query-prior features, prior-field-only mismatch
+
+Extra discoveries:
+- The tiny smoke is effectively identical to the earlier Level 1 smoke on
+  top-line metrics. That is not proof the loss is useless; one epoch on this
+  scale is not a learning probe. It does mean there is no visible quick win to
+  justify skipping stricter evidence.
+- Dense-head predictions remain very compressed at smoke scale:
+  `conditional_behavior_utility` std `0.00726`, replacement std `0.00626`,
+  segment-budget std `0.00871`, path-length-support std `0.01535`.
+
+Decision:
+- Treat the new loss as integration-verified only.
+- Continue, at most, to the next guide-allowed strict diagnostic scale with the
+  weight explicitly enabled. Do not run the final grid and do not claim learning
+  progress from this smoke.
+
+## Checkpoint 5.80 - Dense Head Rank Minimum Strict Diagnostic
+
+Status: failed
+
+Hypothesis:
+- At minimum strict diagnostic scale, `query_useful_dense_head_rank_loss_weight=0.10`
+  should preserve upstream gates well enough to inspect whether dense-head
+  dispersion and learning-causality ablations improve.
+
+Expected files:
+- `artifacts/results/query_driven_v2_checkpoint26_dense_head_rank_level2_min_strict`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- If upstream gates fail, classify those failures and do not tune from causality
+  deltas. If upstream gates pass but causality fails, compare head dispersion and
+  ablation deltas against current-best evidence.
+
+Goal:
+- Test the dense-head rank diagnostic at the smallest strict scale allowed for
+  implementation-level gate diagnosis.
+
+Changes:
+- No code changes from the probe result.
+
+Tests:
+- Minimum strict diagnostic command listed below.
+
+Experiment artifact:
+- path:
+  `artifacts/results/query_driven_v2_checkpoint26_dense_head_rank_level2_min_strict`
+- command: synthetic single-cell with `n_ships=32`, `n_points=128`,
+  `synthetic_route_families=3`, `n_queries=24`, `max_queries=160`,
+  `range_train_workload_replicates=4`, `epochs=3`, `compression_ratio=0.05`,
+  `learned_segment_length_repair_fraction=0.6`, `query_prior_grid_bins=128`,
+  `query_prior_smoothing_passes=0`, and
+  `query_useful_dense_head_rank_loss_weight=0.10`.
+
+Key results:
+- MLQDS QueryUsefulV1: `0.16640326862346`
+- uniform QueryUsefulV1: `0.11810407726090348`
+- Douglas-Peucker QueryUsefulV1: `0.14867676863973497`
+- gates passed: workload stability, support overlap
+- gates failed: target diffusion, predictability, prior-predictive alignment,
+  workload signature, learning causality, global sanity
+- target-diffusion failure: `replacement_representative_value` support fraction
+  above max
+- global-sanity failure: length preservation `0.6486676885567424` below active
+  `0.75` minimum
+- failed causality checks: shuffled prior fields, without query-prior features,
+  without behavior head
+- factorized final-score `prediction_std_to_target_std`: `0.03019633687429775`
+
+Extra discoveries:
+- The result is materially the same shape as the earlier minimum strict run:
+  upstream gates fail and dense-head dispersion remains very compressed.
+- The dense-head rank term did not visibly repair the behavior-head ablation at
+  this scale; disabling the behavior head improved QueryUsefulV1 by about
+  `0.0221`, so the behavior head is still harmful in this probe.
+
+Decision:
+- Do not tune from this minimum probe.
+- A single standard strict diagnostic is still reasonable because prior
+  evidence showed this minimum scale can produce upstream false negatives. Do
+  not run the final grid.
+
+## Checkpoint 5.81 - Dense Head Rank Standard Strict Diagnostic
+
+Status: failed
+
+Hypothesis:
+- The minimum strict failures may be scale noise, so the standard strict
+  single-cell should determine whether dense-head rank pressure improves
+  dispersion without breaking QueryUsefulV1, global sanity, or learning
+  causality.
+
+Expected files:
+- `artifacts/results/query_driven_v2_checkpoint27_dense_head_rank_standard_strict`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- Classify the single-cell by gates. If upstream gates pass but causality fails,
+  compare ablation deltas and dispersion against the current-best strict
+  artifact before deciding whether to continue or reject.
+
+Goal:
+- Test the dense-head rank diagnostic at the smallest meaningful strict scale
+  before any larger run.
+
+Changes:
+- No code changes from the probe result.
+
+Tests:
+- Standard strict diagnostic command listed below.
+
+Experiment artifact:
+- path:
+  `artifacts/results/query_driven_v2_checkpoint27_dense_head_rank_standard_strict`
+- command: synthetic single-cell with `n_ships=96`, `n_points=192`,
+  `synthetic_route_families=4`, `n_queries=48`, `max_queries=256`,
+  `range_train_workload_replicates=4`, `epochs=3`, `compression_ratio=0.05`,
+  `learned_segment_length_repair_fraction=0.6`, `query_prior_grid_bins=128`,
+  `query_prior_smoothing_passes=0`, and
+  `query_useful_dense_head_rank_loss_weight=0.10`.
+
+Key results:
+- MLQDS QueryUsefulV1: `0.14782838468754006`
+- uniform QueryUsefulV1: `0.1260032240011255`
+- Douglas-Peucker QueryUsefulV1: `0.13374014094607353`
+- gates passed: workload stability, support overlap, predictability,
+  prior-predictive alignment, global sanity
+- gates failed: target diffusion, workload signature, learning causality
+- target-diffusion failure: `replacement_representative_value` support fraction
+  above max
+- length preservation: `0.7682205231155679`
+- failed causality checks: shuffled scores, shuffled prior fields, without
+  query-prior features, without behavior head, without segment-budget head,
+  prior-field-only mismatch
+- factorized final-score `prediction_std_to_target_std`: `0.10812342051292786`
+- factorized final-score tau: `0.35207890026007366`
+
+Extra discoveries:
+- Dense-head rank pressure improved the factorized fit diagnostics relative to
+  the rejected prior-transform standard run, but it made the actual workload
+  result worse than the current best (`0.1478` versus `0.1718` QueryUsefulV1).
+- Learning causality degraded. Shuffled-score delta collapsed to
+  `0.0002758070099909693`, and disabling behavior or segment-budget heads
+  improved the primary score (`-0.001303615177307954` and
+  `-0.0009158485242187209` deltas).
+- This confirms the guide warning: better factorized head fit alone is not
+  evidence of learned workload-blind success.
+
+Decision:
+- Reject `query_useful_dense_head_rank_loss_weight=0.10` as a candidate path.
+- Revert the new dense-head rank diagnostic plumbing rather than leaving another
+  failed default-off production knob.
+- Do not run the final grid.
+
+## Checkpoint 5.82 - Revert Failed Dense Head Rank Diagnostic
+
+Status: completed
+
+Hypothesis:
+- Since the dense-head rank path failed the standard strict diagnostic, keeping
+  it as a production/config knob would be misleading experiment clutter.
+
+Expected files:
+- `learning/optimization_epoch.py`
+- `config/run_config.py`
+- `orchestration/learning_scoring_cli.py`
+- `orchestration/train_and_score.py`
+- `tests/unit/orchestration/test_query_driven_rework.py`
+- `tests/unit/runtime/test_torch_runtime_controls.py`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- Dense-head rank plumbing is removed, current default behavior is restored,
+  retained-mask/prior instrumentation from earlier checkpoints remains, and
+  focused checks pass.
+
+Goal:
+- Keep the codebase clean after a failed diagnostic branch.
+
+Changes:
+- Removed `_dense_head_rank_loss`.
+- Removed `query_useful_dense_head_rank_loss_weight` from config, CLI, run
+  construction, train/score config reporting, and focused tests.
+- Kept the earlier useful prior-ablation `retained_mask` diagnostic stage and
+  `identity_probability` model-prior transform metadata.
+
+Tests:
+- `python3 -m py_compile Range_QDS/learning/optimization_epoch.py
+  Range_QDS/config/run_config.py Range_QDS/orchestration/learning_scoring_cli.py
+  Range_QDS/orchestration/train_and_score.py
+  Range_QDS/tests/unit/orchestration/test_query_driven_rework.py
+  Range_QDS/tests/unit/runtime/test_torch_runtime_controls.py`
+- `../.venv/bin/ruff check learning/optimization_epoch.py config/run_config.py
+  orchestration/learning_scoring_cli.py orchestration/train_and_score.py
+  tests/unit/orchestration/test_query_driven_rework.py
+  tests/unit/runtime/test_torch_runtime_controls.py`
+- `../.venv/bin/pyright learning/optimization_epoch.py config/run_config.py
+  orchestration/learning_scoring_cli.py orchestration/train_and_score.py
+  tests/unit/orchestration/test_query_driven_rework.py
+  tests/unit/runtime/test_torch_runtime_controls.py`
+- `../.venv/bin/pytest tests/unit/orchestration/test_query_driven_rework.py
+  tests/unit/runtime/test_torch_runtime_controls.py
+  tests/unit/learning/test_model_learning_does_not_collapse.py
+  tests/unit/learning/test_losses.py -q`
+- `git diff --check`
+
+Experiment artifact:
+- path: not generated
+- command: no probe was run; this was cleanup after a failed diagnostic.
+
+Key results:
+- MLQDS QueryUsefulV1: not applicable
+- uniform QueryUsefulV1: not applicable
+- Douglas-Peucker QueryUsefulV1: not applicable
+- gates passed: not applicable
+- gates failed: not applicable
+
+Extra discoveries:
+- The failed dense-head probe is still useful evidence: forcing better
+  factorized head fit can degrade the actual retained-mask objective. The next
+  root issue is not "more head fit"; it is making learned scores causally useful
+  for retained-set quality.
+
+Decision:
+- Continue from current-best semantics plus the retained-mask/prior diagnostic
+  instrumentation.
+- Do not re-add dense-head rank pressure unless a future checkpoint has a
+  materially different mechanism and strict evidence requirement.
+
+## Checkpoint 5.83 - Guide Evidence Refresh After Failed Fit Levers
+
+Status: completed
+
+Hypothesis:
+- The guide still pointed the next checkpoint toward prior scaling/encoding even
+  though the subsequent evidence rejected prior rescaling and dense-head rank
+  pressure. Leaving that stale direction in the source of truth would waste the
+  next checkpoint.
+
+Expected files:
+- `docs/query-driven-rework-guide.md`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- Section 2 of the guide reflects the rejected `sqrt_probability` and dense-head
+  rank diagnostics, preserves current-best evidence as the baseline, and points
+  the next checkpoint toward score/selector retained-set utility alignment.
+
+Goal:
+- Keep the guide authoritative after Checkpoints 5.72-5.82.
+
+Changes:
+- Added superseding diagnostic notes for the rejected prior transform, derived
+  head-dispersion diagnosis, and rejected dense-head rank standard strict run.
+- Replaced the stale next-checkpoint direction with a score/selector marginal
+  utility alignment hypothesis.
+- Added explicit avoid items for re-adding the rejected prior transform,
+  re-adding dense-head rank pressure, loosening gates, or compensating with
+  temporal scaffold/length guardrail weakening.
+
+Tests:
+- `git diff --check`
+
+Experiment artifact:
+- path: not generated
+- command: no probe was run; this was documentation synchronization.
+
+Key results:
+- MLQDS QueryUsefulV1: not applicable
+- uniform QueryUsefulV1: not applicable
+- Douglas-Peucker QueryUsefulV1: not applicable
+- gates passed: not applicable
+- gates failed: not applicable
+
+Extra discoveries:
+- The guide can become actively harmful if rejected experimental branches are
+  only recorded in the progress log. The source-of-truth guide needs the
+  decision boundary, not every raw checkpoint detail.
+
+Decision:
+- Continue from the updated guide direction: diagnose why learned score movement
+  is not aligned with retained-set QueryUsefulV1 value.
+
+## Checkpoint 5.84 - Score/Selector Alignment Derived Diagnosis
+
+Status: completed
+
+Hypothesis:
+- Current-best learned scores move retained masks, but the moved decisions have
+  weak marginal QueryUsefulV1 value. The next root issue should be classified
+  before changing training loss, prior scaling, or selector scaffolding again.
+
+Expected files:
+- `artifacts/results/query_driven_v2_checkpoint28_score_selector_alignment_diagnosis/score_selector_alignment_diagnosis.json`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- Classify the weakness to raw prediction, score conversion, segment allocation,
+  length repair, prior path, or missing instrumentation without running a broad
+  probe.
+
+Goal:
+- Convert existing strict artifacts into a compact score/selector diagnosis.
+
+Changes:
+- Added a derived diagnosis artifact comparing current-best checkpoint 13,
+  rejected prior-sqrt checkpoint 23, rejected head-rank checkpoint 27, and the
+  checkpoint 18 length-min-0.75 reclassification.
+- Recorded selected score, selector, causality, head-ablation, and length-repair
+  fields instead of dumping full selector traces.
+
+Tests:
+- `jq empty artifacts/results/query_driven_v2_checkpoint28_score_selector_alignment_diagnosis/score_selector_alignment_diagnosis.json`
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint28_score_selector_alignment_diagnosis/score_selector_alignment_diagnosis.json`
+- command: derived JSON analysis only; no probe or model run.
+
+Key results:
+- MLQDS QueryUsefulV1: `0.1718372153` for current-best checkpoint 13
+- uniform QueryUsefulV1: `0.1422379580`
+- Douglas-Peucker QueryUsefulV1: `0.1636245984`
+- gates passed: current-best active reclassification still passes global sanity
+  under length min `0.75`; this checkpoint ran no new gate.
+- gates failed: learning causality remains failed. Shuffled-score delta is
+  `0.0088563451` versus required `0.0177595544`, despite `1864` changed retained
+  decisions and Jaccard `0.2819722650`. Removing query-prior features changes
+  only `36` retained decisions and loses `0.0027430170`.
+
+Extra discoveries:
+- The current artifacts expose component tradeoffs, but not direct retained
+  decision marginal utility ranking. That is the missing diagnostic; adding more
+  generic head-fit pressure is mostly guesswork without it.
+- Length repair is high authority: `845` retained points are repair-attributed.
+  Pre-repair allocation scores higher (`0.1760788903`) than repaired current-best
+  but remains length-bad, so simply weakening repair is the wrong fix.
+
+Decision:
+- Continue with a retained-decision marginal utility alignment diagnostic across
+  raw prediction, converted selector score, segment allocation score, pre-repair
+  mask, and post-repair mask.
+- Do not re-add prior sqrt scaling or dense-head rank pressure.
+
+## Checkpoint 5.85 - Retained-Decision Marginal Instrumentation
+
+Status: completed
+
+Hypothesis:
+- Existing strict artifacts may not contain enough exact retained/source mask
+  information to rank final retained decisions by true marginal QueryUsefulV1.
+  If so, add only the missing query-free instrumentation.
+
+Expected files:
+- `selection/learned_segment_budget/constants.py`
+- `selection/learned_segment_budget/trace.py`
+- `tests/unit/selection/test_learned_segment_budget.py`
+- `tests/unit/orchestration/test_query_driven_rework.py`
+- `artifacts/results/query_driven_v2_checkpoint29_retained_decision_marginal_instrumentation/retained_decision_marginal_instrumentation.json`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- Determine whether existing artifacts can rank retained/removed decisions by
+  marginal QueryUsefulV1, or identify and implement the minimal missing
+  instrumentation.
+
+Goal:
+- Make the next small replay able to attribute marginal utility by selector
+  source and repair stage without changing selector behavior.
+
+Changes:
+- Confirmed old artifacts cannot compute exact final retained-decision marginal
+  ranking: `example_run.json` lacks final retained masks, `range_query_diagnostics.jsonl`
+  stores query-health aggregates only, and segment attribution rows contain
+  counts rather than exact source-specific indices.
+- Added query-free selector trace payloads: `retained_mask`,
+  `skeleton_retained_mask`, `learned_retained_mask`, `fallback_retained_mask`,
+  and `length_repair_retained_mask`.
+- Bumped learned segment-budget trace schema from `6` to `7`.
+- Added unit assertions for the new final/source mask payload contract.
+
+Tests:
+- `python3 -m py_compile Range_QDS/selection/learned_segment_budget/constants.py Range_QDS/selection/learned_segment_budget/trace.py Range_QDS/tests/unit/selection/test_learned_segment_budget.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
+- `../.venv/bin/ruff check selection/learned_segment_budget/constants.py selection/learned_segment_budget/trace.py tests/unit/selection/test_learned_segment_budget.py tests/unit/orchestration/test_query_driven_rework.py`
+- `../.venv/bin/pyright selection/learned_segment_budget/constants.py selection/learned_segment_budget/trace.py tests/unit/selection/test_learned_segment_budget.py tests/unit/orchestration/test_query_driven_rework.py`
+- `../.venv/bin/pytest tests/unit/selection/test_learned_segment_budget.py tests/unit/orchestration/test_query_driven_rework.py -q`
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint29_retained_decision_marginal_instrumentation/retained_decision_marginal_instrumentation.json`
+- command: static artifact sufficiency check plus query-free trace instrumentation;
+  no probe or model run.
+
+Key results:
+- MLQDS QueryUsefulV1: not applicable
+- uniform QueryUsefulV1: not applicable
+- Douglas-Peucker QueryUsefulV1: not applicable
+- gates passed: not applicable
+- gates failed: not applicable
+
+Extra discoveries:
+- The factorized QueryUsefulV1 target explicitly records
+  `replacement_value_is_true_counterfactual_marginal_gain: False`. Treating that
+  label as retained-set marginal utility would be wrong.
+- `range_query_diagnostics.jsonl` is not replay data. It cannot reconstruct
+  QueryUsefulV1 scoring or point-level marginal utility.
+
+Decision:
+- Continue with a small replay or targeted diagnostic that uses the new
+  source-specific mask payloads to compute marginal QueryUsefulV1 alignment by
+  raw score, selector score, segment score, source, and repair stage.
+- Do not claim learning causality, score ordering, or prior path is fixed.
+
+## Checkpoint 5.86 - Retained-Marginal Helper Unit Diagnostic
+
+Status: completed
+
+Hypothesis:
+- A bounded helper can measure true retained-decision QueryUsefulV1 marginal
+  value after masks are frozen. This should be implemented before any replay so
+  the replay measures the right failure mode.
+
+Expected files:
+- `orchestration/selector_diagnostics.py`
+- `tests/unit/orchestration/test_query_driven_rework.py`
+- `artifacts/results/query_driven_v2_checkpoint30_retained_marginal_helper_unit_diagnostic/retained_marginal_helper_unit_diagnostic.json`
+- `docs/query-driven-rework-guide.md`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- The helper can score bounded retained/removal and removed/addition candidates
+  by source and correlate raw, selector, and segment scores with true
+  QueryUsefulV1 marginal value on a tiny controlled case.
+
+Goal:
+- Prepare the next small replay or diagnostic payload hook to report marginal
+  utility alignment instead of only mask movement and factorized-label fit.
+
+Changes:
+- Added `source_masks_from_selector_trace` for learned segment-budget trace
+  schema `7` source mask payloads.
+- Added `retained_decision_marginal_query_useful_diagnostics`.
+  Retained rows use leave-one-out QueryUsefulV1 loss; removed rows use add-one
+  QueryUsefulV1 gain. The helper is bounded by source/candidate limits and is
+  diagnostic-only.
+- Added a controlled unit test proving source-mask parsing, positive learned
+  retained-point loss, positive high-score removed-point gain, and score-field
+  availability.
+- Updated the guide to make the next evidence step a small replay or payload
+  hook using this helper.
+
+Tests:
+- `python3 -m py_compile Range_QDS/orchestration/selector_diagnostics.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
+- `../.venv/bin/ruff check orchestration/selector_diagnostics.py tests/unit/orchestration/test_query_driven_rework.py`
+- `../.venv/bin/pyright orchestration/selector_diagnostics.py tests/unit/orchestration/test_query_driven_rework.py`
+- `../.venv/bin/pytest tests/unit/orchestration/test_query_driven_rework.py -q`
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint30_retained_marginal_helper_unit_diagnostic/retained_marginal_helper_unit_diagnostic.json`
+- command: bounded helper plus tiny controlled unit; no replay or model run.
+
+Key results:
+- MLQDS QueryUsefulV1: not applicable
+- uniform QueryUsefulV1: not applicable
+- Douglas-Peucker QueryUsefulV1: not applicable
+- gates passed: not applicable
+- gates failed: not applicable
+
+Extra discoveries:
+- The helper measures true QueryUsefulV1 marginals after freezing masks, so it
+  avoids the known trap of treating factorized labels as marginal utility.
+- Candidate limits matter. If later replay limits are too low, the output is
+  implementation evidence only, not scientific learning evidence.
+
+Decision:
+- Continue by wiring this helper into a diagnostic payload or running the
+  smallest guide-allowed replay that emits marginal alignment by raw score,
+  selector score, segment score, source, and repair stage.
+- Do not claim learning causality, score ordering, or prior path is fixed.
+
+## Checkpoint 5.87 - Retained-Marginal Payload Hook
+
+Status: completed
+
+Hypothesis:
+- The retained-marginal helper should be emitted in the frozen primary selector
+  trace. Otherwise the next replay will still lack the marginal alignment
+  evidence needed to diagnose learning causality.
+
+Expected files:
+- `orchestration/retained_mask_stage.py`
+- `tests/unit/orchestration/test_retained_mask_stage.py`
+- `artifacts/results/query_driven_v2_checkpoint31_retained_marginal_payload_hook/retained_marginal_payload_hook.json`
+- `docs/query-driven-rework-guide.md`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- A workload-blind freeze test shows the primary selector trace contains a
+  diagnostic-only retained marginal alignment payload without changing masks.
+
+Goal:
+- Make the next small replay emit marginal QueryUsefulV1 alignment by source and
+  repair stage after masks are frozen.
+
+Changes:
+- Wired `retained_decision_marginal_query_useful_diagnostics` into
+  `freeze_workload_blind_retained_masks` for learned segment-budget primary
+  traces.
+- The payload is written at
+  `selector_trace_diagnostics.eval_primary.retained_decision_marginal_query_useful_alignment`.
+- The hook runs after the primary MLQDS mask is frozen and records
+  `available=false` on diagnostic failure instead of breaking freezing.
+- Added a retained-mask stage unit assertion that the payload is present,
+  diagnostic-only, mask-freeze aware, and exposes raw, selector, and segment
+  score fields.
+
+Tests:
+- `python3 -m py_compile Range_QDS/orchestration/retained_mask_stage.py Range_QDS/orchestration/selector_diagnostics.py Range_QDS/tests/unit/orchestration/test_retained_mask_stage.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
+- `../.venv/bin/ruff check orchestration/retained_mask_stage.py orchestration/selector_diagnostics.py tests/unit/orchestration/test_retained_mask_stage.py tests/unit/orchestration/test_query_driven_rework.py`
+- `../.venv/bin/pyright orchestration/retained_mask_stage.py orchestration/selector_diagnostics.py tests/unit/orchestration/test_retained_mask_stage.py tests/unit/orchestration/test_query_driven_rework.py`
+- `../.venv/bin/pytest tests/unit/orchestration/test_retained_mask_stage.py tests/unit/orchestration/test_query_driven_rework.py -q`
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint31_retained_marginal_payload_hook/retained_marginal_payload_hook.json`
+- command: payload hook unit validation; no replay or model run.
+
+Key results:
+- MLQDS QueryUsefulV1: not applicable
+- uniform QueryUsefulV1: not applicable
+- Douglas-Peucker QueryUsefulV1: not applicable
+- gates passed: not applicable
+- gates failed: not applicable
+
+Extra discoveries:
+- The hook is still implementation evidence only. It proves future artifacts can
+  report the missing diagnostic; it does not prove score ordering improved.
+
+Decision:
+- Continue to the smallest guide-allowed replay that exercises the learned
+  segment-budget selector and emits the retained-marginal payload.
+- Do not change training, score conversion, or selector behavior until that
+  payload identifies the failing stage.
+
+## Checkpoint 5.88 - Retained-Marginal Payload Level 1 Smoke
+
+Status: completed
+
+Hypothesis:
+- The smallest Level 1 replay should emit the frozen-mask retained-marginal
+  payload on an end-to-end learned segment-budget run. If the workload generator
+  cannot produce selection queries at this scale, treat the result as schema
+  evidence only.
+
+Expected files:
+- `artifacts/results/query_driven_v2_checkpoint32_retained_marginal_payload_level1_smoke/example_run.json`
+- `docs/query-driven-rework-guide.md`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- The run emits the retained-marginal payload, or it fails by gate/component
+  before any selector or model behavior change.
+
+Goal:
+- Verify the new diagnostic survives an end-to-end run before moving to a
+  larger strict diagnostic.
+
+Changes:
+- No production code change.
+- Ran one Level 1 smoke at `8` ships, `64` points/ship, `8` requested queries,
+  two train workload replicates, one epoch, and 5% compression.
+
+Tests:
+- Level 1 smoke command listed below.
+- `jq` inspection of
+  `selector_trace_diagnostics.eval_primary.retained_decision_marginal_query_useful_alignment`.
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint32_retained_marginal_payload_level1_smoke/example_run.json`
+- command: `../.venv/bin/python -m orchestration.train_and_score --results_dir artifacts/results/query_driven_v2_checkpoint32_retained_marginal_payload_level1_smoke --n_ships 8 --n_points 64 --synthetic_route_families 2 --seed 2324 --n_queries 8 --max_queries 64 --range_train_workload_replicates 2 --workload_profile_id range_workload_v1_local --coverage_calibration_mode profile_sampled_query_count --workload_stability_gate_mode smoke --model_type workload_blind_range_v2 --range_training_target_mode query_useful_v1_factorized --selector_type learned_segment_budget_v1 --checkpoint_score_variant query_useful_v1 --checkpoint_selection_metric uniform_gap --validation_score_every 1 --checkpoint_full_score_every 1 --checkpoint_candidate_pool_size 1 --epochs 1 --embed_dim 16 --num_heads 2 --num_layers 1 --train_batch_size 4 --inference_batch_size 4 --compression_ratio 0.05 --mlqds_temporal_fraction 0.0 --mlqds_score_mode rank_confidence --learned_segment_length_repair_fraction 0.6`
+
+Key results:
+- MLQDS QueryUsefulV1: `0.1003881274`
+- uniform QueryUsefulV1: `0.1005303922`
+- Douglas-Peucker QueryUsefulV1: `0.1042713959`
+- retained-marginal payload: emitted, `available=true`, `diagnostic_only=true`
+- payload candidate count: `72`
+- score fields available: raw score, selector score, segment score
+- workload query counts: train `8`, eval `5`, selection `0`
+- gates passed: support overlap, target diffusion
+- gates failed: workload stability, predictability, prior-predictive alignment,
+  workload signature, learning causality, global sanity
+
+Extra discoveries:
+- This run is schema evidence only. The selection workload generated zero
+  accepted queries, so it did not exercise the current selector-workload
+  question cleanly.
+- Even in this tiny smoke, removed candidates often had positive add-one
+  QueryUsefulV1 gain. That is a useful warning, but not scientific evidence.
+
+Decision:
+- Rerun a Level 1 payload smoke with the smallest guide-allowed scale increase
+  needed to produce a nonzero selection workload before changing model,
+  selector, or score-conversion behavior.
+- Do not claim learning or selector quality from this smoke.
+
+## Checkpoint 5.89 - Retained-Marginal Payload Level 1 Smoke With Selection Queries
+
+Status: completed
+
+Hypothesis:
+- The previous zero-selection-query failure was caused by the tiny validation
+  split and acceptance budget, not by the retained-marginal diagnostic hook.
+
+Expected files:
+- `artifacts/results/query_driven_v2_checkpoint33_retained_marginal_payload_level1_smoke_selection_nonzero/example_run.json`
+- `docs/query-driven-rework-guide.md`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- A Level 1 replay emits the retained-marginal payload with nonzero selection
+  queries, or fails again with enough workload diagnostics to identify the
+  generator component.
+
+Goal:
+- Verify the retained-marginal payload on an end-to-end learned-selector run
+  whose checkpoint-selection workload is not empty.
+
+Changes:
+- No production code change.
+- Stayed inside Level 1 scale: `12` ships, `96` points/ship, `8` requested
+  queries, two train workload replicates, one epoch, and 5% compression.
+- Increased validation fraction to `0.20`, giving two selection trajectories.
+- Raised range acceptance attempts to `1000` to avoid conflating this smoke
+  with tiny-split query exhaustion.
+
+Tests:
+- Level 1 smoke command listed below.
+- `jq` inspection of final gates, workload counts, learned-slot accounting, and
+  retained-marginal alignment payload.
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint33_retained_marginal_payload_level1_smoke_selection_nonzero/example_run.json`
+- command: `../.venv/bin/python -m orchestration.train_and_score --results_dir artifacts/results/query_driven_v2_checkpoint33_retained_marginal_payload_level1_smoke_selection_nonzero --n_ships 12 --n_points 96 --synthetic_route_families 2 --seed 2425 --n_queries 8 --max_queries 64 --range_acceptance_max_attempts 1000 --range_train_workload_replicates 2 --workload_profile_id range_workload_v1_local --coverage_calibration_mode profile_sampled_query_count --workload_stability_gate_mode smoke --train_fraction 0.70 --val_fraction 0.20 --model_type workload_blind_range_v2 --range_training_target_mode query_useful_v1_factorized --selector_type learned_segment_budget_v1 --checkpoint_score_variant query_useful_v1 --checkpoint_selection_metric uniform_gap --validation_score_every 1 --checkpoint_full_score_every 1 --checkpoint_candidate_pool_size 1 --epochs 1 --embed_dim 16 --num_heads 2 --num_layers 1 --train_batch_size 4 --inference_batch_size 4 --compression_ratio 0.05 --mlqds_temporal_fraction 0.0 --mlqds_score_mode rank_confidence --learned_segment_length_repair_fraction 0.6`
+
+Key results:
+- MLQDS QueryUsefulV1: `0.2912429205`
+- uniform QueryUsefulV1: `0.2889764732`
+- Douglas-Peucker QueryUsefulV1: `0.2902431939`
+- workload query counts: train `8`, train_r1 `8`, eval `8`, selection `8`
+- retained-marginal payload: emitted, `available=true`, `diagnostic_only=true`
+- payload candidate count: `74`
+- score fields available: raw score, selector score, segment score
+- retained sources: skeleton `4`, learned `2`, length repair `4`, fallback `0`
+- learned-controlled retained-slot fraction: `0.20`
+- gates passed: support overlap, target diffusion
+- gates failed: workload stability, predictability, prior-predictive alignment,
+  workload signature, learning causality, global sanity
+
+Extra discoveries:
+- Length repair replaced a large share of the planned segment allocation even in
+  this tiny run: segment allocation count was `6`, but final learned-retained
+  count was only `2` and length repair retained count was `4`.
+- Marginal utility is concentrated outside learned-selected points at this
+  scale. Learned-retained mean removal loss was `0.0004861619`; length-repair
+  mean was `0.0007530456`; skeleton mean was `0.0684498070`; removed-candidate
+  mean add-one gain was `0.0067197904`.
+
+Decision:
+- Treat this as Level 1 implementation evidence only.
+- Continue to a Level 2 minimum strict diagnostic with the retained-marginal
+  payload enabled before changing selector or model behavior.
+
+## Checkpoint 5.90 - Retained-Marginal Payload Level 2 Minimum Strict Diagnostic
+
+Status: completed
+
+Hypothesis:
+- At Level 2 minimum strict scale, the retained-marginal payload should separate
+  a real score-ordering problem from Level 1 skeleton/repair noise.
+
+Expected files:
+- `artifacts/results/query_driven_v2_checkpoint34_retained_marginal_payload_level2_min_strict/example_run.json`
+- `docs/query-driven-rework-guide.md`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- A strict minimum single-cell artifact is produced with unchanged gates and the
+  retained-marginal payload, or workload/generator gates fail and block model
+  interpretation.
+
+Goal:
+- Localize the current blocker under final gate mode without running the full
+  grid.
+
+Changes:
+- No production code change.
+- Ran a Level 2 minimum strict single-cell at `24` ships, `128` points/ship,
+  `3` route families, `16` minimum queries, `4` train workload replicates,
+  `3` epochs, `range_workload_v1`, final workload gate mode, and 5%
+  compression.
+
+Tests:
+- Level 2 strict command listed below.
+- `jq` inspection of gates, workload rows, causality deltas, training fit,
+  prior sensitivity, selector source attribution, and retained-marginal
+  alignment payload.
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint34_retained_marginal_payload_level2_min_strict/example_run.json`
+- command: `../.venv/bin/python -m orchestration.train_and_score --results_dir artifacts/results/query_driven_v2_checkpoint34_retained_marginal_payload_level2_min_strict --n_ships 24 --n_points 128 --synthetic_route_families 3 --seed 2526 --n_queries 16 --max_queries 64 --range_train_workload_replicates 4 --workload_profile_id range_workload_v1 --coverage_calibration_mode profile_sampled_query_count --workload_stability_gate_mode final --model_type workload_blind_range_v2 --range_training_target_mode query_useful_v1_factorized --selector_type learned_segment_budget_v1 --checkpoint_score_variant query_useful_v1 --checkpoint_selection_metric uniform_gap --validation_score_every 1 --checkpoint_full_score_every 1 --checkpoint_candidate_pool_size 1 --epochs 3 --embed_dim 32 --num_heads 2 --num_layers 1 --train_batch_size 8 --inference_batch_size 8 --compression_ratio 0.05 --mlqds_temporal_fraction 0.0 --mlqds_hybrid_mode fill --mlqds_score_mode rank_confidence --range_acceptance_max_attempts 20000 --final_metrics_mode diagnostic --learned_segment_length_repair_fraction 0.6`
+
+Key results:
+- MLQDS QueryUsefulV1: `0.1380248104`
+- uniform QueryUsefulV1: `0.1096775731`
+- Douglas-Peucker QueryUsefulV1: `0.1386078304`
+- gates passed: workload stability, support overlap, global sanity
+- gates failed: target diffusion, workload signature, predictability,
+  prior-predictive alignment, learning causality
+- workload generation: healthy; no row exhausted, all rows reached target
+  coverage, query counts ranged from `16` to `37`
+- learning failed checks: shuffled scores, untrained model, shuffled prior
+  fields, without query prior features
+- shuffled-score delta: `0.0074525188` versus required `0.0170083424`
+- prior ablations: sampled/model priors changed, but retained masks did not
+  change; Jaccard `1.0`
+- final retained sources: skeleton `10`, learned `10`, length repair `15`,
+  fallback `0`
+- learned-controlled retained-slot fraction: `0.2857142857`
+- retained-marginal payload: emitted, `candidate_count=99`,
+  `available=true`, `diagnostic_only=true`
+
+Extra discoveries:
+- This run cannot justify model changes because workload signature failed.
+  The generator itself was healthy; the mismatch is scale/split-sensitive:
+  train/eval query-count deltas and point/ship hit KS distances failed.
+- The retained-marginal payload still points at weak score ordering. Removed
+  candidates had positive add-one gain in `81.25%` of sampled cases, but raw and
+  selector scores were negatively aligned with removed-candidate gain.
+- Prior materiality remains broken. Shuffling/removing priors changed sampled
+  priors by about `0.086`, model-input priors by about `0.0145`, head
+  probabilities by only `0.0000185`, and final masks by `0` decisions.
+- Factorized fit is not enough: train-target Kendall tau reached `0.2844`, but
+  factorized final-score prediction std was only `0.0602` of target std.
+
+Decision:
+- Do not change selector/model code from this failed Level 2 artifact.
+- Increase to a standard strict single-cell with the retained-marginal payload
+  enabled, because the Level 2 blocker is workload signature/scale rather than
+  query generation failure.
+
+## Checkpoint 5.91 - Retained-Marginal Payload Standard Strict V1
+
+Status: failed
+
+Hypothesis:
+- The Level 2 signature failure is a small-scale artifact; at standard strict
+  scale, workload signature should pass and make retained-marginal diagnostics
+  interpretable.
+
+Expected files:
+- `artifacts/results/query_driven_v2_checkpoint35_retained_marginal_payload_standard_strict_v1/example_run.json`
+- `docs/query-driven-rework-guide.md`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- One standard strict single-cell artifact with unchanged gates and the
+  retained-marginal payload, or a gate-specific failure that blocks
+  interpretation.
+
+Goal:
+- Produce an interpretable standard strict retained-marginal diagnostic without
+  running the final grid.
+
+Changes:
+- No production code change.
+- Ran one standard strict single-cell at `48` ships, `192` points/ship,
+  `4` route families, `32` minimum queries, `4` train workload replicates,
+  `5` epochs, `range_workload_v1`, final workload gate mode, and 5%
+  compression.
+
+Tests:
+- Standard strict command listed below.
+- `jq` inspection of gates, workload-signature pairs, causality deltas,
+  training fit, prior sensitivity, selector source attribution, and
+  retained-marginal alignment payload.
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint35_retained_marginal_payload_standard_strict_v1/example_run.json`
+- command: `../.venv/bin/python -m orchestration.train_and_score --results_dir artifacts/results/query_driven_v2_checkpoint35_retained_marginal_payload_standard_strict_v1 --n_ships 48 --n_points 192 --synthetic_route_families 4 --seed 2627 --n_queries 32 --max_queries 128 --range_train_workload_replicates 4 --workload_profile_id range_workload_v1 --coverage_calibration_mode profile_sampled_query_count --workload_stability_gate_mode final --model_type workload_blind_range_v2 --range_training_target_mode query_useful_v1_factorized --selector_type learned_segment_budget_v1 --checkpoint_score_variant query_useful_v1 --checkpoint_selection_metric uniform_gap --validation_score_every 1 --checkpoint_full_score_every 1 --checkpoint_candidate_pool_size 1 --epochs 5 --embed_dim 32 --num_heads 2 --num_layers 1 --train_batch_size 8 --inference_batch_size 8 --compression_ratio 0.05 --mlqds_temporal_fraction 0.0 --mlqds_hybrid_mode fill --mlqds_score_mode rank_confidence --range_acceptance_max_attempts 40000 --final_metrics_mode diagnostic --learned_segment_length_repair_fraction 0.6`
+
+Key results:
+- MLQDS QueryUsefulV1: `0.1247339820`
+- uniform QueryUsefulV1: `0.1404554573`
+- Douglas-Peucker QueryUsefulV1: `0.1345268094`
+- gates passed: workload stability, support overlap, global sanity
+- gates failed: target diffusion, workload signature, predictability,
+  prior-predictive alignment, learning causality
+- workload generation: healthy; no row exhausted and all rows reached target
+  coverage
+- workload signature failed: train query counts `89-100`, eval query count `32`,
+  selection query count `40`; query-count mismatch and ship-hit KS were the
+  main blockers
+- retained-marginal payload: emitted, `candidate_count=137`,
+  `available=true`, `diagnostic_only=true`
+- final retained sources: skeleton `16`, learned `25`, length repair `39`,
+  fallback `0`
+
+Extra discoveries:
+- This run is invalid for model conclusions because the default synthetic split
+  was `0.70/0.15/0.15`, which creates very different train/eval/selection split
+  sizes under coverage-calibrated query generation.
+- The current-best strict artifact used balanced synthetic splits:
+  train `130`, selection `126`, eval `128`, and passed workload signature.
+- Even in the invalid run, the retained-marginal signal is weak: retained
+  raw/selector score ordering is slightly negative versus true removal loss.
+
+Decision:
+- Do not tune model/selector from this artifact.
+- Rerun one corrected standard strict single-cell with balanced synthetic
+  splits and the local 10% profile to match the current-best diagnostic regime.
+
+## Checkpoint 5.92 - Retained-Marginal Payload Standard Strict Balanced Local
+
+Status: failed
+
+Hypothesis:
+- With balanced synthetic splits and the local 10% workload profile, workload
+  signature will pass at standard strict scale, making retained-marginal and
+  causality diagnostics interpretable.
+
+Expected files:
+- `artifacts/results/query_driven_v2_checkpoint36_retained_marginal_payload_standard_strict_balanced_local/example_run.json`
+- `docs/query-driven-rework-guide.md`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- One corrected standard strict artifact with unchanged gates and the
+  retained-marginal payload, or a gate-specific failure that blocks
+  interpretation.
+
+Goal:
+- Reproduce the current-best-style synthetic split regime at smaller standard
+  scale and collect retained-marginal diagnostics.
+
+Changes:
+- No production code change.
+- Ran one balanced standard strict single-cell at `96` ships, `192`
+  points/ship, `4` route families, `32` minimum queries, `4` train workload
+  replicates, `5` epochs, `range_workload_v1_local`, final workload gate mode,
+  `train_fraction=0.34`, `val_fraction=0.33`, and 5% compression.
+
+Tests:
+- Corrected standard strict command listed below.
+- `jq` inspection of gates, workload-signature pairs, causality deltas,
+  training fit, prior sensitivity, selector source attribution, and
+  retained-marginal alignment payload.
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint36_retained_marginal_payload_standard_strict_balanced_local/example_run.json`
+- command: `../.venv/bin/python -m orchestration.train_and_score --results_dir artifacts/results/query_driven_v2_checkpoint36_retained_marginal_payload_standard_strict_balanced_local --n_ships 96 --n_points 192 --synthetic_route_families 4 --seed 2728 --train_fraction 0.34 --val_fraction 0.33 --n_queries 32 --max_queries 128 --range_train_workload_replicates 4 --workload_profile_id range_workload_v1_local --coverage_calibration_mode profile_sampled_query_count --workload_stability_gate_mode final --model_type workload_blind_range_v2 --range_training_target_mode query_useful_v1_factorized --selector_type learned_segment_budget_v1 --checkpoint_score_variant query_useful_v1 --checkpoint_selection_metric uniform_gap --validation_score_every 1 --checkpoint_full_score_every 1 --checkpoint_candidate_pool_size 1 --epochs 5 --embed_dim 32 --num_heads 2 --num_layers 1 --train_batch_size 8 --inference_batch_size 8 --compression_ratio 0.05 --mlqds_temporal_fraction 0.0 --mlqds_hybrid_mode fill --mlqds_score_mode rank_confidence --range_acceptance_max_attempts 40000 --final_metrics_mode diagnostic --learned_segment_length_repair_fraction 0.6`
+
+Key results:
+- MLQDS QueryUsefulV1: `0.1549194326`
+- uniform QueryUsefulV1: `0.1152263547`
+- Douglas-Peucker QueryUsefulV1: `0.1749545436`
+- gates passed: workload stability, support overlap, target diffusion, global
+  sanity
+- gates failed: workload signature, predictability, prior-predictive alignment,
+  learning causality
+- workload generation: healthy; no row exhausted and all rows reached target
+  coverage
+- workload signature failed: train query counts `32-48`, eval query count `32`,
+  selection query count `33`; blockers were query-count mismatch on some train
+  replicates plus point/ship-hit KS checks
+- learning failed checks: shuffled scores, untrained model, shuffled prior
+  fields, without query prior features, without segment-budget head,
+  prior-field-only mismatch
+- shuffled-score delta: `-0.0235930255` versus required `0.0238158467`
+- prior ablations: sampled priors changed about `0.096`, model priors about
+  `0.011`, head probabilities about `0.000022`, and masks changed by `0`
+  decisions
+- final retained sources: skeleton `66`, learned `105`, length repair `159`,
+  fallback `0`
+- retained-marginal payload: emitted, `candidate_count=160`,
+  `available=true`, `diagnostic_only=true`
+
+Extra discoveries:
+- Signature still does not pass at `96` ships. The current-best strict artifact
+  used `384` ships and balanced splits, which explains why its query-count
+  ratios are much more stable.
+- The corrected standard run confirms the main blocker shape without being an
+  acceptance artifact: MLQDS beats uniform but loses badly to Douglas-Peucker,
+  and learned score/prior causality is still not defensible.
+- The marginal payload is directionally less damning than the invalid V1 run,
+  but still weak. Retained raw/selector ordering is near zero to slightly
+  negative by rank, and segment-score ordering is negative for retained removal
+  loss.
+
+Decision:
+- Do not tune model/selector from this failed signature artifact.
+- Next evidence needs either a larger balanced current-best-scale strict
+  single-cell with the payload, or a performance-aware retained-marginal
+  diagnostic strategy before running that larger cell.
+
+## Checkpoint 5.93 - Retained-Marginal Cached Query Support
+
+Status: completed
+
+Hypothesis:
+- The retained-marginal hook is doing unnecessary repeated query-cache work and
+  scales poorly enough to make current-best-scale evidence impractical.
+
+Expected files:
+- `orchestration/selector_diagnostics.py`
+- `tests/unit/orchestration/test_query_driven_rework.py`
+- `tests/unit/orchestration/test_retained_mask_stage.py`
+- `artifacts/results/query_driven_v2_checkpoint37_retained_marginal_cached_query_support/retained_marginal_cached_query_support.json`
+- `docs/query-driven-rework-guide.md`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- Exact diagnostic semantics are preserved, the hook reports runtime/cache
+  metadata, and focused tests prove it uses a shared cache without changing
+  masks or gates.
+
+Goal:
+- Make a larger balanced current-best-scale strict cell with retained-marginal
+  payload practical enough to run without weakening evidence rules.
+
+Changes:
+- `retained_decision_marginal_query_useful_diagnostics` now creates one
+  `ScoringQueryCache` when none is provided and reuses it for the primary score,
+  retained leave-one-out scores, and removed add-one scores.
+- The retained-marginal payload now reports exactness, performance mode,
+  elapsed seconds, whether a cache was provided or created, and cache support
+  counts.
+- Focused tests cover both internally-created and caller-provided query caches,
+  plus the retained-mask orchestration hook metadata.
+
+Tests:
+- `python3 -m py_compile orchestration/selector_diagnostics.py tests/unit/orchestration/test_query_driven_rework.py tests/unit/orchestration/test_retained_mask_stage.py`
+- `../.venv/bin/ruff check orchestration/selector_diagnostics.py tests/unit/orchestration/test_query_driven_rework.py tests/unit/orchestration/test_retained_mask_stage.py`
+- `../.venv/bin/pyright orchestration/selector_diagnostics.py tests/unit/orchestration/test_query_driven_rework.py tests/unit/orchestration/test_retained_mask_stage.py`
+- `../.venv/bin/pytest tests/unit/orchestration/test_query_driven_rework.py tests/unit/orchestration/test_retained_mask_stage.py -q`
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint37_retained_marginal_cached_query_support/retained_marginal_cached_query_support.json`
+- command: no training run; implementation checkpoint only
+
+Key results:
+- MLQDS QueryUsefulV1: n/a
+- uniform QueryUsefulV1: n/a
+- Douglas-Peucker QueryUsefulV1: n/a
+- gates passed: n/a
+- gates failed: n/a
+- validation passed: py_compile, ruff, pyright, and `111` focused unit tests
+- exact QueryUsefulV1 marginal semantics are unchanged; only retained-independent
+  range-query support work is cached
+
+Extra discoveries:
+- The previous payload path was exact but wasteful. Every sampled candidate
+  reused the same points, boundaries, and typed queries, so recomputing
+  retained-independent range support was pure overhead.
+- This does not repair weak learning. It only makes the next strict diagnostic
+  run cheaper and auditable through elapsed-time/cache metadata.
+
+Decision:
+- Continue to one larger balanced current-best-scale strict single-cell with
+  cached retained-marginal payload and unchanged gates.
+
+## Checkpoint 5.94 - Cached Retained-Marginal Current-Best-Scale Strict Local
+
+Status: failed
+
+Hypothesis:
+- At current-best data scale with balanced synthetic splits and the local 10%
+  workload profile, workload signature should pass again, making the cached
+  retained-marginal payload interpretable enough to classify the remaining
+  blocker.
+
+Expected files:
+- `artifacts/results/query_driven_v2_checkpoint38_retained_marginal_payload_current_best_scale_cached/example_run.json`
+- `docs/query-driven-rework-guide.md`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- A strict single-cell artifact with unchanged gates, or a gate-specific failure
+  that blocks model/selector conclusions.
+
+Goal:
+- Recheck the current-best-scale strict regime with retained-marginal payload
+  enabled, without running the final grid.
+
+Changes:
+- No production code changes.
+- Ran one 384-ship, 256-point, balanced-split, local 10% profile strict
+  single-cell with cached retained-marginal diagnostics.
+
+Tests:
+- `jq empty artifacts/results/query_driven_v2_checkpoint38_retained_marginal_payload_current_best_scale_cached/example_run.json`
+- `git diff --check`
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint38_retained_marginal_payload_current_best_scale_cached/example_run.json`
+- command: `../.venv/bin/python -m orchestration.train_and_score --results_dir artifacts/results/query_driven_v2_checkpoint38_retained_marginal_payload_current_best_scale_cached --n_ships 384 --n_points 256 --synthetic_route_families 4 --seed 2324 --train_fraction 0.34 --val_fraction 0.33 --n_queries 48 --max_queries 256 --range_train_workload_replicates 4 --workload_profile_id range_workload_v1_local --coverage_calibration_mode profile_sampled_query_count --workload_stability_gate_mode final --model_type workload_blind_range_v2 --range_training_target_mode query_useful_v1_factorized --selector_type learned_segment_budget_v1 --checkpoint_score_variant query_useful_v1 --checkpoint_selection_metric uniform_gap --validation_score_every 1 --checkpoint_full_score_every 1 --checkpoint_candidate_pool_size 1 --epochs 3 --embed_dim 32 --num_heads 2 --num_layers 1 --train_batch_size 8 --inference_batch_size 8 --compression_ratio 0.05 --mlqds_temporal_fraction 0.0 --mlqds_hybrid_mode fill --mlqds_score_mode rank_confidence --range_acceptance_max_attempts 40000 --final_metrics_mode diagnostic --learned_segment_length_repair_fraction 0.6`
+
+Key results:
+- MLQDS QueryUsefulV1: `0.1662115143`
+- uniform QueryUsefulV1: `0.1421296610`
+- Douglas-Peucker QueryUsefulV1: `0.1671038781`
+- gates passed: workload stability, support overlap, target diffusion,
+  prior-predictive alignment, global sanity
+- gates failed: workload signature, predictability, learning causality
+- final claim status: `candidate_blocked_by_required_gates`
+- workload generation: healthy; no row exhausted; all rows reached target
+  coverage
+- query counts: train reps `118`, `148`, `153`, `139`; eval `144`; selection
+  `126`
+- workload signature failure: only train-vs-eval `query_count_mismatch` for
+  train_r0; relative delta `0.1805555556` versus max `0.15`
+- predictability failure: Spearman `0.1109086186` versus min `0.15`, PR-AUC
+  lift `1.2304850435` versus min `1.25`; lift@5 passed narrowly at
+  `1.2035399978`
+- learning causality failures: shuffled scores, shuffled prior fields, without
+  query prior features, without behavior utility head, without segment-budget
+  head
+- shuffled-score delta: `0.0089580664` versus required `0.0144491119`
+- prior ablation deltas: shuffled priors `-0.0001133659`, without query priors
+  `0.0000575989`, both far below the required `0.005`
+- behavior-head delta: `0.0033472765`; segment-budget-head delta:
+  `0.0036430341`
+- prior sensitivity: shuffled-prior sampled feature delta `0.1004762650`,
+  model-input prior delta `0.0101600057`, head probability delta
+  `0.0000115753`, retained-mask Jaccard `0.9904306220`
+- retained-marginal payload: `available=true`, `diagnostic_only=true`,
+  `exact_query_useful_v1_marginals=true`, `performance_mode=exact_cached_query_support`,
+  `candidate_count=160`, `elapsed_seconds=17.8225840520`
+- retained-marginal alignment: overall raw Spearman `-0.0248828079`, selector
+  Spearman `-0.0077522559`; retained-removal selector top-minus-bottom
+  marginal `-0.0000446724`
+- retained sources: skeleton `256`, learned `563`, length repair `845`,
+  fallback `0`
+- runtime: total pipeline `606.68s`, freeze-retained-masks `351.32s`,
+  retained-marginal payload `17.82s`
+
+Extra discoveries:
+- The cached retained-marginal payload is not the dominant remaining runtime
+  cost. It took `17.82s`, while the whole retained-mask freeze stage took
+  `351.32s`. The silent cost is elsewhere in retained-mask freezing, probably
+  ablation mask construction; instrument before more current-best-scale probes.
+- The local 10% profile is still seed/split-sensitive under the strict
+  query-count signature gate. This artifact missed only one train/eval
+  query-count check, but that is enough to block model conclusions.
+- Even ignoring the signature failure, MLQDS only beats uniform and slightly
+  loses to Douglas-Peucker. The retained-marginal payload is not flattering:
+  final selector scores are nearly uncorrelated with exact retained-decision
+  marginal QueryUsefulV1.
+
+Decision:
+- Stop model/selector tuning from this artifact.
+- Next checkpoint should diagnose workload-profile/query-count stability at
+  current-best scale and instrument retained-mask freeze substage timings before
+  rerunning another expensive strict cell.

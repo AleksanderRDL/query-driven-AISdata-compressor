@@ -18,6 +18,7 @@ from orchestration.length_diagnostics import (
 )
 from orchestration.retained_mask_ablation_stage import freeze_retained_mask_ablations
 from orchestration.selector_diagnostics import (
+    retained_decision_marginal_query_useful_diagnostics,
     selector_segment_score_source_label,
 )
 from scoring.methods import FrozenMaskMethod, Method
@@ -185,6 +186,28 @@ def freeze_workload_blind_retained_masks(
                         torch.equal(trace_mask.detach().cpu(), frozen_mlqds_mask.detach().cpu())
                     )
                     trace["frozen_primary_retained_count"] = int(frozen_mlqds_mask.sum().item())
+                try:
+                    trace["retained_decision_marginal_query_useful_alignment"] = (
+                        retained_decision_marginal_query_useful_diagnostics(
+                            points=test_points.detach().cpu().float(),
+                            boundaries=test_boundaries,
+                            typed_queries=eval_workload.typed_queries,
+                            primary_retained_mask=trace_mask.detach().cpu().bool(),
+                            raw_scores=primary_raw_preds,
+                            selector_scores=primary_scores,
+                            segment_scores=primary_segment_scores,
+                            selector_trace=trace,
+                            max_retained_per_source=32,
+                            max_removed_candidates=64,
+                        )
+                    )
+                except Exception as exc:  # pragma: no cover - diagnostic must not break freezing.
+                    trace["retained_decision_marginal_query_useful_alignment"] = {
+                        "available": False,
+                        "diagnostic_only": True,
+                        "reason": "diagnostic_failed",
+                        "error": str(exc),
+                    }
                 compression_for_trace = float(config.model.compression_ratio)
                 learned_fraction_min_for_trace = (
                     0.35

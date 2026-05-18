@@ -9,6 +9,7 @@ import torch
 
 from learning.model_features import (
     WORKLOAD_BLIND_RANGE_V2_MODEL_DISABLED_PRIOR_FIELDS,
+    WORKLOAD_BLIND_RANGE_V2_MODEL_PRIOR_TRANSFORM,
     build_query_free_point_features_for_dim,
 )
 from learning.outputs import TrainingOutputs
@@ -578,6 +579,7 @@ def prior_ablation_sensitivity_payload(
     sampled_prior_features: dict[str, Any],
     model_prior_features: dict[str, Any],
     score_output: dict[str, Any],
+    retained_mask: dict[str, Any],
     raw_prediction: dict[str, Any],
     head_output: dict[str, Any],
 ) -> dict[str, Any]:
@@ -590,6 +592,7 @@ def prior_ablation_sensitivity_payload(
         "sampled_prior_features": sampled_prior_features,
         "model_prior_features": model_prior_features,
         "score_output": named_score_output,
+        "retained_mask": retained_mask,
         "raw_prediction": raw_prediction,
         "head_output": head_output,
     }
@@ -617,6 +620,11 @@ def prior_ablation_sensitivity_from_tensors(
             ablation_scores=ablation_scores,
             primary_mask=primary_mask,
             ablation_mask=ablation_mask,
+        ),
+        retained_mask=retained_mask_comparison(
+            primary_mask=primary_mask,
+            ablation_mask=ablation_mask,
+            expected_shape=primary_scores.shape if primary_scores is not None else None,
         ),
         raw_prediction=score_ablation_sensitivity(
             primary_scores=primary_raw_predictions,
@@ -905,6 +913,7 @@ def model_prior_feature_sensitivity(
         "point_dim": point_dim_int,
         "prior_feature_count": prior_dim,
         "disabled_prior_fields": list(WORKLOAD_BLIND_RANGE_V2_MODEL_DISABLED_PRIOR_FIELDS),
+        "model_prior_feature_transform": WORKLOAD_BLIND_RANGE_V2_MODEL_PRIOR_TRANSFORM,
         "model_input_prior_features": model_prior_features,
         "normalized_model_prior_features": normalized_prior_features,
         "scaler_prior_feature_ranges": scaler_prior_ranges,

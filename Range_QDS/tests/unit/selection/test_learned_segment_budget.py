@@ -484,6 +484,21 @@ def test_learned_segment_budget_reports_query_free_segment_source_attribution() 
     assert summary["skeleton_count_total"] == trace["skeleton_retained_count"]
     assert summary["learned_count_total"] == trace["learned_controlled_retained_slots"]
     assert summary["segment_allocation_count_total"] == trace["segment_budget_allocation_count"]
+    assert trace["retained_mask"]["available"] is True
+    assert trace["retained_mask"]["diagnostic_only"] is True
+    assert trace["retained_mask"]["query_free"] is True
+    assert trace["retained_mask"]["retained_count"] == int(retained.sum().item())
+    assert trace["retained_mask"]["indices"] == torch.where(retained)[0].tolist()
+    assert trace["skeleton_retained_mask"]["retained_count"] == trace["skeleton_retained_count"]
+    assert (
+        trace["learned_retained_mask"]["retained_count"]
+        == trace["learned_controlled_retained_slots"]
+    )
+    assert trace["fallback_retained_mask"]["retained_count"] == trace["fallback_retained_count"]
+    assert (
+        trace["length_repair_retained_mask"]["retained_count"]
+        == trace["length_repair_retained_count"]
+    )
     assert {
         "segment_index",
         "allocation_order_index",
