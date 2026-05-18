@@ -186,6 +186,15 @@ def test_retained_mask_freezing_captures_primary_caches_and_audit_masks() -> Non
     assert [method.name for method in audit_methods] == ["MLQDS", "uniform"]
     assert isinstance(audit_methods[0], FrozenMaskMethod)
     assert audit_methods[0].retained_mask.tolist() == [True, False, False, False]
+    timing = outputs.freeze_timing_diagnostics
+    assert timing["available"] is True
+    assert timing["diagnostic_only"] is True
+    assert timing["query_free"] is True
+    assert timing["primary_method_simplify_seconds"]["MLQDS"] >= 0.0
+    assert timing["primary_method_simplify_seconds"]["uniform"] >= 0.0
+    assert timing["audit_method_simplify_seconds"]["0.2500"]["MLQDS"] >= 0.0
+    assert timing["audit_method_simplify_seconds"]["0.2500"]["uniform"] >= 0.0
+    assert timing["total_seconds"] >= 0.0
 
 
 def test_retained_mask_freezing_captures_learned_selector_trace() -> None:
@@ -214,6 +223,33 @@ def test_retained_mask_freezing_captures_learned_selector_trace() -> None:
     assert outputs.primary_selector_trace is not None
     assert isinstance(outputs.primary_selector_trace["retained_mask_matches_frozen_primary"], bool)
     assert outputs.primary_selector_trace["frozen_primary_retained_count"] == 2
+    timing = outputs.primary_selector_trace["retained_mask_freeze_timing"]
+    assert timing["available"] is True
+    assert timing["primary_method_simplify_seconds"]["MLQDS"] >= 0.0
+    assert timing["substage_seconds"]["selector_trace_reconstruction"] >= 0.0
+    assert timing["substage_seconds"]["retained_marginal_alignment"] >= 0.0
+    assert timing["substage_seconds"]["score_protected_length_diagnostics"] >= 0.0
+    assert timing["substage_seconds"]["query_free_ablation_freeze"] >= 0.0
+    assert timing["ablation_freeze_timing"]["method_count"] == len(
+        outputs.causality_ablation_methods
+    )
+    assert timing["total_seconds"] >= 0.0
+    marginal = outputs.primary_selector_trace["retained_decision_marginal_query_useful_alignment"]
+    assert marginal["available"] is True
+    assert marginal["diagnostic_only"] is True
+    assert marginal["exact_query_useful_v1_marginals"] is True
+    assert marginal["performance_mode"] == "exact_cached_query_support"
+    assert marginal["elapsed_seconds"] >= 0.0
+    assert marginal["query_cache_created"] is True
+    assert marginal["query_cache_provided"] is False
+    assert marginal["masks_frozen_before_query_scoring_required"] is True
+    assert marginal["retained_count"] == 2
+    assert marginal["score_fields_available"] == {
+        "raw_score": True,
+        "selector_score": True,
+        "segment_score": True,
+    }
+    assert marginal["candidate_count"] > 0
     assert outputs.causality_ablation_methods
 
 
@@ -253,6 +289,15 @@ def test_retained_mask_ablations_freeze_pre_repair_and_shuffled_scores() -> None
     method_names = {method.name for method in outputs.causality_ablation_methods}
     assert "MLQDS_pre_repair_allocation_diagnostic" in method_names
     assert "MLQDS_shuffled_scores" in method_names
+    timing = outputs.freeze_timing_diagnostics
+    assert timing["available"] is True
+    assert timing["method_count"] == len(outputs.causality_ablation_methods)
+    assert timing["failure_count"] == len(outputs.causal_ablation_freeze_failures)
+    assert timing["substage_seconds"]["pre_repair_from_trace"] >= 0.0
+    assert timing["substage_seconds"]["shuffled_scores"] >= 0.0
+    assert timing["substage_seconds"]["untrained_model"] >= 0.0
+    assert timing["total_seconds"] >= 0.0
+    assert outputs.primary_selector_trace["retained_mask_ablation_freeze_timing"] is timing
     assert outputs.primary_selector_trace["pre_repair_frozen_method_diagnostic"] == {
         "available": True,
         "diagnostic_only": True,

@@ -33,6 +33,7 @@ WORKLOAD_BLIND_RANGE_V2_POINT_DIM = (
     + WORKLOAD_BLIND_RANGE_V2_PRIOR_DIM
 )
 WORKLOAD_BLIND_RANGE_V2_MODEL_DISABLED_PRIOR_FIELDS = ("route_density_prior",)
+WORKLOAD_BLIND_RANGE_V2_MODEL_PRIOR_TRANSFORM = "identity_probability"
 HISTORICAL_PRIOR_ROUTE_CONTEXT_FEATURE_INDICES = (
     0,
     1,
@@ -600,17 +601,25 @@ def build_workload_blind_range_v2_point_features(
     """Build query-free v2 features with absolute geo and train-derived priors."""
     context = build_workload_blind_point_features_for_dim(points, CONTEXT_WORKLOAD_BLIND_POINT_DIM)
     absolute = _absolute_range_v2_features(points, query_prior_field)
-    priors = sample_query_prior_fields(points, query_prior_field)
-    if int(priors.numel()) > 0:
-        priors = priors.clone()
-        for field_name in WORKLOAD_BLIND_RANGE_V2_MODEL_DISABLED_PRIOR_FIELDS:
-            try:
-                field_idx = QUERY_PRIOR_FIELD_NAMES.index(field_name)
-            except ValueError:
-                continue
-            if field_idx < int(priors.shape[1]):
-                priors[:, field_idx] = 0.0
+    priors = transform_workload_blind_range_v2_prior_features(
+        sample_query_prior_fields(points, query_prior_field)
+    )
     return torch.cat([context, absolute, priors], dim=1)
+
+
+def transform_workload_blind_range_v2_prior_features(priors: torch.Tensor) -> torch.Tensor:
+    """Return the v2 model-facing representation of train-derived query priors."""
+    if int(priors.numel()) <= 0:
+        return priors.float()
+    transformed = priors.float().clamp(0.0, 1.0).clone()
+    for field_name in WORKLOAD_BLIND_RANGE_V2_MODEL_DISABLED_PRIOR_FIELDS:
+        try:
+            field_idx = QUERY_PRIOR_FIELD_NAMES.index(field_name)
+        except ValueError:
+            continue
+        if field_idx < int(transformed.shape[1]):
+            transformed[:, field_idx] = 0.0
+    return transformed
 
 
 def build_model_point_features(

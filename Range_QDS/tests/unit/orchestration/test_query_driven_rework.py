@@ -27,6 +27,7 @@ from learning.factorized_head_diagnostics import (
 from learning.fit_diagnostics import _training_target_diagnostics
 from learning.model_features import (
     WORKLOAD_BLIND_RANGE_V2_MODEL_DISABLED_PRIOR_FIELDS,
+    WORKLOAD_BLIND_RANGE_V2_MODEL_PRIOR_TRANSFORM,
     WORKLOAD_BLIND_RANGE_V2_POINT_DIM,
     build_workload_blind_range_v2_point_features,
 )
@@ -104,8 +105,10 @@ from orchestration.selector_diagnostics import (
     learned_segment_frozen_method,
     neutral_segment_scores_for_ablation,
     pre_repair_frozen_method_from_trace,
+    retained_decision_marginal_query_useful_diagnostics,
     segment_score_quantile_bands_for_ablation,
     segment_score_top_band_for_ablation,
+    source_masks_from_selector_trace,
 )
 from scoring.geometry_thresholds import (
     FINAL_LENGTH_PRESERVATION_MIN,
@@ -113,6 +116,7 @@ from scoring.geometry_thresholds import (
 )
 from scoring.method_scoring import score_range_usefulness
 from scoring.metrics import MethodScore, compute_length_preservation
+from scoring.query_cache import ScoringQueryCache
 from scoring.query_useful_v1 import query_useful_v1_from_range_audit
 from selection.learned_segment_budget import (
     blend_segment_support_scores,
@@ -261,6 +265,10 @@ def test_range_workload_v1_records_profile_signature() -> None:
     assert profile["profile_id"] == "range_workload_v1"
     assert generation["range_time_domain_mode"] == "anchor_day"
     assert signature["profile_id"] == "range_workload_v1"
+    assert signature["workload_profile_version"] == profile["version"]
+    assert signature["target_coverage"] == profile["target_coverage"]
+    assert signature["query_count_mode"] == profile["query_count_mode"]
+    assert signature["coverage_calibration_mode"] == profile["coverage_calibration_mode"]
     assert sum(signature["anchor_family_counts"].values()) == len(workload.typed_queries)
     assert sum(signature["footprint_family_counts"].values()) == len(workload.typed_queries)
     assert signature["query_count"] == len(workload.typed_queries)
@@ -1174,6 +1182,49 @@ def test_workload_signature_gate_rejects_query_count_mismatch() -> None:
     assert gate["metrics"]["query_count_relative_delta"] == pytest.approx(4 / 12)
     assert gate["thresholds"]["query_count_relative_delta_max"] == 0.15
     assert "query_count_mismatch" in gate["failed_checks"]
+
+
+def test_workload_signature_gate_treats_calibrated_query_count_as_diagnostic() -> None:
+    def signature(query_count: int) -> dict[str, Any]:
+        return {
+            "profile_id": "range_workload_v1_local",
+            "target_coverage": 0.10,
+            "coverage_actual": 0.10,
+            "query_count_mode": "calibrated_to_coverage",
+            "coverage_calibration_mode": "profile_sampled_query_count",
+            "query_count": query_count,
+            "anchor_family_counts": {"density_route": query_count},
+            "footprint_family_counts": {"medium_operational": query_count},
+            "point_hit_counts_per_query": [3 for _ in range(query_count)],
+            "ship_hit_counts_per_query": [1 for _ in range(query_count)],
+            "near_duplicate_rate": 0.0,
+            "broad_query_rate": 0.0,
+        }
+
+    summaries = {
+        "train": {
+            "range": {"range_query_count": 24},
+            "range_signal": {},
+            "generation": {"workload_signature": signature(24)},
+        },
+        "eval": {
+            "range": {"range_query_count": 48},
+            "range_signal": {},
+            "generation": {"workload_signature": signature(48)},
+        },
+    }
+
+    gate = range_workload_distribution_comparison(summaries)["workload_signature_gate"]["pairs"][
+        "train"
+    ]
+
+    assert gate["gate_pass"] is True
+    assert gate["metrics"]["query_count_relative_delta"] == pytest.approx(0.50)
+    assert gate["metrics"]["query_count_relative_delta_enforced"] is False
+    assert gate["metrics"]["query_count_check_mode"] == (
+        "diagnostic_min_only_for_coverage_calibrated"
+    )
+    assert "query_count_mismatch" not in gate["failed_checks"]
 
 
 def test_workload_signature_gate_allows_small_calibrated_query_count_drift() -> None:
@@ -2150,6 +2201,22 @@ def test_learned_segment_trace_reports_query_free_segment_source_attribution() -
     assert summary["fallback_count_total"] == trace["fallback_retained_count"]
     assert summary["length_repair_count_total"] == trace["length_repair_retained_count"]
     assert summary["segment_allocation_count_total"] == trace["segment_budget_allocation_count"]
+    retained_payload = trace["retained_mask"]
+    assert retained_payload["available"] is True
+    assert retained_payload["diagnostic_only"] is True
+    assert retained_payload["query_free"] is True
+    assert retained_payload["retained_count"] == int(retained.sum().item())
+    assert retained_payload["indices"] == torch.where(retained)[0].tolist()
+    assert trace["skeleton_retained_mask"]["retained_count"] == trace["skeleton_retained_count"]
+    assert (
+        trace["learned_retained_mask"]["retained_count"]
+        == trace["learned_controlled_retained_slots"]
+    )
+    assert trace["fallback_retained_mask"]["retained_count"] == trace["fallback_retained_count"]
+    assert (
+        trace["length_repair_retained_mask"]["retained_count"]
+        == trace["length_repair_retained_count"]
+    )
     first_row = attribution["rows"][0]
     assert {
         "segment_index",
@@ -2199,6 +2266,11 @@ def test_learned_segment_trace_reports_pre_repair_source_attribution() -> None:
     assert pre_mask_payload["query_free"] is True
     assert pre_mask_payload["retained_count"] == pre_summary["retained_count_total"]
     assert pre_mask_payload["indices"] == sorted(set(pre_mask_payload["indices"]))
+    assert trace["retained_mask"]["retained_count"] == final_summary["retained_count_total"]
+    assert (
+        trace["length_repair_retained_mask"]["retained_count"]
+        == final_summary["length_repair_count_total"]
+    )
 
     pre_repair_method = pre_repair_frozen_method_from_trace(
         name="MLQDS_pre_repair_allocation_diagnostic",
@@ -2211,6 +2283,146 @@ def test_learned_segment_trace_reports_pre_repair_source_attribution() -> None:
         torch.where(pre_repair_method.retained_mask)[0],
         torch.tensor(pre_mask_payload["indices"], dtype=torch.long),
     )
+
+
+def test_source_masks_from_selector_trace_reads_schema7_source_payloads() -> None:
+    trace = {
+        "skeleton_retained_mask": {
+            "available": True,
+            "retained_count": 2,
+            "indices": [0, 4],
+        },
+        "learned_retained_mask": {
+            "available": True,
+            "retained_count": 1,
+            "indices": [2],
+        },
+        "fallback_retained_mask": {
+            "available": True,
+            "retained_count": 0,
+            "indices": [],
+        },
+        "length_repair_retained_mask": {
+            "available": True,
+            "retained_count": 1,
+            "indices": [3],
+        },
+    }
+
+    masks = source_masks_from_selector_trace(trace, point_count=5)
+
+    assert torch.equal(masks["skeleton"], torch.tensor([True, False, False, False, True]))
+    assert torch.equal(masks["learned"], torch.tensor([False, False, True, False, False]))
+    assert torch.equal(masks["fallback"], torch.zeros((5,), dtype=torch.bool))
+    assert torch.equal(masks["length_repair"], torch.tensor([False, False, False, True, False]))
+
+
+def test_retained_decision_marginal_query_useful_diagnostic_scores_true_marginals() -> None:
+    points = torch.zeros((5, 5), dtype=torch.float32)
+    points[:, 0] = torch.arange(5, dtype=torch.float32)
+    points[:, 1] = torch.linspace(0.0, 4.0, steps=5)
+    points[:, 2] = torch.linspace(0.0, 4.0, steps=5)
+    points[:, 3] = torch.tensor([0.0, 0.1, 1.0, 0.9, 0.0])
+    points[:, 4] = torch.tensor([0.0, 5.0, 90.0, 95.0, 100.0])
+    retained = torch.tensor([True, False, True, False, True])
+    selector_scores = torch.tensor([0.0, 0.1, 0.95, 0.90, 0.0])
+    raw_scores = torch.tensor([0.0, 0.2, 1.20, 1.00, 0.0])
+    segment_scores = torch.tensor([0.0, 0.0, 2.0, 1.8, 0.0])
+    query = {
+        "type": "range",
+        "params": {
+            "t_start": 1.5,
+            "t_end": 3.5,
+            "lat_min": 1.5,
+            "lat_max": 3.5,
+            "lon_min": 1.5,
+            "lon_max": 3.5,
+        },
+    }
+    source_masks = {
+        "skeleton": torch.tensor([True, False, False, False, True]),
+        "learned": torch.tensor([False, False, True, False, False]),
+    }
+
+    diagnostics = retained_decision_marginal_query_useful_diagnostics(
+        points=points,
+        boundaries=[(0, 5)],
+        typed_queries=[query],
+        primary_retained_mask=retained,
+        raw_scores=raw_scores,
+        selector_scores=selector_scores,
+        segment_scores=segment_scores,
+        source_masks=source_masks,
+        max_retained_per_source=8,
+        max_removed_candidates=4,
+    )
+
+    rows = diagnostics["rows"]
+    learned_removal = next(
+        row
+        for row in rows
+        if row["source"] == "learned" and row["decision"] == "retained_removal_loss"
+    )
+    removed_addition = next(
+        row
+        for row in rows
+        if row["point_index"] == 3 and row["decision"] == "removed_addition_gain"
+    )
+    assert diagnostics["available"] is True
+    assert diagnostics["diagnostic_only"] is True
+    assert diagnostics["exact_query_useful_v1_marginals"] is True
+    assert diagnostics["performance_mode"] == "exact_cached_query_support"
+    assert diagnostics["query_cache_created"] is True
+    assert diagnostics["query_cache_provided"] is False
+    assert diagnostics["query_cache_range_audit_support_count"] == 1
+    assert diagnostics["elapsed_seconds"] >= 0.0
+    assert diagnostics["score_fields_available"] == {
+        "raw_score": True,
+        "selector_score": True,
+        "segment_score": True,
+    }
+    assert learned_removal["marginal_query_useful_v1"] > 0.0
+    assert removed_addition["marginal_query_useful_v1"] > 0.0
+    assert diagnostics["by_source"]["learned"]["mean_marginal_query_useful_v1"] > 0.0
+    assert diagnostics["by_decision"]["removed_addition_gain"]["selector_score"]["available"] is True
+
+
+def test_retained_decision_marginal_query_useful_diagnostic_uses_provided_cache() -> None:
+    points = torch.zeros((5, 5), dtype=torch.float32)
+    points[:, 0] = torch.arange(5, dtype=torch.float32)
+    points[:, 1] = torch.linspace(0.0, 4.0, steps=5)
+    points[:, 2] = torch.linspace(0.0, 4.0, steps=5)
+    retained = torch.tensor([True, False, True, False, True])
+    query = {
+        "type": "range",
+        "params": {
+            "t_start": 1.5,
+            "t_end": 3.5,
+            "lat_min": 1.5,
+            "lat_max": 3.5,
+            "lon_min": 1.5,
+            "lon_max": 3.5,
+        },
+    }
+    query_cache = ScoringQueryCache.for_workload(points, [(0, 5)], [query])
+
+    diagnostics = retained_decision_marginal_query_useful_diagnostics(
+        points=points,
+        boundaries=[(0, 5)],
+        typed_queries=[query],
+        primary_retained_mask=retained,
+        selector_scores=torch.linspace(0.0, 1.0, steps=5),
+        query_cache=query_cache,
+        max_retained_per_source=2,
+        max_removed_candidates=2,
+    )
+
+    assert diagnostics["available"] is True
+    assert diagnostics["query_cache_provided"] is True
+    assert diagnostics["query_cache_created"] is False
+    assert diagnostics["query_cache_range_audit_support_count"] == 1
+    assert len(query_cache.range_audit_supports) == 1
+    assert diagnostics["candidate_count"] == 4
 
 
 def test_segment_source_attribution_uses_canonical_segment_index_after_score_sort() -> None:
@@ -3094,6 +3306,7 @@ def test_prior_ablation_sensitivity_payload_exposes_score_output_chain() -> None
         sampled_prior_features={"available": True, "mean_abs_feature_delta": 0.75},
         model_prior_features={"available": True, "mean_abs_feature_delta": 0.5},
         score_output=score_output,
+        retained_mask={"available": True, "retained_mask_changed": True},
         raw_prediction={"available": True, "mean_abs_score_delta": 0.4},
         head_output={"available": True, "mean_abs_head_probability_delta": 0.01},
     )
@@ -3103,6 +3316,7 @@ def test_prior_ablation_sensitivity_payload_exposes_score_output_chain() -> None
     assert "selector_score" not in payload
     assert payload["score_output"]["mean_abs_score_delta"] == pytest.approx(0.25)
     assert payload["score_output"]["semantics"] == PRIOR_ABLATION_SCORE_OUTPUT_SEMANTICS
+    assert payload["retained_mask"]["retained_mask_changed"] is True
 
 
 def test_prior_ablation_sensitivity_from_tensors_builds_consistent_chain() -> None:
@@ -3129,6 +3343,8 @@ def test_prior_ablation_sensitivity_from_tensors_builds_consistent_chain() -> No
     )
 
     assert "selector_score" not in payload
+    assert payload["retained_mask"]["retained_mask_changed"] is True
+    assert payload["retained_mask"]["retained_mask_jaccard"] == pytest.approx(1.0 / 3.0)
     assert payload["score_output"]["retained_mask_changed"] is True
     assert payload["score_output"]["retained_mask_jaccard"] == pytest.approx(1.0 / 3.0)
     assert payload["raw_prediction"]["mean_abs_score_delta"] > 0.0
@@ -3349,6 +3565,10 @@ def test_model_prior_feature_sensitivity_reports_post_builder_and_scaler_changes
     assert diagnostics["available"] is True
     assert diagnostics["disabled_prior_fields"] == list(
         WORKLOAD_BLIND_RANGE_V2_MODEL_DISABLED_PRIOR_FIELDS
+    )
+    assert (
+        diagnostics["model_prior_feature_transform"]
+        == WORKLOAD_BLIND_RANGE_V2_MODEL_PRIOR_TRANSFORM
     )
     model_input = diagnostics["model_input_prior_features"]
     normalized = diagnostics["normalized_model_prior_features"]

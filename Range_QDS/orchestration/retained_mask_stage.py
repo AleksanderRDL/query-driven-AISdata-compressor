@@ -18,6 +18,7 @@ from orchestration.length_diagnostics import (
 )
 from orchestration.retained_mask_ablation_stage import freeze_retained_mask_ablations
 from orchestration.selector_diagnostics import (
+    retained_decision_marginal_query_useful_diagnostics,
     selector_segment_score_source_label,
 )
 from scoring.methods import FrozenMaskMethod, Method
@@ -50,6 +51,7 @@ class RetainedMaskFreezingOutputs:
     prior_channel_ablation_diagnostics: dict[str, Any]
     head_ablation_sensitivity_diagnostics: dict[str, Any]
     segment_budget_head_ablation_mode: str | None
+    freeze_timing_diagnostics: dict[str, Any]
 
 
 def freeze_workload_blind_retained_masks(
@@ -84,7 +86,18 @@ def freeze_workload_blind_retained_masks(
     prior_channel_ablation_diagnostics: dict[str, Any] = {}
     head_ablation_sensitivity_diagnostics: dict[str, Any] = {}
     segment_budget_head_ablation_mode: str | None = None
+    freeze_timing_diagnostics: dict[str, Any] = {}
     if workload_blind_eval:
+        freeze_started_at = time.perf_counter()
+        freeze_timing_diagnostics = {
+            "available": True,
+            "diagnostic_only": True,
+            "query_free": True,
+            "stage": "freeze_workload_blind_retained_masks",
+            "primary_method_simplify_seconds": {},
+            "audit_method_simplify_seconds": {},
+            "substage_seconds": {},
+        }
         with phase("freeze-retained-masks"):
             for method in methods:
                 with phase(f"  freeze {method.name}"):
@@ -98,7 +111,11 @@ def freeze_workload_blind_retained_masks(
                         .detach()
                         .cpu()
                     )
-                    cast(Any, method).latency_ms = float((time.perf_counter() - freeze_t0) * 1000.0)
+                    method_elapsed_seconds = float(time.perf_counter() - freeze_t0)
+                    cast(Any, method).latency_ms = float(method_elapsed_seconds * 1000.0)
+                    freeze_timing_diagnostics["primary_method_simplify_seconds"][
+                        method.name
+                    ] = method_elapsed_seconds
                     score_cache = getattr(method, "_score_cache", None)
                     if isinstance(score_cache, torch.Tensor):
                         frozen_primary_scores[method.name] = score_cache.detach().cpu().float()
@@ -145,6 +162,7 @@ def freeze_workload_blind_retained_masks(
                 primary_selector_segment_scores = frozen_primary_selector_segment_scores.get(
                     "MLQDS"
                 )
+                trace_started_at = time.perf_counter()
                 trace_mask, trace = simplify_with_learned_segment_budget_v1_with_trace(
                     primary_scores,
                     test_boundaries,
@@ -179,12 +197,43 @@ def freeze_workload_blind_retained_masks(
                         ),
                     ),
                 )
+                freeze_timing_diagnostics["substage_seconds"][
+                    "selector_trace_reconstruction"
+                ] = float(time.perf_counter() - trace_started_at)
                 frozen_mlqds_mask = frozen_primary_masks.get("MLQDS")
                 if isinstance(frozen_mlqds_mask, torch.Tensor):
                     trace["retained_mask_matches_frozen_primary"] = bool(
                         torch.equal(trace_mask.detach().cpu(), frozen_mlqds_mask.detach().cpu())
                     )
                     trace["frozen_primary_retained_count"] = int(frozen_mlqds_mask.sum().item())
+                trace["retained_mask_freeze_timing"] = freeze_timing_diagnostics
+                diagnostic_started_at = time.perf_counter()
+                try:
+                    trace["retained_decision_marginal_query_useful_alignment"] = (
+                        retained_decision_marginal_query_useful_diagnostics(
+                            points=test_points.detach().cpu().float(),
+                            boundaries=test_boundaries,
+                            typed_queries=eval_workload.typed_queries,
+                            primary_retained_mask=trace_mask.detach().cpu().bool(),
+                            raw_scores=primary_raw_preds,
+                            selector_scores=primary_scores,
+                            segment_scores=primary_segment_scores,
+                            selector_trace=trace,
+                            max_retained_per_source=32,
+                            max_removed_candidates=64,
+                        )
+                    )
+                except Exception as exc:  # pragma: no cover - diagnostic must not break freezing.
+                    trace["retained_decision_marginal_query_useful_alignment"] = {
+                        "available": False,
+                        "diagnostic_only": True,
+                        "reason": "diagnostic_failed",
+                        "error": str(exc),
+                    }
+                finally:
+                    freeze_timing_diagnostics["substage_seconds"][
+                        "retained_marginal_alignment"
+                    ] = float(time.perf_counter() - diagnostic_started_at)
                 compression_for_trace = float(config.model.compression_ratio)
                 learned_fraction_min_for_trace = (
                     0.35
@@ -194,6 +243,7 @@ def freeze_workload_blind_retained_masks(
                     else 0.0
                 )
                 if learned_fraction_min_for_trace > 0.0:
+                    length_diagnostic_started_at = time.perf_counter()
                     trace["score_protected_length_feasibility"] = (
                         score_protected_length_feasibility(
                             scores=primary_scores,
@@ -210,7 +260,11 @@ def freeze_workload_blind_retained_masks(
                         compression_ratio=compression_for_trace,
                         learned_slot_fraction_min=learned_fraction_min_for_trace,
                     )
+                    freeze_timing_diagnostics["substage_seconds"][
+                        "score_protected_length_diagnostics"
+                    ] = float(time.perf_counter() - length_diagnostic_started_at)
                 primary_selector_trace = trace
+                ablation_started_at = time.perf_counter()
                 ablation_outputs = freeze_retained_mask_ablations(
                     config=config,
                     trained=trained,
@@ -229,7 +283,16 @@ def freeze_workload_blind_retained_masks(
                     primary_selector_segment_scores=primary_selector_segment_scores,
                     primary_head_logits=frozen_primary_head_logits.get("MLQDS"),
                 )
+                freeze_timing_diagnostics["substage_seconds"]["query_free_ablation_freeze"] = (
+                    float(time.perf_counter() - ablation_started_at)
+                )
+                freeze_timing_diagnostics["ablation_freeze_timing"] = (
+                    ablation_outputs.freeze_timing_diagnostics
+                )
                 primary_selector_trace = ablation_outputs.primary_selector_trace
+                primary_selector_trace["retained_mask_freeze_timing"] = (
+                    freeze_timing_diagnostics
+                )
                 causality_ablation_methods = ablation_outputs.causality_ablation_methods
                 causal_ablation_freeze_failures = ablation_outputs.causal_ablation_freeze_failures
                 prior_sensitivity_diagnostics = ablation_outputs.prior_sensitivity_diagnostics
@@ -242,6 +305,9 @@ def freeze_workload_blind_retained_masks(
                 segment_budget_head_ablation_mode = (
                     ablation_outputs.segment_budget_head_ablation_mode
                 )
+            freeze_timing_diagnostics["total_seconds"] = float(
+                time.perf_counter() - freeze_started_at
+            )
         methods = [
             FrozenMaskMethod(
                 name=method.name,
@@ -261,6 +327,7 @@ def freeze_workload_blind_retained_masks(
                         continue
                     ratio_key = f"{float(ratio):.4f}"
                     frozen_ratio_methods: list[Method] = []
+                    audit_timing_by_method: dict[str, float] = {}
                     for method in retention_methods:
                         with phase(f"  freeze audit {method.name} ratio={ratio:.4f}"):
                             freeze_t0 = time.perf_counter()
@@ -273,18 +340,28 @@ def freeze_workload_blind_retained_masks(
                                 .detach()
                                 .cpu()
                             )
+                            audit_elapsed_seconds = float(time.perf_counter() - freeze_t0)
+                            audit_timing_by_method[method.name] = audit_elapsed_seconds
                             frozen_ratio_methods.append(
                                 FrozenMaskMethod(
                                     name=method.name,
                                     retained_mask=retained_mask,
-                                    latency_ms=float((time.perf_counter() - freeze_t0) * 1000.0),
+                                    latency_ms=float(audit_elapsed_seconds * 1000.0),
                                 )
                             )
                     frozen_audit_methods_by_ratio[ratio_key] = frozen_ratio_methods
+                    freeze_timing_diagnostics["audit_method_simplify_seconds"][ratio_key] = (
+                        audit_timing_by_method
+                    )
             print(
                 "  workload_blind_protocol=enabled: audit retained masks frozen before eval query scoring",
                 flush=True,
             )
+        freeze_timing_diagnostics["total_seconds"] = float(
+            time.perf_counter() - freeze_started_at
+        )
+        if primary_selector_trace is not None:
+            primary_selector_trace["retained_mask_freeze_timing"] = freeze_timing_diagnostics
 
     return RetainedMaskFreezingOutputs(
         methods=methods,
@@ -303,4 +380,5 @@ def freeze_workload_blind_retained_masks(
         prior_channel_ablation_diagnostics=prior_channel_ablation_diagnostics,
         head_ablation_sensitivity_diagnostics=head_ablation_sensitivity_diagnostics,
         segment_budget_head_ablation_mode=segment_budget_head_ablation_mode,
+        freeze_timing_diagnostics=freeze_timing_diagnostics,
     )

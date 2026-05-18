@@ -307,6 +307,10 @@ def _compact_range_workload_summary(summary: dict[str, Any]) -> dict[str, Any]:
     compact["workload_signature"] = (
         workload_signature if isinstance(workload_signature, dict) else {}
     )
+    query_generation = (
+        generation.get("query_generation", {}) if isinstance(generation, dict) else {}
+    )
+    compact["query_generation"] = query_generation if isinstance(query_generation, dict) else {}
     return compact
 
 
@@ -372,12 +376,34 @@ def _ks_distance(left: object, right: object) -> float | None:
     return float(max_distance)
 
 
+def _context_value(signature: dict[str, Any], generation: object, key: str) -> Any:
+    """Read generation context, falling back to static signature metadata."""
+    if isinstance(generation, dict) and key in generation:
+        return generation.get(key)
+    return signature.get(key)
+
+
+def _optional_str(value: object) -> str:
+    return "" if value is None else str(value)
+
+
+def _normalized_fraction(value: object) -> float | None:
+    if not isinstance(value, (int, float)):
+        return None
+    fraction = float(value)
+    if fraction > 1.0 and fraction <= 100.0:
+        fraction /= 100.0
+    return fraction
+
+
 def _workload_signature_gate_for_pair(
     train_like: dict[str, Any], eval_like: dict[str, Any]
 ) -> dict[str, Any]:
     """Compare profile signatures against guide defaults."""
     train_sig = train_like.get("workload_signature", {})
     eval_sig = eval_like.get("workload_signature", {})
+    train_generation = train_like.get("query_generation", {})
+    eval_generation = eval_like.get("query_generation", {})
     if (
         not isinstance(train_sig, dict)
         or not isinstance(eval_sig, dict)
@@ -400,6 +426,36 @@ def _workload_signature_gate_for_pair(
     }
     train_query_count = int(train_sig.get("query_count", 0) or 0)
     eval_query_count = int(eval_sig.get("query_count", 0) or 0)
+    train_query_count_mode = _optional_str(
+        _context_value(train_sig, train_generation, "query_count_mode")
+    )
+    eval_query_count_mode = _optional_str(
+        _context_value(eval_sig, eval_generation, "query_count_mode")
+    )
+    train_coverage_calibration_mode = _optional_str(
+        _context_value(train_sig, train_generation, "coverage_calibration_mode")
+    )
+    eval_coverage_calibration_mode = _optional_str(
+        _context_value(eval_sig, eval_generation, "coverage_calibration_mode")
+    )
+    train_target_coverage = _normalized_fraction(
+        _context_value(train_sig, train_generation, "target_coverage")
+    )
+    eval_target_coverage = _normalized_fraction(
+        _context_value(eval_sig, eval_generation, "target_coverage")
+    )
+    train_coverage_actual = _normalized_fraction(train_sig.get("coverage_actual"))
+    eval_coverage_actual = _normalized_fraction(eval_sig.get("coverage_actual"))
+    target_coverage_delta = (
+        abs(train_target_coverage - eval_target_coverage)
+        if train_target_coverage is not None and eval_target_coverage is not None
+        else None
+    )
+    coverage_actual_delta = (
+        abs(train_coverage_actual - eval_coverage_actual)
+        if train_coverage_actual is not None and eval_coverage_actual is not None
+        else None
+    )
     min_signature_query_count = 8
     count_failed: list[str] = []
     if train_query_count < min_signature_query_count:
@@ -410,13 +466,39 @@ def _workload_signature_gate_for_pair(
     query_count_relative_delta = query_count_delta / float(
         max(train_query_count, eval_query_count, 1)
     )
-    if query_count_relative_delta > thresholds["query_count_relative_delta_max"]:
+    calibrated_count_signature = (
+        train_query_count_mode == eval_query_count_mode == "calibrated_to_coverage"
+        and train_coverage_calibration_mode
+        == eval_coverage_calibration_mode
+        == "profile_sampled_query_count"
+        and target_coverage_delta is not None
+        and target_coverage_delta <= 1e-9
+    )
+    query_count_relative_delta_enforced = not calibrated_count_signature
+    if (
+        query_count_relative_delta_enforced
+        and query_count_relative_delta > thresholds["query_count_relative_delta_max"]
+    ):
         count_failed.append("query_count_mismatch")
     train_profile = str(train_sig.get("profile_id", ""))
     eval_profile = str(eval_sig.get("profile_id", ""))
     profile_failed: list[str] = []
     if train_profile != eval_profile:
         profile_failed.append("profile_id_mismatch")
+    if (
+        train_query_count_mode
+        and eval_query_count_mode
+        and train_query_count_mode != eval_query_count_mode
+    ):
+        profile_failed.append("query_count_mode_mismatch")
+    if (
+        train_coverage_calibration_mode
+        and eval_coverage_calibration_mode
+        and train_coverage_calibration_mode != eval_coverage_calibration_mode
+    ):
+        profile_failed.append("coverage_calibration_mode_mismatch")
+    if target_coverage_delta is not None and target_coverage_delta > 1e-9:
+        profile_failed.append("target_coverage_mismatch")
 
     point_hit_ks = _ks_distance(
         train_sig.get("point_hit_counts_per_query"),
@@ -459,6 +541,22 @@ def _workload_signature_gate_for_pair(
         "ship_hit_distribution_used_quantile_proxy": ship_hit_ks is None,
         "query_count_delta": query_count_delta,
         "query_count_relative_delta": query_count_relative_delta,
+        "query_count_relative_delta_enforced": query_count_relative_delta_enforced,
+        "query_count_check_mode": (
+            "diagnostic_min_only_for_coverage_calibrated"
+            if calibrated_count_signature
+            else "relative_delta"
+        ),
+        "train_query_count_mode": train_query_count_mode or None,
+        "eval_query_count_mode": eval_query_count_mode or None,
+        "train_coverage_calibration_mode": train_coverage_calibration_mode or None,
+        "eval_coverage_calibration_mode": eval_coverage_calibration_mode or None,
+        "train_target_coverage": train_target_coverage,
+        "eval_target_coverage": eval_target_coverage,
+        "target_coverage_delta": target_coverage_delta,
+        "train_coverage_actual": train_coverage_actual,
+        "eval_coverage_actual": eval_coverage_actual,
+        "coverage_actual_delta": coverage_actual_delta,
         "train_total_points": train_sig.get("total_points"),
         "eval_total_points": eval_sig.get("total_points"),
         "train_total_trajectories": train_sig.get("total_trajectories"),
@@ -522,6 +620,12 @@ def _workload_signature_gate_for_pair(
         "distribution_metric_note": (
             "Point/ship hit distribution checks use persisted per-query hit-count KS distance when available; "
             "older signatures fall back to p10/p50/p90 quantile-distance proxies."
+        ),
+        "query_count_metric_note": (
+            "Fixed-count or legacy signatures enforce relative query-count parity. "
+            "coverage_calibrated/profile_sampled signatures report query-count drift "
+            "but rely on matching profile metadata, coverage target, minimum count, "
+            "and the separate workload-stability gate for generation health."
         ),
     }
 
