@@ -10,10 +10,10 @@ The redesign has made real progress, but it is not complete. The project has mov
 Current best single-cell evidence is promising but not final success:
 
 ```text
-MLQDS QueryUsefulV1:           0.1669032451715525
+MLQDS QueryUsefulV1:           0.17183721530965693
 uniform QueryUsefulV1:         0.14223795796380634
 Douglas-Peucker QueryUsefulV1: 0.16362459837911367
-length preservation:           0.7938149625265364
+length preservation:           0.7941408411227088
 ```
 
 Interpretation:
@@ -29,6 +29,13 @@ Major durable discoveries so far:
 - `route_density_prior` is harmful under the current raw-factorized/head-initialized setup. It should stay available for diagnostics/support overlap, but be excluded from v2 model inputs. Do not generalize this finding to older target/model states.
 - `learned_segment_length_repair_fraction=0.6` is material to the current best candidate. Removing repair improves `QueryUsefulV1` and some causality signs, but invalidates global geometry. Full repair or stronger geometry repair weakens learned control or loses to Douglas-Peucker.
 - Training-fit improvements are not enough. Several changes improved fit diagnostics but worsened retained-mask quality.
+- Behavior-head rank loss at weight `0.15` is rejected as a default. It slightly
+  improved behavior-head train fit, but worsened retained-mask causality and
+  reduced the strict-cell score.
+- Lowering `learned_segment_allocation_weight_floor` from `0.50` to `0.10` is
+  rejected as a standalone fix. It increased mask movement, but most ablations
+  beat the primary selector, MLQDS regressed to `0.15366824272250135`, and
+  length worsened to `0.7833962145166923`.
 
 Current research question:
 
@@ -38,7 +45,7 @@ Can the selector/model make train-derived prior, behavior, and score perturbatio
 
 If a future checkpoint does not answer that question more clearly, it is probably low-value.
 
-## Current State — 2026-05-17
+## Current State — 2026-05-18
 
 Status: active, not complete
 
@@ -49,37 +56,92 @@ Best current code candidate:
 - no direct prior-to-head residual
 - `learned_segment_score_blend_weight=0.05`
 - `learned_segment_length_repair_fraction=0.6`
+- length repair uses global net-gain allocation
+- query-free segment length-support allocation uses
+  `learned_segment_allocation_length_support_weight=0.12`
+- within-segment geometry tie-breaking uses
+  `learned_segment_geometry_gain_weight=0.12`
+- as of Checkpoint 5.22, allocation length support is applied even when learned
+  segment scores are flat, and fairness preallocation uses the same blended
+  allocation weight as the main allocator
+- behavior-rank auxiliary is available only as an explicit diagnostic control;
+  default `query_useful_behavior_rank_loss_weight=0.0`
 
 Best current strict artifact:
-- path: `artifacts/results/query_driven_v2_checkpoint04_no_route_density_strict_probe_c10_r05`
+- path: `artifacts/results/query_driven_v2_checkpoint09_model_prior_materiality_strict_replay_c10_r05`
 
 Best current strict result:
-- MLQDS QueryUsefulV1: `0.1669032451715525`
+- MLQDS QueryUsefulV1: `0.17183721530965693`
 - uniform QueryUsefulV1: `0.14223795796380634`
 - Douglas-Peucker QueryUsefulV1: `0.16362459837911367`
-- length preservation: `0.7938149625265364`
+- length preservation: `0.7941408411227088`
 - gates passed: workload stability, support overlap, predictability, prior-predictive alignment, target diffusion, workload signature
 - gates failed: learning causality, global sanity
 
 Current blockers:
-- Learning causality still fails. In the best strict artifact, key deltas are correct-sign but below material thresholds: shuffled scores `0.008957581030671818` versus required `0.014799172324647697`; untrained model `0.002338397270806869` versus required `0.005`; shuffled prior fields `0.0028898208710833317` versus required `0.005`; without query-prior features `0.0028898208710833317` versus required `0.005`.
-- Segment-budget-head materiality is already useful in the best strict artifact: `0.010472792329425523`, above the `0.005` material threshold. Do not treat all heads as equally weak.
-- Length preservation is close but still below the guide's active `0.80` gate: `0.7938149625265364`.
+- Learning causality still fails. In the best strict artifact, shuffled-score delta is `0.008856345116771192` versus required `0.017759554407510352`; shuffled-prior and no-query-prior deltas are both `0.002743017030572781` versus required `0.005`.
+- Several causality checks now pass: untrained model delta `0.0200725509132888`, behavior-head delta `0.00966018148201922`, segment-budget-head delta `0.014543435541987698`, prior-only delta `0.02288860641060822`, and learned-controlled slot fraction `0.33834134615384615` versus minimum `0.25`.
+- Length preservation is close but still below the guide's active `0.80` gate: `0.7941408411227088`.
+- The separated allocation-length-support ablation is not material:
+  `MLQDS_without_segment_length_support_allocation` delta is only
+  `0.00012394275871965843`, below the `0.005` material threshold.
 - No-length-repair improves MLQDS QueryUsefulV1 to `0.1759846099523811`, but length collapses to `0.6790996203798462` and learning causality still fails. It is a diagnostic, not a candidate.
 - Full 4x7 grid remains intentionally unrun because strict single-cell gates still fail.
 
 Current decision:
 - Do not run the full grid.
 - Do not increase workload/caps yet; current standard strict cell already has healthy accepted query counts.
+- Pre-gate benchmark snapshots are allowed only as scarce diagnostics for a
+  named scale/runtime/instrumentation question. They cannot replace failed
+  strict gates or become a tuning loop.
 - Do not lower gates for a success claim while learning causality still fails.
 - Do not lower the length gate to `0.75`; that would still leave learning causality failed.
 - Keep `learned_segment_length_repair_fraction=0.6` in all summaries of the current candidate. It is material to the best-candidate trade-off.
-- Next scientific checkpoint should target either selector/length allocation or material causality from the Checkpoint 4.74 candidate.
+- Keep behavior-rank disabled by default. The strict replay at weight `0.15`
+  regressed the current candidate.
+- Keep `learned_segment_allocation_weight_floor=0.50` as the default. The
+  `0.10` strict replay made score authority harmful instead of causal.
+- Next scientific checkpoint should target either prior-feature materiality or a
+  selector mechanism that changes segment allocation, not only
+  within-allocation point repair.
 
 Current extra discoveries:
 - The best candidate depends materially on `learned_segment_length_repair_fraction=0.6`; summaries must carry this knob because no-repair has stronger score causality but invalid global geometry.
-- The score-protected length frontier in the best/no-repair artifacts only clears the `0.80` length gate while protecting about `10%` of budget for top learned-score points. At the guide's `25%` learned-slot materiality floor, the length upper bound is about `0.7911`, so the current selector/score distribution has a real learned-control-vs-length tension.
-- `max_budget_share_per_ship` in `simplification/learned_segment_budget.py` is not a strict per-ship cap when the fair-share cap is larger; it is effectively `max(share_cap, fair_share_cap)`. Treat the name as misleading when reasoning about selector allocation caps.
+- The score-protected length frontier in the best artifact only clears the `0.80` length gate while protecting about `10%` of budget for top learned-score points. At the guide's `25%` learned-slot materiality floor, the length upper bound is about `0.7911049677462703`, so the current selector/score distribution has a real learned-control-vs-length tension.
+- Same-allocation length-only point selection would reach only `0.7597755220341236` length preservation, so the length blocker is not just point choice inside currently selected segments. Segment allocation is still part of the problem.
+- Adding query-free segment length support at weight `0.12` gave only a tiny strict-cell gain over Checkpoint 5.18: MLQDS `+0.00012394275871965843`, length `+0.000013005202913918268`, and shuffled-score causality delta `+0.002352417155629921`.
+- Checkpoint 5.20 separated query-free segment allocation length support from the
+  within-segment geometry tie-breaker. Future artifacts should report
+  `learned_segment_allocation_length_support_weight` and
+  `MLQDS_without_segment_length_support_allocation` separately from the
+  geometry tie-breaker.
+- Checkpoint 5.21 replayed the best strict cell with the separated ablation:
+  primary behavior was exactly unchanged from Checkpoint 5.19, and the new
+  ablation showed allocation length support is too weak to explain a material
+  learned win.
+- Checkpoint 5.22 found a selector implementation flaw: allocation length
+  support was ignored when learned segment scores were flat, and fairness
+  preallocation picked by raw score rather than blended allocation weight. This
+  matters most for neutral-head ablations and length-support diagnostics.
+- Checkpoint 5.23 replayed the strict cell after that fix. Primary score,
+  length, shuffled-prior/no-query-prior deltas, learned-slot fraction, and
+  allocation length-support materiality were unchanged. Shuffled-score delta
+  improved only `+0.00046848550650735454`, segment-budget-head delta improved
+  `+0.0028946836748793836`, and prior-only delta improved
+  `+0.0007186064333346565`.
+- Checkpoint 5.26 showed raw and model-input prior channels are available, but
+  active prior changes remain mostly suppressed before retained-mask decisions.
+- Checkpoint 5.28 showed behavior-rank weight `0.15` is not the answer:
+  behavior-head fit improved only slightly while QueryUsefulV1 and shuffled-score
+  causality regressed.
+- Checkpoint 5.31 showed a lower allocation floor made allocation visibly less
+  uniform but not more useful: segments with learned budget dropped to `768`,
+  shuffled-score retained-mask symdiff rose to `1906`, and same-allocation
+  length-only preservation collapsed to `0.6968862694377511`.
+- Prior-feature materiality remains weak under the lower-floor replay: model
+  input prior fields changed by about `0.0128368`, but selector-score delta was
+  only about `0.000534` and retained-mask Jaccard stayed `0.9785969084423306`.
+- `max_budget_share_per_trajectory` is not a strict hard cap when the fair-share cap is larger; it is effectively `max(share_cap, fair_share_cap)`. Treat it as a soft trajectory-share limit when reasoning about selector allocation caps.
 
 Why this candidate is current best:
 - Earlier route-density exclusion failed under the Checkpoint 3.x target/model state, so route density should not be treated as generically bad across all historical runs.
@@ -87,12 +149,41 @@ Why this candidate is current best:
 - Checkpoint 4.73 made the narrow code change: keep `route_density_prior` in prior fields for support diagnostics, but zero it for v2 model features.
 - Checkpoint 4.74 restored the strict-cell MLQDS win over Douglas-Peucker while keeping the standard workload/prior gates healthy.
 - Checkpoint 4.83 showed the current length-repair path suppresses some score/causality upside, but removing it destroys global geometry and still does not pass learning causality. Therefore `learned_segment_length_repair_fraction=0.6` remains part of the best current candidate.
+- Checkpoint 5.18 improved the strict-cell MLQDS score over Checkpoint 4.74 with global net-gain repair, but it did not clear learning causality or length.
+- Checkpoint 5.19 added query-free segment length-support allocation and produced the best strict-cell score so far, but the gain was too small to change the blocker diagnosis.
+- Checkpoint 5.20 cleaned the ablation/config interface around that allocation
+  length support, without generating new scientific evidence.
+- Checkpoint 5.21 confirmed the cleaned interface preserves the Checkpoint 5.19
+  primary result and gives a cleaner negative result for allocation length
+  support.
+- Checkpoint 5.22 fixed allocation-weight semantics but has not generated new
+  strict scientific evidence yet.
+- Checkpoint 5.23 supplied that strict replay. It remains blocked by learning
+  causality and global sanity.
+- Checkpoint 5.26 is the richest strict artifact for the current best behavior
+  because it adds model-prior materiality diagnostics without changing the
+  primary result.
+- Checkpoint 5.28 is a negative behavior-rank replay, not a replacement for the
+  current best candidate.
+- Checkpoint 5.31 is a negative lower-allocation-floor replay, not a replacement
+  for the current best candidate.
 - The current problem is not workload health or generic prior harm. The remaining problem is making useful prior/behavior/score perturbations material enough in retained masks while preserving length.
 
 Evidence boundary:
 - A strict single-cell win is not a final success claim. Final acceptance still requires all strict single-cell gates plus the full 4x7 coverage/compression grid.
-- Any future change must be judged against Checkpoint 4.74 unless it intentionally redefines the candidate baseline.
-- Checkpoint 4.83 is useful evidence about the repair-vs-causality trade-off, but it does not replace Checkpoint 4.74 as the best candidate because its length is invalid.
+- Any future change must be judged against Checkpoint 5.19 for primary metrics
+  and Checkpoint 5.21 for the cleaner separated-ablation diagnostics unless it
+  intentionally redefines the candidate baseline. Keep Checkpoint 5.18 as the
+  pre-segment-length-support comparison and Checkpoint 4.74 as the
+  pre-global-repair historical comparison.
+- Checkpoint 5.26 is the current-best strict evidence boundary after the
+  allocation-weight and prior-materiality diagnostic fixes.
+- Checkpoint 5.28 is rejected evidence for behavior-rank weight `0.15`; after
+  Checkpoint 5.29, current-code defaults disable behavior-rank again.
+- Checkpoint 5.31 is rejected evidence for
+  `learned_segment_allocation_weight_floor=0.10`; keep the Checkpoint 5.26
+  current-best evidence boundary.
+- Checkpoint 4.83 is useful evidence about the repair-vs-causality trade-off, but it does not replace the current strict candidate because its length is invalid.
 - Raw training-fit improvements are not enough. Checkpoint 4.79 showed better fit diagnostics can still worsen retained-mask quality and lose the Douglas-Peucker comparison.
 - Length-only improvements are not enough. Checkpoints 4.65, 4.66, and 4.81 improved length slightly or nearly cleared it but weakened MLQDS, learned control, or causality.
 - A no-repair score win is not enough. Checkpoint 4.83 beat both baselines on QueryUsefulV1 but failed global sanity badly and still failed learning causality.
@@ -104,20 +195,28 @@ Rejected-path memory:
 | no length repair, `learned_segment_length_repair_fraction=0.0` | MLQDS `0.1759846099523811`; learned-controlled slot fraction `0.8461538461538461` | length collapsed to `0.6790996203798462`; learning causality still failed |
 | full length repair | length `0.7980194800294772` | learned-controlled slot fraction collapsed to `0.203125`; MLQDS lost to Douglas-Peucker |
 | geometry gain `0.25` | length `0.797193150044111` | MLQDS regressed and causality worsened |
+| segment length-support allocation `0.12` | MLQDS `0.17183721530965693`; length `0.7941408411227088` | best score so far, but still fails learning causality and global sanity |
+| behavior-rank loss weight `0.15` | behavior head tau improved from `-0.01658` to `-0.00302`; top-5 behavior mass recall improved from `0.20415` to `0.21870` | MLQDS regressed to `0.1662931067947708`; shuffled-score delta collapsed to `0.00005168542757363892`; prior/no-prior and no-behavior gates still failed |
+| allocation weight floor `0.10` | shuffled-score symdiff `1906`, segment-budget symdiff `1380`, segments with learned budget `768` | MLQDS regressed to `0.15366824272250135`, lost to Douglas-Peucker, length worsened to `0.7833962145166923`, and causality failed by sign |
 | full prior residual scale `1.0` after route removal | length `0.7939141083394758` | MLQDS `0.16109363670733973`, lost to Douglas-Peucker; shuffled-score causality failed by sign |
 | semantic prior-to-head residual | improved training fit | retained-mask result worsened; MLQDS `0.16054051959902663`, lost to Douglas-Peucker; prior ablations became harmful |
 | point-score blend `0.15` | length `0.7943720026689473` | MLQDS `0.1581758366351451`, lost to Douglas-Peucker; shuffled and untrained causality failed by sign |
 
 Next-checkpoint guardrails:
-- Prefer narrow changes that preserve Checkpoint 4.74's DP win and healthy workload/prior gates.
+- Prefer narrow changes that preserve the Checkpoint 5.19/5.21 DP win and
+  healthy workload/prior gates.
 - For length work, preserve learned-controlled slots; do not spend the budget with query-free repair that crowds out learned selection.
 - For causality work, focus on making prior/behavior/score perturbations move retained masks materially, not merely improving per-head fit.
 - Score-protected length filling is a plausible diagnostic direction, but it must respect the observed frontier: protecting `25%` learned-score budget currently appears incompatible with the `0.80` length gate.
 - Do not re-test blunt prior-strength escalation unless there is a new mechanism that explains why it will avoid the Checkpoint 4.76 and 4.79 failures.
+- Do not keep lowering allocation floor by itself. Checkpoint 5.31 showed that
+  more score authority without length-compatible segment value amplifies bad
+  decisions.
 - Do not add temporal scaffold or change acceptance thresholds to manufacture a success claim.
 
 Minimum pass condition for the next scientific candidate update:
-- Keep the Checkpoint 4.74 baseline comparable unless there is an explicit reason to reset the baseline.
+- Keep the Checkpoint 5.19/5.21 baseline comparable unless there is an explicit
+  reason to reset the baseline.
 - Preserve the MLQDS win over uniform and Douglas-Peucker on `QueryUsefulV1`.
 - Clear `global_sanity_gate`, especially length preservation `>=0.80`.
 - Clear `learning_causality_gate` with material deltas, not only correct signs.
@@ -1099,6 +1198,8 @@ Changes:
   tiny-probe-collapse questions.
 - Reaffirmed that these slices are not the full final grid, not acceptance
   evidence, and must keep strict gates unchanged.
+- Added a follow-up clarification that pre-gate benchmark snapshots must not
+  move the current-best evidence boundary.
 
 Tests:
 - `git diff --check -- Range_QDS/docs/query-driven-rework-guide.md Range_QDS/docs/query-driven-rework-progress.md`
@@ -1115,3 +1216,1058 @@ Key results:
 Decision:
 - Continue using real-scale slices only for named diagnostic questions.
 - Do not treat exploratory slice results as final success evidence.
+
+## Checkpoint 5.17 — Global Net-Gain Length Repair
+
+Status: completed
+
+Goal:
+- Improve the selector's query-free length repair so the existing bounded
+  repair budget targets the highest path-length gains instead of being trapped
+  by per-trajectory caps.
+
+Changes:
+- Reworked `learned_segment_budget_v1` length repair from independent
+  per-trajectory swap caps to a global greedy net-gain budget.
+- Kept the existing `learned_segment_length_repair_fraction` semantics as a
+  bounded share of learned/fallback slots, but now spends that budget where it
+  has the largest query-free path-length benefit.
+- Added a focused selector test proving repair budget can move away from a
+  zero-gain trajectory and into a high-gain trajectory.
+
+Tests:
+- `uv run --group dev -- ruff format Range_QDS/simplification/learned_segment_budget/length_repair.py Range_QDS/tests/unit/simplification/test_learned_segment_budget.py`
+- `uv run --group dev -- ruff check Range_QDS`
+- `uv run --group dev -- pyright Range_QDS`
+- `uv run --group dev -- pytest Range_QDS/tests -q`
+- focused selector/orchestration tests:
+  `test_learned_segment_budget.py`,
+  `test_learned_segment_selector_properties.py`,
+  `test_query_driven_rework.py`,
+  `test_retained_masks.py`, and `test_evaluation_stage.py`
+- `git diff --check -- Range_QDS/simplification/learned_segment_budget/length_repair.py Range_QDS/tests/unit/simplification/test_learned_segment_budget.py`
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was a selector implementation
+  checkpoint.
+
+Key results:
+- Full pytest passed: `441 passed, 1 warning`.
+- Full Ruff passed.
+- Full Pyright passed.
+- The new unit case verifies that length repair can spend more than the old
+  per-trajectory fractional cap on a high-gain trajectory while spending zero
+  repair slots on a zero-gain trajectory.
+
+Extra discoveries:
+- Artifact audit confirmed the current blocker is a real two-sided selector
+  trade-off, not a missing report field: no-repair has strong score causality
+  but invalid geometry, current repair improves length but weakens causality,
+  and the old length-floor experiment passed global sanity while failing the
+  learned-slot materiality floor.
+- Prior checkpoint artifacts already covered several rejected selector variants
+  (`geometry_gain`, `length_support_blend`, `score_blend`, full repair, and
+  no repair). The next scientific probe should test this allocator change
+  directly instead of re-running those rejected knobs.
+
+Decision:
+- Continue with a strict single-cell probe of the global net-gain repair
+  selector before making any final-quality claim.
+- Do not run the full 4x7 grid; the current evidence is implementation-level
+  plus historical artifact comparison only.
+
+## Checkpoint 5.18 — Global Net-Gain Strict Single-Cell Probe
+
+Status: failed
+
+Goal:
+- Test whether the global net-gain length-repair allocator clears the current
+  strict single-cell blockers at the same candidate scale as the prior best
+  artifact.
+
+Changes:
+- No additional code changes after Checkpoint 5.17.
+- Generated one strict synthetic/debug single-cell artifact for the global
+  net-gain allocator.
+
+Tests:
+- Artifact gate extraction with `jq`.
+- `git diff --check`
+- No full final grid was run.
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint05_global_net_gain_repair06_strict_probe_c10_r05`
+- command: `uv run --group dev -- python -m orchestration.run_ais_experiment ...`
+  with `n_ships=384`, `n_points=256`, `n_queries=48`,
+  `range_train_workload_replicates=4`, `compression_ratio=0.05`,
+  `query_coverage=0.10`, `query_prior_grid_bins=128`,
+  `query_prior_smoothing_passes=0`, and
+  `learned_segment_length_repair_fraction=0.6`.
+
+Key results:
+- MLQDS QueryUsefulV1: `0.17171327255093727`
+- uniform QueryUsefulV1: `0.14223795796380634`
+- Douglas-Peucker QueryUsefulV1: `0.16362459837911367`
+- length preservation: `0.7941278359197949`
+- gates passed: workload stability, support overlap, predictability,
+  prior-predictive alignment, target diffusion, workload signature
+- gates failed: learning causality and global sanity
+- final claim summary status: `candidate_blocked_by_required_gates`
+
+Gate diagnosis:
+- Global sanity failed only on length preservation: `0.7941278359197949`
+  versus required `0.80`; SED ratio passed.
+- Learning causality failed on shuffled scores, shuffled prior fields, and
+  no-query-prior features.
+- Shuffled-score delta was `0.006035442454633916` versus required
+  `0.017685188752278556`.
+- Shuffled-prior and no-query-prior deltas were both
+  `0.002756827093483627` versus required `0.005`.
+- Untrained, behavior-head, segment-budget-head, prior-only, and learned-slot
+  fraction checks passed.
+
+Extra discoveries:
+- The allocator change improved MLQDS over Checkpoint 4.74
+  (`0.17171327255093727` vs `0.1669032451715525`) and slightly improved length
+  (`0.7941278359197949` vs `0.7938149625265364`), but the improvement is too
+  small to clear global sanity.
+- Same-allocation length-only point selection would reach only
+  `0.7585142044823068`, so the length issue is not only point choice inside
+  selected segments. Segment allocation needs to change.
+- The score-protected length frontier still says the `0.80` length gate is only
+  feasible while protecting about `10%` of budget for top learned-score points;
+  the `25%` materiality floor has an upper-bound length of
+  `0.7911049677462703`.
+- Freeze-retained-masks took `202.51s`; global greedy repair is now a runtime
+  risk if it stays in the candidate path.
+
+Decision:
+- Do not run the full grid.
+- Do not call this a success despite beating both baselines.
+- Next work should diagnose or change segment allocation / prior-feature
+  materiality, not just make length repair greedier.
+
+## Checkpoint 5.19 — Segment Length-Support Allocation
+
+Status: failed
+
+Goal:
+- Test whether a small query-free segment length-support component in learned
+  segment allocation can improve length preservation without erasing learned
+  segment-budget materiality.
+
+Changes:
+- Added query-free per-segment path-length support to segment rows.
+- Blended normalized learned segment score with normalized segment
+  length-support score during segment-budget allocation.
+- Reported `segment_length_support_weight`,
+  `segment_length_support_score`, and `segment_length_support_rank` in
+  selector traces/diagnostics.
+- Added focused selector tests for global net-gain length repair,
+  length-support allocation, and source-attribution fields.
+- Removed a stale formatter-only blank line in `benchmarking/__init__.py` found
+  by full format verification.
+- Tightened the guide's exploratory benchmark-snapshot rule: snapshots are
+  diagnostics only, should prefer representative slices, and cannot override
+  failed child gates.
+
+Tests:
+- `uv run --group dev -- ruff format` on touched selector/orchestration/test
+  files.
+- `uv run --group dev -- ruff format --check Range_QDS`
+- `uv run --group dev -- ruff check Range_QDS`
+- `uv run --group dev -- pyright Range_QDS/simplification/learned_segment_budget Range_QDS/tests/unit/simplification/test_learned_segment_budget.py`
+- `uv run --group dev -- pyright Range_QDS`
+- `uv run --group dev -- pytest Range_QDS/tests/unit/simplification/test_learned_segment_budget.py Range_QDS/tests/property/test_learned_segment_selector_properties.py -q`
+- `uv run --group dev -- pytest Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/unit/orchestration/test_retained_masks.py Range_QDS/tests/unit/orchestration/test_evaluation_stage.py -q`
+- `uv run --group dev -- pytest Range_QDS/tests -q`
+- `uv run --group dev -- yamllint .`
+- `git diff --check`
+- Artifact gate extraction with `jq`.
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint06_segment_length_support_allocation_repair06_strict_probe_c10_r05`
+- command: `uv run --group dev -- python -m orchestration.run_ais_experiment ...`
+  with `n_ships=384`, `n_points=256`, `synthetic_route_families=4`,
+  `seed=2324`, `train_fraction=0.34`, `val_fraction=0.33`,
+  `n_queries=48`, `max_queries=256`, `query_coverage=0.10`,
+  `range_train_workload_replicates=4`, `compression_ratio=0.05`,
+  `query_prior_grid_bins=128`, `query_prior_smoothing_passes=0`,
+  `learned_segment_geometry_gain_weight=0.12`,
+  `learned_segment_score_blend_weight=0.05`, and
+  `learned_segment_length_repair_fraction=0.6`.
+
+Key results:
+- MLQDS QueryUsefulV1: `0.17183721530965693`
+- uniform QueryUsefulV1: `0.14223795796380634`
+- Douglas-Peucker QueryUsefulV1: `0.16362459837911367`
+- length preservation: `0.7941408411227088`
+- gates passed: workload stability, support overlap, predictability,
+  prior-predictive alignment, target diffusion, workload signature
+- gates failed: learning causality and global sanity
+- final claim summary status: `candidate_blocked_by_required_gates`
+- Full verification passed: Ruff, Pyright, yamllint, whitespace, and pytest
+  (`442 passed, 1 warning`).
+
+Gate diagnosis:
+- Global sanity failed only on length preservation: `0.7941408411227088`
+  versus required `0.80`; SED ratio passed at `0.9173337766436357`.
+- Learning causality failed on shuffled scores, shuffled prior fields, and
+  no-query-prior features.
+- Shuffled-score delta improved to `0.008387859610263837`, but the threshold
+  is `0.017759554407510352`.
+- Shuffled-prior and no-query-prior deltas were both
+  `0.002743017030572781` versus required `0.005`.
+- Untrained, behavior-head, segment-budget-head, prior-only, and learned-slot
+  fraction checks passed.
+
+Extra discoveries:
+- Relative to Checkpoint 5.18, segment length-support allocation changed little:
+  MLQDS `+0.00012394275871965843`, length
+  `+0.000013005202913918268`, shuffled-score delta
+  `+0.002352417155629921`, and shuffled-prior/no-query-prior deltas slightly
+  worsened by `-0.000013810062910846188`.
+- Same-allocation length-only point selection would reach only
+  `0.7597755220341236`, so this allocation still cannot clear the `0.80`
+  length gate even if point choice inside selected segments is length-only.
+- The score-protected length frontier still only clears `0.80` while protecting
+  about `10%` of budget for top learned-score points. At the `25%` learned-slot
+  materiality floor, length is still only `0.7911049677462703`.
+- The implementation now uses `learned_segment_geometry_gain_weight` for both
+  segment allocation length support and within-segment geometry tie-breaking.
+  That is acceptable for this diagnostic checkpoint because both are query-free
+  geometry pressure, but it is not a clean long-term ablation interface.
+
+Decision:
+- Do not run the full grid.
+- Do not call this a success despite the best single-cell score so far.
+- Continue from Checkpoint 5.19 only if the next checkpoint directly attacks
+  learning-causality materiality or the allocation/length trade-off. Repeating
+  small query-free geometry nudges is low-value.
+
+## Checkpoint 5.20 — Separate Allocation Length-Support Control
+
+Status: completed
+
+Goal:
+- Make the selector diagnostics cleaner by separating query-free segment
+  allocation length-support pressure from the within-segment geometry
+  tie-breaker.
+
+Changes:
+- Added `learned_segment_allocation_length_support_weight` to config, CLI,
+  saved config plumbing, MLQDS methods, validation scoring, retained-mask
+  freezing, inference, and benchmark reporting.
+- Preserved the current candidate behavior by defaulting the new control to
+  `0.12`.
+- Kept `learned_segment_geometry_gain_weight=0.12` as the within-segment
+  geometry tie-breaker only.
+- Added `MLQDS_without_segment_length_support_allocation` as a query-free
+  ablation method and exposed its delta/mask diagnostics in report rows.
+- Updated the guide selector defaults so allocation length support and geometry
+  tie-breaking are reported separately.
+- Added focused tests for the separated selector control, config/CLI roundtrip,
+  benchmark row fields, and regression field set.
+
+Tests:
+- `uv run --group dev -- ruff format` on touched config/orchestration/
+  selector/reporting/test files.
+- `uv run --group dev -- ruff check` on touched config/orchestration/
+  selector/reporting/test files.
+- `uv run --group dev -- pyright Range_QDS/config Range_QDS/orchestration Range_QDS/simplification Range_QDS/evaluation Range_QDS/training Range_QDS/benchmarking Range_QDS/tests/unit/simplification/test_learned_segment_budget.py Range_QDS/tests/unit/runtime/test_torch_runtime_controls.py Range_QDS/tests/unit/benchmarking/test_benchmark_runner.py`
+- `uv run --group dev -- pytest Range_QDS/tests/unit/simplification/test_learned_segment_budget.py Range_QDS/tests/unit/runtime/test_torch_runtime_controls.py Range_QDS/tests/unit/benchmarking/test_benchmark_runner.py -q`
+- `uv run --group dev -- ruff format --check Range_QDS`
+- `uv run --group dev -- ruff check Range_QDS`
+- `uv run --group dev -- pyright Range_QDS`
+- `uv run --group dev -- pytest Range_QDS/tests -q`
+- `uv run --group dev -- yamllint .`
+- `git diff --check`
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was a selector diagnostics/config
+  cleanup checkpoint.
+
+Key results:
+- Focused pytest passed: `66 passed`.
+- Focused Ruff passed.
+- Focused Pyright passed.
+- Full pytest passed: `443 passed, 1 warning`.
+- Full Ruff, full format check, full Pyright, yamllint, and whitespace checks
+  passed.
+- The selector can now report and ablate segment allocation length-support
+  independently from the geometry tie-breaker.
+
+Extra discoveries:
+- Checkpoint 5.19 remains the current best strict scientific artifact; this
+  checkpoint did not generate new gate evidence.
+- Prior artifacts before Checkpoint 5.20 record the length-support allocation
+  through `segment_length_support_weight` in selector traces, but not through
+  the new config/report field. Treat old and new artifact schemas carefully
+  when comparing reports.
+
+Decision:
+- Continue from Checkpoint 5.19/5.20 with no success claim.
+- The next scientific checkpoint should use the separated knob if it tests
+  allocation length support, and should report
+  `MLQDS_without_segment_length_support_allocation`.
+
+## Checkpoint 5.21 — Separated Allocation-Length-Support Strict Replay
+
+Status: failed
+
+Goal:
+- Verify that the separated allocation-length-support control preserves the
+  current best strict-cell behavior while adding a clean ablation for segment
+  allocation length support.
+
+Changes:
+- No code changes after Checkpoint 5.20.
+- Generated one strict synthetic/debug single-cell artifact with
+  `learned_segment_allocation_length_support_weight=0.12` and
+  `learned_segment_geometry_gain_weight=0.12`.
+- Tightened the guide's pre-gate benchmark snapshot rule: occasional realistic
+  benchmark snapshots are scarce diagnostics only, not acceptance evidence,
+  threshold input, checkpoint selection input, or a tuning loop.
+
+Tests:
+- Artifact gate extraction with `jq`.
+- `git diff --check -- Range_QDS/docs/query-driven-rework-guide.md Range_QDS/docs/query-driven-rework-progress.md`
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint07_separated_allocation_length_support_ablation_strict_probe_c10_r05`
+- command: `uv run --group dev -- python -m orchestration.run_ais_experiment ...`
+  with `n_ships=384`, `n_points=256`, `synthetic_route_families=4`,
+  `seed=2324`, `train_fraction=0.34`, `val_fraction=0.33`,
+  `n_queries=48`, `max_queries=256`, `query_coverage=0.10`,
+  `range_train_workload_replicates=4`, `compression_ratio=0.05`,
+  `query_prior_grid_bins=128`, `query_prior_smoothing_passes=0`,
+  `learned_segment_allocation_length_support_weight=0.12`,
+  `learned_segment_geometry_gain_weight=0.12`,
+  `learned_segment_score_blend_weight=0.05`, and
+  `learned_segment_length_repair_fraction=0.6`.
+
+Key results:
+- MLQDS QueryUsefulV1: `0.17183721530965693`
+- uniform QueryUsefulV1: `0.14223795796380634`
+- Douglas-Peucker QueryUsefulV1: `0.16362459837911367`
+- length preservation: `0.7941408411227088`
+- gates passed: workload stability, support overlap, predictability,
+  prior-predictive alignment, target diffusion, workload signature
+- gates failed: learning causality and global sanity
+- final claim summary status: `candidate_blocked_by_required_gates`
+
+Gate diagnosis:
+- Global sanity failed only on length preservation: `0.7941408411227088`
+  versus required `0.80`; SED ratio passed at `0.9173337766436357`.
+- Learning causality failed on shuffled scores, shuffled prior fields, and
+  no-query-prior features.
+- Shuffled-score delta was `0.008387859610263837` versus required
+  `0.017759554407510352`.
+- Shuffled-prior and no-query-prior deltas were both
+  `0.002743017030572781` versus required `0.005`.
+- `MLQDS_without_segment_length_support_allocation` delta was only
+  `0.00012394275871965843`, below the `0.005` material threshold.
+- `MLQDS_without_geometry_tie_breaker` delta was `0.009818654458909754`.
+
+Extra discoveries:
+- Primary behavior was exactly unchanged from Checkpoint 5.19: same MLQDS,
+  uniform, Douglas-Peucker, length, shuffled-score delta, shuffled-prior delta,
+  no-query-prior delta, and learned-controlled slot fraction.
+- Segment allocation length support is not a material source of the current
+  win. It explains only the tiny Checkpoint 5.19 gain over Checkpoint 5.18.
+- Same-allocation length-only point selection still cannot clear the length
+  gate: it reaches only `0.7597755220341236`.
+- The score-protected length frontier still only clears `0.80` while protecting
+  about `10%` of budget for top learned-score points. At the `25%`
+  learned-slot materiality floor, length is still only `0.7911049677462703`.
+- Runtime remains a risk: freeze-retained-masks took about `212.81s`, and the
+  full probe took about `380.40s`.
+
+Decision:
+- Do not run the full grid.
+- Do not call this a success despite the current best strict-cell score.
+- Do not keep nudging allocation length support as the next main path. The next
+  scientific checkpoint needs a mechanism that makes prior/score causality
+  material or changes the length/global trade-off more directly.
+
+## Checkpoint 5.22 — Allocation-Weight Semantics Fix
+
+Status: completed
+
+Goal:
+- Fix selector allocation semantics so the separated query-free segment
+  length-support control is applied consistently in diagnostic and ablation
+  cases.
+
+Changes:
+- Fixed `_segment_allocation_weights` so length support is still used when
+  learned segment scores are flat. Previously flat segment scores returned
+  uniform weights before length support was considered.
+- Changed fairness preallocation to choose each trajectory's first learned
+  segment by the blended allocation weight, with raw score and start index only
+  as tie-breakers.
+- Added `segment_allocation_weight` and `segment_allocation_weight_rank` to
+  per-segment source-attribution diagnostics.
+- Added focused unit coverage for flat-score length-support allocation,
+  fairness preallocation using blended weights, and the new attribution fields.
+
+Tests:
+- `uv run --group dev -- ruff format Range_QDS/simplification/learned_segment_budget/allocation.py Range_QDS/simplification/learned_segment_budget/diagnostics.py Range_QDS/tests/unit/simplification/test_learned_segment_budget.py`
+- `uv run --group dev -- ruff check Range_QDS/simplification/learned_segment_budget/allocation.py Range_QDS/simplification/learned_segment_budget/diagnostics.py Range_QDS/tests/unit/simplification/test_learned_segment_budget.py`
+- `uv run --group dev -- pyright Range_QDS/simplification/learned_segment_budget Range_QDS/tests/unit/simplification/test_learned_segment_budget.py`
+- `uv run --group dev -- pytest Range_QDS/tests/unit/simplification/test_learned_segment_budget.py -q`
+- `uv run --group dev -- pytest Range_QDS/tests/property/test_learned_segment_selector_properties.py Range_QDS/tests/unit/orchestration/test_retained_masks.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py -q`
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was a selector implementation
+  correctness checkpoint.
+
+Key results:
+- Focused Ruff passed.
+- Focused Pyright passed: `0 errors, 0 warnings, 0 informations`.
+- Focused selector pytest passed: `9 passed`.
+- Broader selector/orchestration pytest passed: `100 passed`.
+
+Extra discoveries:
+- Checkpoint 5.21 remains the best strict historical artifact, but it predates
+  this allocation-weight fix. It should not be treated as exact evidence for
+  the current selector implementation.
+- This bug matters most for neutral segment-score ablations and support-only or
+  flat-score diagnostics. It may also alter fairness preallocation when
+  allocation length support disagrees with raw segment score.
+
+Decision:
+- Continue with no success claim.
+- The next scientific checkpoint should strict-replay the current best single
+  cell with this allocation fix before further tuning or benchmark snapshots.
+
+## Checkpoint 5.23 — Allocation-Weight Fix Strict Replay
+
+Status: failed
+
+Goal:
+- Replay the current best strict single cell after the Checkpoint 5.22
+  allocation-weight semantics fix and reset the current-code evidence boundary.
+
+Changes:
+- No code changes after Checkpoint 5.22.
+- Generated one strict synthetic/debug single-cell artifact with the fixed
+  allocation-weight semantics.
+
+Tests:
+- Artifact gate extraction with `jq`.
+- No full final grid was run.
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint08_allocation_weight_semantics_fix_strict_replay_c10_r05`
+- command: `uv run --group dev -- python -m orchestration.run_ais_experiment ...`
+  with `n_ships=384`, `n_points=256`, `synthetic_route_families=4`,
+  `seed=2324`, `train_fraction=0.34`, `val_fraction=0.33`,
+  `n_queries=48`, `max_queries=256`, `query_coverage=0.10`,
+  `range_train_workload_replicates=4`, `compression_ratio=0.05`,
+  `query_prior_grid_bins=128`, `query_prior_smoothing_passes=0`,
+  `learned_segment_allocation_length_support_weight=0.12`,
+  `learned_segment_geometry_gain_weight=0.12`,
+  `learned_segment_score_blend_weight=0.05`, and
+  `learned_segment_length_repair_fraction=0.6`.
+
+Key results:
+- MLQDS QueryUsefulV1: `0.17183721530965693`
+- uniform QueryUsefulV1: `0.14223795796380634`
+- Douglas-Peucker QueryUsefulV1: `0.16362459837911367`
+- length preservation: `0.7941408411227088`
+- gates passed: workload stability, support overlap, predictability,
+  prior-predictive alignment, target diffusion, workload signature
+- gates failed: learning causality and global sanity
+- final claim summary status: `candidate_blocked_by_required_gates`
+
+Gate diagnosis:
+- Global sanity failed only on length preservation: `0.7941408411227088`
+  versus required `0.80`; SED ratio passed at `0.9173337766436357`.
+- Learning causality failed on shuffled scores, shuffled prior fields, and
+  no-query-prior features.
+- Shuffled-score delta was `0.008856345116771192` versus required
+  `0.017759554407510352`.
+- Shuffled-prior and no-query-prior deltas were both
+  `0.002743017030572781` versus required `0.005`.
+- `MLQDS_without_segment_length_support_allocation` delta stayed
+  `0.00012394275871965843`, below the `0.005` material threshold.
+- `MLQDS_without_geometry_tie_breaker` delta stayed `0.009818654458909754`.
+
+Extra discoveries:
+- Primary behavior was unchanged from Checkpoint 5.21: same MLQDS, uniform,
+  Douglas-Peucker, length, shuffled-prior/no-query-prior deltas, allocation
+  length-support delta, and learned-controlled slot fraction.
+- The allocation-weight fix slightly improved some causality diagnostics:
+  shuffled-score delta `+0.00046848550650735454`, segment-budget-head delta
+  `+0.0028946836748793836`, and prior-only delta
+  `+0.0007186064333346565`.
+- These improvements are not enough to clear learning causality. The
+  shuffled-score delta is still only about half of the required threshold, and
+  query-prior materiality is unchanged.
+- Same-allocation length-only point selection still cannot clear the length
+  gate: it reaches only `0.7597755220341236`.
+- The score-protected length frontier is unchanged: length clears `0.80` only
+  while protecting about `10%` of budget for top learned-score points; at the
+  `25%` learned-slot materiality floor, length is `0.7911049677462703`.
+- Runtime remains a risk: freeze-retained-masks took `216.06s`, and the full
+  probe took `391.47s`.
+
+Decision:
+- Do not run the full grid.
+- Do not call this a success despite preserving the current best strict-cell
+  score.
+- The next scientific checkpoint should not keep tuning allocation length
+  support. It should target query-prior materiality or a segment-allocation
+  mechanism that changes the learned-control-vs-length trade-off.
+
+## Checkpoint 5.24 — Pre-Gate Benchmark Snapshot Policy
+
+Status: completed
+
+Goal:
+- Add the current-best benchmark snapshot note to the guide without weakening
+  the evidence protocol.
+
+Changes:
+- Clarified that occasional real-scale benchmark snapshots may be useful for
+  the current best candidate/config when small probes might hide runtime,
+  workload-count, or scale-sensitive quality failures.
+- Kept snapshots diagnostic-only: they may inform prioritization and capacity
+  planning, but not final evidence, threshold changes, checkpoint selection,
+  selector tuning, or final comparison tables without separate strict
+  single-cell diagnosis.
+
+Tests:
+- Documentation-only change; no code tests run.
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run.
+
+Key results:
+- MLQDS QueryUsefulV1: not applicable
+- uniform QueryUsefulV1: not applicable
+- Douglas-Peucker QueryUsefulV1: not applicable
+- gates passed: not applicable
+- gates failed: not applicable
+
+Extra discoveries:
+- The guide already had a pre-gate snapshot section. The missing part was
+  explicit current-best candidate/config wording and a stronger warning against
+  feeding snapshot results back into tuning or final reporting.
+
+Decision:
+- Continue with query-prior materiality diagnosis before further scientific
+  probes.
+
+## Checkpoint 5.25 — Model-Prior Materiality Diagnostics
+
+Status: completed
+
+Goal:
+- Make prior-field causality diagnostics distinguish raw sampled prior changes
+  from the actual v2 model-input and normalized prior-channel changes.
+
+Changes:
+- Added `model_prior_feature_sensitivity` diagnostics for query-prior
+  ablations. It reports:
+  - raw model-input prior-channel deltas after the feature builder has disabled
+    v2-excluded fields such as `route_density_prior`
+  - normalized model-input prior-channel deltas after the persisted scaler
+  - scaler prior-channel ranges and disabled prior-field names
+- Attached the new diagnostics to final retained-mask prior ablations,
+  checkpoint-selection prior ablations, and per-prior-channel ablations.
+- Tightened `prior_sample_gate_failures` so future reports can flag cases where
+  shuffled raw prior fields change but model inputs or normalized model inputs
+  do not.
+- Added benchmark-row fields for model-input and normalized prior deltas so
+  report tables do not hide the materiality path behind nested JSON.
+
+Tests:
+- `uv run --group dev -- ruff format Range_QDS/orchestration/causality.py Range_QDS/orchestration/retained_mask_ablations.py Range_QDS/orchestration/selection_causality.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
+- `uv run --group dev -- ruff check Range_QDS/orchestration/causality.py Range_QDS/orchestration/retained_mask_ablations.py Range_QDS/orchestration/selection_causality.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
+- `uv run --group dev -- pyright Range_QDS/orchestration/causality.py Range_QDS/orchestration/retained_mask_ablations.py Range_QDS/orchestration/selection_causality.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
+- `uv run --group dev -- pytest Range_QDS/tests/unit/orchestration/test_query_driven_rework.py -q`
+- `uv run --group dev -- ruff check Range_QDS/benchmarking/reporting/row_fields.py Range_QDS/tests/unit/benchmarking/test_benchmark_runner.py Range_QDS/tests/regression/test_benchmark_report_regression.py`
+- `uv run --group dev -- pyright Range_QDS/benchmarking/reporting/row_fields.py Range_QDS/tests/unit/benchmarking/test_benchmark_runner.py Range_QDS/tests/regression/test_benchmark_report_regression.py`
+- `uv run --group dev -- pytest Range_QDS/tests/regression/test_benchmark_report_regression.py::test_benchmark_row_field_set_regression Range_QDS/tests/unit/benchmarking/test_benchmark_runner.py -q`
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was a diagnostics/reporting
+  checkpoint.
+
+Key results:
+- Focused orchestration pytest passed: `96 passed`.
+- Focused benchmark/reporting pytest passed: `38 passed`.
+- Focused Ruff and Pyright passed.
+- MLQDS QueryUsefulV1: not applicable
+- uniform QueryUsefulV1: not applicable
+- Douglas-Peucker QueryUsefulV1: not applicable
+- gates passed: not applicable
+- gates failed: not applicable
+
+Extra discoveries:
+- The previous prior-sensitivity diagnostics could prove raw prior fields were
+  sampled and changed, but not whether those changes survived the v2 feature
+  builder and scaler. That made the Checkpoint 5.23 query-prior materiality
+  failure underdiagnosed.
+- `route_density_prior` can be nonzero in raw sampled priors while correctly
+  contributing zero model-input delta because the current v2 candidate disables
+  that channel. Future reports now expose that distinction.
+
+Decision:
+- Continue with no success claim.
+- The next scientific checkpoint should strict-replay the current best single
+  cell only if the new diagnostics are needed in an artifact; otherwise continue
+  directly to a narrow prior/materiality or segment-allocation mechanism.
+
+## Checkpoint 5.26 — Model-Prior Materiality Strict Replay
+
+Status: failed
+
+Goal:
+- Replay the current best strict single cell after Checkpoint 5.25 so the new
+  model-prior materiality diagnostics are present in a scientific artifact.
+
+Changes:
+- No code changes after Checkpoint 5.25.
+- Generated one strict synthetic/debug single-cell artifact with the same
+  current-candidate config as Checkpoint 5.23.
+
+Tests:
+- Artifact gate and diagnostic extraction with `jq`.
+- No full final grid was run.
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint09_model_prior_materiality_strict_replay_c10_r05`
+- command: `uv run --group dev -- python -m orchestration.run_ais_experiment ...`
+  with `n_ships=384`, `n_points=256`, `synthetic_route_families=4`,
+  `seed=2324`, `train_fraction=0.34`, `val_fraction=0.33`,
+  `n_queries=48`, `max_queries=256`, `query_coverage=0.10`,
+  `range_train_workload_replicates=4`, `compression_ratio=0.05`,
+  `query_prior_grid_bins=128`, `query_prior_smoothing_passes=0`,
+  `learned_segment_allocation_length_support_weight=0.12`,
+  `learned_segment_geometry_gain_weight=0.12`,
+  `learned_segment_score_blend_weight=0.05`, and
+  `learned_segment_length_repair_fraction=0.6`.
+
+Key results:
+- MLQDS QueryUsefulV1: `0.17183721530965693`
+- uniform QueryUsefulV1: `0.14223795796380634`
+- Douglas-Peucker QueryUsefulV1: `0.16362459837911367`
+- length preservation: `0.7941408411227088`
+- gates passed: workload stability, support overlap, predictability,
+  prior-predictive alignment, target diffusion, workload signature
+- gates failed: learning causality and global sanity
+- final claim summary status: `candidate_blocked_by_required_gates`
+
+Gate diagnosis:
+- Learning causality failed on shuffled scores, shuffled prior fields, and
+  no-query-prior features.
+- Shuffled-score delta was `0.008856345116771192` versus required
+  `0.017759554407510352`.
+- Shuffled-prior and no-query-prior deltas were both
+  `0.002743017030572781` versus required `0.005`.
+- Global sanity failed only on length preservation: `0.7941408411227088`
+  versus required `0.80`; SED ratio passed at `0.9173337766436357`.
+
+Prior-materiality diagnosis:
+- Raw no-prior ablation changed sampled prior fields strongly:
+  mean absolute feature delta `0.13527387380599976`.
+- After v2 feature building, the active model-input prior delta was much
+  smaller but still real: no-prior model-input and normalized deltas were both
+  `0.012836813926696777`.
+- Shuffled-prior model-input and normalized deltas were both
+  `0.012831311672925949`.
+- Selector-score movement remained tiny despite real model-input movement:
+  no-prior selector-score mean absolute delta `0.0005342491785995662`, raw
+  prediction mean absolute delta `0.00037622981471940875`, retained-mask
+  Jaccard `0.9785969084423306`, and top-k Jaccard
+  `0.9916217833632556`.
+- Channel ablations show the useful model-input prior materiality is mostly
+  `behavior_utility_prior`: channel delta `0.004247008290286597`, model-input
+  mean absolute delta `0.008451469242572784`, and retained-mask difference
+  `32` points.
+- Spatial query hit contributes weakly: channel delta
+  `0.0009345698981791939` and retained-mask difference `4` points.
+- Spatiotemporal query hit, boundary, crossing, and route-density channels are
+  effectively non-material in the current trained model. `route_density_prior`
+  is correctly zero at the model-input level because v2 disables it.
+
+Extra discoveries:
+- The prior materiality blocker is not caused by raw prior sampling failure,
+  v2 feature-builder dropout of active channels, or scaler normalization. The
+  active prior signals reach the model input.
+- The model/selector suppresses active prior input changes before they become
+  retained-mask decisions. This is now the sharper blocker than generic prior
+  support.
+- `behavior_utility_prior` is the only near-material prior channel in the
+  current trained model. Future prior-materiality work should start there rather
+  than treating all prior channels as equally weak.
+- Runtime remains high but stable: selection-causality diagnostics took
+  `56.68s`, freeze-retained-masks took `209.88s`, and the full probe took
+  `378.64s`.
+
+Decision:
+- Do not run the full grid.
+- Do not call this a success; primary behavior is unchanged from Checkpoint
+  5.23 and required gates still fail.
+- Next checkpoint should target model/selector mechanisms that turn
+  `behavior_utility_prior` and score perturbations into material retained-mask
+  changes without weakening the length gate.
+
+## Checkpoint 5.27 — Behavior-Head Rank Loss
+
+Status: completed
+
+Goal:
+- Add a narrow training-only pressure that makes the
+  `conditional_behavior_utility` head preserve useful ordering among high-value
+  behavior points, because Checkpoint 5.26 showed `behavior_utility_prior` is
+  the only near-material prior channel but retained-mask movement is still too
+  weak.
+
+Changes:
+- Added `query_useful_behavior_rank_loss_weight` to model config, CLI parsing,
+  run config plumbing, command logging, config round-trip coverage, and training
+  target diagnostics.
+- Added `_behavior_head_rank_loss`, a listwise auxiliary loss over valid
+  `conditional_behavior_utility` targets. It compares top behavior targets
+  against lower targets with a minimum target gap and penalizes reversed logits.
+- Included the behavior-rank term in `_factorized_query_useful_loss` with a
+  default weight of `0.15`.
+- Updated the guide's active QueryUsefulV1 head list to include
+  `path_length_support_target` and documented the behavior-rank default as
+  diagnostic until strict replay evidence exists.
+
+Tests:
+- `uv run --group dev -- ruff format Range_QDS/training/training_epoch.py Range_QDS/config/experiment_config.py Range_QDS/training/train_model.py Range_QDS/orchestration/experiment_cli.py Range_QDS/orchestration/run_ais_experiment.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/unit/runtime/test_torch_runtime_controls.py`
+- `uv run --group dev -- ruff check Range_QDS/training/training_epoch.py Range_QDS/config/experiment_config.py Range_QDS/training/train_model.py Range_QDS/orchestration/experiment_cli.py Range_QDS/orchestration/run_ais_experiment.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/unit/runtime/test_torch_runtime_controls.py`
+- `uv run --group dev -- pyright Range_QDS/training/training_epoch.py Range_QDS/config/experiment_config.py Range_QDS/training/train_model.py Range_QDS/orchestration/experiment_cli.py Range_QDS/orchestration/run_ais_experiment.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/unit/runtime/test_torch_runtime_controls.py`
+- `uv run --group dev -- pytest Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/unit/runtime/test_torch_runtime_controls.py -q`
+- `uv run --group dev -- pytest Range_QDS/tests/unit/training/test_training_does_not_collapse.py -q`
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was a training-loss implementation
+  checkpoint.
+
+Key results:
+- Focused Ruff passed.
+- Focused Pyright passed: `0 errors, 0 warnings, 0 informations`.
+- Focused orchestration/runtime pytest passed: `119 passed`.
+- Adjacent training pytest passed: `39 passed, 1 warning`.
+- MLQDS QueryUsefulV1: not applicable
+- uniform QueryUsefulV1: not applicable
+- Douglas-Peucker QueryUsefulV1: not applicable
+- gates passed: not applicable
+- gates failed: not applicable
+
+Extra discoveries:
+- The active guide was stale: it listed five QueryUsefulV1 heads while the
+  current schema has six, including `path_length_support_target`.
+- The implementation initially had an incomplete config path: the CLI/run path
+  referenced `query_useful_behavior_rank_loss_weight`, but
+  `build_experiment_config` did not accept or store it. That would have broken
+  command-line use of the new control.
+- This change does not prove better learning. It only creates an auditable
+  mechanism for the next strict replay to test whether behavior-prior signal can
+  become material in retained masks.
+
+Decision:
+- Do not run the full grid.
+- Do not call this a success; no retained-mask artifact exists for this change.
+- Next checkpoint should run a strict single-cell replay of the current best
+  config with the behavior-rank loss enabled and diagnose learning causality,
+  behavior-head fit, prior materiality, and global sanity before any further
+  tuning.
+
+## Checkpoint 5.28 — Behavior-Rank Strict Replay
+
+Status: failed
+
+Goal:
+- Test whether `query_useful_behavior_rank_loss_weight=0.15` turns the
+  near-material `behavior_utility_prior` channel into material retained-mask
+  causality while preserving the current strict-cell win and length behavior.
+
+Changes:
+- Generated one strict synthetic/debug single-cell artifact with the same
+  current-candidate config as Checkpoint 5.26, except behavior-rank loss was
+  explicitly enabled at `0.15`.
+- No full final grid was run.
+
+Tests:
+- Artifact gate and diagnostic extraction with `jq`.
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint10_behavior_rank_loss_strict_replay_c10_r05`
+- command: `uv run --group dev -- python -m orchestration.run_ais_experiment ...`
+  with `n_ships=384`, `n_points=256`, `synthetic_route_families=4`,
+  `seed=2324`, `train_fraction=0.34`, `val_fraction=0.33`,
+  `n_queries=48`, `max_queries=256`, `query_coverage=0.10`,
+  `range_train_workload_replicates=4`, `compression_ratio=0.05`,
+  `query_prior_grid_bins=128`, `query_prior_smoothing_passes=0`,
+  `query_useful_behavior_rank_loss_weight=0.15`,
+  `learned_segment_allocation_length_support_weight=0.12`,
+  `learned_segment_geometry_gain_weight=0.12`,
+  `learned_segment_score_blend_weight=0.05`, and
+  `learned_segment_length_repair_fraction=0.6`.
+
+Key results:
+- MLQDS QueryUsefulV1: `0.1662931067947708`
+- uniform QueryUsefulV1: `0.14223795796380634`
+- Douglas-Peucker QueryUsefulV1: `0.16362459837911367`
+- length preservation: `0.7939681743351743`
+- gates passed: workload stability, support overlap, predictability,
+  prior-predictive alignment, target diffusion, workload signature
+- gates failed: learning causality and global sanity
+- final claim summary status: `candidate_blocked_by_required_gates`
+
+Gate diagnosis:
+- Learning causality failed on shuffled scores, shuffled prior fields,
+  no-query-prior features, and no-behavior-head.
+- Shuffled-score delta collapsed to `0.00005168542757363892` versus required
+  `0.014433089298578677`.
+- Shuffled-prior and no-query-prior deltas were both
+  `0.0011307408759458626` versus required `0.005`.
+- No-behavior-head delta was `0.004538679516121635`, just below the `0.005`
+  material threshold.
+- Global sanity failed only on length preservation: `0.7939681743351743`
+  versus required `0.80`; SED ratio passed at `0.9203558450631464`.
+
+Behavior and prior diagnosis:
+- Behavior-head train fit improved only weakly versus Checkpoint 5.26: Kendall
+  tau moved from `-0.01658122797936113` to `-0.0030223587756942243`, and
+  top-5 mass recall moved from `0.2041450153552849` to
+  `0.21870494090181075`.
+- The behavior head stayed essentially unlearned: prediction std was only
+  `0.019670329988002777` against target std `0.28323090076446533`.
+- Active model-input prior deltas were still present:
+  no-prior model-input delta `0.012836813926696777` and behavior-channel
+  model-input delta `0.008451469242572784`.
+- Selector-score movement stayed tiny: no-prior selector-score mean abs delta
+  `0.0005560250720009208`; behavior-channel selector-score mean abs delta
+  `0.0005180706502869725`.
+- `behavior_utility_prior` was again the only meaningfully active prior
+  channel, but its QueryUsefulV1 delta was only `0.0011291917375584049`.
+
+Extra discoveries:
+- Behavior-rank pressure did not solve prior materiality. It slightly improved
+  a head-fit diagnostic while making the actual retained-mask causality much
+  worse.
+- The trained score became almost indistinguishable from shuffled scores under
+  the required delta gate, so this is not a candidate even though MLQDS still
+  barely beats Douglas-Peucker.
+- The score-protected length frontier stayed unfavorable: protecting `25%` of
+  budget for top learned-score points gives length only
+  `0.7909692518906397`, below the `0.80` gate.
+- Runtime remained high but stable: selection-causality diagnostics took about
+  `57.97s`, freeze-retained-masks took about `215.07s`, and the full probe took
+  `387.04s`.
+
+Decision:
+- Reject behavior-rank loss weight `0.15` as a default.
+- Do not run the full grid.
+- Do not call this a success; it regresses the current best strict candidate.
+- Keep the behavior-rank mechanism only as an explicit diagnostic control unless
+  a future checkpoint has a stronger mechanism-level hypothesis.
+
+## Checkpoint 5.29 — Disable Rejected Behavior-Rank Default
+
+Status: completed
+
+Goal:
+- Keep the codebase clean after the negative strict replay by preventing the
+  rejected behavior-rank setting from becoming the default current candidate.
+
+Changes:
+- Changed `query_useful_behavior_rank_loss_weight` defaults from `0.15` to
+  `0.0` in `ModelConfig`, `build_experiment_config`, CLI parsing, training
+  fallback defaults, and training target diagnostics.
+- Kept explicit CLI/config support for behavior-rank loss so Checkpoint 5.28
+  remains reproducible and future diagnostics can opt in deliberately.
+- Updated the guide to mark behavior-rank weight `0.15` as rejected by strict
+  replay and to recommend default `0.0`.
+- Added runtime/config assertions that direct config and CLI defaults keep
+  behavior-rank disabled.
+
+Tests:
+- `uv run --group dev -- ruff format Range_QDS/training/training_epoch.py Range_QDS/config/experiment_config.py Range_QDS/training/train_model.py Range_QDS/orchestration/experiment_cli.py Range_QDS/tests/unit/runtime/test_torch_runtime_controls.py`
+- `uv run --group dev -- ruff check Range_QDS/training/training_epoch.py Range_QDS/config/experiment_config.py Range_QDS/training/train_model.py Range_QDS/orchestration/experiment_cli.py Range_QDS/orchestration/run_ais_experiment.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/unit/runtime/test_torch_runtime_controls.py`
+- `uv run --group dev -- pyright Range_QDS/training/training_epoch.py Range_QDS/config/experiment_config.py Range_QDS/training/train_model.py Range_QDS/orchestration/experiment_cli.py Range_QDS/orchestration/run_ais_experiment.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/unit/runtime/test_torch_runtime_controls.py`
+- `uv run --group dev -- pytest Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/unit/runtime/test_torch_runtime_controls.py Range_QDS/tests/unit/training/test_training_does_not_collapse.py -q`
+- `git diff --check`
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was cleanup after a failed
+  scientific replay.
+
+Key results:
+- Focused Ruff passed.
+- Focused Pyright passed: `0 errors, 0 warnings, 0 informations`.
+- Focused orchestration/runtime/training pytest passed: `158 passed, 1 warning`.
+- MLQDS QueryUsefulV1: not applicable
+- uniform QueryUsefulV1: not applicable
+- Douglas-Peucker QueryUsefulV1: not applicable
+- gates passed: not applicable
+- gates failed: not applicable
+
+Extra discoveries:
+- Leaving a failed training loss enabled by default would have silently moved
+  the current code candidate away from the best strict artifact. That would make
+  later comparisons misleading.
+
+Decision:
+- Treat Checkpoint 5.26 as the current-best strict evidence boundary.
+- Treat Checkpoint 5.28 as a rejected-path artifact.
+- Next scientific checkpoint should not tune behavior-rank weight. It should
+  target a selector/model mechanism that materially changes prior or score
+  perturbations in retained masks without sacrificing the current baseline win
+  or length behavior.
+
+## Checkpoint 5.30 — Configurable Segment Allocation Weight Floor
+
+Status: completed
+
+Goal:
+- Expose the learned-segment allocation weight floor as an explicit selector
+  control because the hard-coded `0.50` floor can make segment allocation nearly
+  uniform and suppress learned-score materiality diagnostics.
+
+Changes:
+- Added `learned_segment_allocation_weight_floor` to model config, CLI parsing,
+  run-command logging, MLQDS methods, validation scoring, inference replay,
+  retained-mask trace recomputation, retained-mask ablations, selection
+  causality, final summary, and benchmark-row reporting.
+- Kept the default at `0.50`, preserving current selector behavior unless a
+  future checkpoint explicitly opts into a lower floor.
+- Added `segment_allocation_weight_floor` to learned-segment selector traces so
+  artifacts show the exact allocation contrast setting used.
+- Added focused selector coverage proving a lower floor concentrates allocation
+  on the higher-scored segment, and config/CLI/reporting coverage for the new
+  field.
+- Updated the guide selector defaults and marked lower-floor runs as diagnostic
+  until strict replay proves learning causality and global sanity.
+
+Tests:
+- `uv run --group dev -- ruff format` on touched selector/config/orchestration/
+  reporting/test paths
+- `uv run --group dev -- ruff check` on touched selector/config/orchestration/
+  reporting/test paths
+- `uv run --group dev -- pyright` on touched selector/config/orchestration/
+  reporting/test paths
+- `uv run --group dev -- pytest Range_QDS/tests/unit/simplification/test_learned_segment_budget.py Range_QDS/tests/unit/runtime/test_torch_runtime_controls.py Range_QDS/tests/unit/benchmarking/test_benchmark_runner.py Range_QDS/tests/regression/test_benchmark_report_regression.py::test_benchmark_row_field_set_regression -q`
+- `git diff --check` on touched paths
+
+Experiment artifact:
+- path: not generated
+- command: no scientific probe was run; this was default-preserving selector
+  plumbing and diagnostic visibility.
+
+Key results:
+- Focused Ruff passed.
+- Focused Pyright passed: `0 errors, 0 warnings, 0 informations`.
+- Focused pytest passed: `70 passed`.
+- MLQDS QueryUsefulV1: not applicable
+- uniform QueryUsefulV1: not applicable
+- Douglas-Peucker QueryUsefulV1: not applicable
+- gates passed: not applicable
+- gates failed: not applicable
+
+Extra discoveries:
+- The previous hard-coded floor was invisible in run config, selector traces,
+  and benchmark rows. That made future lower-floor diagnostics impossible to
+  distinguish from default behavior by reading artifacts alone.
+- A lower floor is only a diagnostic for allocation contrast. It must not be
+  treated as learned success unless a strict replay clears learning causality
+  and global sanity with unchanged gates.
+
+Decision:
+- Continue from the Checkpoint 5.26 strict evidence boundary.
+- Next scientific checkpoint may test a lower allocation floor as a strict
+  single-cell diagnostic, but only after stating the expected gate movement and
+  keeping all current gates unchanged.
+
+## Checkpoint 5.31 — Lower Allocation-Floor Strict Replay
+
+Status: failed
+
+Goal:
+- Test whether reducing `learned_segment_allocation_weight_floor` from `0.50`
+  to `0.10` makes learned segment scores materially affect retained masks while
+  preserving workload health and global sanity.
+
+Changes:
+- Generated one corrected strict synthetic/debug single-cell artifact using the
+  current-best strict cell settings except for allocation floor `0.10`.
+- Tightened the guide's pre-gate benchmark-snapshot rule: representative slices
+  are the default, and pre-gate full-grid snapshots are exceptional
+  observational diagnostics only.
+- Removed one invalid point-value replay artifact generated before explicitly
+  carrying `--range_training_target_mode query_useful_v1_factorized`.
+
+Tests:
+- Artifact sanity with `jq`: confirmed QueryUsefulV1 primary metric,
+  factorized target mode, and allocation floor `0.10`.
+- Gate/component extraction with `jq`.
+- No full final grid was run.
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint11_allocation_floor010_query_useful_strict_replay_c10_r05`
+- command: current-best strict replay command with
+  `--learned_segment_allocation_weight_floor 0.10` and
+  `--range_training_target_mode query_useful_v1_factorized`
+
+Key results:
+- MLQDS QueryUsefulV1: `0.15366824272250135`
+- uniform QueryUsefulV1: `0.14223795796380634`
+- Douglas-Peucker QueryUsefulV1: `0.16362459837911367`
+- length preservation: `0.7833962145166923`
+- gates passed: workload stability, support overlap, predictability,
+  prior-predictive alignment, target diffusion, workload signature
+- gates failed: learning causality, global sanity
+- final status: `candidate_blocked_by_required_gates`
+
+Gate diagnosis:
+- Lowering the floor increased retained-mask movement, but the movement was not
+  useful. Shuffled-score symdiff was `1906`, no-segment-budget-head symdiff was
+  `1380`, and prior-only symdiff was `1696`.
+- Learning causality failed by sign: shuffled-score delta
+  `-0.008434220434683226` versus required `0.006858170855217005`; untrained
+  delta `-0.0013016596544116188`; shuffled-prior and no-query-prior deltas both
+  `-0.00025329797716061586`; no-behavior-head delta
+  `-0.005274399668764362`; no-segment-budget-head delta
+  `-0.0036255370451678814`; prior-only delta `-0.005605166103091003`.
+- Global sanity failed on length. Endpoint sanity and SED ratio passed.
+- Allocation became less uniform: segments with learned budget dropped to
+  `768`, segment-budget entropy normalized was `0.9731191007713681`, and the
+  learned-controlled slot fraction stayed `0.33834134615384615`.
+
+Extra discoveries:
+- The first replay command was invalid because it omitted
+  `--range_training_target_mode query_useful_v1_factorized`; its artifact was
+  removed. Replays must explicitly carry target mode.
+- Lowering the allocation floor is not a solution by itself. It gives the score
+  more authority, but the current score/segment-value path sends budget into
+  worse segments.
+- Same-allocation length-only point selection fell to
+  `0.6968862694377511`, so the lower-floor allocations were length-hostile
+  before within-segment point choice could recover them.
+- Prior perturbations still barely matter at selector level: model-input prior
+  delta is real at about `0.0128368`, but selector-score delta is about
+  `0.000534` and retained-mask Jaccard stays `0.9785969084423306`.
+
+Decision:
+- Reject `learned_segment_allocation_weight_floor=0.10` as a standalone
+  candidate.
+- Keep the default allocation floor at `0.50`.
+- Do not run the full grid.
+- Next scientific work should not lower allocation floor further unless paired
+  with a mechanism that makes segment value length-compatible and query-useful.

@@ -486,6 +486,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Listwise segment-level loss weight inside the QueryUsefulV1 auxiliary loss.",
     )
     parser.add_argument(
+        "--query_useful_behavior_rank_loss_weight",
+        type=float,
+        default=0.0,
+        help=(
+            "Optional listwise behavior-head ranking loss weight inside the QueryUsefulV1 "
+            "auxiliary loss. Default 0.0 keeps the rejected Checkpoint 5.28 behavior-rank "
+            "candidate disabled unless explicitly requested."
+        ),
+    )
+    parser.add_argument(
         "--temporal_distribution_loss_weight",
         type=float,
         default=0.0,
@@ -758,7 +768,28 @@ def build_parser() -> argparse.ArgumentParser:
         default=0.12,
         help=(
             "Geometry-gain tie-breaker weight for learned_segment_budget_v1. "
-            "This is query-free selector structure and is reported for causality audits."
+            "This is query-free selector structure for within-segment point choice "
+            "and is reported for causality audits."
+        ),
+    )
+    parser.add_argument(
+        "--learned_segment_allocation_length_support_weight",
+        type=float,
+        default=0.12,
+        help=(
+            "Query-free path-length support blend weight for learned_segment_budget_v1 "
+            "segment allocation. This is separate from the within-segment "
+            "geometry-gain tie-breaker."
+        ),
+    )
+    parser.add_argument(
+        "--learned_segment_allocation_weight_floor",
+        type=float,
+        default=0.50,
+        help=(
+            "Base positive floor added to normalized learned_segment_budget_v1 "
+            "segment allocation weights. Lower values increase score contrast; "
+            "the default preserves current selector behavior."
         ),
     )
     parser.add_argument(

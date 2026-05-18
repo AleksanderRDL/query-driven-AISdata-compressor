@@ -41,11 +41,13 @@ def _segment_rows(
     boundaries: list[tuple[int, int]],
     segment_size: int,
     segment_scores: torch.Tensor | None = None,
+    points: torch.Tensor | None = None,
 ) -> list[dict[str, Any]]:
     """Return candidate segment rows with predicted value."""
     rows: list[dict[str, Any]] = []
     size = max(1, int(segment_size))
     segment_values = scores if segment_scores is None else segment_scores.to(device=scores.device)
+    points_cpu = points.detach().cpu().float() if points is not None else None
     for trajectory_id, (start, end) in enumerate(boundaries):
         for seg_start in range(int(start), int(end), size):
             seg_end = min(int(end), seg_start + size)
@@ -69,6 +71,11 @@ def _segment_rows(
                     torch.topk(local_segment, k=head_top_count).values.mean().item()
                 )
                 segment_score_source = "segment_budget_head_top20_mean"
+            length_support_score = (
+                _segment_path_length_support(points_cpu[seg_start:seg_end])
+                if points_cpu is not None
+                else 0.0
+            )
             rows.append(
                 {
                     "segment_index": len(rows),
@@ -77,10 +84,30 @@ def _segment_rows(
                     "end": int(seg_end),
                     "score": segment_score,
                     "score_source": segment_score_source,
+                    "length_support_score": float(length_support_score),
                     "length": int(seg_end - seg_start),
                 }
             )
     return rows
+
+
+def _segment_path_length_support(segment_points: torch.Tensor) -> float:
+    """Return query-free segment curvature/excess length support."""
+    if int(segment_points.shape[0]) < 3 or int(segment_points.shape[-1]) < 3:
+        return 0.0
+    lats = segment_points[:, 1].float()
+    lons = segment_points[:, 2].float()
+    lat_mid = torch.deg2rad((lats[1:] + lats[:-1]) * 0.5)
+    dy = (lats[1:] - lats[:-1]) * 111.32
+    dx = (lons[1:] - lons[:-1]) * 111.32 * torch.clamp(torch.cos(lat_mid).abs(), min=0.10)
+    local_path = torch.sqrt(dx * dx + dy * dy).sum()
+    endpoint_lat_mid = torch.deg2rad((lats[-1] + lats[0]) * 0.5)
+    endpoint_dy = (lats[-1] - lats[0]) * 111.32
+    endpoint_dx = (
+        (lons[-1] - lons[0]) * 111.32 * torch.clamp(torch.cos(endpoint_lat_mid).abs(), min=0.10)
+    )
+    shortcut = torch.sqrt(endpoint_dx * endpoint_dx + endpoint_dy * endpoint_dy)
+    return float(torch.clamp(local_path - shortcut, min=0.0).item())
 
 
 def _segment_score_stats(segment_rows: list[dict[str, Any]]) -> dict[str, float | int]:
@@ -111,20 +138,49 @@ def _segment_score_stats(segment_rows: list[dict[str, Any]]) -> dict[str, float 
     }
 
 
-def _segment_allocation_weights(segment_rows: list[dict[str, Any]]) -> list[float]:
+def _normalized_row_values(segment_rows: list[dict[str, Any]], key: str) -> list[float]:
+    """Return normalized finite row values for one numeric row key."""
+    raw_values = [
+        float(row.get(key, 0.0)) if math.isfinite(float(row.get(key, 0.0))) else 0.0
+        for row in segment_rows
+    ]
+    if not raw_values:
+        return []
+    min_value = min(raw_values)
+    max_value = max(raw_values)
+    span = max_value - min_value
+    if span <= 1e-12:
+        return [0.0 for _row in segment_rows]
+    return [(value - min_value) / span for value in raw_values]
+
+
+def _segment_allocation_weights(
+    segment_rows: list[dict[str, Any]],
+    *,
+    segment_length_support_weight: float = 0.0,
+    segment_allocation_weight_floor: float = SEGMENT_ALLOCATION_WEIGHT_FLOOR,
+) -> list[float]:
     """Return positive row weights; equal scores degrade to uniform allocation."""
     if not segment_rows:
         return []
-    raw_scores = [
-        float(row.get("score", 0.0)) if math.isfinite(float(row.get("score", 0.0))) else 0.0
-        for row in segment_rows
-    ]
-    min_score = min(raw_scores)
-    max_score = max(raw_scores)
-    span = max_score - min_score
-    if span <= 1e-12:
+    score_values = _normalized_row_values(segment_rows, "score")
+    score_has_signal = max(score_values, default=0.0) > 1e-12
+    support_weight = max(0.0, min(1.0, float(segment_length_support_weight)))
+    support_has_signal = False
+    if support_weight > 0.0:
+        support_values = _normalized_row_values(segment_rows, "length_support_score")
+        support_has_signal = max(support_values, default=0.0) > 1e-12
+        if support_has_signal and score_has_signal:
+            score_values = [
+                (1.0 - support_weight) * score + support_weight * support
+                for score, support in zip(score_values, support_values, strict=True)
+            ]
+        elif support_has_signal:
+            score_values = [support_weight * support for support in support_values]
+    if not score_has_signal and not support_has_signal:
         return [1.0 for _row in segment_rows]
-    return [SEGMENT_ALLOCATION_WEIGHT_FLOOR + ((score - min_score) / span) for score in raw_scores]
+    weight_floor = max(0.0, float(segment_allocation_weight_floor))
+    return [weight_floor + value for value in score_values]
 
 
 def _allocate_segment_budgets(
@@ -136,6 +192,8 @@ def _allocate_segment_budgets(
     boundaries: list[tuple[int, int]],
     max_budget_share_per_trajectory: float,
     fairness_preallocation_enabled: bool = True,
+    segment_length_support_weight: float = 0.0,
+    segment_allocation_weight_floor: float = SEGMENT_ALLOCATION_WEIGHT_FLOOR,
 ) -> dict[int, int]:
     """Allocate learned slots with score-weighted diminishing returns."""
     if remaining <= 0 or not segment_rows:
@@ -150,25 +208,42 @@ def _allocate_segment_budgets(
         idx: int(retained[start:end].sum().item()) for idx, (start, end) in enumerate(boundaries)
     }
     segment_allocations: dict[int, int] = {}
-    weights = _segment_allocation_weights(segment_rows)
+    weights = _segment_allocation_weights(
+        segment_rows,
+        segment_length_support_weight=segment_length_support_weight,
+        segment_allocation_weight_floor=segment_allocation_weight_floor,
+    )
+    for row, weight in zip(segment_rows, weights, strict=True):
+        row["allocation_weight"] = float(weight)
     remaining_slots = int(remaining)
 
     # Trajectories with enough total learned budget should not be reduced to
     # endpoints-only retention. This is query-free sanity structure, so expose
     # it as a switch and as a diagnostic ablation rather than hiding it.
     if fairness_preallocation_enabled and remaining_slots >= max(1, valid_trajectory_count):
-        trajectory_best_rows: dict[int, tuple[float, int, int]] = {}
+        trajectory_best_rows: dict[int, tuple[float, float, int, int]] = {}
         for segment_idx, row in enumerate(segment_rows):
             trajectory_id = int(row["trajectory_id"])
             start = int(row["start"])
             score = float(row["score"])
+            allocation_weight = float(weights[segment_idx])
             best = trajectory_best_rows.get(trajectory_id)
-            if best is None or score > best[0] or (score == best[0] and start < best[1]):
-                trajectory_best_rows[trajectory_id] = (score, start, segment_idx)
+            if (
+                best is None
+                or allocation_weight > best[0]
+                or (allocation_weight == best[0] and score > best[1])
+                or (allocation_weight == best[0] and score == best[1] and start < best[2])
+            ):
+                trajectory_best_rows[trajectory_id] = (
+                    allocation_weight,
+                    score,
+                    start,
+                    segment_idx,
+                )
 
-        for _, _start, segment_idx in sorted(
+        for _, _score, _start, segment_idx in sorted(
             trajectory_best_rows.values(),
-            key=lambda item: (float(item[0]), -int(item[1])),
+            key=lambda item: (float(item[0]), float(item[1]), -int(item[2])),
             reverse=True,
         ):
             if remaining_slots <= 0:

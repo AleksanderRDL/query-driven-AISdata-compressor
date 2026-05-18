@@ -820,6 +820,9 @@ def train_model(
             "segment_level_loss_weight": float(
                 getattr(model_config, "query_useful_segment_level_loss_weight", 0.25)
             ),
+            "behavior_rank_loss_weight": float(
+                getattr(model_config, "query_useful_behavior_rank_loss_weight", 0.0)
+            ),
         }
     if query_prior_field is not None:
         target_diagnostics["query_prior_field"] = query_prior_field_metadata(query_prior_field)

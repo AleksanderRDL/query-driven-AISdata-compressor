@@ -11,6 +11,7 @@ from config.experiment_config import ExperimentConfig, SeedBundle
 from evaluation.baselines import FrozenMaskMethod, MLQDSMethod
 from orchestration.causality import (
     head_ablation_sensitivity,
+    model_prior_feature_sensitivity,
     prior_feature_sample_sensitivity,
     score_ablation_sensitivity,
 )
@@ -80,6 +81,10 @@ def freeze_retained_mask_ablations(
     prior_channel_ablation_diagnostics: dict[str, Any] = {}
     head_ablation_sensitivity_diagnostics: dict[str, Any] = {}
     segment_budget_head_ablation_mode: str | None = None
+    allocation_length_support_weight = float(
+        config.model.learned_segment_allocation_length_support_weight
+    )
+    allocation_weight_floor = float(config.model.learned_segment_allocation_weight_floor)
     pre_repair_diagnostic_name = "MLQDS_pre_repair_allocation_diagnostic"
     try:
         pre_repair_method = pre_repair_frozen_method_from_trace(
@@ -117,6 +122,10 @@ def freeze_retained_mask_ablations(
                     segment_point_scores=primary_segment_scores,
                     points=test_points,
                     learned_segment_geometry_gain_weight=0.0,
+                    learned_segment_allocation_length_support_weight=(
+                        allocation_length_support_weight
+                    ),
+                    learned_segment_allocation_weight_floor=allocation_weight_floor,
                     learned_segment_score_blend_weight=float(
                         config.model.learned_segment_score_blend_weight
                     ),
@@ -130,6 +139,37 @@ def freeze_retained_mask_ablations(
             )
         except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
             causal_ablation_freeze_failures["MLQDS_without_geometry_tie_breaker"] = str(exc)
+    if allocation_length_support_weight > 0.0:
+        try:
+            causality_ablation_methods.append(
+                learned_segment_frozen_method(
+                    name="MLQDS_without_segment_length_support_allocation",
+                    scores=primary_scores,
+                    boundaries=test_boundaries,
+                    compression_ratio=float(config.model.compression_ratio),
+                    segment_scores=primary_selector_segment_scores,
+                    segment_point_scores=primary_segment_scores,
+                    points=test_points,
+                    learned_segment_geometry_gain_weight=float(
+                        config.model.learned_segment_geometry_gain_weight
+                    ),
+                    learned_segment_allocation_length_support_weight=0.0,
+                    learned_segment_allocation_weight_floor=allocation_weight_floor,
+                    learned_segment_score_blend_weight=float(
+                        config.model.learned_segment_score_blend_weight
+                    ),
+                    learned_segment_fairness_preallocation=bool(
+                        config.model.learned_segment_fairness_preallocation
+                    ),
+                    learned_segment_length_repair_fraction=float(
+                        config.model.learned_segment_length_repair_fraction
+                    ),
+                )
+            )
+        except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
+            causal_ablation_freeze_failures["MLQDS_without_segment_length_support_allocation"] = (
+                str(exc)
+            )
     generator = torch.Generator().manual_seed(int(seeds.eval_query_seed) + 91_337)
     shuffled_order = torch.randperm(int(primary_scores.numel()), generator=generator)
     shuffled_scores = primary_scores[shuffled_order]
@@ -153,6 +193,8 @@ def freeze_retained_mask_ablations(
             learned_segment_geometry_gain_weight=float(
                 config.model.learned_segment_geometry_gain_weight
             ),
+            learned_segment_allocation_length_support_weight=allocation_length_support_weight,
+            learned_segment_allocation_weight_floor=allocation_weight_floor,
             learned_segment_score_blend_weight=float(
                 config.model.learned_segment_score_blend_weight
             ),
@@ -185,6 +227,8 @@ def freeze_retained_mask_ablations(
             learned_segment_geometry_gain_weight=float(
                 config.model.learned_segment_geometry_gain_weight
             ),
+            learned_segment_allocation_length_support_weight=allocation_length_support_weight,
+            learned_segment_allocation_weight_floor=allocation_weight_floor,
             learned_segment_score_blend_weight=float(
                 config.model.learned_segment_score_blend_weight
             ),
@@ -223,6 +267,8 @@ def freeze_retained_mask_ablations(
                 learned_segment_geometry_gain_weight=float(
                     config.model.learned_segment_geometry_gain_weight
                 ),
+                learned_segment_allocation_length_support_weight=allocation_length_support_weight,
+                learned_segment_allocation_weight_floor=allocation_weight_floor,
                 learned_segment_score_blend_weight=float(
                     config.model.learned_segment_score_blend_weight
                 ),
@@ -264,6 +310,8 @@ def freeze_retained_mask_ablations(
                 learned_segment_geometry_gain_weight=float(
                     config.model.learned_segment_geometry_gain_weight
                 ),
+                learned_segment_allocation_length_support_weight=allocation_length_support_weight,
+                learned_segment_allocation_weight_floor=allocation_weight_floor,
                 learned_segment_score_blend_weight=float(
                     config.model.learned_segment_score_blend_weight
                 ),
@@ -340,6 +388,10 @@ def freeze_retained_mask_ablations(
                     learned_segment_geometry_gain_weight=float(
                         config.model.learned_segment_geometry_gain_weight
                     ),
+                    learned_segment_allocation_length_support_weight=(
+                        allocation_length_support_weight
+                    ),
+                    learned_segment_allocation_weight_floor=allocation_weight_floor,
                     learned_segment_score_blend_weight=float(
                         config.model.learned_segment_score_blend_weight
                     ),
@@ -379,6 +431,8 @@ def freeze_retained_mask_ablations(
                 learned_segment_geometry_gain_weight=float(
                     config.model.learned_segment_geometry_gain_weight
                 ),
+                learned_segment_allocation_length_support_weight=allocation_length_support_weight,
+                learned_segment_allocation_weight_floor=allocation_weight_floor,
                 learned_segment_score_blend_weight=0.0,
                 learned_segment_fairness_preallocation=bool(
                     config.model.learned_segment_fairness_preallocation
@@ -417,6 +471,10 @@ def freeze_retained_mask_ablations(
                     learned_segment_geometry_gain_weight=float(
                         config.model.learned_segment_geometry_gain_weight
                     ),
+                    learned_segment_allocation_length_support_weight=(
+                        allocation_length_support_weight
+                    ),
+                    learned_segment_allocation_weight_floor=allocation_weight_floor,
                     learned_segment_score_blend_weight=float(
                         config.model.learned_segment_score_blend_weight
                     ),
@@ -439,6 +497,8 @@ def freeze_retained_mask_ablations(
                 learned_segment_geometry_gain_weight=float(
                     config.model.learned_segment_geometry_gain_weight
                 ),
+                learned_segment_allocation_length_support_weight=allocation_length_support_weight,
+                learned_segment_allocation_weight_floor=allocation_weight_floor,
                 learned_segment_score_blend_weight=float(
                     config.model.learned_segment_score_blend_weight
                 ),
@@ -478,6 +538,8 @@ def freeze_retained_mask_ablations(
                 learned_segment_geometry_gain_weight=float(
                     config.model.learned_segment_geometry_gain_weight
                 ),
+                learned_segment_allocation_length_support_weight=allocation_length_support_weight,
+                learned_segment_allocation_weight_floor=allocation_weight_floor,
                 learned_segment_score_blend_weight=float(
                     config.model.learned_segment_score_blend_weight
                 ),
@@ -544,6 +606,8 @@ def freeze_retained_mask_ablations(
                 learned_segment_geometry_gain_weight=float(
                     config.model.learned_segment_geometry_gain_weight
                 ),
+                learned_segment_allocation_length_support_weight=allocation_length_support_weight,
+                learned_segment_allocation_weight_floor=allocation_weight_floor,
                 learned_segment_score_blend_weight=float(
                     config.model.learned_segment_score_blend_weight
                 ),
@@ -604,6 +668,10 @@ def freeze_retained_mask_ablations(
             amp_mode=config.model.amp_mode,
             inference_batch_size=config.model.inference_batch_size,
             learned_segment_geometry_gain_weight=config.model.learned_segment_geometry_gain_weight,
+            learned_segment_allocation_length_support_weight=(
+                config.model.learned_segment_allocation_length_support_weight
+            ),
+            learned_segment_allocation_weight_floor=config.model.learned_segment_allocation_weight_floor,
             learned_segment_score_blend_weight=config.model.learned_segment_score_blend_weight,
             learned_segment_fairness_preallocation=config.model.learned_segment_fairness_preallocation,
             learned_segment_length_repair_fraction=config.model.learned_segment_length_repair_fraction,
@@ -639,6 +707,8 @@ def freeze_retained_mask_ablations(
                 learned_segment_geometry_gain_weight=float(
                     config.model.learned_segment_geometry_gain_weight
                 ),
+                learned_segment_allocation_length_support_weight=allocation_length_support_weight,
+                learned_segment_allocation_weight_floor=allocation_weight_floor,
                 learned_segment_score_blend_weight=float(
                     config.model.learned_segment_score_blend_weight
                 ),
@@ -659,6 +729,15 @@ def freeze_retained_mask_ablations(
                 points=test_points,
                 primary_prior_field=query_prior_field,
                 ablation_prior_field=shuffled_prior_field,
+            )
+            shuffled_model_prior_sensitivity = model_prior_feature_sensitivity(
+                points=test_points,
+                point_dim=int(getattr(trained.model, "point_dim", test_points.shape[1])),
+                scaler=trained.scaler,
+                primary_prior_field=query_prior_field,
+                ablation_prior_field=shuffled_prior_field,
+                boundaries=test_boundaries,
+                trajectory_mmsis=test_mmsis,
             )
             shuffled_prior_trained = TrainingOutputs(
                 model=trained.model,
@@ -696,6 +775,12 @@ def freeze_retained_mask_ablations(
                 amp_mode=config.model.amp_mode,
                 inference_batch_size=config.model.inference_batch_size,
                 learned_segment_geometry_gain_weight=config.model.learned_segment_geometry_gain_weight,
+                learned_segment_allocation_length_support_weight=(
+                    config.model.learned_segment_allocation_length_support_weight
+                ),
+                learned_segment_allocation_weight_floor=(
+                    config.model.learned_segment_allocation_weight_floor
+                ),
                 learned_segment_score_blend_weight=config.model.learned_segment_score_blend_weight,
                 learned_segment_fairness_preallocation=config.model.learned_segment_fairness_preallocation,
                 learned_segment_length_repair_fraction=config.model.learned_segment_length_repair_fraction,
@@ -730,6 +815,7 @@ def freeze_retained_mask_ablations(
             )
             prior_sensitivity_diagnostics["shuffled_prior_fields"] = {
                 "sampled_prior_features": shuffled_prior_feature_sensitivity,
+                "model_prior_features": shuffled_model_prior_sensitivity,
                 "selector_score": score_sensitivity,
                 "raw_prediction": raw_sensitivity,
             }
@@ -747,6 +833,15 @@ def freeze_retained_mask_ablations(
                 points=test_points,
                 primary_prior_field=query_prior_field,
                 ablation_prior_field=zero_prior_field,
+            )
+            zero_model_prior_sensitivity = model_prior_feature_sensitivity(
+                points=test_points,
+                point_dim=int(getattr(trained.model, "point_dim", test_points.shape[1])),
+                scaler=trained.scaler,
+                primary_prior_field=query_prior_field,
+                ablation_prior_field=zero_prior_field,
+                boundaries=test_boundaries,
+                trajectory_mmsis=test_mmsis,
             )
             zero_prior_trained = TrainingOutputs(
                 model=trained.model,
@@ -785,6 +880,12 @@ def freeze_retained_mask_ablations(
                 amp_mode=config.model.amp_mode,
                 inference_batch_size=config.model.inference_batch_size,
                 learned_segment_geometry_gain_weight=config.model.learned_segment_geometry_gain_weight,
+                learned_segment_allocation_length_support_weight=(
+                    config.model.learned_segment_allocation_length_support_weight
+                ),
+                learned_segment_allocation_weight_floor=(
+                    config.model.learned_segment_allocation_weight_floor
+                ),
                 learned_segment_score_blend_weight=config.model.learned_segment_score_blend_weight,
                 learned_segment_fairness_preallocation=config.model.learned_segment_fairness_preallocation,
                 learned_segment_length_repair_fraction=config.model.learned_segment_length_repair_fraction,
@@ -817,6 +918,7 @@ def freeze_retained_mask_ablations(
             )
             prior_sensitivity_diagnostics["without_query_prior_features"] = {
                 "sampled_prior_features": zero_prior_feature_sensitivity,
+                "model_prior_features": zero_model_prior_sensitivity,
                 "selector_score": score_sensitivity,
                 "raw_prediction": raw_sensitivity,
             }
@@ -839,6 +941,15 @@ def freeze_retained_mask_ablations(
                     points=test_points,
                     primary_prior_field=query_prior_field,
                     ablation_prior_field=channel_prior_field,
+                )
+                channel_model_prior_sensitivity = model_prior_feature_sensitivity(
+                    points=test_points,
+                    point_dim=int(getattr(trained.model, "point_dim", test_points.shape[1])),
+                    scaler=trained.scaler,
+                    primary_prior_field=query_prior_field,
+                    ablation_prior_field=channel_prior_field,
+                    boundaries=test_boundaries,
+                    trajectory_mmsis=test_mmsis,
                 )
                 channel_trained = TrainingOutputs(
                     model=trained.model,
@@ -879,6 +990,12 @@ def freeze_retained_mask_ablations(
                     amp_mode=config.model.amp_mode,
                     inference_batch_size=config.model.inference_batch_size,
                     learned_segment_geometry_gain_weight=config.model.learned_segment_geometry_gain_weight,
+                    learned_segment_allocation_length_support_weight=(
+                        config.model.learned_segment_allocation_length_support_weight
+                    ),
+                    learned_segment_allocation_weight_floor=(
+                        config.model.learned_segment_allocation_weight_floor
+                    ),
                     learned_segment_score_blend_weight=config.model.learned_segment_score_blend_weight,
                     learned_segment_fairness_preallocation=config.model.learned_segment_fairness_preallocation,
                     learned_segment_length_repair_fraction=config.model.learned_segment_length_repair_fraction,
@@ -897,6 +1014,7 @@ def freeze_retained_mask_ablations(
                     "available": True,
                     "method_name": channel_method_name,
                     "sampled_prior_features": channel_feature_sensitivity,
+                    "model_prior_features": channel_model_prior_sensitivity,
                     "selector_score": score_ablation_sensitivity(
                         primary_scores=primary_scores,
                         ablation_scores=channel_scores

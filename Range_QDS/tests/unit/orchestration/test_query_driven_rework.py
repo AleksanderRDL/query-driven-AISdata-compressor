@@ -19,6 +19,7 @@ from orchestration.causality import (
     causality_ablation_tradeoff_summary,
     head_ablation_sensitivity,
     learning_causality_delta_gate_config,
+    model_prior_feature_sensitivity,
     prior_feature_sample_sensitivity,
     prior_sample_gate_failures,
     query_useful_component_delta_summary,
@@ -103,6 +104,7 @@ from training.train_model import (
 )
 from training.training_diagnostics import _training_target_diagnostics
 from training.training_epoch import (
+    _behavior_head_rank_loss,
     _factorized_query_useful_loss,
     _segment_budget_head_segment_level_loss,
 )
@@ -2284,6 +2286,47 @@ def test_factorized_query_useful_loss_exposes_segment_budget_weights() -> None:
     assert float(implicit_default.item()) > float(point_only.item())
 
 
+def test_behavior_head_rank_loss_penalizes_reversed_behavior_order() -> None:
+    head_targets = torch.zeros((1, 8, len(QUERY_USEFUL_V1_HEAD_NAMES)), dtype=torch.float32)
+    head_mask = torch.zeros_like(head_targets, dtype=torch.bool)
+    behavior_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("conditional_behavior_utility")
+    head_targets[0, :, behavior_idx] = torch.tensor(
+        [1.0, 0.9, 0.8, 0.7, 0.1, 0.0, 0.0, 0.0],
+        dtype=torch.float32,
+    )
+    head_mask[0, :, behavior_idx] = True
+    aligned_logits = torch.zeros_like(head_targets)
+    reversed_logits = torch.zeros_like(head_targets)
+    aligned_logits[0, :, behavior_idx] = torch.linspace(4.0, -4.0, 8)
+    reversed_logits[0, :, behavior_idx] = torch.linspace(-4.0, 4.0, 8)
+
+    aligned = _behavior_head_rank_loss(
+        head_logits=aligned_logits,
+        head_targets=head_targets,
+        head_mask=head_mask,
+    )
+    reversed_loss = _behavior_head_rank_loss(
+        head_logits=reversed_logits,
+        head_targets=head_targets,
+        head_mask=head_mask,
+    )
+    without_behavior_rank = _factorized_query_useful_loss(
+        head_logits=reversed_logits,
+        head_targets=head_targets,
+        head_mask=head_mask,
+        behavior_rank_loss_weight=0.0,
+    )
+    with_behavior_rank = _factorized_query_useful_loss(
+        head_logits=reversed_logits,
+        head_targets=head_targets,
+        head_mask=head_mask,
+        behavior_rank_loss_weight=1.0,
+    )
+
+    assert float(aligned.item()) < float(reversed_loss.item())
+    assert float(with_behavior_rank.item()) > float(without_behavior_rank.item())
+
+
 def test_factorized_head_fit_diagnostics_reports_each_head() -> None:
     head_targets = torch.tensor(
         [
@@ -2978,6 +3021,68 @@ def test_prior_feature_sample_sensitivity_reports_input_level_changes() -> None:
     assert diagnostics["per_feature"]["spatial_query_hit_probability"]["mean_abs_delta"] > 0.0
 
 
+def test_model_prior_feature_sensitivity_reports_post_builder_and_scaler_changes() -> None:
+    points = torch.tensor(
+        [
+            [0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0],
+            [1.0, 1.0, 1.0, 1.0, 5.0, 0.0, 0.0, 0.0],
+            [2.0, 2.0, 2.0, 1.0, 10.0, 0.0, 1.0, 0.0],
+        ],
+        dtype=torch.float32,
+    )
+    query = {
+        "type": "range",
+        "params": {
+            "t_start": -1.0,
+            "t_end": 3.0,
+            "lat_min": -1.0,
+            "lat_max": 3.0,
+            "lon_min": -1.0,
+            "lon_max": 3.0,
+        },
+    }
+    prior = build_train_query_prior_fields(
+        points=points,
+        boundaries=[(0, 3)],
+        typed_queries=[query],
+        workload_profile_id="range_workload_v1",
+        grid_bins=4,
+        time_bins=2,
+        smoothing_passes=0,
+    )
+    zeroed = zero_query_prior_field_like(prior)
+    queries = torch.zeros((1, 12), dtype=torch.float32)
+    model_points = build_workload_blind_range_v2_point_features(points, prior)
+    scaler = _fit_scaler_for_model(model_points, queries, "workload_blind_range_v2")
+
+    raw_sampled = sample_query_prior_fields(points, prior)
+    route_density_idx = QUERY_PRIOR_FIELD_NAMES.index("route_density_prior")
+    assert raw_sampled[:, route_density_idx].abs().mean().item() > 0.0
+
+    diagnostics = model_prior_feature_sensitivity(
+        points=points,
+        point_dim=WORKLOAD_BLIND_RANGE_V2_POINT_DIM,
+        scaler=scaler,
+        primary_prior_field=prior,
+        ablation_prior_field=zeroed,
+        boundaries=[(0, 3)],
+    )
+
+    assert diagnostics["available"] is True
+    assert diagnostics["disabled_prior_fields"] == list(
+        WORKLOAD_BLIND_RANGE_V2_MODEL_DISABLED_PRIOR_FIELDS
+    )
+    model_input = diagnostics["model_input_prior_features"]
+    normalized = diagnostics["normalized_model_prior_features"]
+    assert model_input["sampled_inputs_changed"] is True
+    assert normalized["sampled_inputs_changed"] is True
+    assert model_input["per_feature"]["spatial_query_hit_probability"]["mean_abs_delta"] > 0.0
+    assert normalized["per_feature"]["spatial_query_hit_probability"]["mean_abs_delta"] > 0.0
+    assert model_input["per_feature"]["route_density_prior"]["mean_abs_delta"] == 0.0
+    assert normalized["per_feature"]["route_density_prior"]["mean_abs_delta"] == 0.0
+    assert diagnostics["scaler_prior_feature_ranges"]["route_density_prior"] == 1.0
+
+
 def test_prior_sample_gate_failures_explain_empty_or_out_of_extent_priors() -> None:
     diagnostics = {
         "shuffled_prior_fields": {
@@ -2986,7 +3091,17 @@ def test_prior_sample_gate_failures_explain_empty_or_out_of_extent_priors() -> N
                 "primary_nonzero_fraction": 0.0,
                 "sampled_inputs_changed": False,
                 "points_outside_prior_extent_fraction": 1.0,
-            }
+            },
+            "model_prior_features": {
+                "model_input_prior_features": {
+                    "available": True,
+                    "sampled_inputs_changed": False,
+                },
+                "normalized_model_prior_features": {
+                    "available": True,
+                    "sampled_inputs_changed": False,
+                },
+            },
         }
     }
 
@@ -2994,6 +3109,8 @@ def test_prior_sample_gate_failures_explain_empty_or_out_of_extent_priors() -> N
 
     assert "sampled_query_prior_features_all_zero" in failures
     assert "shuffled_prior_fields_did_not_change_sampled_inputs" in failures
+    assert "shuffled_prior_fields_did_not_change_model_inputs" in failures
+    assert "shuffled_prior_fields_did_not_change_normalized_model_inputs" in failures
     assert "eval_points_mostly_outside_query_prior_extent" in failures
 
 

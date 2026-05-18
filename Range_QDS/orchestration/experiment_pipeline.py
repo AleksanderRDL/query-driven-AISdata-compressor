@@ -653,6 +653,12 @@ def run_experiment_pipeline(
                     hybrid_mode=config.model.mlqds_hybrid_mode,
                     selector_type=config.model.selector_type,
                     learned_segment_geometry_gain_weight=config.model.learned_segment_geometry_gain_weight,
+                    learned_segment_allocation_length_support_weight=(
+                        config.model.learned_segment_allocation_length_support_weight
+                    ),
+                    learned_segment_allocation_weight_floor=(
+                        config.model.learned_segment_allocation_weight_floor
+                    ),
                     learned_segment_score_blend_weight=config.model.learned_segment_score_blend_weight,
                     learned_segment_fairness_preallocation=config.model.learned_segment_fairness_preallocation,
                     learned_segment_length_repair_fraction=config.model.learned_segment_length_repair_fraction,

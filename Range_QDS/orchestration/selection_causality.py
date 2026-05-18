@@ -14,6 +14,7 @@ from evaluation.query_cache import EvaluationQueryCache
 from orchestration.causality import (
     causality_ablation_diagnostics_payload,
     head_ablation_sensitivity,
+    model_prior_feature_sensitivity,
     prior_feature_sample_sensitivity,
     retained_mask_comparison,
     score_ablation_sensitivity,
@@ -78,6 +79,12 @@ def build_selection_causality_diagnostics(
             amp_mode=config.model.amp_mode,
             inference_batch_size=config.model.inference_batch_size,
             learned_segment_geometry_gain_weight=config.model.learned_segment_geometry_gain_weight,
+            learned_segment_allocation_length_support_weight=(
+                config.model.learned_segment_allocation_length_support_weight
+            ),
+            learned_segment_allocation_weight_floor=(
+                config.model.learned_segment_allocation_weight_floor
+            ),
             learned_segment_score_blend_weight=config.model.learned_segment_score_blend_weight,
             learned_segment_fairness_preallocation=config.model.learned_segment_fairness_preallocation,
             learned_segment_length_repair_fraction=config.model.learned_segment_length_repair_fraction,
@@ -140,6 +147,10 @@ def build_selection_causality_diagnostics(
     head_sensitivity: dict[str, Any] = {}
 
     geometry_gain_weight = float(config.model.learned_segment_geometry_gain_weight)
+    allocation_length_support_weight = float(
+        config.model.learned_segment_allocation_length_support_weight
+    )
+    allocation_weight_floor = float(config.model.learned_segment_allocation_weight_floor)
     if isinstance(primary_scores, torch.Tensor) and geometry_gain_weight > 0.0:
         try:
             selection_segment_scores = (
@@ -157,6 +168,10 @@ def build_selection_causality_diagnostics(
                     segment_point_scores=primary_segment_scores,
                     points=selection_points,
                     learned_segment_geometry_gain_weight=0.0,
+                    learned_segment_allocation_length_support_weight=(
+                        allocation_length_support_weight
+                    ),
+                    learned_segment_allocation_weight_floor=allocation_weight_floor,
                     learned_segment_score_blend_weight=float(
                         config.model.learned_segment_score_blend_weight
                     ),
@@ -170,6 +185,41 @@ def build_selection_causality_diagnostics(
             )
         except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
             freeze_failures["MLQDS_without_geometry_tie_breaker"] = str(exc)
+
+    if isinstance(primary_scores, torch.Tensor) and allocation_length_support_weight > 0.0:
+        try:
+            selection_segment_scores = (
+                primary_selector_segment_scores
+                if isinstance(primary_selector_segment_scores, torch.Tensor)
+                else None
+            )
+            ablation_methods.append(
+                learned_segment_frozen_method(
+                    name="MLQDS_without_segment_length_support_allocation",
+                    scores=primary_scores,
+                    boundaries=selection_boundaries,
+                    compression_ratio=float(config.model.compression_ratio),
+                    segment_scores=selection_segment_scores,
+                    segment_point_scores=primary_segment_scores,
+                    points=selection_points,
+                    learned_segment_geometry_gain_weight=float(
+                        config.model.learned_segment_geometry_gain_weight
+                    ),
+                    learned_segment_allocation_length_support_weight=0.0,
+                    learned_segment_allocation_weight_floor=allocation_weight_floor,
+                    learned_segment_score_blend_weight=float(
+                        config.model.learned_segment_score_blend_weight
+                    ),
+                    learned_segment_fairness_preallocation=bool(
+                        config.model.learned_segment_fairness_preallocation
+                    ),
+                    learned_segment_length_repair_fraction=float(
+                        config.model.learned_segment_length_repair_fraction
+                    ),
+                )
+            )
+        except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
+            freeze_failures["MLQDS_without_segment_length_support_allocation"] = str(exc)
 
     if isinstance(primary_scores, torch.Tensor) and isinstance(
         primary_segment_scores, torch.Tensor
@@ -198,6 +248,8 @@ def build_selection_causality_diagnostics(
                 learned_segment_geometry_gain_weight=float(
                     config.model.learned_segment_geometry_gain_weight
                 ),
+                learned_segment_allocation_length_support_weight=allocation_length_support_weight,
+                learned_segment_allocation_weight_floor=allocation_weight_floor,
                 learned_segment_score_blend_weight=float(
                     config.model.learned_segment_score_blend_weight
                 ),
@@ -248,6 +300,8 @@ def build_selection_causality_diagnostics(
                 learned_segment_geometry_gain_weight=float(
                     config.model.learned_segment_geometry_gain_weight
                 ),
+                learned_segment_allocation_length_support_weight=allocation_length_support_weight,
+                learned_segment_allocation_weight_floor=allocation_weight_floor,
                 learned_segment_score_blend_weight=float(
                     config.model.learned_segment_score_blend_weight
                 ),
@@ -295,6 +349,8 @@ def build_selection_causality_diagnostics(
                 learned_segment_geometry_gain_weight=float(
                     config.model.learned_segment_geometry_gain_weight
                 ),
+                learned_segment_allocation_length_support_weight=allocation_length_support_weight,
+                learned_segment_allocation_weight_floor=allocation_weight_floor,
                 learned_segment_score_blend_weight=float(
                     config.model.learned_segment_score_blend_weight
                 ),
@@ -366,6 +422,8 @@ def build_selection_causality_diagnostics(
                 learned_segment_geometry_gain_weight=float(
                     config.model.learned_segment_geometry_gain_weight
                 ),
+                learned_segment_allocation_length_support_weight=allocation_length_support_weight,
+                learned_segment_allocation_weight_floor=allocation_weight_floor,
                 learned_segment_score_blend_weight=float(
                     config.model.learned_segment_score_blend_weight
                 ),
@@ -414,6 +472,10 @@ def build_selection_causality_diagnostics(
                     learned_segment_geometry_gain_weight=float(
                         config.model.learned_segment_geometry_gain_weight
                     ),
+                    learned_segment_allocation_length_support_weight=(
+                        allocation_length_support_weight
+                    ),
+                    learned_segment_allocation_weight_floor=allocation_weight_floor,
                     learned_segment_score_blend_weight=float(
                         config.model.learned_segment_score_blend_weight
                     ),
@@ -445,6 +507,14 @@ def build_selection_causality_diagnostics(
                     points=selection_points,
                     primary_prior_field=query_prior_field,
                     ablation_prior_field=ablation_field,
+                )
+                model_prior_sensitivity = model_prior_feature_sensitivity(
+                    points=selection_points,
+                    point_dim=int(getattr(trained.model, "point_dim", selection_points.shape[1])),
+                    scaler=trained.scaler,
+                    primary_prior_field=query_prior_field,
+                    ablation_prior_field=ablation_field,
+                    boundaries=selection_boundaries,
                 )
                 ablation_trained = TrainingOutputs(
                     model=trained.model,
@@ -478,6 +548,7 @@ def build_selection_causality_diagnostics(
                 ablation_raw_preds = getattr(ablation_method, "_raw_pred_cache", None)
                 prior_sensitivity[prior_sensitivity_key] = {
                     "sampled_prior_features": prior_feature_sensitivity,
+                    "model_prior_features": model_prior_sensitivity,
                     "selector_score": score_ablation_sensitivity(
                         primary_scores=primary_scores,
                         ablation_scores=ablation_scores

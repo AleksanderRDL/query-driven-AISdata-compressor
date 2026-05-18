@@ -438,6 +438,7 @@ conditional_behavior_utility
 boundary_event_utility
 replacement_representative_value
 segment_budget_target
+path_length_support_target
 ```
 
 Recommended interpretation:
@@ -545,9 +546,19 @@ num_layers: 1
 epochs: 3-5
 loss_objective: budget_topk
 mlqds_score_mode: rank_confidence
+query_useful_segment_budget_head_weight: 0.10
+query_useful_segment_level_loss_weight: 0.25
+query_useful_behavior_rank_loss_weight: 0.0
 ```
 
 For real AIS probes, increase capacity only after workload health and predictability gates pass.
+
+The behavior-rank auxiliary is training-only pressure on the
+`conditional_behavior_utility` head. Checkpoint 5.28 rejected weight `0.15` as
+a default because it worsened retained-mask causality despite slightly better
+head fit. Keep it disabled unless a future checkpoint has a specific
+hypothesis, and do not treat better head fit alone as evidence of learned
+workload-blind success.
 
 ### Selector
 
@@ -571,11 +582,18 @@ Recommended default:
 
 ```yaml
 learned_segment_geometry_gain_weight: 0.12
+learned_segment_allocation_length_support_weight: 0.12
+learned_segment_allocation_weight_floor: 0.50
 learned_segment_score_blend_weight: 0.05
 learned_segment_fairness_preallocation: true
 ```
 
-These are query-free selector guardrails. They must be reported and ablated.
+These are query-free selector guardrails. Geometry-gain tie-breaking and
+segment allocation length support are separate controls and must be reported
+separately. The allocation weight floor is a score-contrast diagnostic control;
+lower values can make learned segment scores more decisive, but any lower-floor
+result is diagnostic until a strict replay proves causality and global sanity.
+They must be ablated before any final causality claim.
 
 Causality ablation must include:
 
@@ -1013,6 +1031,14 @@ Never run the full grid to “see what happens” when the standard strict singl
 
 It is acceptable to occasionally run a real-scale diagnostic slice for the most promising current candidate before every strict gate passes, but only to answer a specific scaling or instrumentation question. This is not the full final grid and it is not acceptance evidence.
 
+The default pre-gate form is a representative slice. A full 4x7 snapshot before required gates pass is exceptional: it needs a concrete scaling question, unchanged strict gates, production-like caps, and an explicit label that it is observational diagnostics only.
+
+An occasional benchmark snapshot can be useful to see how the current best candidate/config behaves at realistic scale, especially when tiny or single-cell probes may be hiding runtime, workload-count, or scale-sensitive quality failures. It must be treated as a checkpoint diagnostic, not as proof of progress.
+
+Treat this as a scarce calibration tool: at most one snapshot per materially different current-best candidate unless the previous snapshot exposed an instrumentation or runtime defect that needs a recheck. The result may inform prioritization, capacity planning, and whether the current direction is worth more focused diagnosis. It must not be fed into threshold changes, checkpoint selection, selector tuning, or final comparison tables without a separate strict single-cell diagnosis.
+
+Do not promote a snapshot result into the current-best evidence boundary. The evidence boundary moves only when a strict single-cell probe passes or when a focused diagnostic gives a narrower blocker with unchanged gates.
+
 Use this only when the question is concrete:
 
 ```text
@@ -1049,7 +1075,7 @@ final grid robustness
 gate success by visual inspection or encouraging partial numbers
 ```
 
-Do not run these slices repeatedly to search for a lucky result, compensate for failed causality/support/workload gates, or justify loosening thresholds. If the result is interesting but child gates still fail, diagnose the failed gates before changing code.
+Do not run these slices or snapshots repeatedly to search for a lucky result, compensate for failed causality/support/workload gates, or justify loosening thresholds. If the result is interesting but child gates still fail, diagnose the failed gates before changing code.
 
 ---
 

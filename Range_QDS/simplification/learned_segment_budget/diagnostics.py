@@ -93,6 +93,20 @@ def _segment_source_attribution(
         for row in segment_rows
     ]
     score_ranks = _descending_ranks(score_values)
+    length_support_values = [
+        float(row.get("length_support_score", 0.0))
+        if math.isfinite(float(row.get("length_support_score", 0.0)))
+        else 0.0
+        for row in segment_rows
+    ]
+    length_support_ranks = _descending_ranks(length_support_values)
+    allocation_weight_values = [
+        float(row.get("allocation_weight", 0.0))
+        if math.isfinite(float(row.get("allocation_weight", 0.0)))
+        else 0.0
+        for row in segment_rows
+    ]
+    allocation_weight_ranks = _descending_ranks(allocation_weight_values)
     rows: list[dict[str, Any]] = []
     summary_counts = {
         "retained": 0,
@@ -156,6 +170,16 @@ def _segment_source_attribution(
                 "segment_score": float(score_values[allocation_order_index]),
                 "segment_score_rank": int(score_ranks[allocation_order_index]),
                 "segment_score_source": str(row.get("score_source", "")),
+                "segment_length_support_score": float(
+                    length_support_values[allocation_order_index]
+                ),
+                "segment_length_support_rank": int(length_support_ranks[allocation_order_index]),
+                "segment_allocation_weight": float(
+                    allocation_weight_values[allocation_order_index]
+                ),
+                "segment_allocation_weight_rank": int(
+                    allocation_weight_ranks[allocation_order_index]
+                ),
                 "segment_allocation_count": allocation_count,
                 "retained_count": retained_count,
                 "retained_fraction": float(retained_count / max(1, end - start)),

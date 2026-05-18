@@ -106,13 +106,26 @@ def _row_from_run(
         causality_mask_diagnostics.get("MLQDS_without_segment_budget_head") or {}
     )
     no_geometry_mask = causality_mask_diagnostics.get("MLQDS_without_geometry_tie_breaker") or {}
+    no_length_support_allocation_mask = (
+        causality_mask_diagnostics.get("MLQDS_without_segment_length_support_allocation") or {}
+    )
     prior_sensitivity = learning_causality.get("prior_sensitivity_diagnostics") or {}
     shuffled_prior_sample = (prior_sensitivity.get("shuffled_prior_fields") or {}).get(
         "sampled_prior_features"
     ) or {}
+    shuffled_prior_model = (prior_sensitivity.get("shuffled_prior_fields") or {}).get(
+        "model_prior_features"
+    ) or {}
+    shuffled_prior_model_input = shuffled_prior_model.get("model_input_prior_features") or {}
+    shuffled_prior_normalized = shuffled_prior_model.get("normalized_model_prior_features") or {}
     no_prior_sample = (prior_sensitivity.get("without_query_prior_features") or {}).get(
         "sampled_prior_features"
     ) or {}
+    no_prior_model = (prior_sensitivity.get("without_query_prior_features") or {}).get(
+        "model_prior_features"
+    ) or {}
+    no_prior_model_input = no_prior_model.get("model_input_prior_features") or {}
+    no_prior_normalized = no_prior_model.get("normalized_model_prior_features") or {}
     workload_stability_gate = (run_json or {}).get("workload_stability_gate") or {}
     support_overlap_gate = (run_json or {}).get("support_overlap_gate") or {}
     global_sanity_gate = (run_json or {}).get("global_sanity_gate") or {}
@@ -448,9 +461,18 @@ def _row_from_run(
         "no_geometry_tie_breaker_ablation_delta": learning_causality.get(
             "no_geometry_tie_breaker_ablation_delta"
         ),
+        "no_segment_length_support_allocation_ablation_delta": learning_causality.get(
+            "no_segment_length_support_allocation_ablation_delta"
+        ),
         "no_geometry_retained_mask_jaccard": no_geometry_mask.get("retained_mask_jaccard"),
         "no_geometry_retained_symmetric_difference_count": no_geometry_mask.get(
             "retained_symmetric_difference_count"
+        ),
+        "no_segment_length_support_allocation_retained_mask_jaccard": (
+            no_length_support_allocation_mask.get("retained_mask_jaccard")
+        ),
+        "no_segment_length_support_allocation_retained_symmetric_difference_count": (
+            no_length_support_allocation_mask.get("retained_symmetric_difference_count")
         ),
         "learning_causality_min_material_delta": learning_delta_gate.get(
             "min_material_query_useful_delta"
@@ -467,6 +489,14 @@ def _row_from_run(
         ),
         "learned_segment_geometry_gain_weight": learned_segment_selector_config.get(
             "geometry_gain_weight", model_config.get("learned_segment_geometry_gain_weight")
+        ),
+        "learned_segment_allocation_length_support_weight": learned_segment_selector_config.get(
+            "allocation_length_support_weight",
+            model_config.get("learned_segment_allocation_length_support_weight"),
+        ),
+        "learned_segment_allocation_weight_floor": learned_segment_selector_config.get(
+            "allocation_weight_floor",
+            model_config.get("learned_segment_allocation_weight_floor"),
         ),
         "learned_segment_score_blend_weight": learned_segment_selector_config.get(
             "segment_score_blend_weight", model_config.get("learned_segment_score_blend_weight")
@@ -502,12 +532,34 @@ def _row_from_run(
         "shuffled_prior_sampled_outside_extent_fraction": shuffled_prior_sample.get(
             "points_outside_prior_extent_fraction"
         ),
+        "shuffled_prior_model_inputs_changed": shuffled_prior_model_input.get(
+            "sampled_inputs_changed"
+        ),
+        "shuffled_prior_model_input_mean_abs_feature_delta": shuffled_prior_model_input.get(
+            "mean_abs_feature_delta"
+        ),
+        "shuffled_prior_normalized_model_inputs_changed": shuffled_prior_normalized.get(
+            "sampled_inputs_changed"
+        ),
+        "shuffled_prior_normalized_model_mean_abs_feature_delta": (
+            shuffled_prior_normalized.get("mean_abs_feature_delta")
+        ),
         "no_prior_sampled_primary_nonzero_fraction": no_prior_sample.get(
             "primary_nonzero_fraction"
         ),
         "no_prior_sampled_mean_abs_feature_delta": no_prior_sample.get("mean_abs_feature_delta"),
         "no_prior_sampled_outside_extent_fraction": no_prior_sample.get(
             "points_outside_prior_extent_fraction"
+        ),
+        "no_prior_model_inputs_changed": no_prior_model_input.get("sampled_inputs_changed"),
+        "no_prior_model_input_mean_abs_feature_delta": no_prior_model_input.get(
+            "mean_abs_feature_delta"
+        ),
+        "no_prior_normalized_model_inputs_changed": no_prior_normalized.get(
+            "sampled_inputs_changed"
+        ),
+        "no_prior_normalized_model_mean_abs_feature_delta": no_prior_normalized.get(
+            "mean_abs_feature_delta"
         ),
         "legacy_range_useful_diagnostic_only": bool(
             legacy_range_useful_summary.get("diagnostic_only", True)

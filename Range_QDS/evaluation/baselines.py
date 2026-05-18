@@ -91,6 +91,8 @@ class MLQDSMethod:
     min_learned_swaps: int = 0
     selector_type: str = "temporal_hybrid"
     learned_segment_geometry_gain_weight: float = 0.12
+    learned_segment_allocation_length_support_weight: float = 0.12
+    learned_segment_allocation_weight_floor: float = 0.50
     learned_segment_score_blend_weight: float = 0.05
     learned_segment_fairness_preallocation: bool = True
     learned_segment_length_repair_fraction: float = 0.0
@@ -163,6 +165,8 @@ class MLQDSMethod:
             int(self.min_learned_swaps),
             str(self.selector_type),
             float(self.learned_segment_geometry_gain_weight),
+            float(self.learned_segment_allocation_length_support_weight),
+            float(self.learned_segment_allocation_weight_floor),
             float(self.learned_segment_score_blend_weight),
             bool(self.learned_segment_fairness_preallocation),
             float(self.learned_segment_length_repair_fraction),
@@ -325,6 +329,10 @@ class MLQDSMethod:
                 segment_point_scores=self._segment_score_cache,
                 points=points,
                 geometry_gain_weight=float(self.learned_segment_geometry_gain_weight),
+                segment_length_support_weight=float(
+                    self.learned_segment_allocation_length_support_weight
+                ),
+                segment_allocation_weight_floor=float(self.learned_segment_allocation_weight_floor),
                 segment_score_point_blend_weight=float(self.learned_segment_score_blend_weight),
                 fairness_preallocation_enabled=bool(self.learned_segment_fairness_preallocation),
                 length_repair_fraction=float(self.learned_segment_length_repair_fraction),

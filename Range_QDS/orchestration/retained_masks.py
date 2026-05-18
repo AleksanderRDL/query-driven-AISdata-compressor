@@ -152,6 +152,12 @@ def freeze_workload_blind_retained_masks(
                     segment_point_scores=primary_segment_scores,
                     points=test_points.detach().cpu().float(),
                     geometry_gain_weight=float(config.model.learned_segment_geometry_gain_weight),
+                    segment_length_support_weight=float(
+                        config.model.learned_segment_allocation_length_support_weight
+                    ),
+                    segment_allocation_weight_floor=float(
+                        config.model.learned_segment_allocation_weight_floor
+                    ),
                     segment_score_point_blend_weight=float(
                         config.model.learned_segment_score_blend_weight
                     ),
