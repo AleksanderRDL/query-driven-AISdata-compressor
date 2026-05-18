@@ -8,6 +8,7 @@ from dataclasses import dataclass
 import torch
 
 from selection.retained_mask_selectors import deterministic_topk_with_jitter
+from workloads.range_geometry import local_equirectangular_distance_km
 
 
 @dataclass
@@ -60,10 +61,7 @@ def _local_distance_km(
     lon1 = left[:, 2].float()
     lat2 = right[:, 1].float()
     lon2 = right[:, 2].float()
-    lat_mid = torch.deg2rad((lat1 + lat2) * 0.5)
-    dy = (lat2 - lat1) * 111.32
-    dx = (lon2 - lon1) * 111.32 * torch.clamp(torch.cos(lat_mid).abs(), min=0.10)
-    return torch.sqrt(dx * dx + dy * dy)
+    return local_equirectangular_distance_km(lat1, lon1, lat2, lon2)
 
 
 def _length_gain_scores(

@@ -34,6 +34,7 @@ from learning.targets.local_swap import (
 from learning.targets.marginal_coverage import range_marginal_coverage_training_labels
 from learning.targets.query_residual import range_query_residual_frequency_training_labels
 from learning.targets.query_spine import range_query_spine_frequency_training_labels
+from learning.targets.query_useful_v1 import QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE
 from learning.targets.retained_frequency import (
     range_global_budget_retained_frequency_training_labels,
     range_historical_prior_retained_frequency_training_labels,
@@ -127,7 +128,7 @@ def prepare_training_targets(
         "enabled": False,
         "mode": str(getattr(config.model, "range_teacher_distillation_mode", "none")),
     }
-    if range_training_target_mode == "query_useful_v1_factorized":
+    if range_training_target_mode == QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE:
         range_training_target_transform.update(
             {
                 "enabled": True,
@@ -144,7 +145,7 @@ def prepare_training_targets(
         train_label_sets: list[RangeLabels] = []
         train_component_label_sets: list[dict[str, torch.Tensor] | None] = []
         if (
-            range_training_target_mode != "query_useful_v1_factorized"
+            range_training_target_mode != QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE
             or range_teacher_distillation_enabled(config.model)
         ):
             for replicate_index, label_workload in enumerate(train_label_workloads):
@@ -501,7 +502,7 @@ def prepare_training_targets(
                 f"mass={range_training_target_transform['positive_label_mass']:.4f}",
                 flush=True,
             )
-    elif range_training_target_mode not in {"point_value", "query_useful_v1_factorized"}:
+    elif range_training_target_mode not in {"point_value", QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE}:
         if range_training_target_mode in {
             "component_retained_frequency",
             "continuity_retained_frequency",
@@ -631,7 +632,7 @@ def prepare_training_targets(
                 f"trajectories={range_target_balance_diagnostics['balanced_trajectory_count']}",
                 flush=True,
             )
-    if range_training_target_mode != "query_useful_v1_factorized":
+    if range_training_target_mode != QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE:
         range_training_target_transform.setdefault("target_family", "legacy_range_useful_scalar")
         range_training_target_transform.setdefault("final_success_allowed", False)
         range_training_target_transform.setdefault(

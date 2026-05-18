@@ -7,6 +7,7 @@ from typing import Any
 import torch
 
 from learning.losses import _safe_quantile
+from learning.targets.query_useful_v1 import QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE
 from selection.model_score_conversion import pure_workload_scores, simplify_mlqds_predictions
 from selection.retained_mask_selectors import evenly_spaced_indices
 
@@ -52,7 +53,7 @@ def _training_target_diagnostics(
         "positive_label_mass": total_positive_label_mass,
         "budget_rows": [],
     }
-    if target_mode == "query_useful_v1_factorized":
+    if target_mode == QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE:
         diagnostics.update(
             {
                 "target_family": "QueryUsefulV1Factorized",

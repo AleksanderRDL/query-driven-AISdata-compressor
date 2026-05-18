@@ -8,6 +8,7 @@ from typing import Any
 import torch
 
 from selection.learned_segment_budget.constants import SEGMENT_ALLOCATION_WEIGHT_FLOOR
+from workloads.range_geometry import local_equirectangular_distance_km
 
 
 def _total_budget(boundaries: list[tuple[int, int]], compression_ratio: float) -> int:
@@ -97,16 +98,10 @@ def _segment_path_length_support(segment_points: torch.Tensor) -> float:
         return 0.0
     lats = segment_points[:, 1].float()
     lons = segment_points[:, 2].float()
-    lat_mid = torch.deg2rad((lats[1:] + lats[:-1]) * 0.5)
-    dy = (lats[1:] - lats[:-1]) * 111.32
-    dx = (lons[1:] - lons[:-1]) * 111.32 * torch.clamp(torch.cos(lat_mid).abs(), min=0.10)
-    local_path = torch.sqrt(dx * dx + dy * dy).sum()
-    endpoint_lat_mid = torch.deg2rad((lats[-1] + lats[0]) * 0.5)
-    endpoint_dy = (lats[-1] - lats[0]) * 111.32
-    endpoint_dx = (
-        (lons[-1] - lons[0]) * 111.32 * torch.clamp(torch.cos(endpoint_lat_mid).abs(), min=0.10)
-    )
-    shortcut = torch.sqrt(endpoint_dx * endpoint_dx + endpoint_dy * endpoint_dy)
+    local_path = local_equirectangular_distance_km(
+        lats[:-1], lons[:-1], lats[1:], lons[1:]
+    ).sum()
+    shortcut = local_equirectangular_distance_km(lats[0], lons[0], lats[-1], lons[-1])
     return float(torch.clamp(local_path - shortcut, min=0.0).item())
 
 

@@ -21,6 +21,10 @@ from learning.model_features import build_model_point_features_for_dim
 from learning.outputs import TrainingOutputs
 from learning.targets.query_useful_v1 import QUERY_USEFUL_V1_HEAD_NAMES
 from selection.learned_segment_budget import (
+    GEOMETRY_TIE_BREAKER_WEIGHT,
+    SEGMENT_ALLOCATION_WEIGHT_FLOOR,
+    SEGMENT_LENGTH_SUPPORT_ALLOCATION_WEIGHT,
+    SEGMENT_SCORE_POINT_BLEND_WEIGHT,
     blend_segment_support_scores,
     simplify_with_learned_segment_budget_v1,
 )
@@ -30,6 +34,10 @@ from selection.retained_mask_selectors import (
     simplify_with_global_score_budget,
     simplify_with_scores,
     simplify_with_temporal_score_hybrid,
+)
+from selection.selector_types import (
+    LEARNED_SEGMENT_BUDGET_SELECTOR_TYPE,
+    TEMPORAL_HYBRID_SELECTOR_TYPE,
 )
 from workloads.typed_workload import TypedQueryWorkload
 
@@ -89,11 +97,13 @@ class MLQDSMethod:
     hybrid_mode: str = "fill"
     stratified_center_weight: float = 0.0
     min_learned_swaps: int = 0
-    selector_type: str = "temporal_hybrid"
-    learned_segment_geometry_gain_weight: float = 0.12
-    learned_segment_allocation_length_support_weight: float = 0.12
-    learned_segment_allocation_weight_floor: float = 0.50
-    learned_segment_score_blend_weight: float = 0.05
+    selector_type: str = TEMPORAL_HYBRID_SELECTOR_TYPE
+    learned_segment_geometry_gain_weight: float = GEOMETRY_TIE_BREAKER_WEIGHT
+    learned_segment_allocation_length_support_weight: float = (
+        SEGMENT_LENGTH_SUPPORT_ALLOCATION_WEIGHT
+    )
+    learned_segment_allocation_weight_floor: float = SEGMENT_ALLOCATION_WEIGHT_FLOOR
+    learned_segment_score_blend_weight: float = SEGMENT_SCORE_POINT_BLEND_WEIGHT
     learned_segment_fairness_preallocation: bool = True
     learned_segment_length_repair_fraction: float = 0.0
     learned_segment_length_repair_score_protection_fraction: float = 0.0
@@ -322,7 +332,7 @@ class MLQDSMethod:
             )
 
         scores = self._simplification_scores(points, boundaries, workload_blind=workload_blind)
-        if str(self.selector_type).lower() == "learned_segment_budget_v1":
+        if str(self.selector_type).lower() == LEARNED_SEGMENT_BUDGET_SELECTOR_TYPE:
             return simplify_with_learned_segment_budget_v1(
                 scores,
                 boundaries,

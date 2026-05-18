@@ -9,6 +9,7 @@ from typing import Any
 import torch
 import torch.nn.functional as F
 
+from workloads.generation.workload_profiles import RANGE_WORKLOAD_V1_PROFILE_ID
 from workloads.range_geometry import points_in_range_box, segment_box_bracket_indices
 
 QUERY_PRIOR_FIELD_SCHEMA_VERSION = 3
@@ -304,7 +305,7 @@ def build_train_query_prior_fields(
     typed_queries: list[dict[str, Any]],
     labels: torch.Tensor | None = None,
     behavior_values: torch.Tensor | None = None,
-    workload_profile_id: str = "range_workload_v1",
+    workload_profile_id: str = RANGE_WORKLOAD_V1_PROFILE_ID,
     train_workload_seed: int | None = None,
     grid_bins: int = 64,
     time_bins: int = 24,

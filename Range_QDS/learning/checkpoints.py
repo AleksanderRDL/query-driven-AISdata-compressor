@@ -18,6 +18,7 @@ from config.run_config import (
 from learning.model_factory import build_qds_model, validate_supported_model_type
 from learning.model_features import (
     NONPARAMETRIC_HISTORICAL_PRIOR_MODEL_TYPES,
+    WORKLOAD_BLIND_RANGE_V2_MODEL_TYPE,
 )
 from learning.scaler import FeatureScaler
 
@@ -102,7 +103,7 @@ def load_checkpoint(path: str) -> ModelArtifacts:
     query_prior_field = payload.get("query_prior_field")
     if query_prior_field is not None:
         cast(Any, model).query_prior_field = query_prior_field
-    if model_type == "workload_blind_range_v2":
+    if model_type == WORKLOAD_BLIND_RANGE_V2_MODEL_TYPE:
         load_result = model.load_state_dict(model_state, strict=False)
         allowed_missing = {
             name

@@ -24,6 +24,7 @@ from scoring.methods import FrozenMaskMethod, Method
 from selection.learned_segment_budget import (
     simplify_with_learned_segment_budget_v1_with_trace,
 )
+from selection.selector_types import LEARNED_SEGMENT_BUDGET_SELECTOR_TYPE
 from workloads.typed_workload import TypedQueryWorkload
 
 PhaseLogger = Callable[[str], AbstractContextManager[None]]
@@ -135,7 +136,7 @@ def freeze_workload_blind_retained_masks(
             if (
                 primary_scores is not None
                 and str(getattr(config.model, "selector_type", "")).lower()
-                == "learned_segment_budget_v1"
+                == LEARNED_SEGMENT_BUDGET_SELECTOR_TYPE
             ):
                 primary_segment_scores = frozen_primary_segment_scores.get("MLQDS")
                 primary_path_length_support_scores = frozen_primary_path_length_support_scores.get(

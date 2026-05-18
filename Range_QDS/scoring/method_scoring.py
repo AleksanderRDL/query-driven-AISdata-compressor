@@ -13,7 +13,6 @@ from data_preparation.trajectory_index import (
 )
 from scoring.methods import Method
 from scoring.metrics import (
-    KM_PER_DEG_LAT,
     MethodScore,
     _cumulative_polyline_length_km,
     _polyline_length_km,
@@ -38,6 +37,7 @@ from scoring.range_usefulness import (
 )
 from workloads.query_types import normalize_pure_workload_map
 from workloads.range_geometry import (
+    KM_PER_DEG_LAT,
     points_in_range_box,
     segment_box_bracket_indices,
     segment_pairs_box_crossings,

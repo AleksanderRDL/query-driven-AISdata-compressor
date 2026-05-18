@@ -8,7 +8,7 @@ from typing import Any
 
 import torch
 
-KM_PER_DEG_LAT = 111.32
+from workloads.range_geometry import KM_PER_DEG_LAT
 
 
 def f1_score(r_o: Set[Hashable], r_s: Set[Hashable]) -> float:

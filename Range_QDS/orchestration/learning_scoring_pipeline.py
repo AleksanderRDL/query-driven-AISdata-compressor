@@ -49,6 +49,10 @@ from selection.learned_segment_budget import (
     learned_segment_budget_diagnostics,
 )
 from selection.retained_mask_selectors import temporal_hybrid_selector_budget_diagnostics
+from selection.selector_types import (
+    LEARNED_SEGMENT_BUDGET_SELECTOR_TYPE,
+    TEMPORAL_HYBRID_SELECTOR_TYPE,
+)
 from workloads.query_types import single_workload_type
 
 
@@ -261,8 +265,8 @@ def run_learning_scoring_pipeline(
         sorted({float(config.model.compression_ratio), *(float(ratio) for ratio in audit_ratios)})
     )
     if (
-        str(getattr(config.model, "selector_type", "temporal_hybrid")).lower()
-        == "learned_segment_budget_v1"
+        str(getattr(config.model, "selector_type", TEMPORAL_HYBRID_SELECTOR_TYPE)).lower()
+        == LEARNED_SEGMENT_BUDGET_SELECTOR_TYPE
     ):
         selector_budget_diagnostics = {
             "train": learned_segment_budget_diagnostics(train_boundaries, selector_budget_ratios),

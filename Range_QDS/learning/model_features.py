@@ -72,6 +72,7 @@ HISTORICAL_PRIOR_MMSI_POINT_DIM = (
     + HISTORICAL_PRIOR_CLOCK_DIM
     + HISTORICAL_PRIOR_DENSITY_DIM
 )
+WORKLOAD_BLIND_RANGE_V2_MODEL_TYPE = "workload_blind_range_v2"
 QUERY_AWARE_MODEL_TYPES = ("baseline", "range_aware")
 WORKLOAD_BLIND_MODEL_TYPE_CHOICES = (
     "workload_blind_range",
@@ -81,7 +82,7 @@ WORKLOAD_BLIND_MODEL_TYPE_CHOICES = (
     "historical_prior",
     "historical_prior_mmsi",
     "historical_prior_student",
-    "workload_blind_range_v2",
+    WORKLOAD_BLIND_RANGE_V2_MODEL_TYPE,
 )
 SUPPORTED_MODEL_TYPES = QUERY_AWARE_MODEL_TYPES + WORKLOAD_BLIND_MODEL_TYPE_CHOICES
 WORKLOAD_BLIND_MODEL_TYPES = frozenset(WORKLOAD_BLIND_MODEL_TYPE_CHOICES)
@@ -138,7 +139,7 @@ MODEL_TYPE_METADATA: dict[str, dict[str, object]] = {
         "requires_ablation_against_standalone_knn": True,
         "final_success_allowed": False,
     },
-    "workload_blind_range_v2": {
+    WORKLOAD_BLIND_RANGE_V2_MODEL_TYPE: {
         "model_family": "query_driven_factorized_workload_blind",
         "trainable_final_candidate": True,
         "requires_query_useful_v1": True,
@@ -630,7 +631,7 @@ def build_model_point_features(
         return build_workload_blind_point_features_for_dim(points, CONTEXT_WORKLOAD_BLIND_POINT_DIM)
     if normalized_type in {"range_prior_clock_density", "segment_context_range"}:
         return build_range_prior_clock_density_point_features(points)
-    if normalized_type == "workload_blind_range_v2":
+    if normalized_type == WORKLOAD_BLIND_RANGE_V2_MODEL_TYPE:
         return build_workload_blind_range_v2_point_features(
             points, query_prior_field=query_prior_field
         )

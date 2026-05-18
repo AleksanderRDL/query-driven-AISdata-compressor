@@ -8,6 +8,7 @@ from typing import Any
 import torch
 
 from learning.targets.query_useful_v1 import (
+    QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE,
     QUERY_USEFUL_V1_HEAD_NAMES,
     build_query_useful_v1_targets,
 )
@@ -519,7 +520,7 @@ def target_segment_oracle_alignment_audit(
     source_semantics.update(
         {
             f"target_head_{head_name!s}_top20_mean": (
-                f"eval_query_useful_v1_factorized_target_head:{head_name!s}"
+                f"eval_{QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE}_target_head:{head_name!s}"
             )
             for head_name in QUERY_USEFUL_V1_HEAD_NAMES
         }

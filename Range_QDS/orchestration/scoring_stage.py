@@ -35,6 +35,7 @@ from scoring.score_tables import (
     print_range_usefulness_table,
     print_shift_table,
 )
+from selection.selector_types import LEARNED_SEGMENT_BUDGET_SELECTOR_TYPE
 from workloads.query_types import single_workload_type
 from workloads.typed_workload import TypedQueryWorkload
 
@@ -142,7 +143,8 @@ def run_scoring_stage(
         )
     if (
         workload_blind_eval
-        and str(getattr(config.model, "selector_type", "")).lower() == "learned_segment_budget_v1"
+        and str(getattr(config.model, "selector_type", "")).lower()
+        == LEARNED_SEGMENT_BUDGET_SELECTOR_TYPE
     ):
         segment_oracle_audit_payload = segment_oracle_allocation_audit(
             point_scores=frozen_primary_scores.get("MLQDS"),

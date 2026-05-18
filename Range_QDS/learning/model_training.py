@@ -42,6 +42,7 @@ from learning.model_factory import build_qds_model, require_historical_prior_mod
 from learning.model_features import (
     HISTORICAL_PRIOR_MODEL_TYPES,
     NONPARAMETRIC_HISTORICAL_PRIOR_MODEL_TYPES,
+    WORKLOAD_BLIND_RANGE_V2_MODEL_TYPE,
     build_model_point_features,
 )
 from learning.model_setup import (
@@ -65,11 +66,13 @@ from learning.targets.common import (
     _scaled_training_target_for_type,
 )
 from learning.targets.query_useful_v1 import (
+    QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE,
     QUERY_USEFUL_V1_HEAD_NAMES,
     build_query_useful_v1_targets,
 )
 from learning.trajectory_batching import batch_windows, build_trajectory_windows
 from runtime.torch_runtime import normalize_amp_mode, torch_autocast_context
+from workloads.generation.workload_profiles import RANGE_WORKLOAD_V1_PROFILE_ID
 from workloads.query_types import (
     ID_TO_QUERY_NAME,
     NUM_QUERY_TYPES,
@@ -110,7 +113,7 @@ def _fit_scaler_for_model(
 ) -> FeatureScaler:
     """Fit feature scaling, preserving semantic zero for v2 query-prior channels."""
     scaler = FeatureScaler.fit(points, queries)
-    if str(model_type).lower() == "workload_blind_range_v2":
+    if str(model_type).lower() == WORKLOAD_BLIND_RANGE_V2_MODEL_TYPE:
         prior_dim = len(QUERY_PRIOR_FIELD_NAMES)
         if int(scaler.point_min.numel()) >= prior_dim:
             prior_slice = slice(-prior_dim, None)
@@ -169,7 +172,7 @@ def _scalar_training_target_for_mode(
 ) -> tuple[torch.Tensor, str]:
     """Return the scalar target used by the primary loss and its diagnostic basis."""
     mode = str(range_training_target_mode).lower()
-    if mode == "query_useful_v1_factorized":
+    if mode == QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE:
         return labels[:, int(workload_type_id)].clone().float().clamp(0.0, 1.0), (
             "raw_query_useful_v1_final_label_for_loss"
         )
@@ -230,7 +233,7 @@ def train_model(
     range_training_target_mode = str(
         getattr(model_config, "range_training_target_mode", "")
     ).lower()
-    if range_training_target_mode == "query_useful_v1_factorized":
+    if range_training_target_mode == QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE:
         factorized_bundle = build_query_useful_v1_targets(
             points=all_points,
             boundaries=train_boundaries,
@@ -277,7 +280,7 @@ def train_model(
             )
 
     query_prior_field: dict[str, Any] | None = None
-    if str(model_config.model_type).lower() == "workload_blind_range_v2":
+    if str(model_config.model_type).lower() == WORKLOAD_BLIND_RANGE_V2_MODEL_TYPE:
         prior_seed = None
         if query_prior_workload_seeds:
             prior_seed = int(query_prior_workload_seeds[0])
@@ -301,7 +304,7 @@ def train_model(
                 .get("query_generation", {})
                 .get(
                     "workload_profile_id",
-                    "range_workload_v1",
+                    RANGE_WORKLOAD_V1_PROFILE_ID,
                 )
             ),
             train_workload_seed=prior_seed,
@@ -414,7 +417,7 @@ def train_model(
     )
     target_diagnostics["supervised_scalar_target_basis"] = training_target_basis
     if factorized_target_diagnostics:
-        target_diagnostics["query_useful_v1_factorized"] = factorized_target_diagnostics
+        target_diagnostics[QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE] = factorized_target_diagnostics
         target_diagnostics["query_useful_v1_loss_weights"] = {
             "aux_loss_weight": float(getattr(model_config, "query_useful_aux_loss_weight", 0.50)),
             "segment_budget_head_weight": float(
@@ -454,7 +457,7 @@ def train_model(
         )
 
     scaler = _fit_scaler_for_model(points, workload.query_features, model_config.model_type)
-    if str(model_config.model_type).lower() == "workload_blind_range_v2":
+    if str(model_config.model_type).lower() == WORKLOAD_BLIND_RANGE_V2_MODEL_TYPE:
         target_diagnostics["range_v2_prior_feature_scaling"] = {
             "semantic_zero_preserved": True,
             "prior_feature_names": list(QUERY_PRIOR_FIELD_NAMES),
