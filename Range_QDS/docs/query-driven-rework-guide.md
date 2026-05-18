@@ -556,17 +556,18 @@ query_useful_sparse_head_bce_target_mode: raw
 For real AIS probes, increase capacity only after workload health and predictability gates pass.
 
 The behavior-rank auxiliary is training-only pressure on the
-`conditional_behavior_utility` head. Checkpoint 5.28 rejected weight `0.15` as
-a default because it worsened retained-mask causality despite slightly better
-head fit. Keep it disabled unless a future checkpoint has a specific
-hypothesis, and do not treat better head fit alone as evidence of learned
-workload-blind success.
+`conditional_behavior_utility` head. The Checkpoint 5.25-5.42 diagnostic group
+rejected weight `0.15` as a default because it worsened retained-mask causality
+despite slightly better head fit. Keep it disabled unless a future checkpoint
+has a specific hypothesis, and do not treat better head fit alone as evidence
+of learned workload-blind success.
 
 The sparse-head rank auxiliary is training-only pressure on the numerically
 sparse `query_hit_probability` and `boundary_event_utility` heads. It exists to
-test the Checkpoint 5.37 head-saturation diagnosis. Default `0.0` preserves the
-current candidate; any nonzero run is diagnostic until a strict replay proves
-head dispersion improves retained-mask causality and global sanity.
+test the Checkpoint 5.25-5.42 head-saturation diagnosis. Default `0.0`
+preserves the current candidate; any nonzero run is diagnostic until a strict
+replay proves head dispersion improves retained-mask causality and global
+sanity.
 
 The sparse-head BCE target mode is a stronger diagnostic for the same blocker.
 Default `raw` preserves current labels. `window_max_normalized` may be used only
@@ -1555,21 +1556,21 @@ Produce a strict support-valid synthetic/debug single-cell workload where genera
 
 Use the standard strict diagnostic scale unless runtime makes it impossible. A smaller 24-32 ship / 16-query run is allowed only as a quick preliminary failure-localization step.
 
-Recommended command shape:
+Recommended command shape. This example uses the local workload-profile variant
+as a representative strict diagnostic. Do not express this as a raw coverage
+override; coverage and overshoot are profile-owned settings.
 
 ```bash
 uv run --group dev -- python -m orchestration.train_and_score \
-  --results_dir Range_QDS/artifacts/results/query_driven_v2_checkpoint01_generator_health_probe_standard_c10_r05 \
+  --results_dir Range_QDS/artifacts/results/query_driven_v2_checkpoint01_generator_health_probe_standard_profile_local_r05 \
   --n_ships 64 \
   --n_points 256 \
   --synthetic_route_families 4 \
   --seed 2324 \
   --n_queries 48 \
-  --query_coverage 0.10 \
   --max_queries 256 \
-  --range_max_coverage_overshoot 0.0075 \
   --range_train_workload_replicates 4 \
-  --workload_profile_id range_workload_v1 \
+  --workload_profile_id range_workload_v1_local \
   --coverage_calibration_mode profile_sampled_query_count \
   --workload_stability_gate_mode final \
   --model_type workload_blind_range_v2 \

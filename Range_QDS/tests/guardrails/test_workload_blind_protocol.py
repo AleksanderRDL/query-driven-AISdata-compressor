@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from config.experiment_config import build_experiment_config
+from config.run_config import build_run_config
 from learning.checkpoint_validation import _validation_query_score
 from learning.outputs import TrainingOutputs
 from learning.scaler import FeatureScaler
@@ -141,7 +141,7 @@ def test_workload_blind_validation_scoring_does_not_read_validation_query_featur
     trajectories = [points]
     trained = _trained_blind(points)
     bad_validation_features = torch.full((1, 12), float("nan"), dtype=torch.float32)
-    cfg = build_experiment_config(
+    cfg = build_run_config(
         model_type="workload_blind_range",
         compression_ratio=0.4,
         checkpoint_score_variant="range_usefulness",

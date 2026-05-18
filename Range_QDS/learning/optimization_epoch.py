@@ -11,7 +11,7 @@ from typing import Any, Protocol, cast
 import torch
 import torch.nn.functional as F
 
-from config.experiment_config import ModelConfig
+from config.run_config import ModelConfig
 from learning.losses import (
     _balanced_pointwise_loss_rows,
     _budget_stratified_recall_loss_rows,

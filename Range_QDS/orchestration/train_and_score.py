@@ -1,16 +1,16 @@
-"""AIS-QDS end-to-end experiment entrypoint. See orchestration/README.md for details."""
+"""AIS-QDS end-to-end run entrypoint. See orchestration/README.md for details."""
 
 from __future__ import annotations
 
 import time
 from pathlib import Path
 
-from config.experiment_config import build_experiment_config
+from config.run_config import build_run_config
 from data_preparation.ais_loader import generate_synthetic_ais_data, load_ais_csv
 from data_preparation.trajectory_cache import load_or_build_ais_cache
 from orchestration.cli_utils import normalized_gap_arg, split_csv_path_list
 from orchestration.learning_scoring_cli import build_parser
-from orchestration.learning_scoring_pipeline import run_experiment_pipeline
+from orchestration.learning_scoring_pipeline import run_learning_scoring_pipeline
 from runtime.torch_runtime import apply_torch_runtime_settings
 
 
@@ -142,11 +142,11 @@ def _default_simplified_dir(args) -> str:
 
 
 def main() -> None:
-    """Parse CLI args and run the AIS-QDS experiment. See orchestration/README.md for details."""
+    """Parse CLI args and run AIS-QDS learning/scoring. See orchestration/README.md for details."""
     parser = build_parser()
     args = parser.parse_args()
 
-    config = build_experiment_config(
+    config = build_run_config(
         n_ships=args.n_ships,
         n_points=args.n_points,
         synthetic_route_families=args.synthetic_route_families,
@@ -609,7 +609,7 @@ def main() -> None:
         save_simplified_dir = _default_simplified_dir(args)
         print(f"[config] auto-saving simplified eval CSV under {save_simplified_dir}", flush=True)
 
-    out = run_experiment_pipeline(
+    out = run_learning_scoring_pipeline(
         config=config,
         trajectories=trajectories,
         results_dir=args.results_dir,

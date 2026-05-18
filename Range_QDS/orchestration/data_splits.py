@@ -1,4 +1,4 @@
-"""Data splitting and dataset construction for experiment runs."""
+"""Data splitting and dataset construction for single runs."""
 
 from __future__ import annotations
 
@@ -7,12 +7,12 @@ from typing import Any
 
 import torch
 
-from config.experiment_config import ExperimentConfig, SeedBundle
+from config.run_config import RunConfig, SeedBundle
 from data_preparation.trajectory_dataset import TrajectoryDataset
 
 
 @dataclass
-class ExperimentDataSplit:
+class RunDataSplit:
     """Resolved train, selection-validation, and evaluation trajectory splits."""
 
     train_traj: list[torch.Tensor]
@@ -25,8 +25,8 @@ class ExperimentDataSplit:
 
 
 @dataclass
-class ExperimentDatasets:
-    """Flattened datasets and trajectory boundaries for one experiment run."""
+class RunDatasets:
+    """Flattened datasets and trajectory boundaries for one run."""
 
     train_points: torch.Tensor
     test_points: torch.Tensor
@@ -114,7 +114,7 @@ def _fallback_validation_indices(
     )
 
 
-def _single_dataset_split_fractions(config: ExperimentConfig) -> tuple[float, float]:
+def _single_dataset_split_fractions(config: RunConfig) -> tuple[float, float]:
     """Return validated train/validation fractions for single-dataset splits."""
     train_fraction = float(config.data.train_fraction)
     val_fraction = float(config.data.val_fraction)
@@ -129,9 +129,9 @@ def _single_dataset_split_fractions(config: ExperimentConfig) -> tuple[float, fl
     return train_fraction, val_fraction
 
 
-def prepare_experiment_split(
+def prepare_run_split(
     *,
-    config: ExperimentConfig,
+    config: RunConfig,
     seeds: SeedBundle,
     trajectories: list[torch.Tensor],
     needs_validation_score: bool,
@@ -140,7 +140,7 @@ def prepare_experiment_split(
     eval_trajectories: list[torch.Tensor] | None = None,
     eval_trajectory_mmsis: list[int] | None = None,
     trajectory_source_ids: list[int] | None = None,
-) -> ExperimentDataSplit:
+) -> RunDataSplit:
     """Resolve train/eval/selection split for single-dataset and separate-CSV modes."""
     if trajectory_source_ids is not None and len(trajectory_source_ids) != len(trajectories):
         raise ValueError(
@@ -277,7 +277,7 @@ def prepare_experiment_split(
     if selection_traj:
         print(f"  checkpoint-selection validation={len(selection_traj)} trajectories", flush=True)
 
-    return ExperimentDataSplit(
+    return RunDataSplit(
         train_traj=train_traj,
         test_traj=test_traj,
         selection_traj=selection_traj,
@@ -288,14 +288,14 @@ def prepare_experiment_split(
     )
 
 
-def build_experiment_datasets(data_split: ExperimentDataSplit) -> ExperimentDatasets:
+def build_run_datasets(data_split: RunDataSplit) -> RunDatasets:
     """Build flattened trajectory datasets for train, eval, and optional selection split."""
     train_ds = TrajectoryDataset(data_split.train_traj)
     test_ds = TrajectoryDataset(data_split.test_traj)
     selection_ds = (
         TrajectoryDataset(data_split.selection_traj) if data_split.selection_traj else None
     )
-    return ExperimentDatasets(
+    return RunDatasets(
         train_points=train_ds.get_all_points(),
         test_points=test_ds.get_all_points(),
         selection_points=selection_ds.get_all_points() if selection_ds is not None else None,

@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from config.experiment_config import build_experiment_config
+from config.run_config import build_run_config
 from learning.checkpoints import ModelArtifacts, load_checkpoint, save_checkpoint
 from learning.inference import forward_predict, windowed_predict
 from learning.model_features import (
@@ -310,7 +310,7 @@ def test_segment_context_model_ignores_queries_and_round_trips_checkpoint(tmp_pa
     assert torch.isfinite(scores_a).all()
     assert torch.allclose(scores_a, scores_b)
 
-    cfg = build_experiment_config(
+    cfg = build_run_config(
         model_type="segment_context_range",
         embed_dim=16,
         num_heads=4,
@@ -345,7 +345,7 @@ def test_workload_blind_range_v2_checkpoint_accepts_missing_prior_feature_encode
         num_layers=0,
         dropout=0.0,
     )
-    cfg = build_experiment_config(
+    cfg = build_run_config(
         model_type="workload_blind_range_v2",
         embed_dim=16,
         num_heads=2,
@@ -384,7 +384,7 @@ def test_load_checkpoint_rejects_unknown_model_type(tmp_path) -> None:
         num_layers=1,
         dropout=0.0,
     )
-    cfg = build_experiment_config(
+    cfg = build_run_config(
         model_type="segment_context_range",
         embed_dim=16,
         num_heads=4,
@@ -528,7 +528,7 @@ def test_historical_prior_model_scores_and_round_trips_checkpoint(tmp_path) -> N
     assert scores.shape == (1, 2)
     assert scores[0, 0].item() < scores[0, 1].item()
 
-    cfg = build_experiment_config(
+    cfg = build_run_config(
         model_type="historical_prior",
         historical_prior_k=1,
         historical_prior_clock_weight=0.25,
@@ -644,7 +644,7 @@ def test_historical_prior_student_uses_prior_feature_and_round_trips_checkpoint(
     assert torch.isfinite(scores).all()
     assert model.historical_targets.shape[0] == 3
 
-    cfg = build_experiment_config(
+    cfg = build_run_config(
         model_type="historical_prior_student",
         historical_prior_k=1,
         embed_dim=8,
@@ -750,7 +750,7 @@ def test_forward_predict_supports_historical_query_free_feature_dims() -> None:
     scaler = FeatureScaler.fit(features, torch.zeros((1, 1), dtype=torch.float32))
     norm_points = scaler.transform_points(features)
     model.set_prior(norm_points, torch.tensor([0.1, 0.5, 0.9], dtype=torch.float32))
-    cfg = build_experiment_config(model_type="historical_prior")
+    cfg = build_run_config(model_type="historical_prior")
     artifacts = ModelArtifacts(model=model, scaler=scaler, config=cfg)
 
     scores = forward_predict(

@@ -8,27 +8,18 @@ from typing import Any, cast
 
 import torch
 
-from config.experiment_config import (
+from config.run_config import (
     BaselineConfig,
     DataConfig,
-    ExperimentConfig,
     ModelConfig,
     QueryConfig,
+    RunConfig,
 )
+from learning.model_factory import build_qds_model, validate_supported_model_type
 from learning.model_features import (
-    HISTORICAL_PRIOR_MODEL_TYPES,
     NONPARAMETRIC_HISTORICAL_PRIOR_MODEL_TYPES,
-    SUPPORTED_MODEL_TYPES,
-    is_workload_blind_model_type,
 )
 from learning.scaler import FeatureScaler
-from models.historical_prior_qds_model import (
-    HistoricalPriorRangeQDSModel,
-    HistoricalPriorStudentRangeQDSModel,
-)
-from models.trajectory_qds_model import TrajectoryQDSModel
-from models.workload_blind_qds_model import SegmentContextRangeQDSModel, WorkloadBlindRangeQDSModel
-from models.workload_blind_range_v2 import WorkloadBlindRangeV2Model
 
 
 @dataclass
@@ -37,7 +28,7 @@ class ModelArtifacts:
 
     model: torch.nn.Module
     scaler: FeatureScaler
-    config: ExperimentConfig
+    config: RunConfig
     epochs_trained: int = 0
     workload_type: str | None = None
     query_prior_field: dict[str, Any] | None = None
@@ -83,14 +74,11 @@ def save_checkpoint(path: str, artifacts: ModelArtifacts) -> None:
 def load_checkpoint(path: str) -> ModelArtifacts:
     """Load model weights, scaler stats, and config from checkpoint."""
     payload = torch.load(path, map_location="cpu")
-    cfg = ExperimentConfig.from_dict(_checkpoint_config_payload(payload["config"]))
-    model_type = str(payload["model_type"])
-    if model_type not in SUPPORTED_MODEL_TYPES:
-        choices = ", ".join(SUPPORTED_MODEL_TYPES)
-        raise ValueError(f"Unsupported checkpoint model_type={model_type!r}; choices: {choices}.")
+    cfg = RunConfig.from_dict(_checkpoint_config_payload(payload["config"]))
+    model_type = validate_supported_model_type(str(payload["model_type"]))
     model_state = payload["model_state"]
+    prior_feature_count = 0
     if model_type in NONPARAMETRIC_HISTORICAL_PRIOR_MODEL_TYPES:
-        model_cls = HistoricalPriorRangeQDSModel
         prior = model_state.get("historical_targets")
         prior_feature_count = int(prior.shape[0]) if isinstance(prior, torch.Tensor) else 0
         if "historical_source_ids" not in model_state:
@@ -98,54 +86,19 @@ def load_checkpoint(path: str) -> ModelArtifacts:
                 (prior_feature_count,), dtype=torch.long
             )
     elif model_type == "historical_prior_student":
-        model_cls = HistoricalPriorStudentRangeQDSModel
         prior = model_state.get("prior.historical_targets")
         prior_feature_count = int(prior.shape[0]) if isinstance(prior, torch.Tensor) else 0
         if "prior.historical_source_ids" not in model_state:
             model_state["prior.historical_source_ids"] = torch.zeros(
                 (prior_feature_count,), dtype=torch.long
             )
-    elif model_type == "segment_context_range":
-        model_cls = SegmentContextRangeQDSModel
-        prior_feature_count = 0
-    elif model_type == "workload_blind_range_v2":
-        model_cls = WorkloadBlindRangeV2Model
-        prior_feature_count = 0
-    elif is_workload_blind_model_type(model_type):
-        model_cls = WorkloadBlindRangeQDSModel
-        prior_feature_count = 0
-    else:
-        model_cls = TrajectoryQDSModel
-        prior_feature_count = 0
-    model_kwargs = {
-        "point_dim": int(payload["point_dim"]),
-        "query_dim": int(payload["query_dim"]),
-        "embed_dim": int(payload["embed_dim"]),
-        "query_chunk_size": int(payload["query_chunk_size"]),
-        "num_heads": cfg.model.num_heads,
-        "num_layers": cfg.model.num_layers,
-        "type_embed_dim": cfg.model.type_embed_dim,
-        "dropout": cfg.model.dropout,
-    }
-    if model_type in HISTORICAL_PRIOR_MODEL_TYPES:
-        model_kwargs["historical_prior_k"] = int(getattr(cfg.model, "historical_prior_k", 32))
-        model_kwargs["historical_prior_clock_weight"] = float(
-            getattr(cfg.model, "historical_prior_clock_weight", 0.0)
-        )
-        model_kwargs["historical_prior_mmsi_weight"] = float(
-            getattr(cfg.model, "historical_prior_mmsi_weight", 1.0)
-        )
-        model_kwargs["historical_prior_density_weight"] = float(
-            getattr(cfg.model, "historical_prior_density_weight", 1.0)
-        )
-        model_kwargs["historical_prior_min_target"] = float(
-            getattr(cfg.model, "historical_prior_min_target", 0.0)
-        )
-        model_kwargs["historical_prior_source_aggregation"] = str(
-            getattr(cfg.model, "historical_prior_source_aggregation", "none")
-        )
-        model_kwargs["prior_feature_count"] = prior_feature_count
-    model = model_cls(**model_kwargs)
+    model = build_qds_model(
+        model_type=model_type,
+        model_config=cfg.model,
+        point_dim=int(payload["point_dim"]),
+        query_dim=int(payload["query_dim"]),
+        prior_feature_count=prior_feature_count,
+    )
     query_prior_field = payload.get("query_prior_field")
     if query_prior_field is not None:
         cast(Any, model).query_prior_field = query_prior_field

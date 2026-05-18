@@ -8,7 +8,7 @@ from typing import Any, cast
 
 import torch
 
-from config.experiment_config import ModelConfig
+from config.run_config import ModelConfig
 from learning.fit_diagnostics import _discriminative_sample, _kendall_tau
 from learning.inference import (
     _is_workload_blind_model,

@@ -24,8 +24,11 @@ implementation checks.
 | `data_splits.py` | Train, validation, selection, and eval data splits. |
 | `workload_stage.py` | Workload generation and workload-map resolution. |
 | `scoring_methods.py` | Scoring method construction. |
+| `mlqds_method_factory.py` | Shared MLQDS scoring-method construction from run config. |
 | `scoring_stage.py` | Matched scoring, ablation scoring, learned-fill diagnostics, compression audit scoring, and shift scoring. |
-| `run_artifacts.py` | Run artifact payloads and writers. |
+| `run_artifacts.py` | Standard run artifact file writers. |
+| `run_payload.py` | Stable `example_run.json` payload assembly from completed stage outputs. |
+| `run_exports.py` | Optional query GeoJSON and simplified eval CSV export glue. |
 | `learning_target_stage.py` | Training-label preparation, target transforms, teacher distillation, and validation query caches. |
 | `retained_mask_stage.py` | Workload-blind primary/audit retained-mask freezing and selector-trace capture. |
 | `retained_mask_ablation_stage.py` | Query-free retained-mask ablation construction and freeze diagnostics. |

@@ -9,7 +9,7 @@ from typing import Any, cast
 import pytest
 import torch
 
-from config.experiment_config import build_experiment_config, derive_seed_bundle
+from config.run_config import build_run_config, derive_seed_bundle
 from learning.outputs import TrainingOutputs
 from orchestration.retained_mask_ablation_stage import freeze_retained_mask_ablations
 from orchestration.retained_mask_stage import freeze_workload_blind_retained_masks
@@ -105,7 +105,7 @@ def test_retained_mask_freezing_is_noop_for_query_aware_runs() -> None:
         retention_methods=[method],
         workload_blind_eval=False,
         audit_ratios=[0.25],
-        config=build_experiment_config(),
+        config=build_run_config(),
         trained=_trained_stub(),
         eval_workload=_workload(),
         eval_workload_map={"range": 1.0},
@@ -133,7 +133,7 @@ def test_retained_mask_freezing_captures_primary_caches_and_audit_masks() -> Non
         retention_methods=[mlqds, uniform],
         workload_blind_eval=True,
         audit_ratios=[0.50, 0.25],
-        config=build_experiment_config(
+        config=build_run_config(
             model_type="workload_blind_range_v2",
             selector_type="temporal_hybrid",
             compression_ratio=0.50,
@@ -196,7 +196,7 @@ def test_retained_mask_freezing_captures_learned_selector_trace() -> None:
         retention_methods=[mlqds],
         workload_blind_eval=True,
         audit_ratios=[],
-        config=build_experiment_config(
+        config=build_run_config(
             model_type="workload_blind_range_v2",
             selector_type="learned_segment_budget_v1",
             compression_ratio=0.50,
@@ -228,7 +228,7 @@ def test_retained_mask_ablations_freeze_pre_repair_and_shuffled_scores() -> None
     primary_scores = torch.tensor([0.1, 0.4, 0.3, 0.2], dtype=torch.float32)
 
     outputs = freeze_retained_mask_ablations(
-        config=build_experiment_config(
+        config=build_run_config(
             model_type="workload_blind_range_v2",
             selector_type="learned_segment_budget_v1",
             compression_ratio=0.50,

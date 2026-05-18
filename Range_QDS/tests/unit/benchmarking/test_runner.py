@@ -42,7 +42,7 @@ from benchmarking.runner import (
     _workload_profile_label_suffix,
 )
 from benchmarking.table import _format_report_table
-from config.experiment_config import build_experiment_config
+from config.run_config import build_run_config
 from orchestration.workload_stage import resolve_workload_maps, validation_query_count
 
 
@@ -189,7 +189,7 @@ def test_benchmark_workload_profile_parser_accepts_known_profiles() -> None:
         _parse_workload_profile_ids("range_workload_v1,range_workload_v1")
 
 
-def test_experiment_workload_resolution_is_pure_only() -> None:
+def test_run_workload_resolution_is_pure_only() -> None:
     assert resolve_workload_maps("range") == ({"range": 1.0}, {"range": 1.0})
 
     with pytest.raises(ValueError, match="no longer supported"):
@@ -1808,13 +1808,13 @@ def test_workload_aware_diagnostic_profile_uses_requested_training_shape() -> No
 
 
 def test_selection_query_count_matches_eval_query_count() -> None:
-    cfg = build_experiment_config(n_queries=80, query_coverage=0.20, max_queries=None)
+    cfg = build_run_config(n_queries=80, query_coverage=0.20, max_queries=None)
 
     assert validation_query_count(cfg) == 80
 
 
 def test_csv_config_suppresses_inactive_synthetic_metadata() -> None:
-    cfg = build_experiment_config(
+    cfg = build_run_config(
         n_ships=24,
         n_points=200,
         train_csv_path="../AISDATA/cleaned/day1.csv",

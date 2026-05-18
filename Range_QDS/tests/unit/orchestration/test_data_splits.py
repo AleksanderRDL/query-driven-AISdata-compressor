@@ -1,12 +1,12 @@
-"""Tests for experiment data splitting."""
+"""Tests for run data splitting."""
 
 from __future__ import annotations
 
 import pytest
 import torch
 
-from config.experiment_config import SeedBundle, build_experiment_config
-from orchestration.data_splits import prepare_experiment_split
+from config.run_config import SeedBundle, build_run_config
+from orchestration.data_splits import prepare_run_split
 
 
 def _trajectory(value: float) -> torch.Tensor:
@@ -25,11 +25,11 @@ def _seeds() -> SeedBundle:
 
 
 def test_source_stratified_validation_holds_out_each_train_source() -> None:
-    cfg = build_experiment_config(validation_split_mode="source_stratified")
+    cfg = build_run_config(validation_split_mode="source_stratified")
     train = [_trajectory(float(value)) for value in (0, 1, 2, 10, 11, 12)]
     source_ids = [0, 0, 0, 1, 1, 1]
 
-    split = prepare_experiment_split(
+    split = prepare_run_split(
         config=cfg,
         seeds=_seeds(),
         trajectories=train,
@@ -48,10 +48,10 @@ def test_source_stratified_validation_holds_out_each_train_source() -> None:
 
 
 def test_source_stratified_validation_requires_source_ids() -> None:
-    cfg = build_experiment_config(validation_split_mode="source_stratified")
+    cfg = build_run_config(validation_split_mode="source_stratified")
 
     with pytest.raises(ValueError, match="requires train trajectory source ids"):
-        prepare_experiment_split(
+        prepare_run_split(
             config=cfg,
             seeds=_seeds(),
             trajectories=[_trajectory(0.0), _trajectory(1.0)],
@@ -61,10 +61,10 @@ def test_source_stratified_validation_requires_source_ids() -> None:
 
 
 def test_single_dataset_split_respects_configured_fractions() -> None:
-    cfg = build_experiment_config(train_fraction=0.34, val_fraction=0.33)
+    cfg = build_run_config(train_fraction=0.34, val_fraction=0.33)
     trajectories = [_trajectory(float(value)) for value in range(12)]
 
-    split = prepare_experiment_split(
+    split = prepare_run_split(
         config=cfg,
         seeds=_seeds(),
         trajectories=trajectories,
@@ -80,10 +80,10 @@ def test_single_dataset_split_respects_configured_fractions() -> None:
 
 
 def test_single_dataset_split_rejects_fractions_without_eval_holdout() -> None:
-    cfg = build_experiment_config(train_fraction=0.80, val_fraction=0.20)
+    cfg = build_run_config(train_fraction=0.80, val_fraction=0.20)
 
     with pytest.raises(ValueError, match=r"less than 1\.0"):
-        prepare_experiment_split(
+        prepare_run_split(
             config=cfg,
             seeds=_seeds(),
             trajectories=[_trajectory(float(value)) for value in range(12)],

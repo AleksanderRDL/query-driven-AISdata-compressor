@@ -1,4 +1,4 @@
-"""Segment-level audit helpers for query-driven experiment diagnostics."""
+"""Segment-level audit helpers for query-driven run diagnostics."""
 
 from __future__ import annotations
 

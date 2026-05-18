@@ -1,4 +1,4 @@
-"""Range diagnostics, query-cache, and label-cache helpers for experiment runs."""
+"""Range diagnostics, query-cache, and label-cache helpers for single runs."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from typing import Any
 
 import torch
 
-from config.experiment_config import ExperimentConfig
+from config.run_config import RunConfig
 from learning.importance_labels import (
     compute_typed_importance_labels,
     compute_typed_importance_labels_with_range_components,
@@ -101,7 +101,7 @@ def ensure_range_runtime_labels(
     return labels, labelled_mask
 
 
-def range_diagnostic_duplicate_threshold(config: ExperimentConfig) -> float | None:
+def range_diagnostic_duplicate_threshold(config: RunConfig) -> float | None:
     """Use explicit duplicate threshold for diagnostics, or a diagnostic-only default."""
     threshold = config.query.range_duplicate_iou_threshold
     return 0.85 if threshold is None else threshold
@@ -112,7 +112,7 @@ def range_only_queries(typed_queries: list[dict[str, Any]]) -> list[dict[str, An
     return [query for query in typed_queries if str(query.get("type", "")).lower() == "range"]
 
 
-def _range_diagnostics_cache_root(config: ExperimentConfig) -> Path | None:
+def _range_diagnostics_cache_root(config: RunConfig) -> Path | None:
     """Return persistent range-diagnostics cache root when enabled."""
     if str(getattr(config.data, "range_diagnostics_mode", "full")).lower() != "cached":
         return None
@@ -133,7 +133,7 @@ def range_diagnostics_cache_payload(
     boundaries: list[tuple[int, int]],
     workload: TypedQueryWorkload,
     workload_map: dict[str, float],
-    config: ExperimentConfig,
+    config: RunConfig,
     seed: int,
     range_label_mode: str | None = None,
     range_boundary_prior_weight: float | None = None,
@@ -184,7 +184,7 @@ def range_label_cache_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _range_diagnostics_cache_paths(
-    config: ExperimentConfig, label: str, key: str
+    config: RunConfig, label: str, key: str
 ) -> tuple[Path, Path] | None:
     """Return JSON and tensor paths for a range diagnostics cache entry."""
     cache_root = _range_diagnostics_cache_root(config)
@@ -196,7 +196,7 @@ def _range_diagnostics_cache_paths(
 
 def load_range_diagnostics_cache(
     *,
-    config: ExperimentConfig,
+    config: RunConfig,
     label: str,
     key: str,
     points: torch.Tensor,
@@ -281,7 +281,7 @@ def load_range_diagnostics_cache(
 
 def _load_range_label_tensor_cache(
     *,
-    config: ExperimentConfig,
+    config: RunConfig,
     label: str,
     key: str,
     runtime_cache: RangeRuntimeCache,
@@ -330,7 +330,7 @@ def _load_range_label_tensor_cache(
 
 def _write_range_label_tensor_cache(
     *,
-    config: ExperimentConfig,
+    config: RunConfig,
     label: str,
     key: str,
     runtime_cache: RangeRuntimeCache,
@@ -358,7 +358,7 @@ def _write_range_label_tensor_cache(
 
 def write_range_diagnostics_cache(
     *,
-    config: ExperimentConfig,
+    config: RunConfig,
     label: str,
     key: str,
     summary: dict[str, Any],
@@ -417,7 +417,7 @@ def prepare_range_label_cache(
     boundaries: list[tuple[int, int]],
     workload: TypedQueryWorkload,
     workload_map: dict[str, float],
-    config: ExperimentConfig,
+    config: RunConfig,
     seed: int,
     runtime_cache: RangeRuntimeCache,
     range_boundary_prior_weight: float | None = None,
@@ -492,7 +492,7 @@ def prepare_range_training_cache(
     boundaries: list[tuple[int, int]],
     workload: TypedQueryWorkload,
     workload_map: dict[str, float],
-    config: ExperimentConfig,
+    config: RunConfig,
     seed: int,
     runtime_cache: RangeRuntimeCache,
 ) -> tuple[torch.Tensor, torch.Tensor] | None:

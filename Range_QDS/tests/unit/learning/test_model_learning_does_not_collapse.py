@@ -7,7 +7,7 @@ from typing import Any, cast
 import pytest
 import torch
 
-from config.experiment_config import build_experiment_config
+from config.run_config import build_run_config
 from data_preparation.ais_loader import generate_synthetic_ais_data
 from data_preparation.trajectory_dataset import TrajectoryDataset
 from learning.checkpoint_selection import (
@@ -56,7 +56,7 @@ def test_selection_score_penalizes_collapsed_predictions() -> None:
 
 
 def test_temporal_residual_budget_ratios_match_learned_fill_budget() -> None:
-    cfg = build_experiment_config(
+    cfg = build_run_config(
         compression_ratio=0.05,
         budget_loss_ratios=[0.01, 0.02, 0.05, 0.10],
         mlqds_temporal_fraction=0.75,
@@ -76,7 +76,7 @@ def test_temporal_residual_budget_ratios_match_learned_fill_budget() -> None:
         (0.01, 0.02, 0.05, 0.10)
     )
 
-    stratified_cfg = build_experiment_config(
+    stratified_cfg = build_run_config(
         compression_ratio=0.05,
         budget_loss_ratios=[0.01, 0.02, 0.05, 0.10],
         mlqds_hybrid_mode="stratified",
@@ -85,7 +85,7 @@ def test_temporal_residual_budget_ratios_match_learned_fill_budget() -> None:
     assert _effective_budget_loss_ratios(stratified_cfg.model, "temporal") == pytest.approx(
         (0.01, 0.02, 0.05, 0.10)
     )
-    global_cfg = build_experiment_config(
+    global_cfg = build_run_config(
         compression_ratio=0.05,
         budget_loss_ratios=[0.01, 0.02, 0.05, 0.10],
         mlqds_hybrid_mode="global_budget",
@@ -109,7 +109,7 @@ def test_train_target_fit_diagnostics_reports_budget_target_recall() -> None:
     target = torch.tensor([0.0, 0.1, 1.0, 0.9, 0.2, 0.0], dtype=torch.float32)
     predictions = target.clone()
     labelled_mask = torch.ones_like(target, dtype=torch.bool)
-    cfg = build_experiment_config(
+    cfg = build_run_config(
         compression_ratio=0.5,
         budget_loss_ratios=[0.5],
         workload="range",
@@ -506,7 +506,7 @@ def test_training_records_validation_selection_score() -> None:
     train_boundaries = train_ds.get_trajectory_boundaries()
     validation_boundaries = validation_ds.get_trajectory_boundaries()
 
-    cfg = build_experiment_config(
+    cfg = build_run_config(
         epochs=8,
         n_queries=4,
         workload="range",
@@ -571,7 +571,7 @@ def test_checkpoint_candidate_pool_defers_full_validation() -> None:
     train_boundaries = TrajectoryDataset(train_trajectories).get_trajectory_boundaries()
     validation_boundaries = TrajectoryDataset(validation_trajectories).get_trajectory_boundaries()
 
-    cfg = build_experiment_config(
+    cfg = build_run_config(
         epochs=5,
         n_queries=4,
         workload="range",
@@ -663,7 +663,7 @@ def test_validation_query_score_matches_final_mlqds_scoring(
         range_spatial_fraction=0.40,
         range_time_fraction=0.40,
     )
-    cfg = build_experiment_config(
+    cfg = build_run_config(
         compression_ratio=0.40,
         workload="range",
         mlqds_temporal_fraction=0.25,
@@ -749,7 +749,7 @@ def test_validation_range_usefulness_matches_final_audit(monkeypatch: pytest.Mon
         range_spatial_fraction=0.40,
         range_time_fraction=0.40,
     )
-    cfg = build_experiment_config(
+    cfg = build_run_config(
         compression_ratio=0.40,
         workload="range",
         mlqds_temporal_fraction=0.25,
@@ -832,7 +832,7 @@ def test_validation_selection_passes_segment_head_to_learned_selector(
         range_spatial_fraction=0.60,
         range_time_fraction=0.60,
     )
-    cfg = build_experiment_config(
+    cfg = build_run_config(
         compression_ratio=0.40,
         workload="range",
         checkpoint_score_variant="answer",
@@ -896,7 +896,7 @@ def test_validation_selection_can_blend_length_support_head_for_learned_selector
         range_spatial_fraction=0.60,
         range_time_fraction=0.60,
     )
-    cfg = build_experiment_config(
+    cfg = build_run_config(
         compression_ratio=0.40,
         workload="range",
         checkpoint_score_variant="answer",
@@ -978,7 +978,7 @@ def test_validation_checkpoint_scores_report_factorized_causality_deltas(
         range_spatial_fraction=0.60,
         range_time_fraction=0.60,
     )
-    cfg = build_experiment_config(
+    cfg = build_run_config(
         compression_ratio=0.50,
         workload="range",
         checkpoint_score_variant="query_useful_v1",
@@ -1078,7 +1078,7 @@ def test_training_accepts_precomputed_importance_labels() -> None:
         typed_queries=workload.typed_queries,
     )
 
-    cfg = build_experiment_config(
+    cfg = build_run_config(
         epochs=1,
         n_queries=4,
         workload="range",
@@ -1117,7 +1117,7 @@ def test_historical_prior_training_returns_fitted_prior_and_diagnostics() -> Non
         workload_map={"range": 1.0},
         seed=823,
     )
-    cfg = build_experiment_config(
+    cfg = build_run_config(
         epochs=3,
         n_queries=4,
         workload="range",
@@ -1168,7 +1168,7 @@ def test_historical_prior_training_caps_support_per_trajectory() -> None:
     labelled_mask[:, QUERY_TYPE_ID_RANGE] = True
     for start, end in boundaries:
         labels[start:end, QUERY_TYPE_ID_RANGE] = torch.linspace(0.0, 1.0, steps=end - start)
-    cfg = build_experiment_config(
+    cfg = build_run_config(
         epochs=3,
         n_queries=4,
         workload="range",
@@ -1203,7 +1203,7 @@ def test_historical_prior_training_preserves_train_source_ids() -> None:
         workload_map={"range": 1.0},
         seed=829,
     )
-    cfg = build_experiment_config(
+    cfg = build_run_config(
         epochs=1,
         n_queries=4,
         workload="range",
@@ -1241,7 +1241,7 @@ def test_ranking_bce_objective_keeps_rank_signal(synthetic_dataset) -> None:
     ds = TrajectoryDataset(trajectories)
     boundaries = ds.get_trajectory_boundaries()
 
-    cfg = build_experiment_config(
+    cfg = build_run_config(
         epochs=4, n_queries=80, workload="range", loss_objective="ranking_bce"
     )
     workload = generate_typed_query_workload(
@@ -1272,7 +1272,7 @@ def test_pointwise_bce_objective_trains_on_range_labels(synthetic_dataset) -> No
     ds = TrajectoryDataset(trajectories)
     boundaries = ds.get_trajectory_boundaries()
 
-    cfg = build_experiment_config(
+    cfg = build_run_config(
         epochs=1, n_queries=24, workload="range", loss_objective="pointwise_bce"
     )
     cfg.model.embed_dim = 16
@@ -1308,7 +1308,7 @@ def test_range_coverage_training_keeps_score_spread(synthetic_dataset) -> None:
     ds = TrajectoryDataset(trajectories)
     boundaries = ds.get_trajectory_boundaries()
 
-    cfg = build_experiment_config(
+    cfg = build_run_config(
         epochs=4,
         n_queries=60,
         query_coverage=0.30,

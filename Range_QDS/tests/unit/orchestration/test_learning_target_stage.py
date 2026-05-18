@@ -8,7 +8,7 @@ from contextlib import contextmanager
 import pytest
 import torch
 
-from config.experiment_config import build_experiment_config, derive_seed_bundle
+from config.run_config import build_run_config, derive_seed_bundle
 from orchestration.learning_target_stage import prepare_training_targets
 from orchestration.range_runtime_cache import RangeRuntimeCache
 from workloads.query_types import pad_query_features
@@ -70,7 +70,7 @@ def _minimal_points() -> torch.Tensor:
 
 
 def test_factorized_target_preparation_does_not_precompute_train_labels() -> None:
-    config = build_experiment_config(
+    config = build_run_config(
         model_type="workload_blind_range_v2",
         range_training_target_mode="query_useful_v1_factorized",
     )
@@ -106,7 +106,7 @@ def test_factorized_target_preparation_does_not_precompute_train_labels() -> Non
 
 
 def test_target_preparation_builds_selection_query_cache_for_range_validation() -> None:
-    config = build_experiment_config(
+    config = build_run_config(
         model_type="workload_blind_range_v2",
         range_training_target_mode="query_useful_v1_factorized",
     )
@@ -142,7 +142,7 @@ def test_target_preparation_builds_selection_query_cache_for_range_validation() 
 
 
 def test_target_preparation_rejects_invalid_replicate_aggregation() -> None:
-    config = build_experiment_config(
+    config = build_run_config(
         model_type="workload_blind_range_v2",
         range_training_target_mode="query_useful_v1_factorized",
         range_replicate_target_aggregation="unsupported",
@@ -172,7 +172,7 @@ def test_target_preparation_rejects_invalid_replicate_aggregation() -> None:
 
 
 def test_target_preparation_rejects_replicates_for_query_aware_model() -> None:
-    config = build_experiment_config(
+    config = build_run_config(
         model_type="baseline",
         range_training_target_mode="query_useful_v1_factorized",
     )
@@ -201,7 +201,7 @@ def test_target_preparation_rejects_replicates_for_query_aware_model() -> None:
 
 
 def test_target_preparation_rejects_balancing_without_precomputed_labels() -> None:
-    config = build_experiment_config(
+    config = build_run_config(
         model_type="workload_blind_range_v2",
         range_training_target_mode="query_useful_v1_factorized",
         range_target_balance_mode="trajectory_unit_mass",

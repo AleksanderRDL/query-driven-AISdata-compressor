@@ -1,4 +1,4 @@
-"""Shared experiment configuration dataclasses. See config/README.md for details."""
+"""Shared run configuration dataclasses. See config/README.md for details."""
 
 from __future__ import annotations
 
@@ -240,8 +240,8 @@ class BaselineConfig:
 
 
 @dataclass
-class ExperimentConfig:
-    """Top-level experiment config container. See orchestration/README.md for details."""
+class RunConfig:
+    """Top-level run config container. See orchestration/README.md for details."""
 
     data: DataConfig = field(default_factory=DataConfig)
     query: QueryConfig = field(default_factory=QueryConfig)
@@ -258,12 +258,12 @@ class ExperimentConfig:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> ExperimentConfig:
+    def from_dict(cls, data: dict[str, Any]) -> RunConfig:
         """Deserialize config from a dictionary. See orchestration/README.md for details."""
         expected_keys = {"data", "query", "model", "baselines"}
         unknown_keys = set(data) - expected_keys
         if unknown_keys:
-            raise TypeError(f"Unknown ExperimentConfig keys: {sorted(unknown_keys)}")
+            raise TypeError(f"Unknown RunConfig keys: {sorted(unknown_keys)}")
         return cls(
             data=DataConfig.from_dict(data["data"]),
             query=QueryConfig.from_dict(data["query"]),
@@ -274,7 +274,7 @@ class ExperimentConfig:
 
 @dataclass
 class SeedBundle:
-    """Derived deterministic sub-seeds for experiment stages. See orchestration/README.md for details."""
+    """Derived deterministic sub-seeds for run stages. See orchestration/README.md for details."""
 
     split_seed: int
     train_query_seed: int
@@ -282,7 +282,7 @@ class SeedBundle:
     torch_seed: int
 
 
-def build_experiment_config(
+def build_run_config(
     n_ships: int = 24,
     n_points: int = 200,
     synthetic_route_families: int = 0,
@@ -424,8 +424,8 @@ def build_experiment_config(
     float32_matmul_precision: str = "highest",
     allow_tf32: bool = False,
     amp_mode: str = "off",
-) -> ExperimentConfig:
-    """Build a structured experiment config from flat arguments. See orchestration/README.md for details."""
+) -> RunConfig:
+    """Build structured run config from flat arguments. See orchestration/README.md for details."""
     uses_csv = bool(csv_path or train_csv_path or validation_csv_path or eval_csv_path)
     effective_query_coverage = query_coverage
     effective_range_max_coverage_overshoot = range_max_coverage_overshoot
@@ -444,7 +444,7 @@ def build_experiment_config(
                 effective_range_max_coverage_overshoot = workload_profile.max_coverage_overshoot
             if effective_coverage_calibration_mode is None:
                 effective_coverage_calibration_mode = workload_profile.coverage_calibration_mode
-    return ExperimentConfig(
+    return RunConfig(
         data=DataConfig(
             n_ships=None if uses_csv else n_ships,
             n_points_per_ship=None if uses_csv else n_points,

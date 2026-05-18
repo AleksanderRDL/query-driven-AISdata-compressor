@@ -1,11 +1,11 @@
-"""CLI parsing helpers for the AIS-QDS experiment runner. See orchestration/README.md for details."""
+"""CLI parsing helpers for the AIS-QDS run entrypoint. See orchestration/README.md for details."""
 
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
 
-from config.experiment_config import (
+from config.run_config import (
     DEFAULT_BUDGET_LOSS_RATIOS,
     DEFAULT_BUDGET_LOSS_TEMPERATURE,
     VALIDATION_SPLIT_MODES,
@@ -86,8 +86,8 @@ def _range_train_footprint_list(value: str) -> list[str]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Build experiment CLI parser. See orchestration/README.md for details."""
-    parser = argparse.ArgumentParser(description="Run AIS-QDS experiment.")
+    """Build run CLI parser. See orchestration/README.md for details."""
+    parser = argparse.ArgumentParser(description="Run AIS-QDS learning/scoring.")
     parser.add_argument("--csv_path", type=str, default=None)
     parser.add_argument(
         "--train_csv_path",

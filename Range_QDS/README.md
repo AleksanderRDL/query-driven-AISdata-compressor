@@ -1,8 +1,8 @@
 # AIS-QDS
 
-AIS-QDS trains and scores trajectory simplification models for AIS data. The
-active target is workload-blind range compression: choose retained points before
-future eval queries are known, then score the frozen retained set.
+AIS-QDS trains and scores query-driven AIS trajectory compressors. The active
+target is workload-blind range compression: choose retained points before future
+eval queries are known, then score the frozen retained set.
 
 Current source of truth:
 
@@ -47,9 +47,18 @@ uv run --group dev -- python -m orchestration.train_and_score \
   --csv_path AISDATA/cleaned/<cleaned-ais-file.csv> \
   --cache_dir Range_QDS/artifacts/cache/manual_csv \
   --workload range \
+  --workload_profile_id range_workload_v1 \
+  --coverage_calibration_mode profile_sampled_query_count \
+  --model_type workload_blind_range_v2 \
+  --range_training_target_mode query_useful_v1_factorized \
+  --selector_type learned_segment_budget_v1 \
+  --checkpoint_score_variant query_useful_v1 \
+  --checkpoint_selection_metric uniform_gap \
   --n_queries 128 \
   --epochs 6 \
   --compression_ratio 0.10 \
+  --mlqds_temporal_fraction 0.0 \
+  --final_metrics_mode diagnostic \
   --results_dir Range_QDS/artifacts/results/manual_range
 ```
 

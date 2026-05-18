@@ -1,4 +1,4 @@
-"""Final single-cell gate and summary assembly for experiment artifacts."""
+"""Final single-cell gate and summary assembly for run artifacts."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Any
 
 import torch
 
-from config.experiment_config import ExperimentConfig
+from config.run_config import RunConfig
 from learning.outputs import TrainingOutputs
 from orchestration.causality import (
     LEARNING_CAUSALITY_MIN_MATERIAL_DELTA,
@@ -30,7 +30,7 @@ from workloads.generation.workload_profiles import RANGE_WORKLOAD_V1_FINAL_PROFI
 
 @dataclass(frozen=True)
 class FinalRunSummaries:
-    """Final-claim and gate payloads used by experiment artifacts."""
+    """Final-claim and gate payloads used by run artifacts."""
 
     final_candidate: bool
     final_claim_summary: dict[str, Any]
@@ -45,7 +45,7 @@ class FinalRunSummaries:
 
 def build_final_run_summaries(
     *,
-    config: ExperimentConfig,
+    config: RunConfig,
     trained: TrainingOutputs,
     train_points: torch.Tensor,
     test_points: torch.Tensor,

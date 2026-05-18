@@ -6,10 +6,10 @@ from pathlib import Path
 
 import torch
 
-from config.experiment_config import build_experiment_config, derive_seed_bundle
+from config.run_config import build_run_config, derive_seed_bundle
 from data_preparation.ais_loader import generate_synthetic_ais_data, load_ais_csv
 from orchestration.workload_generation_cache import generate_typed_query_workload_for_config
-from orchestration.workload_stage import generate_experiment_workloads
+from orchestration.workload_stage import generate_run_workloads
 from workloads.coverage_estimator import (
     best_query_count,
     estimate_range_coverage,
@@ -364,7 +364,7 @@ def test_sampled_range_coverage_estimator_works_on_loaded_cleaned_csv(tmp_path: 
 def test_configured_workload_expands_to_max_queries_when_target_needs_more_queries() -> None:
     """Assert coverage-targeted config treats n_queries as a minimum and max_queries as the cap."""
     trajectories = generate_synthetic_ais_data(n_ships=5, n_points_per_ship=60, seed=457)
-    cfg = build_experiment_config(
+    cfg = build_run_config(
         n_queries=4,
         query_coverage=1.0,
         max_queries=12,
@@ -401,7 +401,7 @@ def test_workload_generation_warns_when_train_or_eval_coverage_overshoots(capsys
         next_cursor = cursor + int(trajectory.shape[0])
         boundaries.append((cursor, next_cursor))
         cursor = next_cursor
-    cfg = build_experiment_config(
+    cfg = build_run_config(
         n_queries=4,
         query_coverage=0.01,
         max_queries=8,
@@ -410,7 +410,7 @@ def test_workload_generation_warns_when_train_or_eval_coverage_overshoots(capsys
         range_time_fraction=1.0,
     )
 
-    generate_experiment_workloads(
+    generate_run_workloads(
         config=cfg,
         seeds=derive_seed_bundle(782),
         train_traj=trajectories,
@@ -433,7 +433,7 @@ def test_workload_generation_warns_when_train_or_eval_coverage_overshoots(capsys
 
 def test_configured_workload_uses_persistent_workload_cache(tmp_path: Path) -> None:
     trajectories = generate_synthetic_ais_data(n_ships=3, n_points_per_ship=24, seed=462)
-    cfg = build_experiment_config(
+    cfg = build_run_config(
         n_queries=6,
         query_coverage=0.10,
         max_queries=20,
@@ -468,7 +468,7 @@ def test_configured_workload_uses_persistent_workload_cache(tmp_path: Path) -> N
     assert first.typed_queries == second.typed_queries
     assert torch.equal(first.query_features, second.query_features)
 
-    anchor_cfg = build_experiment_config(
+    anchor_cfg = build_run_config(
         n_queries=6,
         query_coverage=0.10,
         max_queries=20,
@@ -490,7 +490,7 @@ def test_configured_workload_uses_persistent_workload_cache(tmp_path: Path) -> N
     assert anchor_cache["hit"] is False
     assert anchor_cache["key"] != first_cache["key"]
 
-    sparse_cfg = build_experiment_config(
+    sparse_cfg = build_run_config(
         n_queries=6,
         query_coverage=0.10,
         max_queries=20,
@@ -528,7 +528,7 @@ def test_configured_workload_uses_persistent_workload_cache(tmp_path: Path) -> N
     assert override_cache["hit"] is False
     assert override_cache["key"] != first_cache["key"]
 
-    guarded_cfg = build_experiment_config(
+    guarded_cfg = build_run_config(
         n_queries=6,
         query_coverage=0.10,
         max_queries=20,
@@ -565,7 +565,7 @@ def test_train_workload_replicates_can_cycle_anchor_modes() -> None:
         boundaries.append((cursor, next_cursor))
         cursor = next_cursor
 
-    cfg = build_experiment_config(
+    cfg = build_run_config(
         n_queries=8,
         query_coverage=0.15,
         max_queries=20,
@@ -577,7 +577,7 @@ def test_train_workload_replicates_can_cycle_anchor_modes() -> None:
         range_train_anchor_modes=["mixed_density", "sparse"],
     )
 
-    workloads = generate_experiment_workloads(
+    workloads = generate_run_workloads(
         config=cfg,
         seeds=derive_seed_bundle(19),
         train_traj=trajectories,
@@ -614,7 +614,7 @@ def test_train_workload_replicates_can_cycle_footprint_families() -> None:
         boundaries.append((cursor, next_cursor))
         cursor = next_cursor
 
-    cfg = build_experiment_config(
+    cfg = build_run_config(
         n_queries=8,
         query_coverage=0.15,
         max_queries=20,
@@ -627,7 +627,7 @@ def test_train_workload_replicates_can_cycle_footprint_families() -> None:
         range_train_footprints=["1.1:2.5", "2.2:5.0", "4.4:10.0"],
     )
 
-    workloads = generate_experiment_workloads(
+    workloads = generate_run_workloads(
         config=cfg,
         seeds=derive_seed_bundle(20),
         train_traj=trajectories,

@@ -277,7 +277,7 @@ def _load_json(path: Path) -> dict[str, Any] | None:
 
 
 def _matched_summary(run_json: dict[str, Any] | None) -> dict[str, Any]:
-    """Extract compact final metrics from an experiment JSON payload."""
+    """Extract compact final metrics from a run JSON payload."""
     if not run_json:
         return {}
     matched = run_json.get("matched", {})

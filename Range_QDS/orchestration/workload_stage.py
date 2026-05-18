@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import torch
 
-from config.experiment_config import ExperimentConfig, SeedBundle
+from config.run_config import RunConfig, SeedBundle
 from orchestration.workload_generation_cache import (
     coverage_name,
     generate_typed_query_workload_for_config,
@@ -17,7 +17,7 @@ from workloads.typed_workload import TypedQueryWorkload
 
 
 @dataclass
-class ExperimentWorkloads:
+class RunWorkloads:
     """Train, eval, and optional checkpoint-selection query workloads."""
 
     train_workload: TypedQueryWorkload
@@ -52,12 +52,12 @@ def _normalized_coverage_tolerance(value: float | None, *, default: float) -> fl
     return max(0.0, tolerance)
 
 
-def validation_query_count(config: ExperimentConfig) -> int:
+def validation_query_count(config: RunConfig) -> int:
     """Use the same minimum query count for validation and final eval workloads."""
     return max(1, int(config.query.n_queries))
 
 
-def _training_anchor_modes(config: ExperimentConfig) -> list[str]:
+def _training_anchor_modes(config: RunConfig) -> list[str]:
     """Return anchor-prior modes to cycle across train label workloads."""
     raw_modes = getattr(config.query, "range_train_anchor_modes", []) or []
     modes = [str(mode).strip().lower() for mode in raw_modes if str(mode).strip()]
@@ -84,7 +84,7 @@ def _parse_train_footprint(spec: str) -> tuple[float, float]:
     return spatial_km, time_hours
 
 
-def _training_footprints(config: ExperimentConfig) -> list[tuple[float | None, float | None]]:
+def _training_footprints(config: RunConfig) -> list[tuple[float | None, float | None]]:
     """Return train-only range footprints to cycle across train label workloads."""
     raw_specs = getattr(config.query, "range_train_footprints", []) or []
     specs = [str(spec).strip() for spec in raw_specs if str(spec).strip()]
@@ -93,9 +93,9 @@ def _training_footprints(config: ExperimentConfig) -> list[tuple[float | None, f
     return [_parse_train_footprint(spec) for spec in specs]
 
 
-def generate_experiment_workloads(
+def generate_run_workloads(
     *,
-    config: ExperimentConfig,
+    config: RunConfig,
     seeds: SeedBundle,
     train_traj: list[torch.Tensor],
     test_traj: list[torch.Tensor],
@@ -108,7 +108,7 @@ def generate_experiment_workloads(
     selection_boundaries: list[tuple[int, int]] | None,
     train_workload_map: dict[str, float],
     eval_workload_map: dict[str, float],
-) -> ExperimentWorkloads:
+) -> RunWorkloads:
     """Generate train, eval, and optional checkpoint-selection query workloads."""
     train_anchor_modes = _training_anchor_modes(config)
     train_footprints = _training_footprints(config)
@@ -180,7 +180,7 @@ def generate_experiment_workloads(
     if selection_workload is not None:
         _print_workload_summary("selection", selection_workload)
     _print_coverage_warnings(config, train_label_workloads, eval_workload, selection_workload)
-    return ExperimentWorkloads(
+    return RunWorkloads(
         train_workload=train_workload,
         train_label_workloads=train_label_workloads,
         train_label_workload_seeds=train_label_workload_seeds,
@@ -204,7 +204,7 @@ def _print_workload_summary(label: str, workload: TypedQueryWorkload) -> None:
 
 
 def _print_coverage_warnings(
-    config: ExperimentConfig,
+    config: RunConfig,
     train_workloads: list[TypedQueryWorkload],
     eval_workload: TypedQueryWorkload,
     selection_workload: TypedQueryWorkload | None,

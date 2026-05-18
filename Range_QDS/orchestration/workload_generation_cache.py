@@ -9,7 +9,7 @@ from typing import Any
 
 import torch
 
-from config.experiment_config import ExperimentConfig
+from config.run_config import RunConfig
 from workloads.generation.generator import generate_typed_query_workload
 from workloads.typed_workload import TypedQueryWorkload
 
@@ -46,7 +46,7 @@ def tensor_cache_digest(tensor: torch.Tensor) -> str:
     return hasher.hexdigest()
 
 
-def _workload_cache_root(config: ExperimentConfig) -> Path | None:
+def _workload_cache_root(config: RunConfig) -> Path | None:
     """Return persistent workload-cache root when data caching is configured."""
     if not config.data.cache_dir:
         return None
@@ -60,7 +60,7 @@ def _workload_cache_payload(
     n_queries: int,
     workload_map: dict[str, float],
     seed: int,
-    config: ExperimentConfig,
+    config: RunConfig,
     range_anchor_mode: str | None = None,
     range_spatial_km: float | None = None,
     range_time_hours: float | None = None,
@@ -135,7 +135,7 @@ def generate_typed_query_workload_for_config(
     n_queries: int,
     workload_map: dict[str, float],
     seed: int,
-    config: ExperimentConfig,
+    config: RunConfig,
     points: torch.Tensor | None = None,
     boundaries: list[tuple[int, int]] | None = None,
     cache_label: str | None = None,

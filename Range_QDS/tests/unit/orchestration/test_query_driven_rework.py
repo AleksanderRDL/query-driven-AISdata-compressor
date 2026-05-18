@@ -13,6 +13,11 @@ from learning.checkpoint_validation import (
     _validation_factorized_target_fit_metrics,
     _validation_query_useful_selection_score,
 )
+from learning.factorized_head_diagnostics import (
+    _factorized_final_score_composition_diagnostics,
+    _factorized_head_fit_diagnostics,
+    _initialize_factorized_head_output_biases_from_targets,
+)
 from learning.fit_diagnostics import _training_target_diagnostics
 from learning.model_features import (
     WORKLOAD_BLIND_RANGE_V2_MODEL_DISABLED_PRIOR_FIELDS,
@@ -20,10 +25,7 @@ from learning.model_features import (
     build_workload_blind_range_v2_point_features,
 )
 from learning.model_training import (
-    _factorized_final_score_composition_diagnostics,
-    _factorized_head_fit_diagnostics,
     _fit_scaler_for_model,
-    _initialize_factorized_head_output_biases_from_targets,
     _scalar_training_target_for_mode,
 )
 from learning.optimization_epoch import (
@@ -2821,8 +2823,7 @@ def test_final_run_summaries_block_final_grid_until_benchmark_evidence() -> None
     assert summaries.final_claim_summary["primary_metric"] == "QueryUsefulV1"
     assert summaries.final_claim_summary["final_success_allowed"] is False
     assert (
-        "full_workload_profile_compression_grid"
-        in summaries.final_claim_summary["blocking_gates"]
+        "full_workload_profile_compression_grid" in summaries.final_claim_summary["blocking_gates"]
     )
     assert summaries.learning_causality_summary["final_success_allowed"] is False
     assert summaries.diagnostic_summary["workload_stability_gate_available"] is True

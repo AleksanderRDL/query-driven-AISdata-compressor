@@ -1,4 +1,4 @@
-"""Experiment output payloads and artifact writing."""
+"""Single-run artifact writing."""
 
 from __future__ import annotations
 
@@ -12,8 +12,8 @@ from scoring.metrics import MethodScore
 
 
 @dataclass
-class ExperimentOutputs:
-    """Experiment run output payload."""
+class RunOutputs:
+    """Single-run output payload."""
 
     matched_table: str
     shift_table: str
@@ -23,7 +23,7 @@ class ExperimentOutputs:
     range_compression_audit_table: str = ""
 
 
-def write_experiment_results(
+def write_run_results(
     *,
     results_dir: str,
     matched_table: str,
@@ -40,7 +40,7 @@ def write_experiment_results(
     range_diagnostics_rows: list[dict[str, Any]],
     dump: dict[str, Any],
 ) -> Path:
-    """Write the standard experiment result artifact set and return its directory."""
+    """Write the standard single-run result artifact set and return its directory."""
     out_dir = Path(results_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "matched_table.txt").write_text(matched_table + "\n", encoding="utf-8")

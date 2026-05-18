@@ -7,7 +7,7 @@ from typing import Any
 
 import torch
 
-from config.experiment_config import ModelConfig
+from config.run_config import ModelConfig
 from learning.inference import windowed_predict
 from learning.losses import _budget_loss_ratios, _safe_quantile
 from learning.model_features import build_model_point_features
@@ -126,7 +126,7 @@ def _retained_frequency_labels(
 
 
 def _label_diagnostics(values: torch.Tensor, mode: str) -> dict[str, Any]:
-    """Summarize distilled labels for experiment artifacts."""
+    """Summarize distilled labels for run artifacts."""
     positive = values > 0.0
     positive_count = int(positive.sum().item())
     diag: dict[str, Any] = {

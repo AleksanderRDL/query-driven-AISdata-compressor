@@ -1,4 +1,4 @@
-"""Selector diagnostic helpers used by experiment orchestration."""
+"""Selector diagnostic helpers used by run orchestration."""
 
 from __future__ import annotations
 

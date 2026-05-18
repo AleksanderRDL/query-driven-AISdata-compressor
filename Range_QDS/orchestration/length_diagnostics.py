@@ -1,4 +1,4 @@
-"""Length-feasibility diagnostics for query-driven experiment reporting."""
+"""Length-feasibility diagnostics for query-driven run reporting."""
 
 from __future__ import annotations
 

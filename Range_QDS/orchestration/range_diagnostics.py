@@ -1,4 +1,4 @@
-"""Range diagnostics and range-specific experiment payload helpers."""
+"""Range diagnostics and range-specific run payload helpers."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Any
 
 import torch
 
-from config.experiment_config import ExperimentConfig
+from config.run_config import RunConfig
 from orchestration.range_runtime_cache import (
     RangeRuntimeCache,
     ensure_range_runtime_labels,
@@ -143,7 +143,7 @@ def range_workload_diagnostics(
     boundaries: list[tuple[int, int]],
     workload: TypedQueryWorkload,
     workload_map: dict[str, float],
-    config: ExperimentConfig,
+    config: RunConfig,
     seed: int,
     runtime_cache: RangeRuntimeCache | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -578,7 +578,7 @@ def range_workload_distribution_comparison(summaries: dict[str, Any]) -> dict[st
     }
 
 
-def range_audit_ratios(config: ExperimentConfig) -> list[float]:
+def range_audit_ratios(config: RunConfig) -> list[float]:
     """Return configured multi-budget range-audit ratios, deduped and sorted."""
     raw = getattr(config.model, "range_audit_compression_ratios", []) or []
     return sorted({float(value) for value in raw if 0.0 < float(value) <= 1.0})

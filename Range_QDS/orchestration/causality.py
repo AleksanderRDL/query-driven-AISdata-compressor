@@ -1,4 +1,4 @@
-"""Causality and ablation diagnostic helpers for experiment reporting."""
+"""Causality and ablation diagnostic helpers for run reporting."""
 
 from __future__ import annotations
 

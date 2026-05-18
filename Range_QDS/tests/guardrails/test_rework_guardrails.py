@@ -31,6 +31,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 @pytest.mark.parametrize(
     "module_name",
     [
+        "config.experiment_config",
         "learning.training_pipeline",
         "learning.targets.legacy",
         "selection.selector_diagnostics",

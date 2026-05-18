@@ -1,4 +1,4 @@
-"""Retained-mask freezing for workload-blind experiment runs."""
+"""Retained-mask freezing for workload-blind runs."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from typing import Any, cast
 
 import torch
 
-from config.experiment_config import ExperimentConfig, SeedBundle
+from config.run_config import RunConfig, SeedBundle
 from learning.outputs import TrainingOutputs
 from orchestration.length_diagnostics import (
     score_protected_length_feasibility,
@@ -57,7 +57,7 @@ def freeze_workload_blind_retained_masks(
     retention_methods: list[Method],
     workload_blind_eval: bool,
     audit_ratios: Sequence[float],
-    config: ExperimentConfig,
+    config: RunConfig,
     trained: TrainingOutputs,
     eval_workload: TypedQueryWorkload,
     eval_workload_map: dict[str, float],

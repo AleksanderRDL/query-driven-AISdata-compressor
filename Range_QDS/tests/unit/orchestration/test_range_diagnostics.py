@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 import torch
 
-from config.experiment_config import build_experiment_config
+from config.run_config import build_run_config
 from data_preparation.ais_loader import generate_synthetic_ais_data
 from learning.importance_labels import (
     compute_typed_importance_labels,
@@ -296,7 +296,7 @@ def test_range_workload_diagnostics_cache_reuses_labels(tmp_path: Path) -> None:
         covered_points=3,
         total_points=5,
     )
-    cfg = build_experiment_config(
+    cfg = build_run_config(
         cache_dir=str(tmp_path / "cache"),
         range_diagnostics_mode="cached",
         compression_ratio=0.4,
@@ -350,7 +350,7 @@ def test_range_workload_diagnostics_populates_runtime_query_cache_masks(tmp_path
         covered_points=3,
         total_points=5,
     )
-    cfg = build_experiment_config(
+    cfg = build_run_config(
         cache_dir=str(tmp_path / "cache"),
         range_diagnostics_mode="full",
         compression_ratio=0.4,
@@ -388,7 +388,7 @@ def test_eval_range_label_cache_reuses_tensor_cache(tmp_path: Path) -> None:
         covered_points=3,
         total_points=5,
     )
-    cfg = build_experiment_config(
+    cfg = build_run_config(
         cache_dir=str(tmp_path / "cache"),
         range_diagnostics_mode="cached",
         compression_ratio=0.4,
@@ -443,7 +443,7 @@ def test_ship_balanced_range_label_cache_keeps_component_labels(tmp_path: Path) 
         covered_points=3,
         total_points=5,
     )
-    cfg = build_experiment_config(
+    cfg = build_run_config(
         cache_dir=str(tmp_path / "cache"),
         range_diagnostics_mode="cached",
         compression_ratio=0.4,
@@ -499,13 +499,13 @@ def test_range_label_cache_key_ignores_compression_ratio(tmp_path: Path) -> None
         total_points=5,
     )
     cache_dir = tmp_path / "cache"
-    cfg_40 = build_experiment_config(
+    cfg_40 = build_run_config(
         cache_dir=str(cache_dir),
         range_diagnostics_mode="cached",
         compression_ratio=0.4,
         workload="range",
     )
-    cfg_10 = build_experiment_config(
+    cfg_10 = build_run_config(
         cache_dir=str(cache_dir),
         range_diagnostics_mode="cached",
         compression_ratio=0.1,

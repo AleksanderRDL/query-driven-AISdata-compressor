@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import torch
 
-from config.experiment_config import build_experiment_config
+from config.run_config import build_run_config
 from learning.checkpoints import ModelArtifacts, load_checkpoint, save_checkpoint
 from learning.inference import forward_predict, windowed_predict
 from learning.scaler import FeatureScaler
@@ -23,7 +23,7 @@ def test_scaler_persisted(tmp_path: Path) -> None:
     q_ids = torch.zeros((32,), dtype=torch.long)
 
     scaler = FeatureScaler.fit(points, queries)
-    cfg = build_experiment_config()
+    cfg = build_run_config()
     art = ModelArtifacts(
         model=model,
         scaler=scaler,
@@ -46,7 +46,7 @@ def test_scaler_persisted(tmp_path: Path) -> None:
 def test_checkpoint_loader_ignores_retired_query_config_fields(tmp_path: Path) -> None:
     model = TrajectoryQDSModel(point_dim=7, query_dim=12)
     scaler = FeatureScaler.fit(torch.randn(8, 7), torch.randn(2, 12))
-    cfg = build_experiment_config()
+    cfg = build_run_config()
     ckpt = tmp_path / "model.pt"
     save_checkpoint(
         str(ckpt),
@@ -107,7 +107,7 @@ def test_forward_predict_batch_size_does_not_change_predictions() -> None:
     art = ModelArtifacts(
         model=model,
         scaler=scaler,
-        config=build_experiment_config(inference_batch_size=4),
+        config=build_run_config(inference_batch_size=4),
     )
 
     pred_single = forward_predict(
@@ -200,7 +200,7 @@ def test_forward_predict_cuda_matches_cpu() -> None:
     art = ModelArtifacts(
         model=model,
         scaler=scaler,
-        config=build_experiment_config(),
+        config=build_run_config(),
     )
 
     pred_cpu = forward_predict(art, points, queries, q_ids, boundaries=boundaries, device="cpu")

@@ -37,6 +37,7 @@ from orchestration.geojson_writers import (
     write_queries_geojson,
     write_simplified_csv,
 )
+from orchestration.mlqds_method_factory import build_mlqds_method
 from runtime.torch_runtime import (
     AMP_MODE_CHOICES,
     FLOAT32_MATMUL_PRECISION_CHOICES,
@@ -48,7 +49,6 @@ from runtime.torch_runtime import (
 from scoring.method_scoring import score_method
 from scoring.methods import (
     DouglasPeuckerMethod,
-    MLQDSMethod,
     UniformTemporalMethod,
 )
 from scoring.query_cache import ScoringQueryCache
@@ -417,56 +417,12 @@ def main() -> None:
         range_geometry_scores = labels[:, range_type_id].float()
 
     methods = [
-        MLQDSMethod(
+        build_mlqds_method(
             name="MLQDS",
             trained=trained,
             workload=workload,
-            workload_type=eval_workload_type,
-            score_mode=str(getattr(saved_cfg.model, "mlqds_score_mode", "rank")),
-            score_temperature=float(getattr(saved_cfg.model, "mlqds_score_temperature", 1.0)),
-            rank_confidence_weight=float(
-                getattr(saved_cfg.model, "mlqds_rank_confidence_weight", 0.15)
-            ),
-            temporal_fraction=float(getattr(saved_cfg.model, "mlqds_temporal_fraction", 0.50)),
-            diversity_bonus=float(getattr(saved_cfg.model, "mlqds_diversity_bonus", 0.0)),
-            hybrid_mode=str(getattr(saved_cfg.model, "mlqds_hybrid_mode", "fill")),
-            selector_type=str(getattr(saved_cfg.model, "selector_type", "temporal_hybrid")),
-            learned_segment_geometry_gain_weight=float(
-                getattr(saved_cfg.model, "learned_segment_geometry_gain_weight", 0.12)
-            ),
-            learned_segment_allocation_length_support_weight=float(
-                getattr(
-                    saved_cfg.model,
-                    "learned_segment_allocation_length_support_weight",
-                    0.12,
-                )
-            ),
-            learned_segment_allocation_weight_floor=float(
-                getattr(saved_cfg.model, "learned_segment_allocation_weight_floor", 0.50)
-            ),
-            learned_segment_score_blend_weight=float(
-                getattr(saved_cfg.model, "learned_segment_score_blend_weight", 0.05)
-            ),
-            learned_segment_fairness_preallocation=bool(
-                getattr(saved_cfg.model, "learned_segment_fairness_preallocation", True)
-            ),
-            learned_segment_length_repair_fraction=float(
-                getattr(saved_cfg.model, "learned_segment_length_repair_fraction", 0.0)
-            ),
-            learned_segment_length_repair_score_protection_fraction=float(
-                getattr(
-                    saved_cfg.model,
-                    "learned_segment_length_repair_score_protection_fraction",
-                    0.0,
-                )
-            ),
-            learned_segment_length_support_blend_weight=float(
-                getattr(saved_cfg.model, "learned_segment_length_support_blend_weight", 0.0)
-            ),
-            stratified_center_weight=float(
-                getattr(saved_cfg.model, "mlqds_stratified_center_weight", 0.0)
-            ),
-            min_learned_swaps=int(getattr(saved_cfg.model, "mlqds_min_learned_swaps", 0)),
+            workload_map=eval_workload_map,
+            config=saved_cfg,
             range_geometry_blend=range_geometry_blend,
             range_geometry_scores=range_geometry_scores,
             trajectory_mmsis=trajectory_mmsis,

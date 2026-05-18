@@ -7,7 +7,7 @@ from typing import Any
 
 import torch
 
-from config.experiment_config import ExperimentConfig, SeedBundle
+from config.run_config import RunConfig, SeedBundle
 from learning.outputs import TrainingOutputs
 from learning.predictability_audit import query_prior_predictability_scores
 from learning.query_prior_fields import (
@@ -23,6 +23,7 @@ from orchestration.causality import (
     prior_feature_sample_sensitivity,
     score_ablation_sensitivity,
 )
+from orchestration.mlqds_method_factory import build_mlqds_method
 from orchestration.model_ablations import (
     raw_predictions_without_factorized_head,
     reset_module_parameters,
@@ -36,7 +37,7 @@ from orchestration.selector_diagnostics import (
     segment_score_quantile_bands_for_ablation,
     segment_score_top_band_for_ablation,
 )
-from scoring.methods import FrozenMaskMethod, MLQDSMethod
+from scoring.methods import FrozenMaskMethod
 from selection.learned_segment_budget import blend_segment_support_scores
 from workloads.query_types import single_workload_type
 from workloads.typed_workload import TypedQueryWorkload
@@ -57,7 +58,7 @@ class RetainedMaskAblationOutputs:
 
 def freeze_retained_mask_ablations(
     *,
-    config: ExperimentConfig,
+    config: RunConfig,
     trained: TrainingOutputs,
     eval_workload: TypedQueryWorkload,
     eval_workload_map: dict[str, float],
@@ -689,38 +690,14 @@ def freeze_retained_mask_ablations(
             history=[],
             feature_context=dict(trained.feature_context),
         )
-        untrained_method = MLQDSMethod(
+        untrained_method = build_mlqds_method(
             name="MLQDS_untrained_model",
             trained=untrained_outputs,
             workload=eval_workload,
-            workload_type=single_workload_type(eval_workload_map),
-            score_mode=config.model.mlqds_score_mode,
-            score_temperature=config.model.mlqds_score_temperature,
-            rank_confidence_weight=config.model.mlqds_rank_confidence_weight,
-            temporal_fraction=config.model.mlqds_temporal_fraction,
-            diversity_bonus=config.model.mlqds_diversity_bonus,
-            hybrid_mode=config.model.mlqds_hybrid_mode,
-            stratified_center_weight=config.model.mlqds_stratified_center_weight,
-            min_learned_swaps=config.model.mlqds_min_learned_swaps,
-            selector_type=config.model.selector_type,
+            workload_map=eval_workload_map,
+            config=config,
+            range_geometry_blend=0.0,
             trajectory_mmsis=test_mmsis,
-            inference_device=None,
-            amp_mode=config.model.amp_mode,
-            inference_batch_size=config.model.inference_batch_size,
-            learned_segment_geometry_gain_weight=config.model.learned_segment_geometry_gain_weight,
-            learned_segment_allocation_length_support_weight=(
-                config.model.learned_segment_allocation_length_support_weight
-            ),
-            learned_segment_allocation_weight_floor=config.model.learned_segment_allocation_weight_floor,
-            learned_segment_score_blend_weight=config.model.learned_segment_score_blend_weight,
-            learned_segment_fairness_preallocation=config.model.learned_segment_fairness_preallocation,
-            learned_segment_length_repair_fraction=config.model.learned_segment_length_repair_fraction,
-            learned_segment_length_repair_score_protection_fraction=(
-                config.model.learned_segment_length_repair_score_protection_fraction
-            ),
-            learned_segment_length_support_blend_weight=(
-                config.model.learned_segment_length_support_blend_weight
-            ),
         )
         untrained_mask = untrained_method.simplify(
             test_points,
@@ -802,40 +779,14 @@ def freeze_retained_mask_ablations(
                     "query_prior_field": shuffled_prior_field,
                 },
             )
-            shuffled_prior_method = MLQDSMethod(
+            shuffled_prior_method = build_mlqds_method(
                 name="MLQDS_shuffled_prior_fields",
                 trained=shuffled_prior_trained,
                 workload=eval_workload,
-                workload_type=single_workload_type(eval_workload_map),
-                score_mode=config.model.mlqds_score_mode,
-                score_temperature=config.model.mlqds_score_temperature,
-                rank_confidence_weight=config.model.mlqds_rank_confidence_weight,
-                temporal_fraction=config.model.mlqds_temporal_fraction,
-                diversity_bonus=config.model.mlqds_diversity_bonus,
-                hybrid_mode=config.model.mlqds_hybrid_mode,
-                stratified_center_weight=config.model.mlqds_stratified_center_weight,
-                min_learned_swaps=config.model.mlqds_min_learned_swaps,
-                selector_type=config.model.selector_type,
+                workload_map=eval_workload_map,
+                config=config,
+                range_geometry_blend=0.0,
                 trajectory_mmsis=test_mmsis,
-                inference_device=None,
-                amp_mode=config.model.amp_mode,
-                inference_batch_size=config.model.inference_batch_size,
-                learned_segment_geometry_gain_weight=config.model.learned_segment_geometry_gain_weight,
-                learned_segment_allocation_length_support_weight=(
-                    config.model.learned_segment_allocation_length_support_weight
-                ),
-                learned_segment_allocation_weight_floor=(
-                    config.model.learned_segment_allocation_weight_floor
-                ),
-                learned_segment_score_blend_weight=config.model.learned_segment_score_blend_weight,
-                learned_segment_fairness_preallocation=config.model.learned_segment_fairness_preallocation,
-                learned_segment_length_repair_fraction=config.model.learned_segment_length_repair_fraction,
-                learned_segment_length_repair_score_protection_fraction=(
-                    config.model.learned_segment_length_repair_score_protection_fraction
-                ),
-                learned_segment_length_support_blend_weight=(
-                    config.model.learned_segment_length_support_blend_weight
-                ),
             )
             shuffled_prior_mask = shuffled_prior_method.simplify(
                 test_points,
@@ -917,40 +868,14 @@ def freeze_retained_mask_ablations(
                     "query_prior_field_metadata": query_prior_field_metadata(zero_prior_field),
                 },
             )
-            zero_prior_method = MLQDSMethod(
+            zero_prior_method = build_mlqds_method(
                 name="MLQDS_without_query_prior_features",
                 trained=zero_prior_trained,
                 workload=eval_workload,
-                workload_type=single_workload_type(eval_workload_map),
-                score_mode=config.model.mlqds_score_mode,
-                score_temperature=config.model.mlqds_score_temperature,
-                rank_confidence_weight=config.model.mlqds_rank_confidence_weight,
-                temporal_fraction=config.model.mlqds_temporal_fraction,
-                diversity_bonus=config.model.mlqds_diversity_bonus,
-                hybrid_mode=config.model.mlqds_hybrid_mode,
-                stratified_center_weight=config.model.mlqds_stratified_center_weight,
-                min_learned_swaps=config.model.mlqds_min_learned_swaps,
-                selector_type=config.model.selector_type,
+                workload_map=eval_workload_map,
+                config=config,
+                range_geometry_blend=0.0,
                 trajectory_mmsis=test_mmsis,
-                inference_device=None,
-                amp_mode=config.model.amp_mode,
-                inference_batch_size=config.model.inference_batch_size,
-                learned_segment_geometry_gain_weight=config.model.learned_segment_geometry_gain_weight,
-                learned_segment_allocation_length_support_weight=(
-                    config.model.learned_segment_allocation_length_support_weight
-                ),
-                learned_segment_allocation_weight_floor=(
-                    config.model.learned_segment_allocation_weight_floor
-                ),
-                learned_segment_score_blend_weight=config.model.learned_segment_score_blend_weight,
-                learned_segment_fairness_preallocation=config.model.learned_segment_fairness_preallocation,
-                learned_segment_length_repair_fraction=config.model.learned_segment_length_repair_fraction,
-                learned_segment_length_repair_score_protection_fraction=(
-                    config.model.learned_segment_length_repair_score_protection_fraction
-                ),
-                learned_segment_length_support_blend_weight=(
-                    config.model.learned_segment_length_support_blend_weight
-                ),
             )
             zero_prior_mask = zero_prior_method.simplify(
                 test_points,
@@ -1037,40 +962,14 @@ def freeze_retained_mask_ablations(
                         ),
                     },
                 )
-                channel_method = MLQDSMethod(
+                channel_method = build_mlqds_method(
                     name=channel_method_name,
                     trained=channel_trained,
                     workload=eval_workload,
-                    workload_type=single_workload_type(eval_workload_map),
-                    score_mode=config.model.mlqds_score_mode,
-                    score_temperature=config.model.mlqds_score_temperature,
-                    rank_confidence_weight=config.model.mlqds_rank_confidence_weight,
-                    temporal_fraction=config.model.mlqds_temporal_fraction,
-                    diversity_bonus=config.model.mlqds_diversity_bonus,
-                    hybrid_mode=config.model.mlqds_hybrid_mode,
-                    stratified_center_weight=config.model.mlqds_stratified_center_weight,
-                    min_learned_swaps=config.model.mlqds_min_learned_swaps,
-                    selector_type=config.model.selector_type,
+                    workload_map=eval_workload_map,
+                    config=config,
+                    range_geometry_blend=0.0,
                     trajectory_mmsis=test_mmsis,
-                    inference_device=None,
-                    amp_mode=config.model.amp_mode,
-                    inference_batch_size=config.model.inference_batch_size,
-                    learned_segment_geometry_gain_weight=config.model.learned_segment_geometry_gain_weight,
-                    learned_segment_allocation_length_support_weight=(
-                        config.model.learned_segment_allocation_length_support_weight
-                    ),
-                    learned_segment_allocation_weight_floor=(
-                        config.model.learned_segment_allocation_weight_floor
-                    ),
-                    learned_segment_score_blend_weight=config.model.learned_segment_score_blend_weight,
-                    learned_segment_fairness_preallocation=config.model.learned_segment_fairness_preallocation,
-                    learned_segment_length_repair_fraction=config.model.learned_segment_length_repair_fraction,
-                    learned_segment_length_repair_score_protection_fraction=(
-                        config.model.learned_segment_length_repair_score_protection_fraction
-                    ),
-                    learned_segment_length_support_blend_weight=(
-                        config.model.learned_segment_length_support_blend_weight
-                    ),
                 )
                 channel_mask = channel_method.simplify(
                     test_points,

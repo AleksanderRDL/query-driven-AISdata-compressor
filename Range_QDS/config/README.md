@@ -7,7 +7,7 @@ and benchmarking.
 
 | File | Purpose |
 | --- | --- |
-| `experiment_config.py` | Data, query, model, baseline, and top-level run config dataclasses plus the flat config builder and seed derivation. |
+| `run_config.py` | Data, query, model, baseline, and top-level run config dataclasses plus the flat config builder and seed derivation. |
 
 Keep CLI parsing in `orchestration/learning_scoring_cli.py`. Keep runtime mutation in
 `runtime/`. Config objects should remain serializable and policy-light.

@@ -15,11 +15,11 @@ from benchmarking.runtime_benchmark import (
     _profile_train_args,
     _runtime_child_args,
 )
-from config.experiment_config import (
+from config.run_config import (
     DEFAULT_BUDGET_LOSS_RATIOS,
     DEFAULT_BUDGET_LOSS_TEMPERATURE,
-    ExperimentConfig,
-    build_experiment_config,
+    RunConfig,
+    build_run_config,
 )
 from learning.checkpoints import _checkpoint_config_payload
 from learning.model_features import SUPPORTED_MODEL_TYPES
@@ -48,8 +48,8 @@ def test_apply_torch_runtime_settings_sets_precision_and_tf32() -> None:
         torch.backends.cuda.matmul.allow_tf32 = old_tf32
 
 
-def test_experiment_config_roundtrips_precision_controls() -> None:
-    cfg = build_experiment_config(
+def test_run_config_roundtrips_precision_controls() -> None:
+    cfg = build_run_config(
         train_csv_path="train.csv",
         validation_csv_path="validation.csv",
         eval_csv_path="eval.csv",
@@ -124,7 +124,7 @@ def test_experiment_config_roundtrips_precision_controls() -> None:
         val_fraction=0.33,
         final_metrics_mode="core",
     )
-    restored = ExperimentConfig.from_dict(cfg.to_dict())
+    restored = RunConfig.from_dict(cfg.to_dict())
 
     assert restored.model.float32_matmul_precision == "high"
     assert restored.model.embed_dim == 96
@@ -342,7 +342,7 @@ def test_cli_exposes_training_and_scoring_tuning_controls() -> None:
         ]
     )
 
-    cfg = build_experiment_config(
+    cfg = build_run_config(
         ranking_pairs_per_type=args.ranking_pairs_per_type,
         ranking_top_quantile=args.ranking_top_quantile,
         embed_dim=args.embed_dim,
@@ -542,8 +542,8 @@ def test_cli_exposes_training_and_scoring_tuning_controls() -> None:
     assert cfg.data.validation_csv_path == "validation.csv"
 
 
-def test_experiment_config_loads_missing_runtime_and_mlqds_defaults() -> None:
-    payload = build_experiment_config().to_dict()
+def test_run_config_loads_missing_runtime_and_mlqds_defaults() -> None:
+    payload = build_run_config().to_dict()
     payload["model"].pop("float32_matmul_precision")
     payload["model"].pop("allow_tf32")
     payload["model"].pop("inference_batch_size")
@@ -600,7 +600,7 @@ def test_experiment_config_loads_missing_runtime_and_mlqds_defaults() -> None:
     payload["data"].pop("range_diagnostics_mode")
     payload["baselines"].pop("final_metrics_mode")
 
-    restored = ExperimentConfig.from_dict(payload)
+    restored = RunConfig.from_dict(payload)
 
     assert restored.model.float32_matmul_precision == "highest"
     assert restored.model.allow_tf32 is False
@@ -673,7 +673,7 @@ def test_split_max_segments_falls_back_to_global_cap() -> None:
 
 
 def test_validation_score_config_uses_current_names() -> None:
-    payload = build_experiment_config(
+    payload = build_run_config(
         validation_score_every=2,
         checkpoint_full_score_every=4,
         checkpoint_score_variant="answer",
@@ -686,7 +686,7 @@ def test_validation_score_config_uses_current_names() -> None:
         query_prior_smoothing_passes=0,
         temporal_residual_label_mode="none",
     ).to_dict()
-    restored = ExperimentConfig.from_dict(payload)
+    restored = RunConfig.from_dict(payload)
     args = build_parser().parse_args(
         [
             "--validation_score_every",
@@ -746,7 +746,7 @@ def test_validation_score_config_uses_current_names() -> None:
 
 
 def test_direct_config_and_cli_default_to_non_residual_training() -> None:
-    cfg = build_experiment_config()
+    cfg = build_run_config()
     args = build_parser().parse_args([])
 
     assert cfg.model.temporal_residual_label_mode == "none"
@@ -840,16 +840,16 @@ def test_parser_accepts_structural_target_blend() -> None:
     assert args.range_structural_target_source_mode == "boost"
 
 
-def test_experiment_config_rejects_unknown_model_keys() -> None:
-    payload = build_experiment_config().to_dict()
+def test_run_config_rejects_unknown_model_keys() -> None:
+    payload = build_run_config().to_dict()
     payload["model"]["f1_diagnostic_every"] = 1
 
     with pytest.raises(TypeError, match="f1_diagnostic_every"):
-        ExperimentConfig.from_dict(payload)
+        RunConfig.from_dict(payload)
 
 
 def test_checkpoint_config_payload_filters_stale_section_keys() -> None:
-    payload = build_experiment_config().to_dict()
+    payload = build_run_config().to_dict()
     payload["legacy_top_level"] = True
     payload["data"]["stale_data_key"] = 1
     payload["query"]["stale_query_key"] = 2
@@ -857,7 +857,7 @@ def test_checkpoint_config_payload_filters_stale_section_keys() -> None:
     payload["model"]["residual_label_mode"] = "temporal"
     payload["baselines"]["stale_baseline_key"] = 4
 
-    restored = ExperimentConfig.from_dict(_checkpoint_config_payload(payload))
+    restored = RunConfig.from_dict(_checkpoint_config_payload(payload))
 
     assert not hasattr(restored.data, "stale_data_key")
     assert not hasattr(restored.query, "stale_query_key")
@@ -867,7 +867,7 @@ def test_checkpoint_config_payload_filters_stale_section_keys() -> None:
 
 
 def test_checkpoint_config_payload_supplies_missing_sections() -> None:
-    restored = ExperimentConfig.from_dict(
+    restored = RunConfig.from_dict(
         _checkpoint_config_payload({"model": {"model_type": "baseline"}})
     )
 

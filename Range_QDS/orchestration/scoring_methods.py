@@ -6,9 +6,10 @@ from collections.abc import Sequence
 
 import torch
 
-from config.experiment_config import ExperimentConfig, SeedBundle
+from config.run_config import RunConfig, SeedBundle
 from learning.importance_labels import compute_typed_importance_labels
 from learning.outputs import TrainingOutputs
+from orchestration.mlqds_method_factory import build_mlqds_method
 from orchestration.range_runtime_cache import RangeRuntimeCache, prepare_range_label_cache
 from orchestration.workload_stage import workload_name
 from scoring.method_scoring import score_method
@@ -31,43 +32,18 @@ def build_primary_methods(
     trained: TrainingOutputs,
     eval_workload: TypedQueryWorkload,
     eval_workload_map: dict[str, float],
-    config: ExperimentConfig,
+    config: RunConfig,
     trajectory_mmsis: list[int] | None = None,
 ) -> list[Method]:
     """Build the standard matched-scoring methods."""
     return [
-        MLQDSMethod(
+        build_mlqds_method(
             name="MLQDS",
             trained=trained,
             workload=eval_workload,
-            workload_type=single_workload_type(eval_workload_map),
-            score_mode=config.model.mlqds_score_mode,
-            score_temperature=config.model.mlqds_score_temperature,
-            rank_confidence_weight=config.model.mlqds_rank_confidence_weight,
-            temporal_fraction=config.model.mlqds_temporal_fraction,
-            diversity_bonus=config.model.mlqds_diversity_bonus,
-            hybrid_mode=config.model.mlqds_hybrid_mode,
-            selector_type=config.model.selector_type,
-            learned_segment_geometry_gain_weight=config.model.learned_segment_geometry_gain_weight,
-            learned_segment_allocation_length_support_weight=(
-                config.model.learned_segment_allocation_length_support_weight
-            ),
-            learned_segment_allocation_weight_floor=(
-                config.model.learned_segment_allocation_weight_floor
-            ),
-            learned_segment_score_blend_weight=config.model.learned_segment_score_blend_weight,
-            learned_segment_fairness_preallocation=config.model.learned_segment_fairness_preallocation,
-            learned_segment_length_repair_fraction=config.model.learned_segment_length_repair_fraction,
-            learned_segment_length_repair_score_protection_fraction=(
-                config.model.learned_segment_length_repair_score_protection_fraction
-            ),
-            learned_segment_length_support_blend_weight=config.model.learned_segment_length_support_blend_weight,
-            stratified_center_weight=config.model.mlqds_stratified_center_weight,
-            min_learned_swaps=config.model.mlqds_min_learned_swaps,
-            range_geometry_blend=config.model.mlqds_range_geometry_blend,
+            workload_map=eval_workload_map,
+            config=config,
             trajectory_mmsis=trajectory_mmsis,
-            inference_batch_size=config.model.inference_batch_size,
-            amp_mode=config.model.amp_mode,
         ),
         UniformTemporalMethod(),
         DouglasPeuckerMethod(),
@@ -103,7 +79,7 @@ def prepare_eval_labels(
     test_boundaries: list[tuple[int, int]],
     eval_workload: TypedQueryWorkload,
     eval_workload_map: dict[str, float],
-    config: ExperimentConfig,
+    config: RunConfig,
     seeds: SeedBundle,
     eval_is_range_only: bool,
     run_oracle_baseline: bool,
@@ -160,7 +136,7 @@ def build_learned_fill_methods(
     test_points: torch.Tensor,
     eval_labels: torch.Tensor,
     eval_workload_map: dict[str, float],
-    config: ExperimentConfig,
+    config: RunConfig,
     seeds: SeedBundle,
 ) -> list[Method]:
     """Build temporal random/oracle fill diagnostics for pure range scoring."""
@@ -204,7 +180,7 @@ def score_shift_pairs(
     train_workload: TypedQueryWorkload,
     train_workload_map: dict[str, float],
     eval_workload_map: dict[str, float],
-    config: ExperimentConfig,
+    config: RunConfig,
     test_points: torch.Tensor,
     test_boundaries: list[tuple[int, int]],
     test_mmsis: list[int] | None = None,
@@ -224,37 +200,14 @@ def score_shift_pairs(
     )
     shift_pairs[train_name][train_name] = float(
         score_method(
-            method=MLQDSMethod(
+            method=build_mlqds_method(
                 name="MLQDS",
                 trained=trained,
                 workload=train_workload,
-                workload_type=single_workload_type(train_workload_map),
-                score_mode=config.model.mlqds_score_mode,
-                score_temperature=config.model.mlqds_score_temperature,
-                rank_confidence_weight=config.model.mlqds_rank_confidence_weight,
-                temporal_fraction=config.model.mlqds_temporal_fraction,
-                diversity_bonus=config.model.mlqds_diversity_bonus,
-                hybrid_mode=config.model.mlqds_hybrid_mode,
-                selector_type=config.model.selector_type,
-                learned_segment_geometry_gain_weight=config.model.learned_segment_geometry_gain_weight,
-                learned_segment_allocation_length_support_weight=(
-                    config.model.learned_segment_allocation_length_support_weight
-                ),
-                learned_segment_allocation_weight_floor=(
-                    config.model.learned_segment_allocation_weight_floor
-                ),
-                learned_segment_score_blend_weight=config.model.learned_segment_score_blend_weight,
-                learned_segment_fairness_preallocation=config.model.learned_segment_fairness_preallocation,
-                learned_segment_length_repair_fraction=config.model.learned_segment_length_repair_fraction,
-                learned_segment_length_repair_score_protection_fraction=(
-                    config.model.learned_segment_length_repair_score_protection_fraction
-                ),
-                learned_segment_length_support_blend_weight=config.model.learned_segment_length_support_blend_weight,
-                stratified_center_weight=config.model.mlqds_stratified_center_weight,
-                min_learned_swaps=config.model.mlqds_min_learned_swaps,
+                workload_map=train_workload_map,
+                config=config,
+                range_geometry_blend=0.0,
                 trajectory_mmsis=test_mmsis,
-                inference_batch_size=config.model.inference_batch_size,
-                amp_mode=config.model.amp_mode,
             ),
             points=test_points,
             boundaries=test_boundaries,

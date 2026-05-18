@@ -1,4 +1,4 @@
-"""Shared benchmark profile definitions for AIS-QDS experiment wrappers."""
+"""Shared benchmark profile definitions for AIS-QDS run wrappers."""
 
 from __future__ import annotations
 

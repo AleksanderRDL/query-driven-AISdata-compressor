@@ -35,7 +35,7 @@ class AISLoadConfig:
             raise ValueError("max_segments must be positive when provided.")
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialize load config for experiment artifacts."""
+        """Serialize load config for run artifacts."""
         return asdict(self)
 
 

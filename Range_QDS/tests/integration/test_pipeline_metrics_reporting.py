@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-from config.experiment_config import build_experiment_config
-from orchestration.learning_scoring_pipeline import run_experiment_pipeline
+from config.run_config import build_run_config
+from orchestration.learning_scoring_pipeline import run_learning_scoring_pipeline
 
 
 def test_pipeline_reports_active_metrics_and_diagnostics(synthetic_dataset, tmp_path) -> None:
     """Assert matched-workload metrics, diagnostics, and saved outputs use current names."""
     trajectories, _ = synthetic_dataset
-    cfg = build_experiment_config(n_queries=64, epochs=3)
+    cfg = build_run_config(n_queries=64, epochs=3)
 
-    out = run_experiment_pipeline(
+    out = run_learning_scoring_pipeline(
         config=cfg,
         trajectories=trajectories,
         results_dir=str(tmp_path),
@@ -65,9 +65,9 @@ def test_pipeline_reports_active_metrics_and_diagnostics(synthetic_dataset, tmp_
 
 def test_core_final_metrics_mode_skips_diagnostic_baselines(synthetic_dataset, tmp_path) -> None:
     trajectories, _ = synthetic_dataset
-    cfg = build_experiment_config(n_queries=16, epochs=1, final_metrics_mode="core")
+    cfg = build_run_config(n_queries=16, epochs=1, final_metrics_mode="core")
 
-    out = run_experiment_pipeline(
+    out = run_learning_scoring_pipeline(
         config=cfg,
         trajectories=trajectories,
         results_dir=str(tmp_path),

@@ -62,11 +62,12 @@ approximate and should be treated as refactor signals, not automatic defects.
 
 | File | Current issue | Recommended split |
 | --- | --- | --- |
-| `orchestration/learning_scoring_pipeline.py` | Still coordinates end-to-end stage order and owns dump assembly, result writing, and simplified CSV export. It is no longer the owner of target prep, retained-mask freezing, scoring mechanics, selection causality, or final summary assembly. | Keep this file as the stage orchestrator. Next extract artifact export/dump assembly only if tests preserve payload field names exactly. |
+| `orchestration/learning_scoring_pipeline.py` | Coordinates end-to-end stage order after target prep, retained-mask freezing, scoring mechanics, final summaries, payload assembly, and optional exports have direct owners. | Keep this file as the stage orchestrator. Extract only if a stage block grows a new independent responsibility. |
 | `orchestration/scoring_stage.py` | Owns matched scoring, ablation scoring, learned-fill diagnostics, compression audit scoring, and shift scoring for a single run. | Keep it limited to scoring-stage mechanics; do not move final summary gates or artifact writing here. |
 | `orchestration/learning_target_stage.py` | Owns several target families plus teacher-distillation runtime in one large module. This is cleaner than keeping it in the pipeline, but it is not small. | Split by target-family dispatch only after behavior is stable; avoid moving target builders back into orchestration. |
 | `orchestration/retained_mask_stage.py` | Owns primary/audit freeze ordering, score-cache capture, and selector-trace capture. | Keep it focused on protocol ordering; move only if primary/audit freeze mechanics grow beyond the current boundary. |
-| `orchestration/retained_mask_ablation_stage.py` | Owns query-free causality ablation mask construction and freeze diagnostics. It still repeats MLQDS method construction arguments. | Add a small local MLQDS diagnostic-method factory before adding more ablation variants. |
+| `orchestration/retained_mask_ablation_stage.py` | Owns query-free causality ablation mask construction and freeze diagnostics. MLQDS construction now delegates to `orchestration/mlqds_method_factory.py`. | Split ablation families only if the stage grows more variants or starts mixing artifact/report assembly into freeze logic. |
+| `learning/model_training.py` | Owns the fitting loop, validation cadence, and checkpoint-selection orchestration after factorized-head diagnostics, target diagnostics, model construction, and checkpoint scoring helpers moved to focused learning modules. | Split only if the optimizer loop or validation/checkpoint handoff grows a new independent responsibility; preserve selected-score behavior with focused regression. |
 
 ## Refactor Rules
 

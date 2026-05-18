@@ -4,29 +4,22 @@ from __future__ import annotations
 
 import time
 from contextlib import contextmanager
-from pathlib import Path
 from typing import Any
 
 import torch
 
-from config.experiment_config import ExperimentConfig, derive_seed_bundle
+from config.run_config import RunConfig, derive_seed_bundle
 from learning.checkpoints import ModelArtifacts, save_checkpoint
-from learning.model_features import is_workload_blind_model_type, model_type_metadata
+from learning.model_features import is_workload_blind_model_type
 from learning.model_training import train_model
 from learning.predictability_audit import (
     query_prior_predictability_audit,
 )
-from orchestration.data_splits import build_experiment_datasets, prepare_experiment_split
+from orchestration.data_splits import build_run_datasets, prepare_run_split
 from orchestration.final_gate_summary import build_final_run_summaries
-from orchestration.geojson_writers import (
-    report_trajectory_length_loss,
-    write_queries_geojson,
-    write_simplified_csv,
-)
 from orchestration.learning_target_stage import prepare_training_targets
 from orchestration.range_diagnostics import (
     build_range_learned_fill_summary,
-    method_score_payload,
     print_range_diagnostics_summary,
     print_range_distribution_comparison,
     range_audit_ratios,
@@ -35,27 +28,23 @@ from orchestration.range_diagnostics import (
 )
 from orchestration.range_runtime_cache import RangeRuntimeCache
 from orchestration.retained_mask_stage import freeze_workload_blind_retained_masks
-from orchestration.run_artifacts import ExperimentOutputs, write_experiment_results
+from orchestration.run_artifacts import RunOutputs, write_run_results
+from orchestration.run_exports import export_eval_queries_geojson, export_simplified_eval_csvs
+from orchestration.run_payload import build_run_payload
 from orchestration.scoring_methods import (
     build_primary_methods,
 )
 from orchestration.scoring_stage import run_scoring_stage
 from orchestration.selection_causality_diagnostics import build_selection_causality_diagnostics
 from orchestration.workload_stage import (
-    generate_experiment_workloads,
+    generate_run_workloads,
     resolve_workload_maps,
     workload_name,
 )
 from runtime.torch_runtime import (
-    amp_runtime_snapshot,
     cuda_memory_snapshot,
     reset_cuda_peak_memory_stats,
-    torch_runtime_snapshot,
 )
-from scoring.methods import (
-    MLQDSMethod,
-)
-from scoring.range_usefulness import range_usefulness_weight_summary
 from selection.learned_segment_budget import (
     learned_segment_budget_diagnostics,
 )
@@ -75,8 +64,8 @@ def _phase(name: str):
         print(f"[{name}] done in {dt:.2f}s", flush=True)
 
 
-def run_experiment_pipeline(
-    config: ExperimentConfig,
+def run_learning_scoring_pipeline(
+    config: RunConfig,
     trajectories: list[torch.Tensor],
     results_dir: str,
     save_model: str | None = None,
@@ -88,7 +77,7 @@ def run_experiment_pipeline(
     eval_trajectory_mmsis: list[int] | None = None,
     trajectory_source_ids: list[int] | None = None,
     data_audit: dict[str, Any] | None = None,
-) -> ExperimentOutputs:
+) -> RunOutputs:
     """Run training, matched scoring, and shifted scoring tables. See orchestration/README.md for details."""
     pipeline_t0 = time.perf_counter()
     train_workload_map, eval_workload_map = resolve_workload_maps(config.query.workload)
@@ -117,7 +106,7 @@ def run_experiment_pipeline(
         selection_metric in {"score", "uniform_gap"} or validation_score_every > 0
     )
     with _phase("split"):
-        data_split = prepare_experiment_split(
+        data_split = prepare_run_split(
             config=config,
             seeds=seeds,
             trajectories=trajectories,
@@ -136,7 +125,7 @@ def run_experiment_pipeline(
         train_source_ids = data_split.train_source_ids
 
     with _phase("build-datasets"):
-        datasets = build_experiment_datasets(data_split)
+        datasets = build_run_datasets(data_split)
         train_points = datasets.train_points
         test_points = datasets.test_points
         selection_points = datasets.selection_points
@@ -145,7 +134,7 @@ def run_experiment_pipeline(
         selection_boundaries = datasets.selection_boundaries
 
     with _phase("generate-workloads"):
-        workloads = generate_experiment_workloads(
+        workloads = generate_run_workloads(
             config=config,
             seeds=seeds,
             train_traj=train_traj,
@@ -175,9 +164,11 @@ def run_experiment_pipeline(
     }
     workload_distribution_comparison: dict[str, Any] = {"deltas_vs_eval": {}}
 
-    if save_queries_dir:
-        with _phase("write-queries-geojson"):
-            write_queries_geojson(save_queries_dir, eval_workload.typed_queries)
+    export_eval_queries_geojson(
+        save_queries_dir=save_queries_dir,
+        eval_workload=eval_workload,
+        phase=_phase,
+    )
 
     reset_cuda_peak_memory_stats()
     mlqds_range_geometry_blend = max(
@@ -481,143 +472,44 @@ def run_experiment_pipeline(
         predictability_audit=predictability_audit,
         workload_distribution_comparison=workload_distribution_comparison,
     )
-    final_claim_summary = final_summaries.final_claim_summary
-    legacy_range_useful_summary = final_summaries.legacy_range_useful_summary
-    learning_causality_summary = final_summaries.learning_causality_summary
-    support_overlap_gate = final_summaries.support_overlap_gate
-    global_sanity_gate = final_summaries.global_sanity_gate
-    target_diffusion_gate = final_summaries.target_diffusion_gate
-    workload_stability_gate = final_summaries.workload_stability_gate
-
-    dump = {
-        "config": config.to_dict(),
-        "final_claim_summary": final_claim_summary,
-        "diagnostic_summary": final_summaries.diagnostic_summary,
-        "legacy_range_useful_summary": legacy_range_useful_summary,
-        "learning_causality_summary": learning_causality_summary,
-        "support_overlap_gate": support_overlap_gate,
-        "global_sanity_gate": global_sanity_gate,
-        "target_diffusion_gate": target_diffusion_gate,
-        "workload": single_workload_type(eval_workload_map),
-        "train_query_count": len(train_workload.typed_queries),
-        "train_label_workload_count": len(train_label_workloads),
-        "train_label_workload_query_counts": [
-            len(workload.typed_queries) for workload in train_label_workloads
-        ],
-        "eval_query_count": len(eval_workload.typed_queries),
-        "selection_query_count": len(selection_workload.typed_queries)
-        if selection_workload is not None
-        else None,
-        "train_query_coverage": train_workload.coverage_fraction,
-        "train_label_workload_coverages": [
-            workload.coverage_fraction for workload in train_label_workloads
-        ],
-        "eval_query_coverage": eval_workload.coverage_fraction,
-        "selection_query_coverage": selection_workload.coverage_fraction
-        if selection_workload is not None
-        else None,
-        "query_generation_diagnostics": {
-            "train": train_workload.generation_diagnostics,
-            "train_label_workloads": [
-                workload.generation_diagnostics for workload in train_label_workloads
-            ],
-            "eval": eval_workload.generation_diagnostics,
-            "selection": selection_workload.generation_diagnostics
-            if selection_workload is not None
-            else None,
-        },
-        "data_split_diagnostics": data_split.split_diagnostics,
-        "selector_budget_diagnostics": selector_budget_diagnostics,
-        "selector_trace_diagnostics": {
-            "eval_primary": primary_selector_trace
-            if primary_selector_trace is not None
-            else {"available": False}
-        },
-        "segment_oracle_allocation_audit": segment_oracle_allocation_audit,
-        "target_segment_oracle_alignment_audit": target_segment_oracle_alignment_audit,
-        "matched": {name: method_score_payload(m) for name, m in matched.items()},
-        "learning_causality_ablations": {
-            name: method_score_payload(metrics)
-            for name, metrics in causality_ablation_scores.items()
-        },
-        "learned_fill_diagnostics": {
-            name: method_score_payload(metrics)
-            for name, metrics in learned_fill_diagnostics.items()
-        },
-        "range_learned_fill_summary": range_learned_fill_summary,
-        "predictability_audit": predictability_audit,
-        "workload_stability_gate": workload_stability_gate,
-        "range_compression_audit": range_compression_audit,
-        "shift": shift_pairs,
-        "training_history": trained.history,
-        "training_target_diagnostics": trained.target_diagnostics,
-        "training_fit_diagnostics": trained.fit_diagnostics,
-        "range_training_target_transform": range_training_target_transform,
-        "model_metadata": model_type_metadata(config.model.model_type),
-        "query_prior_field": trained.feature_context.get(
-            "query_prior_field_metadata", {"available": False}
-        ),
-        "range_target_balance": range_target_balance_diagnostics,
-        "range_training_label_aggregation": range_training_label_aggregation,
-        "teacher_distillation": teacher_distillation_diagnostics,
-        "best_epoch": trained.best_epoch,
-        "best_loss": trained.best_loss,
-        "best_selection_score": trained.best_selection_score,
-        "checkpoint_selection_metric": selection_metric,
-        "checkpoint_selection_metric_requested": config.model.checkpoint_selection_metric,
-        "checkpoint_score_variant": config.model.checkpoint_score_variant,
-        "final_metrics_mode": config.baselines.final_metrics_mode,
-        "workload_blind_protocol": {
-            "enabled": bool(workload_blind_eval),
-            "model_type": config.model.model_type,
-            "masks_frozen_before_eval_query_scoring": bool(workload_blind_eval),
-            "eval_queries_seen_by_model": False,
-            "eval_queries_seen_by_feature_builder": False,
-            "eval_queries_seen_by_selector": False,
-            "checkpoint_selected_on_eval_queries": False,
-            "query_conditioned_range_aware_used_for_product_acceptance": False,
-            "primary_masks_frozen_before_eval_query_scoring": bool(workload_blind_eval),
-            "audit_masks_frozen_before_eval_query_scoring": bool(
-                workload_blind_eval and bool(frozen_audit_methods_by_ratio)
-            ),
-            "frozen_audit_ratio_count": len(frozen_audit_methods_by_ratio),
-            "frozen_method_names": sorted(frozen_primary_masks),
-            "frozen_audit_ratios": sorted(frozen_audit_methods_by_ratio),
-            "eval_geometry_blend_allowed": not bool(workload_blind_eval),
-        },
-        "range_usefulness_weight_summary": range_usefulness_weight_summary(),
-        "checkpoint_smoothing_window": config.model.checkpoint_smoothing_window,
-        "mlqds_score_mode": config.model.mlqds_score_mode,
-        "mlqds_score_temperature": config.model.mlqds_score_temperature,
-        "mlqds_rank_confidence_weight": config.model.mlqds_rank_confidence_weight,
-        "mlqds_range_geometry_blend": config.model.mlqds_range_geometry_blend,
-        "mlqds_hybrid_mode": config.model.mlqds_hybrid_mode,
-        "mlqds_stratified_center_weight": config.model.mlqds_stratified_center_weight,
-        "mlqds_min_learned_swaps": config.model.mlqds_min_learned_swaps,
-        "oracle_diagnostic": {
-            "kind": "additive_label_greedy",
-            "enabled": run_oracle_baseline,
-            "exact_optimum": False,
-            "retained_mask_constructor": "per_trajectory_topk_with_endpoints",
-            "purpose": "diagnostic label-greedy reference, not exact retained-set RangeUseful optimum",
-        },
-        "range_label_mode": config.model.range_label_mode,
-        "range_boundary_prior_weight": config.model.range_boundary_prior_weight,
-        "range_boundary_prior_enabled": config.model.range_boundary_prior_weight > 0.0,
-        "data_audit": data_audit,
-        "workload_diagnostics": range_diagnostics_summary,
-        "workload_distribution_comparison": workload_distribution_comparison,
-        "torch_runtime": {
-            **torch_runtime_snapshot(),
-            "amp": amp_runtime_snapshot(config.model.amp_mode),
-        },
-        "cuda_memory": {
-            "training": training_cuda_memory,
-        },
-    }
+    dump = build_run_payload(
+        config=config,
+        final_summaries=final_summaries,
+        trained=trained,
+        train_workload=train_workload,
+        train_label_workloads=train_label_workloads,
+        eval_workload=eval_workload,
+        selection_workload=selection_workload,
+        eval_workload_map=eval_workload_map,
+        data_split_diagnostics=data_split.split_diagnostics,
+        selector_budget_diagnostics=selector_budget_diagnostics,
+        primary_selector_trace=primary_selector_trace,
+        segment_oracle_allocation_audit=segment_oracle_allocation_audit,
+        target_segment_oracle_alignment_audit=target_segment_oracle_alignment_audit,
+        matched=matched,
+        causality_ablation_scores=causality_ablation_scores,
+        learned_fill_diagnostics=learned_fill_diagnostics,
+        range_learned_fill_summary=range_learned_fill_summary,
+        predictability_audit=predictability_audit,
+        range_compression_audit=range_compression_audit,
+        shift_pairs=shift_pairs,
+        range_training_target_transform=range_training_target_transform,
+        range_target_balance_diagnostics=range_target_balance_diagnostics,
+        range_training_label_aggregation=range_training_label_aggregation,
+        teacher_distillation_diagnostics=teacher_distillation_diagnostics,
+        selection_metric=selection_metric,
+        workload_blind_eval=workload_blind_eval,
+        frozen_primary_masks=frozen_primary_masks,
+        frozen_audit_methods_by_ratio=frozen_audit_methods_by_ratio,
+        data_audit=data_audit,
+        range_diagnostics_summary=range_diagnostics_summary,
+        workload_distribution_comparison=workload_distribution_comparison,
+        training_cuda_memory=training_cuda_memory,
+        run_oracle_baseline=run_oracle_baseline,
+    )
 
     with _phase("write-results"):
-        out_dir = write_experiment_results(
+        out_dir = write_run_results(
             results_dir=results_dir,
             matched_table=matched_table,
             shift_table=shift_table,
@@ -635,81 +527,21 @@ def run_experiment_pipeline(
         )
         print(f"  wrote results to {out_dir}", flush=True)
 
-    if save_simplified_dir:
-        with _phase("write-simplified-csv"):
-            out_dir = Path(save_simplified_dir)
-            eval_mask = matched["MLQDS"].retained_mask
-            if eval_mask is None:
-                eval_mlqds = MLQDSMethod(
-                    name="MLQDS",
-                    trained=trained,
-                    workload=eval_workload,
-                    workload_type=single_workload_type(eval_workload_map),
-                    score_mode=config.model.mlqds_score_mode,
-                    score_temperature=config.model.mlqds_score_temperature,
-                    rank_confidence_weight=config.model.mlqds_rank_confidence_weight,
-                    temporal_fraction=config.model.mlqds_temporal_fraction,
-                    diversity_bonus=config.model.mlqds_diversity_bonus,
-                    hybrid_mode=config.model.mlqds_hybrid_mode,
-                    selector_type=config.model.selector_type,
-                    learned_segment_geometry_gain_weight=config.model.learned_segment_geometry_gain_weight,
-                    learned_segment_allocation_length_support_weight=(
-                        config.model.learned_segment_allocation_length_support_weight
-                    ),
-                    learned_segment_allocation_weight_floor=(
-                        config.model.learned_segment_allocation_weight_floor
-                    ),
-                    learned_segment_score_blend_weight=config.model.learned_segment_score_blend_weight,
-                    learned_segment_fairness_preallocation=config.model.learned_segment_fairness_preallocation,
-                    learned_segment_length_repair_fraction=config.model.learned_segment_length_repair_fraction,
-                    learned_segment_length_repair_score_protection_fraction=(
-                        config.model.learned_segment_length_repair_score_protection_fraction
-                    ),
-                    learned_segment_length_support_blend_weight=(
-                        config.model.learned_segment_length_support_blend_weight
-                    ),
-                    stratified_center_weight=config.model.mlqds_stratified_center_weight,
-                    min_learned_swaps=config.model.mlqds_min_learned_swaps,
-                    trajectory_mmsis=test_mmsis,
-                    inference_batch_size=config.model.inference_batch_size,
-                    amp_mode=config.model.amp_mode,
-                )
-                eval_mask = eval_mlqds.simplify(
-                    test_points, test_boundaries, config.model.compression_ratio
-                )
-            write_simplified_csv(
-                str(out_dir / "ML_simplified_eval.csv"),
-                test_points,
-                test_boundaries,
-                eval_mask,
-                trajectory_mmsis=test_mmsis,
-            )
-            for ref_name, csv_name in (
-                ("uniform", "uniform_simplified_eval.csv"),
-                ("DouglasPeucker", "DP_simplified_eval.csv"),
-            ):
-                ref_eval = matched.get(ref_name)
-                ref_mask = ref_eval.retained_mask if ref_eval is not None else None
-                if ref_mask is not None:
-                    write_simplified_csv(
-                        str(out_dir / csv_name),
-                        test_points,
-                        test_boundaries,
-                        ref_mask,
-                        trajectory_mmsis=test_mmsis,
-                    )
-
-        with _phase("trajectory-length-loss"):
-            report_trajectory_length_loss(
-                test_points,
-                test_boundaries,
-                eval_mask,
-                top_k=25,
-                trajectory_mmsis=test_mmsis,
-            )
+    export_simplified_eval_csvs(
+        save_simplified_dir=save_simplified_dir,
+        matched=matched,
+        config=config,
+        trained=trained,
+        eval_workload=eval_workload,
+        eval_workload_map=eval_workload_map,
+        test_points=test_points,
+        test_boundaries=test_boundaries,
+        test_mmsis=test_mmsis,
+        phase=_phase,
+    )
 
     print(f"[pipeline] total runtime {time.perf_counter() - pipeline_t0:.2f}s", flush=True)
-    return ExperimentOutputs(
+    return RunOutputs(
         matched_table=matched_table,
         shift_table=shift_table,
         metrics_dump=dump,

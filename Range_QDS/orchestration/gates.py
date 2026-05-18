@@ -1,4 +1,4 @@
-"""Final-candidate gate helpers for query-driven experiment artifacts."""
+"""Final-candidate gate helpers for query-driven run artifacts."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from typing import Any
 
 import torch
 
-from config.experiment_config import ExperimentConfig
+from config.run_config import RunConfig
 from learning.query_prior_fields import QUERY_PRIOR_FIELD_NAMES, sample_query_prior_fields
 from scoring.metrics import MethodScore
 from workloads.generation.workload_profiles import (
@@ -170,7 +170,7 @@ def _optional_float_for_gate(value: Any) -> float | None:
 
 def evaluate_workload_stability_gate(
     *,
-    config: ExperimentConfig,
+    config: RunConfig,
     train_label_workloads: list[Any],
     eval_workload: Any,
     selection_workload: Any | None,

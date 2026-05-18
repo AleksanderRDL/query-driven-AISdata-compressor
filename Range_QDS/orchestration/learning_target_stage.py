@@ -9,7 +9,7 @@ from typing import Any
 
 import torch
 
-from config.experiment_config import ExperimentConfig, SeedBundle
+from config.run_config import RunConfig, SeedBundle
 from learning.model_features import is_workload_blind_model_type
 from learning.model_training import train_model
 from learning.targets.aggregation import (
@@ -76,7 +76,7 @@ class TargetPreparationOutputs:
 
 def prepare_training_targets(
     *,
-    config: ExperimentConfig,
+    config: RunConfig,
     seeds: SeedBundle,
     train_traj: list[torch.Tensor],
     train_points: torch.Tensor,

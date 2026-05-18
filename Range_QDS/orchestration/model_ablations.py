@@ -1,4 +1,4 @@
-"""Model and prior-field ablation helpers for experiment diagnostics."""
+"""Model and prior-field ablation helpers for run diagnostics."""
 
 from __future__ import annotations
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import torch
 
-from config.experiment_config import ModelConfig
+from config.run_config import ModelConfig
 from learning.outputs import TrainingOutputs
 from learning.scaler import FeatureScaler
 from learning.teacher_distillation import build_range_teacher_config, distill_range_teacher_labels

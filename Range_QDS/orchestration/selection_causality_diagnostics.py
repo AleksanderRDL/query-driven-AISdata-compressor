@@ -6,7 +6,7 @@ from typing import Any
 
 import torch
 
-from config.experiment_config import ExperimentConfig
+from config.run_config import RunConfig
 from learning.outputs import TrainingOutputs
 from learning.predictability_audit import query_prior_predictability_scores
 from learning.query_prior_fields import query_prior_field_metadata, zero_query_prior_field_like
@@ -19,6 +19,7 @@ from orchestration.causality import (
     retained_mask_comparison,
     score_ablation_sensitivity,
 )
+from orchestration.mlqds_method_factory import build_mlqds_method
 from orchestration.model_ablations import (
     raw_predictions_without_factorized_head,
     scores_without_factorized_head,
@@ -44,7 +45,7 @@ def build_selection_causality_diagnostics(
     selection_workload: Any | None,
     eval_workload_map: dict[str, float],
     selection_query_cache: ScoringQueryCache | None,
-    config: ExperimentConfig,
+    config: RunConfig,
     seeds: Any,
 ) -> dict[str, Any]:
     """Return checkpoint-validation ablation diagnostics without changing selection."""
@@ -61,38 +62,13 @@ def build_selection_causality_diagnostics(
         trained_outputs: TrainingOutputs,
         workload: Any,
     ) -> MLQDSMethod:
-        return MLQDSMethod(
+        return build_mlqds_method(
             name=name,
             trained=trained_outputs,
             workload=workload,
-            workload_type=workload_type,
-            score_mode=config.model.mlqds_score_mode,
-            score_temperature=config.model.mlqds_score_temperature,
-            rank_confidence_weight=config.model.mlqds_rank_confidence_weight,
-            temporal_fraction=config.model.mlqds_temporal_fraction,
-            diversity_bonus=config.model.mlqds_diversity_bonus,
-            hybrid_mode=config.model.mlqds_hybrid_mode,
-            stratified_center_weight=config.model.mlqds_stratified_center_weight,
-            min_learned_swaps=config.model.mlqds_min_learned_swaps,
-            selector_type=config.model.selector_type,
-            trajectory_mmsis=None,
-            inference_device=None,
-            amp_mode=config.model.amp_mode,
-            inference_batch_size=config.model.inference_batch_size,
-            learned_segment_geometry_gain_weight=config.model.learned_segment_geometry_gain_weight,
-            learned_segment_allocation_length_support_weight=(
-                config.model.learned_segment_allocation_length_support_weight
-            ),
-            learned_segment_allocation_weight_floor=(
-                config.model.learned_segment_allocation_weight_floor
-            ),
-            learned_segment_score_blend_weight=config.model.learned_segment_score_blend_weight,
-            learned_segment_fairness_preallocation=config.model.learned_segment_fairness_preallocation,
-            learned_segment_length_repair_fraction=config.model.learned_segment_length_repair_fraction,
-            learned_segment_length_repair_score_protection_fraction=(
-                config.model.learned_segment_length_repair_score_protection_fraction
-            ),
-            learned_segment_length_support_blend_weight=config.model.learned_segment_length_support_blend_weight,
+            workload_map=eval_workload_map,
+            config=config,
+            range_geometry_blend=0.0,
         )
 
     primary_method = _mlqds_method(

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 import torch
 
-from config.experiment_config import ModelConfig
+from config.run_config import ModelConfig
 from learning.targets.aggregation import (
     aggregate_range_component_label_sets,
     aggregate_range_component_retained_frequency_training_labels,

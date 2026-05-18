@@ -40,7 +40,7 @@ class AISCacheResult:
     parquet_path: str
 
     def cache_metadata(self) -> dict[str, Any]:
-        """Return JSON-safe cache metadata for experiment artifacts."""
+        """Return JSON-safe cache metadata for run artifacts."""
         return {
             "cache_hit": self.cache_hit,
             "cache_dir": self.cache_dir,

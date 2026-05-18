@@ -1,4 +1,4 @@
-"""Scoring-stage orchestration for single experiment runs."""
+"""Scoring-stage orchestration for single runs."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from typing import Any
 
 import torch
 
-from config.experiment_config import ExperimentConfig, SeedBundle
+from config.run_config import RunConfig, SeedBundle
 from learning.outputs import TrainingOutputs
 from orchestration.causality import retained_mask_comparison
 from orchestration.range_diagnostics import method_score_payload
@@ -64,7 +64,7 @@ class ScoringStageOutputs:
 
 def run_scoring_stage(
     *,
-    config: ExperimentConfig,
+    config: RunConfig,
     seeds: SeedBundle,
     trained: TrainingOutputs,
     methods: list[Method],

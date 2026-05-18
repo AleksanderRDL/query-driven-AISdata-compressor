@@ -1,4 +1,4 @@
-"""Torch runtime precision controls for experiment entrypoints."""
+"""Torch runtime precision controls for run entrypoints."""
 
 from __future__ import annotations
 

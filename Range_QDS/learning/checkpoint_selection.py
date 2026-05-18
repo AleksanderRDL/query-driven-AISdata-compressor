@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import torch
 
-from config.experiment_config import ModelConfig
+from config.run_config import ModelConfig
 from workloads.query_types import normalize_pure_workload_map
 
 

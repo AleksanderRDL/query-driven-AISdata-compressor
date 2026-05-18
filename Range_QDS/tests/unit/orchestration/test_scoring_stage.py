@@ -9,7 +9,7 @@ from typing import Any, cast
 import pytest
 import torch
 
-from config.experiment_config import build_experiment_config, derive_seed_bundle
+from config.run_config import build_run_config, derive_seed_bundle
 from learning.outputs import TrainingOutputs
 from orchestration.range_runtime_cache import RangeRuntimeCache
 from orchestration.scoring_stage import run_scoring_stage
@@ -88,7 +88,7 @@ def test_scoring_stage_runs_core_matched_audit_and_shift() -> None:
         phase_names.append(name)
         yield
 
-    config = build_experiment_config(
+    config = build_run_config(
         compression_ratio=0.50,
         final_metrics_mode="core",
     )
@@ -144,7 +144,7 @@ def test_scoring_stage_runs_core_matched_audit_and_shift() -> None:
 
 
 def test_scoring_stage_rejects_unknown_final_metrics_mode() -> None:
-    config = build_experiment_config(final_metrics_mode="wide-open")
+    config = build_run_config(final_metrics_mode="wide-open")
     workload = _range_workload()
 
     with pytest.raises(ValueError, match="final_metrics_mode"):
