@@ -43,13 +43,7 @@ The target product result is not “best possible geometric simplification.” I
 The latest relevant strict single-cell evidence is:
 
 ```text
-artifacts/results/query_driven_v2_checkpoint13_per_head_prior_materiality_strict_replay_c10_r05/example_run.json
-```
-
-The active length-preservation policy is `0.75`. The stored strict artifact was originally written under the older `0.80` global-sanity minimum, so its current gate status must be read with the policy reclassification artifact:
-
-```text
-artifacts/results/query_driven_v2_checkpoint18_current_best_gate_reclassification_len075/gate_reclassification_summary.json
+artifacts/results/query_driven_v2_checkpoint42_mode_aware_current_best_strict_local/example_run.json
 ```
 
 This is still diagnostic evidence, not final acceptance evidence. The final grid has not been run, and final success is not allowed.
@@ -58,78 +52,107 @@ Current strict-cell result:
 
 ```text
 QueryUsefulV1:
-  MLQDS:           0.1718372153
-  uniform:         0.1422379580
-  DouglasPeucker:  0.1636245984
+  MLQDS:           0.1662115143
+  uniform:         0.1421296610
+  DouglasPeucker:  0.1671038781
 
 RangeUsefulLegacy:
-  not the primary decision metric
+  MLQDS:           0.1524363397
+  uniform:         0.1303214771
+  DouglasPeucker:  0.1526760352
 
 Length preservation:
-  MLQDS:           0.7941408411
+  MLQDS:           0.7915916346
   active minimum:  0.7500000000
 ```
 
-Gate status after the `0.75` length-policy reclassification:
+Gate status:
 
 ```text
 Passed:
   workload_stability_gate
   support_overlap_gate
-  predictability_gate
   prior_predictive_alignment_gate
   target_diffusion_gate
   workload_signature_gate
   global_sanity_gates
 
 Blocked:
+  predictability_gate
   learning_causality_ablations
   full_workload_profile_compression_grid
 ```
 
-The previous workload-generation/signature blocker is no longer the first active blocker for the current-best strict cell. Do not spend the next checkpoint increasing workload scale, widening caps, or running the full matrix unless a focused probe shows those gates regressed.
+The previous workload-generation/signature blocker is resolved for this strict
+cell by the mode-aware signature invariant. Do not spend the next checkpoint
+increasing workload scale, widening caps, or running the full matrix unless a
+focused probe shows those gates regressed.
 
-The active blocker is **learning causality**. The model beats uniform and Douglas-Peucker in this strict cell, but the win is not yet defensible as learned workload-blind behavior.
+The active blockers are **predictability** and **learning causality**. MLQDS
+beats uniform but still narrowly loses to Douglas-Peucker on QueryUsefulV1, so
+there is no acceptable product win even before the causality failures.
+
+Predictability gate:
+
+```text
+failed:
+  spearman_min:
+    observed:  0.1109086186
+    required:  0.1500000000
+  pr_auc_lift_over_base_rate:
+    observed:  1.2304850435
+    required:  1.2500000000
+passed:
+  lift_at_1_percent: 1.1339085990
+  lift_at_2_percent: 1.4429388677
+  lift_at_5_percent: 1.2035399978
+
+query_hit_probability:
+  spearman: 0.1010042808
+  lift@5:   1.3721010168
+
+segment_budget_target:
+  spearman: 0.1545043692
+  lift@5:   1.1383350577
+```
 
 Failed causality child gates:
 
 ```text
 shuffled_scores_should_lose:
-  required delta: 0.0177595544
-  observed delta: 0.0088563451
-  shortfall:      0.0089032093
-  mask movement:  1864 symmetric-difference decisions
-  mask Jaccard:   0.2819722650
+  required delta: 0.0144491119
+  observed delta: 0.0089580664
+  shortfall:      0.0054910455
 
 shuffled_prior_fields_should_lose:
   required delta: 0.0050000000
-  observed delta: 0.0027430170
-  shortfall:      0.0022569830
-  mask movement:  36 symmetric-difference decisions
-  mask Jaccard:   0.9785969084
+  observed delta: -0.0001133659
+  shortfall:      0.0051133659
 
 without_query_prior_features_should_lose:
   required delta: 0.0050000000
-  observed delta: 0.0027430170
-  shortfall:      0.0022569830
-  mask movement:  36 symmetric-difference decisions
-  mask Jaccard:   0.9785969084
+  observed delta: 0.0000575989
+  shortfall:      0.0049424011
+
+without_behavior_utility_head_should_lose:
+  required delta: 0.0050000000
+  observed delta: 0.0033472765
+  shortfall:      0.0016527235
+
+without_segment_budget_head_should_lose:
+  required delta: 0.0050000000
+  observed delta: 0.0036430341
+  shortfall:      0.0013569659
 ```
 
 Passing causality child gates:
 
 ```text
 untrained_model_should_lose:
-  margin: 0.0150725509
-
-without_behavior_utility_head_should_lose:
-  margin: 0.0046601815
-
-without_segment_budget_head_should_lose:
-  margin: 0.0095434355
+  margin: 0.0033867379
 
 prior_field_only_should_not_match_trained:
-  margin: 0.0178886064
+  margin: 0.0017087725
 ```
 
 Selector control is not the current blocker:
@@ -141,12 +164,18 @@ required minimum:                         0.2500000000
 
 Current interpretation:
 
-- Score ordering has material mask control, but the ordering advantage is too weak. Shuffling scores changes many retained decisions, yet QueryUsefulV1 drops by only about half of the required threshold.
-- The prior path is too weak. Raw sampled priors change substantially, model-input priors change nontrivially, but head probability changes are near zero and retained-mask movement is tiny.
-- Behavior and segment-budget heads are material enough under the current checks. Preserve that behavior while fixing score/prior materiality.
-- The pre-repair diagnostic remains higher scoring but length-broken. Do not compensate by weakening length repair, adding large temporal scaffolding, or loosening causality gates.
+- Workload signature is no longer the blocker under the mode-aware invariant.
+- Aggregate prior predictability is close but still below the hard gate.
+- Query-hit prior lift is useful; segment-budget transfer is weaker. Diagnose
+  prior/target alignment before model tuning.
+- Score ordering still has weak retained-set marginal value. The retained
+  marginal payload shows overall selector-score Spearman `-0.0077522559` and
+  raw-score Spearman `-0.0248828079` against exact QueryUsefulV1 marginals.
+- Prior and head ablations move final masks too little, and removing behavior or
+  segment-budget heads does not hurt enough. Do not compensate by weakening
+  length repair, adding large temporal scaffolding, or loosening causality gates.
 
-Superseding diagnostics after the current-best artifact:
+Relevant diagnostics before and around the current-best artifact:
 
 ```text
 checkpoint23 prior sqrt transform standard strict:
@@ -439,6 +468,143 @@ checkpoint38 cached retained-marginal current-best-scale strict local:
     signature failed. Do not tune model/selector from this artifact. Next work
     should diagnose workload-profile/query-count stability at current-best scale
     and instrument the remaining retained-mask freeze cost.
+
+checkpoint39 retained-mask freeze timing instrumentation:
+  evidence level: implementation only
+  change:
+    retained-mask freezing now emits query-free timing diagnostics:
+      retained_mask_freeze_timing
+      retained_mask_ablation_freeze_timing
+  timing coverage:
+    primary method simplify seconds
+    audit method simplify seconds
+    selector trace reconstruction
+    retained-marginal alignment
+    score-protected length diagnostics
+    query-free ablation freeze total
+    ablation substage seconds
+    prior-channel ablation seconds
+    method count
+    failure count
+    total seconds
+  tests:
+    py_compile passed
+    ruff passed
+    pyright passed
+    focused pytest passed: 111 tests
+  decision: this does not change masks, scoring, or gates. It makes the next
+    strict rerun auditable enough to locate the checkpoint38 freeze bottleneck.
+
+checkpoint40 workload query-count stability generation-only:
+  evidence level: targeted generation diagnostic
+  scale:
+    384 ships, 256 points, 4 route families, balanced 0.34/0.33 split,
+    48 minimum queries, 256 max queries, 4 train workload replicates,
+    range_workload_v1_local, profile_sampled_query_count
+  seeds:
+    2324, 2325, 2326, 2327, 2328
+  signature results:
+    pass: 2/5
+    fail: 3/5
+    failure mode: query_count_mismatch only
+  query-count range:
+    minimum observed row count: 101
+    maximum observed row count: 197
+  generation health:
+    every workload reached target coverage
+    every workload stopped with target_coverage_reached
+  interpretation:
+    the local 10% profile is seed/split-sensitive under the strict
+    query-count signature check. This is not generator exhaustion and not model
+    evidence.
+  decision: next work must stabilize profile/query-count behavior or revise the
+    signature invariant in the guide; do not tune model/selector from these
+    artifacts.
+
+checkpoint41 query-count signature invariant:
+  evidence level: targeted generation diagnostic plus gate implementation
+  accepted-query floor probe:
+    n_queries 160:
+      signature pass 4/5
+      workload stability pass 2/5
+      failure modes:
+        query_count_mismatch
+        range_generation_rejection_rate_too_high
+        coverage_guard_rejection_pressure_too_high
+        range_acceptance_or_coverage_guard_exhausted
+    n_queries 192:
+      signature pass 5/5
+      workload stability pass 0/5
+      failure modes:
+        range_generation_rejection_rate_too_high
+        coverage_guard_rejection_pressure_too_high
+        range_acceptance_or_coverage_guard_exhausted
+    decision:
+      raising the accepted-query floor is not a valid root fix because it makes
+      the coverage guard/rejection-pressure gates fail.
+  mode-aware signature gate:
+    fixed-count or legacy signatures:
+      enforce relative query-count parity
+    calibrated_to_coverage + profile_sampled_query_count signatures:
+      require matching profile id, query_count_mode, coverage_calibration_mode,
+      and target_coverage; enforce minimum query count and distribution checks;
+      record query-count relative delta as diagnostic instead of a parity
+      blocker
+    validation:
+      checkpoint40 scale rerun after the gate change passed workload signature
+      and workload stability in 5/5 nearby seeds. Query counts still ranged
+      from 101 to 197, but all pairs used
+      diagnostic_min_only_for_coverage_calibrated and did not enforce relative
+      query-count parity.
+    decision:
+      this is a guide-level invariant change, not a model success claim. Do
+      not use it to loosen learning-causality, predictability, support, or
+      global-sanity gates.
+
+checkpoint42 mode-aware current-best strict local:
+  MLQDS QueryUsefulV1: 0.1662115143
+  uniform QueryUsefulV1: 0.1421296610
+  Douglas-Peucker QueryUsefulV1: 0.1671038781
+  gates passed:
+    workload stability
+    support overlap
+    prior-predictive alignment
+    target diffusion
+    workload signature
+    global sanity
+  gates failed:
+    predictability
+    learning causality
+  final claim:
+    final_success_allowed: false
+    reason: candidate_blocked_by_required_gates
+  predictability:
+    Spearman 0.1109086186 versus min 0.15
+    PR-AUC lift 1.2304850435 versus min 1.25
+    lift@5 passed at 1.2035399978
+  learning causality:
+    failed shuffled scores, shuffled priors, no query priors, no behavior head,
+    and no segment-budget head
+    shuffled-score delta 0.0089580664 versus required 0.0144491119
+    no-query-prior delta 0.0000575989 versus required 0.005
+  retained-marginal payload:
+    available: true
+    exact_query_useful_v1_marginals: true
+    candidate_count: 160
+    overall raw Spearman: -0.0248828079
+    overall selector Spearman: -0.0077522559
+    retained-removal selector top-minus-bottom marginal: -0.0000446724
+  timing:
+    total runtime: 625.69s
+    freeze-retained-masks: 363.45s
+    retained-marginal alignment: 17.79s
+    score-protected length diagnostics: 63.28s
+    query-free ablation freeze: 260.07s
+  decision:
+    workload gate is now clean enough. Next work should diagnose why
+    train-derived priors and learned heads do not translate into marginally
+    valuable retained decisions; do not run the final grid or tune from
+    generation-only evidence.
 ```
 
 These diagnostics matter. Prior rescaling and generic head-fit/ranking pressure
@@ -452,14 +618,20 @@ Latest prior-path sensitivity from the derived diagnosis:
 
 ```text
 shuffled_prior_fields:
-  sampled_prior_mean_abs_delta:       0.1336687356
-  model_input_prior_mean_abs_delta:   0.0128313117
-  head_probability_mean_abs_delta:    0.0000181609
+  sampled_prior_mean_abs_delta:       0.1004762650
+  model_input_prior_mean_abs_delta:   0.0101600057
+  head_probability_mean_abs_delta:    0.0000115752
+  score_mean_abs_delta:               0.0002874043
+  retained_symmetric_difference:      16
+  retained_mask_jaccard:              0.9904306220
 
 without_query_prior_features:
-  sampled_prior_mean_abs_delta:       0.1352738738
-  model_input_prior_mean_abs_delta:   0.0128368139
-  head_probability_mean_abs_delta:    0.0000181643
+  sampled_prior_mean_abs_delta:       0.1055359766
+  model_input_prior_mean_abs_delta:   0.0106786611
+  head_probability_mean_abs_delta:    0.0000116865
+  score_mean_abs_delta:               0.0002997211
+  retained_symmetric_difference:      24
+  retained_mask_jaccard:              0.9856801909
 ```
 
 Future prior-ablation artifacts should expose one canonical diagnostic chain:
@@ -479,24 +651,23 @@ Current next checkpoint direction:
 
 ```text
 Primary hypothesis:
-  The local 10% workload profile is still seed/split-sensitive under the
-  strict query-count signature gate at current-best scale. The latest larger
-  probe failed before model conclusions were admissible, even though the
-  retained-marginal payload itself is now affordable.
+  Checkpoint42 proves workload signature is no longer the blocker. The remaining
+  failure is score/prior materiality: train-derived priors are barely below the
+  aggregate predictability gate, and learned scores/heads do not rank exact
+  retained-decision marginal value well enough.
 
 Expected focus:
-  workloads/generation/workload_profiles.py
-  workloads/generation/generator.py
-  orchestration/range_diagnostics.py
-  orchestration/retained_mask_stage.py
-  orchestration/retained_mask_ablation_stage.py
+  learning prior predictability by head/channel
+  factorized target/head dispersion
+  selector score versus retained-decision marginal QueryUsefulV1
+  query-free causality ablation mask movement
 
 Preferred scope:
-  targeted workload/profile query-count stability diagnostics first; do not use
-  raw coverage overrides to recreate stale profile behavior; do not tune
-  model/selector until workload signature passes. Separately instrument the
-  retained-mask freeze stage because most checkpoint38 freeze time was outside
-  the retained-marginal payload.
+  focused artifact diagnostics first. If code changes are needed, prefer
+  instrumentation or root target/prior/selector alignment fixes. Do not run the
+  final grid. Do not loosen predictability or learning-causality gates. Do not
+  compensate with temporal scaffold, raw coverage overrides, or weaker length
+  guardrails.
 
 Avoid:
   re-adding sqrt_probability prior transform
@@ -722,7 +893,7 @@ point hits per query
 ship hits per query
 near-duplicate rate
 broad-query rate
-query count
+query count semantics
 profile id
 ```
 
@@ -735,8 +906,18 @@ point_hit_distribution_ks_max: 0.20
 ship_hit_distribution_ks_max: 0.20
 near_duplicate_rate_max: 0.05
 broad_query_rate_max: 0.05
+query_count_relative_delta_max: 0.15  # fixed-count/legacy signatures only
 min_signature_query_count: 8
 ```
+
+For fixed-count or legacy signatures, query-count relative delta is a hard
+signature check. For `calibrated_to_coverage` signatures using
+`profile_sampled_query_count`, accepted query count is a target-coverage stopping
+statistic. In that mode, the gate must require matching profile id,
+`query_count_mode`, `coverage_calibration_mode`, and `target_coverage`; it must
+still enforce `min_signature_query_count` and all distribution checks; and it
+must record query-count relative delta as a diagnostic rather than a parity
+blocker. Generation health remains a separate hard gate and must pass.
 
 If planned family quotas match but accepted signatures fail, acceptance filters are skewing the generated workload. Fix the generator/profile first.
 

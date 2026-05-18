@@ -3712,3 +3712,316 @@ Decision:
 - Next checkpoint should diagnose workload-profile/query-count stability at
   current-best scale and instrument retained-mask freeze substage timings before
   rerunning another expensive strict cell.
+
+## Checkpoint 5.95 - Retained-Mask Freeze Timing Instrumentation
+
+Status: completed
+
+Hypothesis:
+- Checkpoint38's `351.32s` `freeze-retained-masks` phase is hiding substage
+  cost, so more current-best-scale probes are wasteful until freeze timing is
+  broken down.
+
+Expected files:
+- `orchestration/retained_mask_stage.py`
+- `orchestration/retained_mask_ablation_stage.py`
+- `tests/unit/orchestration/test_retained_mask_stage.py`
+- `artifacts/results/query_driven_v2_checkpoint39_retained_mask_freeze_timing_instrumentation/retained_mask_freeze_timing_instrumentation.json`
+- `docs/query-driven-rework-guide.md`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- Retained-mask outputs include substage timing metadata without changing masks
+  or gates, and focused tests prove the metadata is emitted.
+
+Goal:
+- Make the next strict rerun able to identify the retained-mask freeze
+  bottleneck without adding one-off experiment prints.
+
+Changes:
+- Added `retained_mask_freeze_timing` to the primary selector trace.
+- Added `retained_mask_ablation_freeze_timing` to the selector trace.
+- Added `freeze_timing_diagnostics` to retained-mask and ablation output
+  dataclasses.
+- Timing covers primary method simplify seconds, audit method simplify seconds,
+  selector trace reconstruction, retained-marginal alignment, score-protected
+  length diagnostics, query-free ablation freeze total, ablation substages,
+  prior-channel ablations, method count, failure count, and total seconds.
+
+Tests:
+- `python3 -m py_compile orchestration/retained_mask_stage.py orchestration/retained_mask_ablation_stage.py tests/unit/orchestration/test_retained_mask_stage.py`
+- `../.venv/bin/ruff check orchestration/retained_mask_stage.py orchestration/retained_mask_ablation_stage.py tests/unit/orchestration/test_retained_mask_stage.py`
+- `../.venv/bin/pyright orchestration/retained_mask_stage.py orchestration/retained_mask_ablation_stage.py tests/unit/orchestration/test_retained_mask_stage.py`
+- `../.venv/bin/pytest tests/unit/orchestration/test_retained_mask_stage.py -q`
+- `../.venv/bin/pytest tests/unit/orchestration/test_query_driven_rework.py tests/unit/orchestration/test_retained_mask_stage.py -q`
+- `git diff --check`
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint39_retained_mask_freeze_timing_instrumentation/retained_mask_freeze_timing_instrumentation.json`
+- command: no training run; implementation checkpoint only
+
+Key results:
+- MLQDS QueryUsefulV1: n/a
+- uniform QueryUsefulV1: n/a
+- Douglas-Peucker QueryUsefulV1: n/a
+- gates passed: n/a
+- gates failed: n/a
+- validation passed: py_compile, ruff, pyright, focused retained-mask tests,
+  broader orchestration unit slice, and `git diff --check`
+
+Extra discoveries:
+- The retained-mask freeze stage had no durable timing payload, so checkpoint38
+  could only tell us that the full freeze bucket was slow. That is too coarse
+  for another 10-minute probe.
+- The new timing is intentionally query-free and diagnostic-only. It does not
+  change retained-mask construction, scoring, acceptance gates, or protocol
+  behavior.
+
+Decision:
+- Continue to targeted workload/profile query-count stability diagnostics before
+  another strict cell. When a strict cell is rerun, use the new timing payload
+  to locate the retained-mask freeze bottleneck.
+
+## Checkpoint 5.96 - Workload Query-Count Stability Generation-Only
+
+Status: failed
+
+Hypothesis:
+- Checkpoint38's workload-signature failure is a workload-profile/query-count
+  stability issue, not a model issue, and can be diagnosed from generation and
+  signature artifacts before another strict training run.
+
+Expected files:
+- `artifacts/results/query_driven_v2_checkpoint40_workload_query_count_stability_generation_only/workload_query_count_stability_generation_only.json`
+- `docs/query-driven-rework-guide.md`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- Classify whether the failure is due profile semantics, seed/split variance,
+  or gate accounting, without running training or loosening gates.
+
+Goal:
+- Decide whether another strict training run is justified or whether workload
+  generation/signature behavior must be fixed first.
+
+Changes:
+- No production code change.
+- Ran a five-seed generation-only diagnostic at checkpoint38 scale using
+  existing generator, split, workload, and signature-comparison code.
+
+Tests:
+- `../.venv/bin/python` generation-only diagnostic using `build_run_config`,
+  `generate_synthetic_ais_data`, `prepare_run_split`, `generate_run_workloads`,
+  and `range_workload_distribution_comparison`
+- `jq empty artifacts/results/query_driven_v2_checkpoint40_workload_query_count_stability_generation_only/workload_query_count_stability_generation_only.json`
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint40_workload_query_count_stability_generation_only/workload_query_count_stability_generation_only.json`
+- command: generation-only Python diagnostic; no training or scoring run
+
+Key results:
+- MLQDS QueryUsefulV1: n/a
+- uniform QueryUsefulV1: n/a
+- Douglas-Peucker QueryUsefulV1: n/a
+- gates passed: n/a
+- gates failed: workload signature in 3/5 generation-only seeds
+- seeds tested: `2324`, `2325`, `2326`, `2327`, `2328`
+- signature passed: `2/5`
+- signature failed: `3/5`
+- failure mode: `query_count_mismatch` only
+- observed query-count range across generated rows: `101` to `197`
+- all rows reached target coverage and stopped with `target_coverage_reached`
+- checkpoint38 seed `2324` was reproduced exactly: train `118`, eval `144`,
+  relative delta `0.1805555556`
+
+Extra discoveries:
+- The local 10% profile can need very different numbers of accepted queries to
+  reach the same target coverage on train/eval/selection splits. That makes the
+  current strict query-count signature check fail even when generation is
+  healthy.
+- This is a profile/generator/gate-accounting problem. It is not evidence that
+  the model got worse, and it is not a reason to weaken learning-causality gates.
+- A stale current-best artifact used `range_workload_v1` with 10% target
+  coverage. Recreating that with raw overrides would violate the current guide;
+  fix the root issue instead.
+
+Decision:
+- Stop strict training reruns until workload query-count stability is fixed or
+  the guide explicitly changes the signature invariant.
+- Next checkpoint should focus on profile-owned query-count stabilization, not
+  model/selector tuning.
+
+## Checkpoint 5.97 - Mode-Aware Query-Count Signature Gate
+
+Status: completed
+
+Hypothesis:
+- The local 10% profile's accepted query count is a coverage-calibrated stopping
+  statistic. Forcing strict train/eval query-count parity is the wrong
+  invariant when profile id, query-count mode, coverage-calibration mode,
+  target coverage, generation health, and distribution checks match.
+
+Expected files:
+- `workloads/generation/signatures.py`
+- `orchestration/range_diagnostics.py`
+- `tests/unit/orchestration/test_query_driven_rework.py`
+- `docs/query-driven-rework-guide.md`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- Either find a valid profile/generator query-count stabilization path, or
+  explicitly update the guide and gate semantics without weakening unrelated
+  gates.
+
+Goal:
+- Resolve the checkpoint40 query-count-only signature blocker without using raw
+  coverage overrides, weak overshoot settings, model tuning, or selector tuning.
+
+Changes:
+- Added profile generation metadata to workload signatures:
+  `workload_profile_version`, `target_coverage`, `max_coverage_overshoot`,
+  `query_count_mode`, and `coverage_calibration_mode`.
+- The workload-signature gate now carries `query_generation` context.
+- Fixed-count and legacy signatures still enforce `query_count_relative_delta`.
+- `calibrated_to_coverage` + `profile_sampled_query_count` signatures now
+  require matching generation semantics and target coverage, enforce minimum
+  query count and distribution checks, and report query-count delta as a
+  diagnostic instead of a parity blocker.
+- Updated the guide's workload-signature invariant to match the implemented
+  mode-aware behavior.
+
+Tests:
+- `python3 -m py_compile orchestration/range_diagnostics.py workloads/generation/signatures.py tests/unit/orchestration/test_query_driven_rework.py`
+- `../.venv/bin/ruff check orchestration/range_diagnostics.py workloads/generation/signatures.py tests/unit/orchestration/test_query_driven_rework.py`
+- `../.venv/bin/pyright orchestration/range_diagnostics.py workloads/generation/signatures.py tests/unit/orchestration/test_query_driven_rework.py`
+- `../.venv/bin/pytest tests/unit/orchestration/test_query_driven_rework.py -q`
+- `../.venv/bin/ruff check orchestration/range_diagnostics.py workloads/generation/signatures.py tests/unit/orchestration/test_query_driven_rework.py orchestration/retained_mask_stage.py orchestration/retained_mask_ablation_stage.py tests/unit/orchestration/test_retained_mask_stage.py`
+- `../.venv/bin/pyright orchestration/range_diagnostics.py workloads/generation/signatures.py tests/unit/orchestration/test_query_driven_rework.py orchestration/retained_mask_stage.py orchestration/retained_mask_ablation_stage.py tests/unit/orchestration/test_retained_mask_stage.py`
+- `../.venv/bin/pytest tests/unit/orchestration/test_query_driven_rework.py tests/unit/orchestration/test_retained_mask_stage.py -q`
+- `jq empty artifacts/results/query_driven_v2_checkpoint41_query_count_floor_generation_only/query_count_floor_generation_only.json`
+- `jq empty artifacts/results/query_driven_v2_checkpoint41_mode_aware_signature_generation_only/mode_aware_signature_generation_only.json`
+- `git diff --check`
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint41_query_count_floor_generation_only/query_count_floor_generation_only.json`
+- path: `artifacts/results/query_driven_v2_checkpoint41_mode_aware_signature_generation_only/mode_aware_signature_generation_only.json`
+- command: generation-only Python diagnostics; no training or scoring run
+
+Key results:
+- MLQDS QueryUsefulV1: n/a
+- uniform QueryUsefulV1: n/a
+- Douglas-Peucker QueryUsefulV1: n/a
+- accepted-query floor `160`: signature passed `4/5`, workload stability passed
+  `2/5`; rejected as a fix.
+- accepted-query floor `192`: signature passed `5/5`, workload stability passed
+  `0/5`; rejected as a fix.
+- mode-aware gate at checkpoint40 scale: signature passed `5/5`, workload
+  stability passed `5/5`.
+- observed query-count range remained `101` to `197`.
+- all mode-aware pairs recorded
+  `diagnostic_min_only_for_coverage_calibrated` and did not enforce relative
+  query-count parity.
+- gates passed: generation-only workload stability and workload signature under
+  the revised invariant.
+- gates failed: n/a for the mode-aware generation-only probe.
+- validation passed: py_compile, ruff, pyright, focused orchestration unit tests
+  (`108 passed`), broader retained-mask/query-driven unit slice (`112 passed`),
+  JSON artifact validation, and `git diff --check`.
+
+Extra discoveries:
+- Raising the accepted-query floor can make the query-count signature look
+  cleaner while breaking generator health through coverage-guard rejection
+  pressure. That is a bad fix.
+- The old gate lacked the metadata needed to distinguish fixed-count workloads
+  from coverage-calibrated workloads. It was enforcing a parity rule without
+  knowing the query-count semantics.
+
+Decision:
+- Continue to one strict current-best-scale local single-cell rerun using the
+  mode-aware signature gate and retained-mask freeze timing.
+- Do not claim model success from these generation-only artifacts.
+- Do not tune model or selector until the strict rerun identifies the remaining
+  child-gate failures.
+
+## Checkpoint 5.98 - Mode-Aware Current-Best Strict Local
+
+Status: completed
+
+Hypothesis:
+- With the mode-aware workload-signature invariant, the checkpoint38-scale local
+  strict cell should clear workload signature and expose the real remaining
+  blockers.
+
+Expected files:
+- `artifacts/results/query_driven_v2_checkpoint42_mode_aware_current_best_strict_local/`
+- `docs/query-driven-rework-guide.md`
+- `docs/query-driven-rework-progress.md`
+
+Stop condition:
+- One checkpoint38-scale strict local single-cell completes and is classified by
+  child gate, without model/selector tuning.
+
+Goal:
+- Determine whether workload signature is still a blocker after checkpoint5.97,
+  and identify the next admissible blocker.
+
+Changes:
+- No production code change.
+- Ran one strict current-best-scale local single-cell with retained-mask freeze
+  timing and the mode-aware workload-signature gate.
+- Updated the guide's current evidence and next checkpoint direction.
+
+Tests:
+- `../.venv/bin/python -m orchestration.train_and_score --results_dir artifacts/results/query_driven_v2_checkpoint42_mode_aware_current_best_strict_local --n_ships 384 --n_points 256 --synthetic_route_families 4 --seed 2324 --train_fraction 0.34 --val_fraction 0.33 --n_queries 48 --max_queries 256 --range_train_workload_replicates 4 --workload_profile_id range_workload_v1_local --coverage_calibration_mode profile_sampled_query_count --workload_stability_gate_mode final --model_type workload_blind_range_v2 --range_training_target_mode query_useful_v1_factorized --selector_type learned_segment_budget_v1 --checkpoint_score_variant query_useful_v1 --checkpoint_selection_metric uniform_gap --validation_score_every 1 --checkpoint_full_score_every 1 --checkpoint_candidate_pool_size 1 --epochs 3 --embed_dim 32 --num_heads 2 --num_layers 1 --train_batch_size 8 --inference_batch_size 8 --compression_ratio 0.05 --mlqds_temporal_fraction 0.0 --mlqds_hybrid_mode fill --mlqds_score_mode rank_confidence --range_acceptance_max_attempts 40000 --final_metrics_mode diagnostic --learned_segment_length_repair_fraction 0.6`
+- `jq empty artifacts/results/query_driven_v2_checkpoint42_mode_aware_current_best_strict_local/example_run.json artifacts/results/query_driven_v2_checkpoint42_mode_aware_current_best_strict_local/range_workload_distribution_comparison.json artifacts/results/query_driven_v2_checkpoint42_mode_aware_current_best_strict_local/range_workload_diagnostics.json artifacts/results/query_driven_v2_checkpoint42_mode_aware_current_best_strict_local/learned_fill_diagnostics.json artifacts/results/query_driven_v2_checkpoint42_mode_aware_current_best_strict_local/range_learned_fill_summary.json`
+- `git diff --check`
+
+Experiment artifact:
+- path: `artifacts/results/query_driven_v2_checkpoint42_mode_aware_current_best_strict_local/example_run.json`
+- command: strict local single-cell training/scoring run; no final grid
+
+Key results:
+- MLQDS QueryUsefulV1: `0.1662115143`
+- uniform QueryUsefulV1: `0.1421296610`
+- Douglas-Peucker QueryUsefulV1: `0.1671038781`
+- MLQDS RangeUsefulLegacy: `0.1524363397`
+- uniform RangeUsefulLegacy: `0.1303214771`
+- Douglas-Peucker RangeUsefulLegacy: `0.1526760352`
+- MLQDS length preservation: `0.7915916346`
+- final_success_allowed: `false`
+- gates passed: workload stability, support overlap, prior-predictive
+  alignment, target diffusion, workload signature, global sanity
+- gates failed: predictability, learning causality
+- final-grid gate: not run
+- workload signature: all pairs passed; query-count relative deltas were
+  diagnostic-only for coverage-calibrated profile-sampled signatures
+- predictability failures: Spearman `0.1109086186 < 0.15`, PR-AUC lift
+  `1.2304850435 < 1.25`
+- predictability passes: lift@1 `1.1339085990`, lift@2 `1.4429388677`,
+  lift@5 `1.2035399978`
+- learning-causality failed checks: shuffled scores, shuffled priors, no query
+  priors, no behavior head, no segment-budget head
+- shuffled-score delta: `0.0089580664` versus required `0.0144491119`
+- no-query-prior delta: `0.0000575989` versus required `0.005`
+- learned-controlled retained-slot fraction: `0.3383413462`
+- retained-marginal payload: available, exact cached QueryUsefulV1 marginals,
+  `160` candidates, overall selector Spearman `-0.0077522559`, raw Spearman
+  `-0.0248828079`
+- timing: total runtime `625.69s`, freeze-retained-masks `363.45s`,
+  retained-marginal alignment `17.79s`, score-protected length diagnostics
+  `63.28s`, query-free ablation freeze `260.07s`
+
+Extra discoveries:
+- The query-count-only workload-signature blocker is resolved; this artifact
+  would have failed checkpoint38 only because the old gate enforced parity on a
+  coverage-calibrated count.
+- The freeze bottleneck is mostly query-free ablation mask construction, not the
+  retained-marginal payload or primary MLQDS simplify call.
+- Score ordering is still poorly aligned with exact retained-decision marginal
+  value. This is a stronger diagnosis than generic head-fit metrics.
+
+Decision:
+- Continue with focused artifact diagnostics on prior/head/selector marginal
+  alignment before changing model, selector, or targets.
+- Do not run the final grid.
+- Do not loosen predictability or learning-causality gates.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -53,6 +54,7 @@ class RetainedMaskAblationOutputs:
     prior_channel_ablation_diagnostics: dict[str, Any]
     head_ablation_sensitivity_diagnostics: dict[str, Any]
     segment_budget_head_ablation_mode: str | None
+    freeze_timing_diagnostics: dict[str, Any]
 
 
 def freeze_retained_mask_ablations(
@@ -75,6 +77,7 @@ def freeze_retained_mask_ablations(
     primary_head_logits: torch.Tensor | None,
 ) -> RetainedMaskAblationOutputs:
     """Freeze query-free ablation retained masks before eval query scoring."""
+    stage_started_at = time.perf_counter()
     trace = primary_selector_trace
     causality_ablation_methods: list[FrozenMaskMethod] = []
     causal_ablation_freeze_failures: dict[str, str] = {}
@@ -82,6 +85,25 @@ def freeze_retained_mask_ablations(
     prior_channel_ablation_diagnostics: dict[str, Any] = {}
     head_ablation_sensitivity_diagnostics: dict[str, Any] = {}
     segment_budget_head_ablation_mode: str | None = None
+    freeze_timing_diagnostics: dict[str, Any] = {
+        "available": True,
+        "diagnostic_only": True,
+        "query_free": True,
+        "stage": "freeze_retained_mask_ablations",
+        "substage_seconds": {},
+        "prior_channel_seconds": {},
+    }
+
+    def _record_substage(name: str, started_at: float) -> None:
+        substage_seconds = freeze_timing_diagnostics["substage_seconds"]
+        previous = float(substage_seconds.get(name, 0.0))
+        substage_seconds[name] = previous + float(time.perf_counter() - started_at)
+
+    def _record_prior_channel(name: str, started_at: float) -> None:
+        freeze_timing_diagnostics["prior_channel_seconds"][name] = float(
+            time.perf_counter() - started_at
+        )
+
     allocation_length_support_weight = float(
         config.model.learned_segment_allocation_length_support_weight
     )
@@ -90,6 +112,7 @@ def freeze_retained_mask_ablations(
         config.model.learned_segment_length_repair_score_protection_fraction
     )
     pre_repair_diagnostic_name = "MLQDS_pre_repair_allocation_diagnostic"
+    substage_started_at = time.perf_counter()
     try:
         pre_repair_method = pre_repair_frozen_method_from_trace(
             name=pre_repair_diagnostic_name,
@@ -114,7 +137,10 @@ def freeze_retained_mask_ablations(
             "reason": "freeze_failed",
             "error": str(exc),
         }
+    finally:
+        _record_substage("pre_repair_from_trace", substage_started_at)
     if float(config.model.learned_segment_geometry_gain_weight) > 0.0:
+        substage_started_at = time.perf_counter()
         try:
             causality_ablation_methods.append(
                 learned_segment_frozen_method(
@@ -146,7 +172,10 @@ def freeze_retained_mask_ablations(
             )
         except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
             causal_ablation_freeze_failures["MLQDS_without_geometry_tie_breaker"] = str(exc)
+        finally:
+            _record_substage("without_geometry_tie_breaker", substage_started_at)
     if allocation_length_support_weight > 0.0:
+        substage_started_at = time.perf_counter()
         try:
             causality_ablation_methods.append(
                 learned_segment_frozen_method(
@@ -180,6 +209,8 @@ def freeze_retained_mask_ablations(
             causal_ablation_freeze_failures["MLQDS_without_segment_length_support_allocation"] = (
                 str(exc)
             )
+        finally:
+            _record_substage("without_segment_length_support_allocation", substage_started_at)
     generator = torch.Generator().manual_seed(int(seeds.eval_query_seed) + 91_337)
     shuffled_order = torch.randperm(int(primary_scores.numel()), generator=generator)
     shuffled_scores = primary_scores[shuffled_order]
@@ -191,6 +222,7 @@ def freeze_retained_mask_ablations(
     shuffled_segment_point_scores = (
         primary_segment_scores[shuffled_order] if primary_segment_scores is not None else None
     )
+    substage_started_at = time.perf_counter()
     causality_ablation_methods.append(
         learned_segment_frozen_method(
             name="MLQDS_shuffled_scores",
@@ -219,7 +251,9 @@ def freeze_retained_mask_ablations(
             ),
         )
     )
+    _record_substage("shuffled_scores", substage_started_at)
     if primary_segment_scores is not None:
+        substage_started_at = time.perf_counter()
         neutral_segment_scores = neutral_segment_scores_for_ablation(primary_segment_scores)
         no_segment_selector_scores = blend_segment_support_scores(
             segment_scores=neutral_segment_scores,
@@ -486,7 +520,9 @@ def freeze_retained_mask_ablations(
             head_ablation_sensitivity_diagnostics[
                 "MLQDS_without_segment_budget_point_blend_only"
             ] = point_blend_sensitivity
+        _record_substage("segment_budget_head_and_allocation_ablations", substage_started_at)
         if bool(config.model.learned_segment_fairness_preallocation):
+            substage_started_at = time.perf_counter()
             causality_ablation_methods.append(
                 learned_segment_frozen_method(
                     name="MLQDS_without_trajectory_fairness_preallocation",
@@ -515,8 +551,10 @@ def freeze_retained_mask_ablations(
                     ),
                 )
             )
+            _record_substage("without_trajectory_fairness_preallocation", substage_started_at)
     path_length_support_scores = primary_path_length_support_scores
     if path_length_support_scores is not None:
+        substage_started_at = time.perf_counter()
         try:
             path_length_segment_method = learned_segment_frozen_method(
                 name="MLQDS_path_length_support_segment_head_diagnostic",
@@ -614,8 +652,11 @@ def freeze_retained_mask_ablations(
                 "reason": "freeze_failed",
                 "error": str(exc),
             }
+        finally:
+            _record_substage("path_length_support_ablations", substage_started_at)
     primary_head_logits = primary_head_logits
     if primary_head_logits is not None:
+        substage_started_at = time.perf_counter()
         try:
             behavior_raw_preds = raw_predictions_without_factorized_head(
                 model=trained.model,
@@ -676,6 +717,9 @@ def freeze_retained_mask_ablations(
             )
         except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
             causal_ablation_freeze_failures["MLQDS_without_behavior_utility_head"] = str(exc)
+        finally:
+            _record_substage("without_behavior_utility_head", substage_started_at)
+    substage_started_at = time.perf_counter()
     try:
         untrained_model = reset_module_parameters(
             trained.model,
@@ -711,8 +755,11 @@ def freeze_retained_mask_ablations(
         )
     except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
         causal_ablation_freeze_failures["MLQDS_untrained_model"] = str(exc)
+    finally:
+        _record_substage("untrained_model", substage_started_at)
     query_prior_field = trained.feature_context.get("query_prior_field")
     if isinstance(query_prior_field, dict):
+        substage_started_at = time.perf_counter()
         prior_scores = (
             query_prior_predictability_scores(test_points, query_prior_field).detach().cpu()
         )
@@ -742,6 +789,8 @@ def freeze_retained_mask_ablations(
                 ),
             )
         )
+        _record_substage("prior_field_only_score", substage_started_at)
+        substage_started_at = time.perf_counter()
         try:
             shuffled_prior_field = shuffled_query_prior_field(
                 query_prior_field,
@@ -810,6 +859,9 @@ def freeze_retained_mask_ablations(
             )
         except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
             causal_ablation_freeze_failures["MLQDS_shuffled_prior_fields"] = str(exc)
+        finally:
+            _record_substage("shuffled_prior_fields", substage_started_at)
+        substage_started_at = time.perf_counter()
         try:
             zero_prior_field = zero_query_prior_field_like(query_prior_field)
             zero_prior_feature_sensitivity = prior_feature_sample_sensitivity(
@@ -875,8 +927,12 @@ def freeze_retained_mask_ablations(
             )
         except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
             causal_ablation_freeze_failures["MLQDS_without_query_prior_features"] = str(exc)
+        finally:
+            _record_substage("without_query_prior_features", substage_started_at)
+        prior_channel_started_at = time.perf_counter()
         for prior_channel_name in QUERY_PRIOR_FIELD_NAMES:
             channel_method_name = f"MLQDS_without_prior_channel_{prior_channel_name}"
+            channel_started_at = time.perf_counter()
             try:
                 channel_prior_field = zero_query_prior_field_channels(
                     query_prior_field,
@@ -951,6 +1007,14 @@ def freeze_retained_mask_ablations(
                     "method_name": channel_method_name,
                     "error": str(exc),
                 }
+            finally:
+                _record_prior_channel(prior_channel_name, channel_started_at)
+        _record_substage("per_prior_channel_ablations", prior_channel_started_at)
+
+    freeze_timing_diagnostics["method_count"] = len(causality_ablation_methods)
+    freeze_timing_diagnostics["failure_count"] = len(causal_ablation_freeze_failures)
+    freeze_timing_diagnostics["total_seconds"] = float(time.perf_counter() - stage_started_at)
+    trace["retained_mask_ablation_freeze_timing"] = freeze_timing_diagnostics
 
     return RetainedMaskAblationOutputs(
         primary_selector_trace=trace,
@@ -960,4 +1024,5 @@ def freeze_retained_mask_ablations(
         prior_channel_ablation_diagnostics=prior_channel_ablation_diagnostics,
         head_ablation_sensitivity_diagnostics=head_ablation_sensitivity_diagnostics,
         segment_budget_head_ablation_mode=segment_budget_head_ablation_mode,
+        freeze_timing_diagnostics=freeze_timing_diagnostics,
     )

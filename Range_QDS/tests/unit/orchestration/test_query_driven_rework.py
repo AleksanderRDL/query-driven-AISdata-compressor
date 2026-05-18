@@ -265,6 +265,10 @@ def test_range_workload_v1_records_profile_signature() -> None:
     assert profile["profile_id"] == "range_workload_v1"
     assert generation["range_time_domain_mode"] == "anchor_day"
     assert signature["profile_id"] == "range_workload_v1"
+    assert signature["workload_profile_version"] == profile["version"]
+    assert signature["target_coverage"] == profile["target_coverage"]
+    assert signature["query_count_mode"] == profile["query_count_mode"]
+    assert signature["coverage_calibration_mode"] == profile["coverage_calibration_mode"]
     assert sum(signature["anchor_family_counts"].values()) == len(workload.typed_queries)
     assert sum(signature["footprint_family_counts"].values()) == len(workload.typed_queries)
     assert signature["query_count"] == len(workload.typed_queries)
@@ -1178,6 +1182,49 @@ def test_workload_signature_gate_rejects_query_count_mismatch() -> None:
     assert gate["metrics"]["query_count_relative_delta"] == pytest.approx(4 / 12)
     assert gate["thresholds"]["query_count_relative_delta_max"] == 0.15
     assert "query_count_mismatch" in gate["failed_checks"]
+
+
+def test_workload_signature_gate_treats_calibrated_query_count_as_diagnostic() -> None:
+    def signature(query_count: int) -> dict[str, Any]:
+        return {
+            "profile_id": "range_workload_v1_local",
+            "target_coverage": 0.10,
+            "coverage_actual": 0.10,
+            "query_count_mode": "calibrated_to_coverage",
+            "coverage_calibration_mode": "profile_sampled_query_count",
+            "query_count": query_count,
+            "anchor_family_counts": {"density_route": query_count},
+            "footprint_family_counts": {"medium_operational": query_count},
+            "point_hit_counts_per_query": [3 for _ in range(query_count)],
+            "ship_hit_counts_per_query": [1 for _ in range(query_count)],
+            "near_duplicate_rate": 0.0,
+            "broad_query_rate": 0.0,
+        }
+
+    summaries = {
+        "train": {
+            "range": {"range_query_count": 24},
+            "range_signal": {},
+            "generation": {"workload_signature": signature(24)},
+        },
+        "eval": {
+            "range": {"range_query_count": 48},
+            "range_signal": {},
+            "generation": {"workload_signature": signature(48)},
+        },
+    }
+
+    gate = range_workload_distribution_comparison(summaries)["workload_signature_gate"]["pairs"][
+        "train"
+    ]
+
+    assert gate["gate_pass"] is True
+    assert gate["metrics"]["query_count_relative_delta"] == pytest.approx(0.50)
+    assert gate["metrics"]["query_count_relative_delta_enforced"] is False
+    assert gate["metrics"]["query_count_check_mode"] == (
+        "diagnostic_min_only_for_coverage_calibrated"
+    )
+    assert "query_count_mismatch" not in gate["failed_checks"]
 
 
 def test_workload_signature_gate_allows_small_calibrated_query_count_drift() -> None:
