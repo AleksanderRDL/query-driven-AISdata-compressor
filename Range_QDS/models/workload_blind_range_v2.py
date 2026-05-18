@@ -5,9 +5,9 @@ from __future__ import annotations
 import torch
 import torch.nn as nn
 
+from learning.query_prior_fields import QUERY_PRIOR_FIELD_NAMES
+from learning.targets.query_useful_v1 import QUERY_USEFUL_V1_HEAD_NAMES
 from models.positional_encoding import CachedSinusoidalPositionalEncodingMixin
-from training.query_prior_fields import QUERY_PRIOR_FIELD_NAMES
-from training.targets.query_useful_v1 import QUERY_USEFUL_V1_HEAD_NAMES
 
 WORKLOAD_BLIND_RANGE_V2_SCHEMA_VERSION = 6
 WORKLOAD_BLIND_RANGE_V2_PRIOR_FEATURE_DIM = len(QUERY_PRIOR_FIELD_NAMES)

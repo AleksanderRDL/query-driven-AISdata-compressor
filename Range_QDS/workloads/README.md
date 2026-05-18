@@ -74,5 +74,5 @@ not final-success eligible.
 - `execute_range_query`: trajectory IDs with points inside the box.
 - `execute_typed_query`: dispatch by the query `type` field.
 
-The generator defines the future-query prior for workload-blind training. Do
+The generator defines the future-query prior for workload-blind learning. Do
 not tune final claims only to one narrow generator setting.

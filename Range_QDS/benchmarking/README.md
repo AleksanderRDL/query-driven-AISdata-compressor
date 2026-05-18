@@ -2,7 +2,7 @@
 
 Owns benchmark profiles, benchmark child-run orchestration, queue execution,
 family indexes, report rows, tables, runtime benchmark wrappers, and final-grid
-acceptance summaries. Single training/scoring run wiring belongs in
+acceptance summaries. Single learning/scoring run wiring belongs in
 `../orchestration/`.
 
 From `Range_QDS/`, use the Make targets for routine benchmark work:

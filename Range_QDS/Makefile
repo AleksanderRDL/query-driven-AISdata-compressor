@@ -6,9 +6,9 @@ UV_GROUP ?= dev
 UV_GROUP_FLAGS ?= --group $(UV_GROUP)
 UV_RUN := cd $(REPO_ROOT) && $(UV) run $(UV_GROUP_FLAGS) --
 
-TYPECHECK_PATHS ?= Range_QDS/benchmarking Range_QDS/config Range_QDS/data_preparation Range_QDS/scoring Range_QDS/models Range_QDS/orchestration Range_QDS/workloads Range_QDS/runtime Range_QDS/selection Range_QDS/training Range_QDS/scripts Range_QDS/tests
+TYPECHECK_PATHS ?= Range_QDS/benchmarking Range_QDS/config Range_QDS/data_preparation Range_QDS/scoring Range_QDS/models Range_QDS/orchestration Range_QDS/workloads Range_QDS/runtime Range_QDS/selection Range_QDS/learning Range_QDS/scripts Range_QDS/tests
 TEST_PATHS ?= Range_QDS/tests
-LINT_PATHS ?= Range_QDS/benchmarking Range_QDS/config Range_QDS/data_preparation Range_QDS/scoring Range_QDS/models Range_QDS/orchestration Range_QDS/workloads Range_QDS/runtime Range_QDS/selection Range_QDS/training Range_QDS/scripts Range_QDS/tests
+LINT_PATHS ?= Range_QDS/benchmarking Range_QDS/config Range_QDS/data_preparation Range_QDS/scoring Range_QDS/models Range_QDS/orchestration Range_QDS/workloads Range_QDS/runtime Range_QDS/selection Range_QDS/learning Range_QDS/scripts Range_QDS/tests
 LINT_SELECT ?= F401,F821,F822,F823
 RUN ?= Range_QDS/artifacts/results/latest/example_run.json
 
@@ -44,8 +44,8 @@ help:
 	@echo "  lint-yaml   Run yamllint on repository YAML files"
 	@echo "  test        Run the QDS pytest suite"
 	@echo "  typecheck   Run Pyright on TYPECHECK_PATHS"
-	@echo "  smoke       Run a tiny synthetic training/scoring experiment"
-	@echo "  smoke-csv   Run a tiny cleaned-CSV training/scoring experiment"
+	@echo "  smoke       Run a tiny synthetic learning/scoring experiment"
+	@echo "  smoke-csv   Run a tiny cleaned-CSV learning/scoring experiment"
 	@echo "  benchmark-preflight  Check tmux/GPU/data_preparation/artifact prerequisites"
 	@echo "  benchmark-queue-preflight  Check prerequisites using BENCHMARK_QUEUE_SESSION"
 	@echo "  list-runs   List benchmark runs from BENCHMARK_FAMILY"

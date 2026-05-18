@@ -40,7 +40,7 @@ Run project Python commands through `uv` from the repository root:
 uv sync --group dev
 uv lock --check
 uv run --group dev -- pytest Range_QDS/tests
-uv run --group dev -- pyright Range_QDS/benchmarking Range_QDS/config Range_QDS/data_preparation Range_QDS/scoring Range_QDS/models Range_QDS/orchestration Range_QDS/workloads Range_QDS/runtime Range_QDS/selection Range_QDS/training Range_QDS/scripts Range_QDS/tests
+uv run --group dev -- pyright Range_QDS/benchmarking Range_QDS/config Range_QDS/data_preparation Range_QDS/scoring Range_QDS/models Range_QDS/orchestration Range_QDS/workloads Range_QDS/runtime Range_QDS/selection Range_QDS/learning Range_QDS/scripts Range_QDS/tests
 uv run --group dev -- python -m orchestration.train_and_score --help
 ```
 
@@ -105,8 +105,8 @@ Good targets:
 - `workloads/generation/coverage.py`
 - `workloads/generation/profile_query_plan.py`
 - `workloads/generation/workload_profiles.py`
-- `training/query_prior_fields.py`
-- `training/model_features.py`
+- `learning/query_prior_fields.py`
+- `learning/model_features.py`
 - `selection/learned_segment_budget/core.py`
 - `selection/learned_segment_budget/allocation.py`
 - `selection/learned_segment_budget/length_repair.py`
@@ -184,7 +184,7 @@ Bad uses:
 - GPU memory values
 - raw query arrays
 - random seeds unless the seed is the behavior under test
-- stochastic learned metrics from training runs
+- stochastic learned metrics from learning runs
 
 Snapshots should catch accidental field removal, renaming, and contract drift.
 They should not be updated just to make a test pass. Update them only after

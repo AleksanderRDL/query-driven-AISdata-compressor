@@ -10,6 +10,7 @@ from typing import Any
 import torch
 
 from config.experiment_config import ExperimentConfig, SeedBundle
+from learning.outputs import TrainingOutputs
 from orchestration.causality import retained_mask_comparison
 from orchestration.range_diagnostics import method_score_payload
 from orchestration.range_runtime_cache import RangeRuntimeCache, range_only_queries
@@ -34,7 +35,6 @@ from scoring.score_tables import (
     print_range_usefulness_table,
     print_shift_table,
 )
-from training.training_outputs import TrainingOutputs
 from workloads.query_types import single_workload_type
 from workloads.typed_workload import TypedQueryWorkload
 

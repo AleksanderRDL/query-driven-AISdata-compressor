@@ -62,7 +62,7 @@ uv run --group dev -- python -m orchestration.train_and_score \
 | Single-run orchestration | [`orchestration/README.md`](orchestration/README.md) |
 | Benchmark profiles, queues, reports, artifact names | [`benchmarking/README.md`](benchmarking/README.md) |
 | Artifact layout and cleanup | [`artifacts/README.md`](artifacts/README.md) |
-| Training labels, loss, checkpoint selection | [`training/README.md`](training/README.md) |
+| Training labels, loss, checkpoint selection | [`learning/README.md`](learning/README.md) |
 | Workload generation and query execution | [`workloads/README.md`](workloads/README.md) |
 | Retained-mask selection and selector diagnostics | [`selection/README.md`](selection/README.md) |
 | Scoring methods and metrics | [`scoring/README.md`](scoring/README.md) |

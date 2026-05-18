@@ -11,12 +11,12 @@ from typing import Any
 import torch
 
 from config.experiment_config import ExperimentConfig
-from orchestration.workload_generation_cache import tensor_cache_digest
-from scoring.query_cache import ScoringQueryCache
-from training.importance_labels import (
+from learning.importance_labels import (
     compute_typed_importance_labels,
     compute_typed_importance_labels_with_range_components,
 )
+from orchestration.workload_generation_cache import tensor_cache_digest
+from scoring.query_cache import ScoringQueryCache
 from workloads.typed_workload import TypedQueryWorkload
 
 RANGE_DIAGNOSTICS_CACHE_SCHEMA_VERSION = 2

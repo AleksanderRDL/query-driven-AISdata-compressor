@@ -9,8 +9,8 @@ from config.experiment_config import build_experiment_config
 from data_preparation.ais_loader import generate_synthetic_ais_data, load_ais_csv
 from data_preparation.trajectory_cache import load_or_build_ais_cache
 from orchestration.cli_utils import normalized_gap_arg, split_csv_path_list
-from orchestration.training_scoring_cli import build_parser
-from orchestration.training_scoring_pipeline import run_experiment_pipeline
+from orchestration.learning_scoring_cli import build_parser
+from orchestration.learning_scoring_pipeline import run_experiment_pipeline
 from runtime.torch_runtime import apply_torch_runtime_settings
 
 

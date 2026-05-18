@@ -6,14 +6,14 @@ from typing import Any
 
 import torch
 
-from scoring.metrics import MethodScore
-from scoring.query_useful_v1 import QUERY_USEFUL_V1_COMPONENT_WEIGHTS
-from training.model_features import (
+from learning.model_features import (
     WORKLOAD_BLIND_RANGE_V2_MODEL_DISABLED_PRIOR_FIELDS,
     build_query_free_point_features_for_dim,
 )
-from training.query_prior_fields import QUERY_PRIOR_FIELD_NAMES, sample_query_prior_fields
-from training.targets.query_useful_v1 import QUERY_USEFUL_V1_HEAD_NAMES
+from learning.query_prior_fields import QUERY_PRIOR_FIELD_NAMES, sample_query_prior_fields
+from learning.targets.query_useful_v1 import QUERY_USEFUL_V1_HEAD_NAMES
+from scoring.metrics import MethodScore
+from scoring.query_useful_v1 import QUERY_USEFUL_V1_COMPONENT_WEIGHTS
 
 
 def build_learned_slot_summary(

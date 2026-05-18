@@ -1,1 +1,1 @@
-"""Shared runtime controls used by orchestration entrypoints and training."""
+"""Shared runtime controls used by orchestration entrypoints and learning."""

@@ -523,7 +523,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--checkpoint",
         type=str,
         default=None,
-        help="Checkpoint for inference mode. In both mode, defaults to the checkpoint produced by training.",
+        help="Checkpoint for inference mode. In both mode, defaults to the checkpoint produced by learning.",
     )
     parser.add_argument(
         "--inference_csv_path",

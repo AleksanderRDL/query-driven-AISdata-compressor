@@ -10,14 +10,14 @@ import torch
 
 from config.experiment_config import build_experiment_config
 from data_preparation.ais_loader import generate_synthetic_ais_data
+from learning.importance_labels import (
+    compute_typed_importance_labels,
+    compute_typed_importance_labels_with_range_components,
+)
 from orchestration.range_diagnostics import range_workload_diagnostics
 from orchestration.range_runtime_cache import RangeRuntimeCache
 from orchestration.range_runtime_cache import (
     prepare_range_label_cache as _prepare_range_label_cache,
-)
-from training.importance_labels import (
-    compute_typed_importance_labels,
-    compute_typed_importance_labels_with_range_components,
 )
 from workloads.generation.generator import generate_typed_query_workload
 from workloads.query_types import QUERY_TYPE_ID_RANGE, pad_query_features

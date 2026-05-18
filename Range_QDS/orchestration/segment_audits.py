@@ -7,11 +7,11 @@ from typing import Any
 
 import torch
 
-from selection.model_score_conversion import workload_type_head
-from training.targets.query_useful_v1 import (
+from learning.targets.query_useful_v1 import (
     QUERY_USEFUL_V1_HEAD_NAMES,
     build_query_useful_v1_targets,
 )
+from selection.model_score_conversion import workload_type_head
 
 
 def _average_ranks(values: list[float]) -> list[float]:

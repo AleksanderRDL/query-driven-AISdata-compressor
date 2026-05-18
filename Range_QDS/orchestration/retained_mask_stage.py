@@ -11,6 +11,7 @@ from typing import Any, cast
 import torch
 
 from config.experiment_config import ExperimentConfig, SeedBundle
+from learning.outputs import TrainingOutputs
 from orchestration.length_diagnostics import (
     score_protected_length_feasibility,
     score_protected_length_frontier,
@@ -23,7 +24,6 @@ from scoring.methods import FrozenMaskMethod, Method
 from selection.learned_segment_budget import (
     simplify_with_learned_segment_budget_v1_with_trace,
 )
-from training.training_outputs import TrainingOutputs
 from workloads.typed_workload import TypedQueryWorkload
 
 PhaseLogger = Callable[[str], AbstractContextManager[None]]

@@ -10,6 +10,16 @@ from typing import Protocol
 import numpy as np
 import torch
 
+from learning.inference import (
+    _is_workload_blind_model,
+    _model_point_dim,
+    default_inference_device,
+    windowed_predict,
+    windowed_predict_with_heads,
+)
+from learning.model_features import build_model_point_features_for_dim
+from learning.outputs import TrainingOutputs
+from learning.targets.query_useful_v1 import QUERY_USEFUL_V1_HEAD_NAMES
 from selection.learned_segment_budget import (
     blend_segment_support_scores,
     simplify_with_learned_segment_budget_v1,
@@ -21,16 +31,6 @@ from selection.retained_mask_selectors import (
     simplify_with_scores,
     simplify_with_temporal_score_hybrid,
 )
-from training.inference import (
-    _is_workload_blind_model,
-    _model_point_dim,
-    default_inference_device,
-    windowed_predict,
-    windowed_predict_with_heads,
-)
-from training.model_features import build_model_point_features_for_dim
-from training.targets.query_useful_v1 import QUERY_USEFUL_V1_HEAD_NAMES
-from training.training_outputs import TrainingOutputs
 from workloads.typed_workload import TypedQueryWorkload
 
 

@@ -7,6 +7,8 @@ from collections.abc import Sequence
 import torch
 
 from config.experiment_config import ExperimentConfig, SeedBundle
+from learning.importance_labels import compute_typed_importance_labels
+from learning.outputs import TrainingOutputs
 from orchestration.range_runtime_cache import RangeRuntimeCache, prepare_range_label_cache
 from orchestration.workload_stage import workload_name
 from scoring.method_scoring import score_method
@@ -20,8 +22,6 @@ from scoring.methods import (
 )
 from scoring.query_cache import ScoringQueryCache
 from selection.model_score_conversion import workload_type_head
-from training.importance_labels import compute_typed_importance_labels
-from training.training_outputs import TrainingOutputs
 from workloads.query_types import single_workload_type
 from workloads.typed_workload import TypedQueryWorkload
 

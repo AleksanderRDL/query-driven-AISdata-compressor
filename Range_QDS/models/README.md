@@ -17,7 +17,7 @@ path such as `workload_blind_range_v2`.
 | `workload_blind_qds_model.py` | Query-free range scorer used by workload-blind students. |
 | `historical_prior_qds_model.py` | Query-free KNN historical-prior diagnostic model and prior-assisted student. |
 | `workload_blind_range_v2.py` | Trainable factorized query-driven workload-blind model with prior-field and local/segment context encoders. |
-| `../training/model_features.py` | Baseline, range-aware, and workload-blind point features. |
+| `../learning/model_features.py` | Baseline, range-aware, and workload-blind point features. |
 
 ## Rules
 
@@ -32,7 +32,7 @@ path such as `workload_blind_range_v2`.
   KNN prior.
 - Current density/sparsity feature columns are current-split point-cloud
   context features. Do not call them train-derived query-prior fields.
-- Feature dimensions are owned by `training/model_features.py`; update tests
+- Feature dimensions are owned by `learning/model_features.py`; update tests
   there when changing model input shape.
 
 ## Checkpoint Compatibility

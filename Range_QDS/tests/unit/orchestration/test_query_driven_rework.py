@@ -9,6 +9,48 @@ import pytest
 import torch
 
 from data_preparation.ais_loader import generate_synthetic_ais_data
+from learning.checkpoint_validation import (
+    _validation_factorized_target_fit_metrics,
+    _validation_query_useful_selection_score,
+)
+from learning.fit_diagnostics import _training_target_diagnostics
+from learning.model_features import (
+    WORKLOAD_BLIND_RANGE_V2_MODEL_DISABLED_PRIOR_FIELDS,
+    WORKLOAD_BLIND_RANGE_V2_POINT_DIM,
+    build_workload_blind_range_v2_point_features,
+)
+from learning.model_training import (
+    _factorized_final_score_composition_diagnostics,
+    _factorized_head_fit_diagnostics,
+    _fit_scaler_for_model,
+    _initialize_factorized_head_output_biases_from_targets,
+    _scalar_training_target_for_mode,
+)
+from learning.optimization_epoch import (
+    _behavior_head_rank_loss,
+    _calibrated_sparse_head_bce_targets,
+    _factorized_query_useful_loss,
+    _segment_budget_head_segment_level_loss,
+    _sparse_head_rank_loss,
+)
+from learning.predictability_audit import (
+    _prior_channel_scores,
+    _rankdata,
+    query_prior_predictability_audit,
+    query_prior_predictability_scores,
+)
+from learning.query_prior_fields import (
+    QUERY_PRIOR_FIELD_NAMES,
+    build_train_query_prior_fields,
+    query_prior_field_metadata,
+    sample_query_prior_fields,
+    zero_query_prior_field_channels,
+    zero_query_prior_field_like,
+)
+from learning.targets.query_useful_v1 import (
+    QUERY_USEFUL_V1_HEAD_NAMES,
+    build_query_useful_v1_targets,
+)
 from models.workload_blind_range_v2 import WorkloadBlindRangeV2Model
 from orchestration.causality import (
     build_learned_slot_summary,
@@ -61,48 +103,6 @@ from selection.learned_segment_budget import (
     simplify_with_learned_segment_budget_v1_with_trace,
 )
 from selection.model_score_conversion import simplify_mlqds_predictions
-from training.model_features import (
-    WORKLOAD_BLIND_RANGE_V2_MODEL_DISABLED_PRIOR_FIELDS,
-    WORKLOAD_BLIND_RANGE_V2_POINT_DIM,
-    build_workload_blind_range_v2_point_features,
-)
-from training.predictability_audit import (
-    _prior_channel_scores,
-    _rankdata,
-    query_prior_predictability_audit,
-    query_prior_predictability_scores,
-)
-from training.query_prior_fields import (
-    QUERY_PRIOR_FIELD_NAMES,
-    build_train_query_prior_fields,
-    query_prior_field_metadata,
-    sample_query_prior_fields,
-    zero_query_prior_field_channels,
-    zero_query_prior_field_like,
-)
-from training.targets.query_useful_v1 import (
-    QUERY_USEFUL_V1_HEAD_NAMES,
-    build_query_useful_v1_targets,
-)
-from training.train_model import (
-    _factorized_final_score_composition_diagnostics,
-    _factorized_head_fit_diagnostics,
-    _fit_scaler_for_model,
-    _initialize_factorized_head_output_biases_from_targets,
-    _scalar_training_target_for_mode,
-)
-from training.training_diagnostics import _training_target_diagnostics
-from training.training_epoch import (
-    _behavior_head_rank_loss,
-    _calibrated_sparse_head_bce_targets,
-    _factorized_query_useful_loss,
-    _segment_budget_head_segment_level_loss,
-    _sparse_head_rank_loss,
-)
-from training.training_validation import (
-    _validation_factorized_target_fit_metrics,
-    _validation_query_useful_selection_score,
-)
 from workloads.generation.anchors import _anchor_weights_for_family
 from workloads.generation.generator import (
     _make_range_query,

@@ -8,6 +8,7 @@ from typing import Any
 import torch
 
 from config.experiment_config import ExperimentConfig
+from learning.outputs import TrainingOutputs
 from orchestration.causality import (
     LEARNING_CAUSALITY_MIN_MATERIAL_DELTA,
     build_learned_slot_summary,
@@ -24,7 +25,6 @@ from orchestration.gates import (
     evaluate_workload_stability_gate,
 )
 from scoring.metrics import MethodScore
-from training.training_outputs import TrainingOutputs
 from workloads.generation.workload_profiles import RANGE_WORKLOAD_V1_FINAL_PROFILE_IDS
 
 

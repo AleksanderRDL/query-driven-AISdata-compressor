@@ -33,7 +33,7 @@ from benchmarking.row_runtime import (
     phase_seconds,
     phase_seconds_with_prefix,
 )
-from training.model_features import is_workload_blind_model_type, model_type_metadata
+from learning.model_features import is_workload_blind_model_type, model_type_metadata
 
 
 def _milliseconds_to_seconds(value: Any) -> float | None:

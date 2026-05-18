@@ -21,16 +21,16 @@ from config.experiment_config import (
     ExperimentConfig,
     build_experiment_config,
 )
+from learning.checkpoints import _checkpoint_config_payload
+from learning.model_features import SUPPORTED_MODEL_TYPES
+from orchestration.learning_scoring_cli import build_parser
 from orchestration.train_and_score import _split_max_segments
-from orchestration.training_scoring_cli import build_parser
 from runtime.torch_runtime import (
     amp_runtime_snapshot,
     apply_torch_runtime_settings,
     normalize_amp_mode,
     torch_autocast_context,
 )
-from training.checkpoints import _checkpoint_config_payload
-from training.model_features import SUPPORTED_MODEL_TYPES
 
 
 def test_apply_torch_runtime_settings_sets_precision_and_tf32() -> None:

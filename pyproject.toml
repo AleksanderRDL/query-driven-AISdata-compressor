@@ -33,17 +33,17 @@ dev = [
 [tool.setuptools.packages.find]
 where = [".", "Range_QDS"]
 include = [
-    "ais_pipeline*",
     "benchmarking*",
     "config*",
-    "data*",
-    "evaluation*",
+    "data_preparation*",
+    "learning*",
     "models*",
     "orchestration*",
-    "queries*",
     "runtime*",
-    "simplification*",
-    "training*",
+    "scoring*",
+    "scripts*",
+    "selection*",
+    "workloads*",
 ]
 
 [tool.pytest.ini_options]
@@ -118,17 +118,17 @@ select = [
 
 [tool.ruff.lint.isort]
 known-first-party = [
-    "ais_pipeline",
     "benchmarking",
     "config",
-    "data",
-    "evaluation",
+    "data_preparation",
+    "learning",
     "models",
     "orchestration",
-    "queries",
     "runtime",
-    "simplification",
-    "training",
+    "scoring",
+    "scripts",
+    "selection",
+    "workloads",
 ]
 
 [tool.ruff.format]

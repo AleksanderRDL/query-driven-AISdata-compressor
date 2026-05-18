@@ -2,11 +2,11 @@ import pytest
 import torch
 
 from config.experiment_config import build_experiment_config
+from learning.checkpoint_validation import _validation_query_score
+from learning.outputs import TrainingOutputs
+from learning.scaler import FeatureScaler
 from models.workload_blind_qds_model import WorkloadBlindRangeQDSModel
 from scoring.methods import MLQDSMethod
-from training.scaler import FeatureScaler
-from training.training_outputs import TrainingOutputs
-from training.training_validation import _validation_query_score
 from workloads.query_types import NUM_QUERY_TYPES, pad_query_features
 from workloads.typed_workload import TypedQueryWorkload
 

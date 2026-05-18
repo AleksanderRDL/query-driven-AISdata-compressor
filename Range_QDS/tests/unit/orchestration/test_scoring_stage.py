@@ -10,9 +10,9 @@ import pytest
 import torch
 
 from config.experiment_config import build_experiment_config, derive_seed_bundle
+from learning.outputs import TrainingOutputs
 from orchestration.range_runtime_cache import RangeRuntimeCache
 from orchestration.scoring_stage import run_scoring_stage
-from training.training_outputs import TrainingOutputs
 from workloads.query_types import pad_query_features
 from workloads.typed_workload import TypedQueryWorkload
 

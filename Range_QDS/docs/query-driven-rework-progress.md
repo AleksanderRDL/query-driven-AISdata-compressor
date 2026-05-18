@@ -3816,3 +3816,94 @@ Decision:
   field for "how long does it take to apply inference".
 - Keep `mlqds_latency_ms` only as a stable artifact compatibility alias.
 - Do not run scientific probes for this checkpoint.
+
+## Checkpoint 5.55 - Learning Component Rename
+
+Status: completed
+
+Hypothesis:
+- `training/` was too narrow for a component that owns labels, priors,
+  features, model fitting, checkpoint selection, persistence, and scorer
+  inference. `learning/` is the clearer component name, while `selection/`
+  remains a separate score-to-mask component.
+
+Expected files:
+- `training/` package and `tests/unit/training/`
+- learning imports across orchestration, scoring, benchmarking, models, tests,
+  tooling, and docs
+- orchestration stage names tied to the old component boundary
+- generated `__pycache__` directories
+
+Stop condition:
+- Active code imports `learning.*`, tests live under `tests/unit/learning/`,
+  top-level docs show `workloads -> learning -> selection`, no active stale
+  `training/` package references remain outside historical progress entries or
+  domain terms, and full verification passes.
+
+Changes:
+- Renamed `Range_QDS/training/` to `Range_QDS/learning/`.
+- Renamed `tests/unit/training/` to `tests/unit/learning/`.
+- Renamed learning-internal files whose names repeated the old component
+  boundary:
+  `train_model.py` to `model_training.py`,
+  `training_diagnostics.py` to `fit_diagnostics.py`,
+  `training_epoch.py` to `optimization_epoch.py`,
+  `training_losses.py` to `losses.py`,
+  `training_outputs.py` to `outputs.py`,
+  `training_setup.py` to `model_setup.py`,
+  `training_validation.py` to `checkpoint_validation.py`, and
+  `training_windows.py` to `supervised_windows.py`.
+- Renamed orchestration stage files from `training_scoring_*` and
+  `training_target_stage.py` to `learning_scoring_*` and
+  `learning_target_stage.py`.
+- Updated imports, test monkeypatch paths, active READMEs, `CODE_LAYOUT.md`,
+  `Makefile`, dev tooling docs, and `pyproject.toml` first-party package
+  configuration.
+- Removed generated `__pycache__` directories under `Range_QDS/`.
+- Preserved public commands, CLI flags, artifact field names, and domain terms
+  such as training workloads, training targets, and `training_history`.
+
+Tests:
+- `uv run --group dev -- pytest Range_QDS/tests/unit/learning Range_QDS/tests/unit/orchestration/test_learning_target_stage.py Range_QDS/tests/guardrails/test_rework_guardrails.py Range_QDS/tests/guardrails/test_workload_blind_protocol.py -q`:
+  `145 passed`, one existing PyTorch nested-tensor prototype warning.
+- `uv run --group dev -- ruff check Range_QDS pyproject.toml`: passed.
+- `uv run --group dev -- pyright Range_QDS`: `0 errors, 0 warnings, 0 informations`.
+- `uv run --group dev -- pytest Range_QDS/tests -q`: `456 passed`, one
+  existing PyTorch nested-tensor prototype warning.
+- `uv run --group dev -- python -m orchestration.train_and_score --help`:
+  passed.
+- `uv run --group dev -- python -m orchestration.score_checkpoint --help`:
+  passed.
+- `uv run --group dev -- python -m benchmarking.runner --help`: passed.
+- `uv run --group dev -- python -m benchmarking.runtime_benchmark --help`:
+  passed.
+- `git diff --check`: passed.
+
+Experiment artifact:
+- path: none
+- command: none; structural rename only.
+
+Key results:
+- MLQDS QueryUsefulV1: not applicable
+- uniform QueryUsefulV1: not applicable
+- Douglas-Peucker QueryUsefulV1: not applicable
+- gates passed: not applicable
+- gates failed: not applicable
+
+Extra discoveries:
+- `pyproject.toml` still listed stale first-party packages such as
+  `evaluation`, `queries`, `simplification`, and `training`. That was a real
+  tooling drift risk after the structural work.
+- Full test and help-smoke runs regenerate `__pycache__` directories even when
+  the source tree was cleaned before verification. They must be removed after
+  test runs if we want the workspace to stay structurally clean.
+- The name `training` remains correct for domain concepts like training
+  workloads and training targets. Replacing those with "learning workloads"
+  would be less precise and was avoided in active docs.
+
+Decision:
+- Continue with `learning/` as the learned-scorer component and `selection/` as
+  the retained-mask component.
+- Keep public command names such as `orchestration.train_and_score`; they
+  describe the user-facing action and do not need package-compatibility shims.
+- Do not run scientific probes for this checkpoint.

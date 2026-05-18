@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from training.model_features import is_workload_blind_model_type
+from learning.model_features import is_workload_blind_model_type
 from workloads.generation.workload_profiles import (
     RANGE_WORKLOAD_V1_FINAL_PROFILE_IDS,
     RANGE_WORKLOAD_V1_PROFILE_ID,

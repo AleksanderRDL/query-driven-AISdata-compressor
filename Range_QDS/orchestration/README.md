@@ -1,6 +1,6 @@
 # Orchestration Module
 
-Owns single-run CLI parsing, training/scoring pipeline wiring, workload assembly,
+Owns single-run CLI parsing, learning/scoring pipeline wiring, workload assembly,
 runtime metadata emission, and artifact writing. Shared config dataclasses live
 in `../config/`; shared torch runtime controls live in `../runtime/`.
 Benchmark campaign machinery lives in `../benchmarking/`.
@@ -19,14 +19,14 @@ implementation checks.
 
 | File | Purpose |
 | --- | --- |
-| `training_scoring_cli.py` | CLI flags over shared config dataclasses. |
-| `training_scoring_pipeline.py` | End-to-end single-run stage ordering and handoffs. |
+| `learning_scoring_cli.py` | CLI flags over shared config dataclasses. |
+| `learning_scoring_pipeline.py` | End-to-end single-run stage ordering and handoffs. |
 | `data_splits.py` | Train, validation, selection, and eval data splits. |
 | `workload_stage.py` | Workload generation and workload-map resolution. |
 | `scoring_methods.py` | Scoring method construction. |
 | `scoring_stage.py` | Matched scoring, ablation scoring, learned-fill diagnostics, compression audit scoring, and shift scoring. |
 | `run_artifacts.py` | Run artifact payloads and writers. |
-| `training_target_stage.py` | Training-label preparation, target transforms, teacher distillation, and validation query caches. |
+| `learning_target_stage.py` | Training-label preparation, target transforms, teacher distillation, and validation query caches. |
 | `retained_mask_stage.py` | Workload-blind primary/audit retained-mask freezing and selector-trace capture. |
 | `retained_mask_ablation_stage.py` | Query-free retained-mask ablation construction and freeze diagnostics. |
 | `final_gate_summary.py` | Final single-cell gate, final-claim, and causality summary assembly. |
@@ -35,7 +35,7 @@ implementation checks.
 | `gates.py` | Single-run final-candidate gate helpers. |
 | `causality.py` / `model_ablations.py` / `selection_causality_diagnostics.py` | Learning-causality and ablation diagnostics. |
 | `segment_audits.py` / `length_diagnostics.py` / `selector_diagnostics.py` | Selector and geometry diagnostic helpers. |
-| `train_and_score.py` | Main training/scoring entry point. |
+| `train_and_score.py` | Main learning/scoring entry point. |
 | `score_checkpoint.py` | Score a saved checkpoint without retraining. |
 
 ## Data Modes

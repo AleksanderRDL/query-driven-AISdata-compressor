@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-import training.targets.query_useful_v1 as query_useful_targets
+import learning.targets.query_useful_v1 as query_useful_targets
 from benchmarking.profiles import (
     BLIND_EXPECTED_USEFULNESS_PROFILE,
     BLIND_RETAINED_FREQUENCY_PROFILE,
@@ -21,9 +21,9 @@ from benchmarking.profiles import (
     benchmark_profile_settings,
 )
 from benchmarking.reporting.row_fields import _row_from_run
-from training.model_features import model_type_metadata
-from training.targets.modes import SCALAR_RANGE_TARGET_MODES
-from training.targets.query_useful_v1 import QUERY_USEFUL_V1_TARGET_MODES
+from learning.model_features import model_type_metadata
+from learning.targets.modes import SCALAR_RANGE_TARGET_MODES
+from learning.targets.query_useful_v1 import QUERY_USEFUL_V1_TARGET_MODES
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -31,8 +31,8 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 @pytest.mark.parametrize(
     "module_name",
     [
-        "training.training_pipeline",
-        "training.targets.legacy",
+        "learning.training_pipeline",
+        "learning.targets.legacy",
         "selection.selector_diagnostics",
         "selection.legacy_temporal_hybrid",
         "simplification",

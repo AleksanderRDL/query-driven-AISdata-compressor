@@ -7,8 +7,8 @@ from typing import Any
 import torch
 
 from config.experiment_config import ExperimentConfig
+from learning.query_prior_fields import QUERY_PRIOR_FIELD_NAMES, sample_query_prior_fields
 from scoring.metrics import MethodScore
-from training.query_prior_fields import QUERY_PRIOR_FIELD_NAMES, sample_query_prior_fields
 from workloads.generation.workload_profiles import (
     RANGE_WORKLOAD_V1_FINAL_PROFILE_IDS,
     normalize_workload_profile_id,

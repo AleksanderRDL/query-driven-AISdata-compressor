@@ -10,10 +10,10 @@ import pytest
 import torch
 
 from config.experiment_config import build_experiment_config, derive_seed_bundle
+from learning.outputs import TrainingOutputs
 from orchestration.retained_mask_ablation_stage import freeze_retained_mask_ablations
 from orchestration.retained_mask_stage import freeze_workload_blind_retained_masks
 from scoring.methods import FrozenMaskMethod
-from training.training_outputs import TrainingOutputs
 from workloads.query_types import pad_query_features
 from workloads.typed_workload import TypedQueryWorkload
 
