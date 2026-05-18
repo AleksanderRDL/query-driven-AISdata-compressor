@@ -9,5 +9,5 @@ and benchmarking.
 | --- | --- |
 | `experiment_config.py` | Data, query, model, baseline, and top-level run config dataclasses plus the flat config builder and seed derivation. |
 
-Keep CLI parsing in `orchestration/experiment_cli.py`. Keep runtime mutation in
+Keep CLI parsing in `orchestration/training_scoring_cli.py`. Keep runtime mutation in
 `runtime/`. Config objects should remain serializable and policy-light.

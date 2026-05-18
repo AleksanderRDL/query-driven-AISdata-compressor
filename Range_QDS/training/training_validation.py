@@ -9,15 +9,13 @@ from typing import Any, cast
 import torch
 
 from config.experiment_config import ModelConfig
-from evaluation.baselines import UniformTemporalMethod
-from evaluation.evaluate_methods import score_range_usefulness, score_retained_mask
-from evaluation.metrics import compute_geometric_distortion, compute_length_preservation
-from evaluation.query_useful_v1 import query_useful_v1_from_range_audit
-from queries.query_types import single_workload_type
-from queries.workload import TypedQueryWorkload
 from runtime.torch_runtime import normalize_amp_mode
-from simplification.learned_segment_budget import blend_segment_support_scores
-from simplification.mlqds_scoring import simplify_mlqds_predictions
+from scoring.method_scoring import score_range_usefulness, score_retained_mask
+from scoring.methods import UniformTemporalMethod
+from scoring.metrics import compute_geometric_distortion, compute_length_preservation
+from scoring.query_useful_v1 import query_useful_v1_from_range_audit
+from selection.learned_segment_budget import blend_segment_support_scores
+from selection.model_score_conversion import simplify_mlqds_predictions
 from training.inference import (
     _is_workload_blind_model,
     _model_point_dim,
@@ -31,6 +29,8 @@ from training.targets.query_useful_v1 import (
 )
 from training.training_diagnostics import _discriminative_sample, _kendall_tau
 from training.training_setup import _pure_query_type_id
+from workloads.query_types import single_workload_type
+from workloads.typed_workload import TypedQueryWorkload
 
 PredictWorkloadLogits = Callable[..., torch.Tensor]
 
@@ -456,6 +456,9 @@ def _validation_retained_mask_from_scores(
         ),
         learned_segment_length_repair_fraction=float(
             getattr(model_config, "learned_segment_length_repair_fraction", 0.0)
+        ),
+        learned_segment_length_repair_score_protection_fraction=float(
+            getattr(model_config, "learned_segment_length_repair_score_protection_fraction", 0.0)
         ),
     )
 

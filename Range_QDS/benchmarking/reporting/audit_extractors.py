@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from benchmarking.benchmark_common import LOW_COMPRESSION_THRESHOLD, as_float, audit_ratio_prefix
+from benchmarking.common import LOW_COMPRESSION_THRESHOLD, as_float, audit_ratio_prefix
 from benchmarking.reporting.metrics import RANGE_USEFULNESS_GAP_VARIANT_KEYS
 
 

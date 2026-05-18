@@ -5,15 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from benchmarking.benchmark_row_runtime import (
-    collapse_warning_summary,
-    dominant_runtime_phase_fields,
-    last_history_value,
-    mean_epoch_seconds,
-    mean_history_value,
-    phase_seconds,
-    phase_seconds_with_prefix,
-)
 from benchmarking.reporting.audit_extractors import (
     _audit_summary,
     _data_source_row_fields,
@@ -31,6 +22,15 @@ from benchmarking.reporting.metrics import (
     _selector_claim_evidence,
     _single_cell_range_status,
     _worst_uniform_component_delta,
+)
+from benchmarking.row_runtime import (
+    collapse_warning_summary,
+    dominant_runtime_phase_fields,
+    last_history_value,
+    mean_epoch_seconds,
+    mean_history_value,
+    phase_seconds,
+    phase_seconds_with_prefix,
 )
 from training.model_features import is_workload_blind_model_type, model_type_metadata
 
@@ -116,6 +116,9 @@ def _row_from_run(
     shuffled_prior_model = (prior_sensitivity.get("shuffled_prior_fields") or {}).get(
         "model_prior_features"
     ) or {}
+    shuffled_prior_head_output = (prior_sensitivity.get("shuffled_prior_fields") or {}).get(
+        "head_output"
+    ) or {}
     shuffled_prior_model_input = shuffled_prior_model.get("model_input_prior_features") or {}
     shuffled_prior_normalized = shuffled_prior_model.get("normalized_model_prior_features") or {}
     no_prior_sample = (prior_sensitivity.get("without_query_prior_features") or {}).get(
@@ -123,6 +126,9 @@ def _row_from_run(
     ) or {}
     no_prior_model = (prior_sensitivity.get("without_query_prior_features") or {}).get(
         "model_prior_features"
+    ) or {}
+    no_prior_head_output = (prior_sensitivity.get("without_query_prior_features") or {}).get(
+        "head_output"
     ) or {}
     no_prior_model_input = no_prior_model.get("model_input_prior_features") or {}
     no_prior_normalized = no_prior_model.get("normalized_model_prior_features") or {}
@@ -263,6 +269,12 @@ def _row_from_run(
         ),
         "workload_stability_configured_target_coverage": workload_stability_gate.get(
             "configured_target_coverage"
+        ),
+        "workload_stability_configured_workload_profile_id": workload_stability_gate.get(
+            "configured_workload_profile_id"
+        ),
+        "workload_stability_configured_workload_profile_in_grid": workload_stability_gate.get(
+            "configured_workload_profile_in_grid"
         ),
         "workload_stability_gate_mode": workload_stability_gate.get(
             "gate_mode", query_config.get("workload_stability_gate_mode")
@@ -508,6 +520,12 @@ def _row_from_run(
         "learned_segment_length_repair_fraction": learned_segment_selector_config.get(
             "length_repair_fraction", model_config.get("learned_segment_length_repair_fraction")
         ),
+        "learned_segment_length_repair_score_protection_fraction": (
+            learned_segment_selector_config.get(
+                "length_repair_score_protection_fraction",
+                model_config.get("learned_segment_length_repair_score_protection_fraction"),
+            )
+        ),
         "learned_segment_length_support_blend_weight": learned_segment_selector_config.get(
             "length_support_blend_weight",
             model_config.get("learned_segment_length_support_blend_weight"),
@@ -544,6 +562,13 @@ def _row_from_run(
         "shuffled_prior_normalized_model_mean_abs_feature_delta": (
             shuffled_prior_normalized.get("mean_abs_feature_delta")
         ),
+        "shuffled_prior_head_logits_changed": shuffled_prior_head_output.get("head_logits_changed"),
+        "shuffled_prior_head_logit_mean_abs_delta": shuffled_prior_head_output.get(
+            "mean_abs_head_logit_delta"
+        ),
+        "shuffled_prior_head_probability_mean_abs_delta": shuffled_prior_head_output.get(
+            "mean_abs_head_probability_delta"
+        ),
         "no_prior_sampled_primary_nonzero_fraction": no_prior_sample.get(
             "primary_nonzero_fraction"
         ),
@@ -560,6 +585,11 @@ def _row_from_run(
         ),
         "no_prior_normalized_model_mean_abs_feature_delta": no_prior_normalized.get(
             "mean_abs_feature_delta"
+        ),
+        "no_prior_head_logits_changed": no_prior_head_output.get("head_logits_changed"),
+        "no_prior_head_logit_mean_abs_delta": no_prior_head_output.get("mean_abs_head_logit_delta"),
+        "no_prior_head_probability_mean_abs_delta": no_prior_head_output.get(
+            "mean_abs_head_probability_delta"
         ),
         "legacy_range_useful_diagnostic_only": bool(
             legacy_range_useful_summary.get("diagnostic_only", True)

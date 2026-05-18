@@ -8,7 +8,7 @@ import torch
 import torch.nn.functional as F
 
 from config.experiment_config import ModelConfig
-from simplification.simplify_trajectories import evenly_spaced_indices
+from selection.retained_mask_selectors import evenly_spaced_indices
 
 _QUANTILE_SUBSAMPLE_CAP = 1_000_000  # torch.quantile errors past 2^24 on some builds.
 

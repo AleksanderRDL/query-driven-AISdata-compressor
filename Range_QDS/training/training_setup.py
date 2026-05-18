@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import torch
 
-from queries.query_types import NUM_QUERY_TYPES, normalize_pure_workload_map
-from queries.workload import TypedQueryWorkload
+from workloads.query_types import NUM_QUERY_TYPES, normalize_pure_workload_map
+from workloads.typed_workload import TypedQueryWorkload
 
 
 def _model_state_on_cpu(model: torch.nn.Module) -> dict[str, torch.Tensor]:
@@ -41,5 +41,5 @@ def _pure_query_type_id(type_ids: torch.Tensor) -> int:
     """Return the only query type id in a pure workload."""
     unique_ids = torch.unique(type_ids.detach().cpu())
     if int(unique_ids.numel()) != 1:
-        raise ValueError("Pure-workload training/evaluation requires exactly one query type id.")
+        raise ValueError("Pure-workload training/scoring requires exactly one query type id.")
     return int(unique_ids[0].item())

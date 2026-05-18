@@ -17,11 +17,6 @@ from models.historical_prior_qds_model import (
 from models.trajectory_qds_model import TrajectoryQDSModel
 from models.workload_blind_qds_model import SegmentContextRangeQDSModel, WorkloadBlindRangeQDSModel
 from models.workload_blind_range_v2 import WorkloadBlindRangeV2Model
-from queries.query_types import (
-    ID_TO_QUERY_NAME,
-    NUM_QUERY_TYPES,
-)
-from queries.workload import TypedQueryWorkload
 from runtime.torch_runtime import normalize_amp_mode, torch_autocast_context
 from training.checkpoint_selection import (
     CheckpointCandidate,
@@ -76,6 +71,11 @@ from training.training_setup import (
 from training.training_validation import _validation_checkpoint_scores, _validation_uniform_score
 from training.training_windows import _filter_supervised_windows, _trajectory_batch_to_device
 from training.trajectory_batching import batch_windows, build_trajectory_windows
+from workloads.query_types import (
+    ID_TO_QUERY_NAME,
+    NUM_QUERY_TYPES,
+)
+from workloads.typed_workload import TypedQueryWorkload
 
 
 def _historical_prior_support_mask(
@@ -823,6 +823,12 @@ def train_model(
             "behavior_rank_loss_weight": float(
                 getattr(model_config, "query_useful_behavior_rank_loss_weight", 0.0)
             ),
+            "sparse_head_rank_loss_weight": float(
+                getattr(model_config, "query_useful_sparse_head_rank_loss_weight", 0.0)
+            ),
+            "sparse_head_bce_target_mode": str(
+                getattr(model_config, "query_useful_sparse_head_bce_target_mode", "raw")
+            ).lower(),
         }
     if query_prior_field is not None:
         target_diagnostics["query_prior_field"] = query_prior_field_metadata(query_prior_field)
@@ -1102,7 +1108,7 @@ def train_model(
     validation_points_for_score: torch.Tensor | None = None
     validation_query_cache: Any | None = None
     if has_validation_score:
-        from evaluation.query_cache import EvaluationQueryCache
+        from scoring.query_cache import ScoringQueryCache
 
         validation_trajectories, validation_boundaries, validation_workload = (
             _require_validation_inputs(
@@ -1117,7 +1123,7 @@ def train_model(
             else torch.cat(validation_trajectories, dim=0)
         )
         if precomputed_validation_query_cache is None:
-            validation_query_cache = EvaluationQueryCache.for_workload(
+            validation_query_cache = ScoringQueryCache.for_workload(
                 validation_points_for_score,
                 validation_boundaries,
                 validation_workload.typed_queries,

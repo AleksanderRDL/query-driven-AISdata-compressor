@@ -6,10 +6,10 @@ from typing import Any
 
 import torch
 
-from data.trajectory_index import trajectory_ids_for_points
-from evaluation.range_usefulness import RANGE_USEFULNESS_WEIGHTS
-from queries.query_types import NUM_QUERY_TYPES, QUERY_NAME_TO_ID, QUERY_TYPE_ID_RANGE
-from queries.range_geometry import (
+from data_preparation.trajectory_index import trajectory_ids_for_points
+from scoring.range_usefulness import RANGE_USEFULNESS_WEIGHTS
+from workloads.query_types import NUM_QUERY_TYPES, QUERY_NAME_TO_ID, QUERY_TYPE_ID_RANGE
+from workloads.range_geometry import (
     points_in_range_box,
     segment_box_bracket_mask,
 )

@@ -7,8 +7,8 @@ from argparse import Namespace
 import pytest
 import torch
 
-from benchmarking.benchmark_profiles import DEFAULT_PROFILE
-from benchmarking.benchmark_runtime import (
+from benchmarking.profiles import DEFAULT_PROFILE
+from benchmarking.runtime_benchmark import (
     _batch_size_sweep_summary,
     _extra_args_include_training_data_source,
     _parse_train_batch_sizes,
@@ -21,8 +21,8 @@ from config.experiment_config import (
     ExperimentConfig,
     build_experiment_config,
 )
-from orchestration.experiment_cli import build_parser
-from orchestration.run_ais_experiment import _split_max_segments
+from orchestration.train_and_score import _split_max_segments
+from orchestration.training_scoring_cli import build_parser
 from runtime.torch_runtime import (
     amp_runtime_snapshot,
     apply_torch_runtime_settings,
@@ -95,6 +95,8 @@ def test_experiment_config_roundtrips_precision_controls() -> None:
         query_useful_segment_budget_head_weight=0.35,
         query_useful_segment_level_loss_weight=0.90,
         query_useful_behavior_rank_loss_weight=0.40,
+        query_useful_sparse_head_rank_loss_weight=0.25,
+        query_useful_sparse_head_bce_target_mode="window_max_normalized",
         temporal_distribution_loss_weight=0.07,
         ranking_pairs_per_type=192,
         ranking_top_quantile=0.9,
@@ -174,6 +176,8 @@ def test_experiment_config_roundtrips_precision_controls() -> None:
     assert restored.model.query_useful_segment_budget_head_weight == 0.35
     assert restored.model.query_useful_segment_level_loss_weight == 0.90
     assert restored.model.query_useful_behavior_rank_loss_weight == 0.40
+    assert restored.model.query_useful_sparse_head_rank_loss_weight == 0.25
+    assert restored.model.query_useful_sparse_head_bce_target_mode == "window_max_normalized"
     assert restored.model.temporal_distribution_loss_weight == 0.07
     assert restored.model.ranking_pairs_per_type == 192
     assert restored.model.ranking_top_quantile == 0.9
@@ -297,6 +301,10 @@ def test_cli_exposes_training_and_scoring_tuning_controls() -> None:
             "0.90",
             "--query_useful_behavior_rank_loss_weight",
             "0.40",
+            "--query_useful_sparse_head_rank_loss_weight",
+            "0.25",
+            "--query_useful_sparse_head_bce_target_mode",
+            "window_max_normalized",
             "--temporal_distribution_loss_weight",
             "0.20",
             "--checkpoint_full_score_every",
@@ -380,6 +388,8 @@ def test_cli_exposes_training_and_scoring_tuning_controls() -> None:
         query_useful_segment_budget_head_weight=args.query_useful_segment_budget_head_weight,
         query_useful_segment_level_loss_weight=args.query_useful_segment_level_loss_weight,
         query_useful_behavior_rank_loss_weight=args.query_useful_behavior_rank_loss_weight,
+        query_useful_sparse_head_rank_loss_weight=args.query_useful_sparse_head_rank_loss_weight,
+        query_useful_sparse_head_bce_target_mode=args.query_useful_sparse_head_bce_target_mode,
         temporal_distribution_loss_weight=args.temporal_distribution_loss_weight,
         checkpoint_full_score_every=args.checkpoint_full_score_every,
         checkpoint_candidate_pool_size=args.checkpoint_candidate_pool_size,
@@ -447,6 +457,8 @@ def test_cli_exposes_training_and_scoring_tuning_controls() -> None:
     assert args.query_useful_segment_budget_head_weight == 0.35
     assert args.query_useful_segment_level_loss_weight == 0.90
     assert args.query_useful_behavior_rank_loss_weight == 0.40
+    assert args.query_useful_sparse_head_rank_loss_weight == 0.25
+    assert args.query_useful_sparse_head_bce_target_mode == "window_max_normalized"
     assert args.temporal_distribution_loss_weight == 0.20
     assert args.checkpoint_full_score_every == 3
     assert args.checkpoint_candidate_pool_size == 2
@@ -509,6 +521,8 @@ def test_cli_exposes_training_and_scoring_tuning_controls() -> None:
     assert cfg.model.query_useful_segment_budget_head_weight == 0.35
     assert cfg.model.query_useful_segment_level_loss_weight == 0.90
     assert cfg.model.query_useful_behavior_rank_loss_weight == 0.40
+    assert cfg.model.query_useful_sparse_head_rank_loss_weight == 0.25
+    assert cfg.model.query_useful_sparse_head_bce_target_mode == "window_max_normalized"
     assert cfg.model.temporal_distribution_loss_weight == 0.20
     assert cfg.model.checkpoint_full_score_every == 3
     assert cfg.model.checkpoint_candidate_pool_size == 2
@@ -561,6 +575,8 @@ def test_experiment_config_loads_missing_runtime_and_mlqds_defaults() -> None:
     payload["model"].pop("budget_loss_ratios")
     payload["model"].pop("budget_loss_temperature")
     payload["model"].pop("query_useful_behavior_rank_loss_weight")
+    payload["model"].pop("query_useful_sparse_head_rank_loss_weight")
+    payload["model"].pop("query_useful_sparse_head_bce_target_mode")
     payload["model"].pop("temporal_distribution_loss_weight")
     payload["model"].pop("range_audit_compression_ratios")
     payload["model"].pop("mlqds_score_mode")
@@ -662,6 +678,7 @@ def test_validation_score_config_uses_current_names() -> None:
         checkpoint_full_score_every=4,
         checkpoint_score_variant="answer",
         learned_segment_length_repair_fraction=0.25,
+        learned_segment_length_repair_score_protection_fraction=0.15,
         learned_segment_allocation_length_support_weight=0.5,
         learned_segment_allocation_weight_floor=0.35,
         learned_segment_length_support_blend_weight=0.75,
@@ -680,6 +697,8 @@ def test_validation_score_config_uses_current_names() -> None:
             "combined",
             "--learned_segment_length_repair_fraction",
             "0.5",
+            "--learned_segment_length_repair_score_protection_fraction",
+            "0.1",
             "--learned_segment_allocation_length_support_weight",
             "0.25",
             "--learned_segment_allocation_weight_floor",
@@ -699,12 +718,17 @@ def test_validation_score_config_uses_current_names() -> None:
     assert restored.model.checkpoint_full_score_every == 4
     assert restored.model.checkpoint_score_variant == "answer"
     assert restored.model.learned_segment_length_repair_fraction == pytest.approx(0.25)
+    assert restored.model.learned_segment_length_repair_score_protection_fraction == pytest.approx(
+        0.15
+    )
     assert restored.model.learned_segment_allocation_length_support_weight == pytest.approx(0.5)
     assert restored.model.learned_segment_allocation_weight_floor == pytest.approx(0.35)
     assert restored.model.learned_segment_length_support_blend_weight == pytest.approx(0.75)
     assert restored.model.query_prior_grid_bins == 128
     assert restored.model.query_prior_smoothing_passes == 0
     assert restored.model.query_useful_behavior_rank_loss_weight == 0.0
+    assert restored.model.query_useful_sparse_head_rank_loss_weight == 0.0
+    assert restored.model.query_useful_sparse_head_bce_target_mode == "raw"
     assert restored.model.temporal_residual_label_mode == "none"
     assert not hasattr(restored.model, "f1_diagnostic_every")
     assert not hasattr(restored.model, "residual_label_mode")
@@ -712,6 +736,7 @@ def test_validation_score_config_uses_current_names() -> None:
     assert args.checkpoint_full_score_every == 5
     assert args.checkpoint_score_variant == "combined"
     assert args.learned_segment_length_repair_fraction == pytest.approx(0.5)
+    assert args.learned_segment_length_repair_score_protection_fraction == pytest.approx(0.1)
     assert args.learned_segment_allocation_length_support_weight == pytest.approx(0.25)
     assert args.learned_segment_allocation_weight_floor == pytest.approx(0.2)
     assert args.learned_segment_length_support_blend_weight == pytest.approx(1.0)
@@ -726,10 +751,16 @@ def test_direct_config_and_cli_default_to_non_residual_training() -> None:
 
     assert cfg.model.temporal_residual_label_mode == "none"
     assert cfg.model.query_useful_behavior_rank_loss_weight == 0.0
+    assert cfg.model.query_useful_sparse_head_rank_loss_weight == 0.0
+    assert cfg.model.query_useful_sparse_head_bce_target_mode == "raw"
     assert cfg.model.learned_segment_allocation_weight_floor == pytest.approx(0.50)
+    assert cfg.model.learned_segment_length_repair_score_protection_fraction == 0.0
     assert args.temporal_residual_label_mode == "none"
     assert args.query_useful_behavior_rank_loss_weight == 0.0
+    assert args.query_useful_sparse_head_rank_loss_weight == 0.0
+    assert args.query_useful_sparse_head_bce_target_mode == "raw"
     assert args.learned_segment_allocation_weight_floor == pytest.approx(0.50)
+    assert args.learned_segment_length_repair_score_protection_fraction == 0.0
 
 
 def test_cli_model_type_choices_use_supported_model_registry() -> None:

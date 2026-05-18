@@ -1,4 +1,4 @@
-"""Tests tie-handling top-k selection does not create positional bias. See simplification/README.md for details."""
+"""Tests tie-handling top-k selection does not create positional bias. See selection/README.md for details."""
 
 from __future__ import annotations
 
@@ -6,11 +6,11 @@ import math
 
 import torch
 
-from simplification.simplify_trajectories import simplify_with_scores
+from selection.retained_mask_selectors import simplify_with_scores
 
 
 def _ks_pvalue_uniform01(samples: torch.Tensor) -> float:
-    """Approximate one-sample KS p-value against Uniform(0,1). See simplification/README.md for details."""
+    """Approximate one-sample KS p-value against Uniform(0,1). See selection/README.md for details."""
     x = torch.sort(samples).values
     n = x.numel()
     if n == 0:
@@ -25,7 +25,7 @@ def _ks_pvalue_uniform01(samples: torch.Tensor) -> float:
 
 
 def test_topk_no_positional_bias() -> None:
-    """Assert retained positions look approximately uniform under constant scores. See simplification/README.md for details."""
+    """Assert retained positions look approximately uniform under constant scores. See selection/README.md for details."""
     lengths = [200, 220, 240, 260, 280]
     boundaries = []
     offset = 0

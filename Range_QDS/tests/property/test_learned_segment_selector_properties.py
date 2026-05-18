@@ -8,7 +8,7 @@ import torch
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from simplification.learned_segment_budget import simplify_with_learned_segment_budget_v1_with_trace
+from selection.learned_segment_budget import simplify_with_learned_segment_budget_v1_with_trace
 
 pytestmark = pytest.mark.property
 

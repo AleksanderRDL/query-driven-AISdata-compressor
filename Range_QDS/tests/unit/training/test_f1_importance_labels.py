@@ -5,13 +5,13 @@ from __future__ import annotations
 import pytest
 import torch
 
-from queries.query_types import QUERY_TYPE_ID_RANGE
 from training.importance_labels import (
     RANGE_USEFULNESS_LABEL_COMPONENTS,
     RANGE_USEFULNESS_LABEL_WEIGHTS,
     compute_typed_importance_labels,
     compute_typed_importance_labels_with_range_components,
 )
+from workloads.query_types import QUERY_TYPE_ID_RANGE
 
 
 def test_range_labels_match_singleton_point_f1_contribution() -> None:

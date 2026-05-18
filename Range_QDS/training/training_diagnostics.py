@@ -6,8 +6,8 @@ from typing import Any
 
 import torch
 
-from simplification.mlqds_scoring import pure_workload_scores, simplify_mlqds_predictions
-from simplification.simplify_trajectories import evenly_spaced_indices
+from selection.model_score_conversion import pure_workload_scores, simplify_mlqds_predictions
+from selection.retained_mask_selectors import evenly_spaced_indices
 from training.training_losses import _safe_quantile
 
 KENDALL_TIE_THRESHOLD = 1e-4

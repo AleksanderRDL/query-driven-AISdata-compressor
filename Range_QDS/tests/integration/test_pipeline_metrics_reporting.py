@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from config.experiment_config import build_experiment_config
-from orchestration.experiment_pipeline import run_experiment_pipeline
+from orchestration.training_scoring_pipeline import run_experiment_pipeline
 
 
 def test_pipeline_reports_active_metrics_and_diagnostics(synthetic_dataset, tmp_path) -> None:

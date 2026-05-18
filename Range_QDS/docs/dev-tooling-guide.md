@@ -40,8 +40,8 @@ Run project Python commands through `uv` from the repository root:
 uv sync --group dev
 uv lock --check
 uv run --group dev -- pytest Range_QDS/tests
-uv run --group dev -- pyright Range_QDS/benchmarking Range_QDS/config Range_QDS/data Range_QDS/evaluation Range_QDS/models Range_QDS/orchestration Range_QDS/queries Range_QDS/runtime Range_QDS/simplification Range_QDS/training Range_QDS/scripts Range_QDS/tests
-uv run --group dev -- python -m orchestration.run_ais_experiment --help
+uv run --group dev -- pyright Range_QDS/benchmarking Range_QDS/config Range_QDS/data_preparation Range_QDS/scoring Range_QDS/models Range_QDS/orchestration Range_QDS/workloads Range_QDS/runtime Range_QDS/selection Range_QDS/training Range_QDS/scripts Range_QDS/tests
+uv run --group dev -- python -m orchestration.train_and_score --help
 ```
 
 From `Range_QDS/`, prefer Make targets:
@@ -100,20 +100,20 @@ miss.
 
 Good targets:
 
-- `queries/generation/workload.py`
-- `queries/generation/anchors.py`
-- `queries/generation/coverage.py`
-- `queries/generation/profile_planning.py`
-- `queries/generation/profiles.py`
+- `workloads/generation/generator.py`
+- `workloads/generation/anchors.py`
+- `workloads/generation/coverage.py`
+- `workloads/generation/profile_query_plan.py`
+- `workloads/generation/workload_profiles.py`
 - `training/query_prior_fields.py`
 - `training/model_features.py`
-- `simplification/learned_segment_budget/core.py`
-- `simplification/learned_segment_budget/allocation.py`
-- `simplification/learned_segment_budget/length_repair.py`
-- `simplification/learned_segment_budget/diagnostics.py`
-- `simplification/learned_segment_budget/trace.py`
-- `evaluation/query_useful_v1.py`
-- `evaluation/evaluate_methods.py`
+- `selection/learned_segment_budget/core.py`
+- `selection/learned_segment_budget/allocation.py`
+- `selection/learned_segment_budget/length_repair.py`
+- `selection/learned_segment_budget/diagnostics.py`
+- `selection/learned_segment_budget/trace.py`
+- `scoring/query_useful_v1.py`
+- `scoring/method_scoring.py`
 - `orchestration/range_diagnostics.py`
 
 Good properties:
@@ -238,7 +238,7 @@ uv lock --check
 git diff --check
 uv run --group dev -- yamllint .
 uv run --group dev -- pytest Range_QDS/tests/property Range_QDS/tests/regression -q
-uv run --group dev -- pytest Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/unit/benchmarking/test_benchmark_runner.py -q
+uv run --group dev -- pytest Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/unit/benchmarking/test_runner.py -q
 ```
 
 For code checkpoints touching model, selector, query generation, metrics, or

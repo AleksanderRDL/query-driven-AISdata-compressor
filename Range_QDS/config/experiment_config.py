@@ -13,7 +13,7 @@ VALIDATION_SPLIT_MODES = ("random", "source_stratified")
 
 @dataclass
 class DataConfig:
-    """Data loading and splitting configuration. See data/README.md for details."""
+    """Data loading and splitting configuration. See data_preparation/README.md for details."""
 
     n_ships: int | None = 24
     n_points_per_ship: int | None = 200
@@ -50,7 +50,7 @@ class DataConfig:
 
 @dataclass
 class QueryConfig:
-    """Query generation and pure workload configuration. See queries/README.md for details."""
+    """Query generation and pure workload configuration. See workloads/README.md for details."""
 
     n_queries: int = 128
     target_coverage: float | None = None
@@ -143,6 +143,8 @@ class ModelConfig:
     query_useful_segment_budget_head_weight: float = 0.10
     query_useful_segment_level_loss_weight: float = 0.25
     query_useful_behavior_rank_loss_weight: float = 0.0
+    query_useful_sparse_head_rank_loss_weight: float = 0.0
+    query_useful_sparse_head_bce_target_mode: str = "raw"
     temporal_distribution_loss_weight: float = 0.0
     gradient_clip_norm: float = 1.0
     l2_score_weight: float = 1e-4
@@ -174,6 +176,7 @@ class ModelConfig:
     learned_segment_score_blend_weight: float = 0.05
     learned_segment_fairness_preallocation: bool = True
     learned_segment_length_repair_fraction: float = 0.0
+    learned_segment_length_repair_score_protection_fraction: float = 0.0
     learned_segment_length_support_blend_weight: float = 0.0
     mlqds_stratified_center_weight: float = 0.0
     mlqds_min_learned_swaps: int = 0
@@ -221,7 +224,7 @@ class ModelConfig:
 
 @dataclass
 class BaselineConfig:
-    """Baseline methods configuration. See evaluation/README.md for details."""
+    """Baseline methods configuration. See scoring/README.md for details."""
 
     include_oracle: bool = True
     final_metrics_mode: str = "diagnostic"
@@ -333,6 +336,8 @@ def build_experiment_config(
     query_useful_segment_budget_head_weight: float = 0.10,
     query_useful_segment_level_loss_weight: float = 0.25,
     query_useful_behavior_rank_loss_weight: float = 0.0,
+    query_useful_sparse_head_rank_loss_weight: float = 0.0,
+    query_useful_sparse_head_bce_target_mode: str = "raw",
     temporal_distribution_loss_weight: float = 0.0,
     gradient_clip_norm: float = 1.0,
     compression_ratio: float = 0.2,
@@ -383,6 +388,7 @@ def build_experiment_config(
     learned_segment_score_blend_weight: float = 0.05,
     learned_segment_fairness_preallocation: bool = True,
     learned_segment_length_repair_fraction: float = 0.0,
+    learned_segment_length_repair_score_protection_fraction: float = 0.0,
     learned_segment_length_support_blend_weight: float = 0.0,
     mlqds_stratified_center_weight: float = 0.0,
     mlqds_min_learned_swaps: int = 0,
@@ -421,6 +427,23 @@ def build_experiment_config(
 ) -> ExperimentConfig:
     """Build a structured experiment config from flat arguments. See orchestration/README.md for details."""
     uses_csv = bool(csv_path or train_csv_path or validation_csv_path or eval_csv_path)
+    effective_query_coverage = query_coverage
+    effective_range_max_coverage_overshoot = range_max_coverage_overshoot
+    effective_coverage_calibration_mode = coverage_calibration_mode
+    if workload_profile_id:
+        from workloads.generation.workload_profiles import (
+            LEGACY_GENERATOR_PROFILE,
+            range_workload_profile,
+        )
+
+        workload_profile = range_workload_profile(workload_profile_id)
+        if workload_profile.profile_id != LEGACY_GENERATOR_PROFILE.profile_id:
+            if effective_query_coverage is None:
+                effective_query_coverage = workload_profile.target_coverage
+            if effective_range_max_coverage_overshoot is None:
+                effective_range_max_coverage_overshoot = workload_profile.max_coverage_overshoot
+            if effective_coverage_calibration_mode is None:
+                effective_coverage_calibration_mode = workload_profile.coverage_calibration_mode
     return ExperimentConfig(
         data=DataConfig(
             n_ships=None if uses_csv else n_ships,
@@ -448,7 +471,7 @@ def build_experiment_config(
         ),
         query=QueryConfig(
             n_queries=n_queries,
-            target_coverage=query_coverage,
+            target_coverage=effective_query_coverage,
             max_queries=max_queries,
             range_spatial_fraction=range_spatial_fraction,
             range_time_fraction=range_time_fraction,
@@ -466,10 +489,10 @@ def build_experiment_config(
             range_max_box_volume_fraction=range_max_box_volume_fraction,
             range_duplicate_iou_threshold=range_duplicate_iou_threshold,
             range_acceptance_max_attempts=range_acceptance_max_attempts,
-            range_max_coverage_overshoot=range_max_coverage_overshoot,
+            range_max_coverage_overshoot=effective_range_max_coverage_overshoot,
             range_train_workload_replicates=range_train_workload_replicates,
             workload_profile_id=workload_profile_id,
-            coverage_calibration_mode=coverage_calibration_mode,
+            coverage_calibration_mode=effective_coverage_calibration_mode,
             workload_stability_gate_mode=workload_stability_gate_mode,
             workload=workload,
         ),
@@ -490,6 +513,8 @@ def build_experiment_config(
             query_useful_segment_budget_head_weight=query_useful_segment_budget_head_weight,
             query_useful_segment_level_loss_weight=query_useful_segment_level_loss_weight,
             query_useful_behavior_rank_loss_weight=query_useful_behavior_rank_loss_weight,
+            query_useful_sparse_head_rank_loss_weight=query_useful_sparse_head_rank_loss_weight,
+            query_useful_sparse_head_bce_target_mode=query_useful_sparse_head_bce_target_mode,
             temporal_distribution_loss_weight=temporal_distribution_loss_weight,
             gradient_clip_norm=gradient_clip_norm,
             compression_ratio=compression_ratio,
@@ -534,6 +559,9 @@ def build_experiment_config(
             learned_segment_score_blend_weight=learned_segment_score_blend_weight,
             learned_segment_fairness_preallocation=learned_segment_fairness_preallocation,
             learned_segment_length_repair_fraction=learned_segment_length_repair_fraction,
+            learned_segment_length_repair_score_protection_fraction=(
+                learned_segment_length_repair_score_protection_fraction
+            ),
             learned_segment_length_support_blend_weight=learned_segment_length_support_blend_weight,
             mlqds_stratified_center_weight=mlqds_stratified_center_weight,
             mlqds_min_learned_swaps=mlqds_min_learned_swaps,

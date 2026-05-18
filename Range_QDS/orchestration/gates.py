@@ -7,8 +7,12 @@ from typing import Any
 import torch
 
 from config.experiment_config import ExperimentConfig
-from evaluation.metrics import MethodEvaluation
+from scoring.metrics import MethodScore
 from training.query_prior_fields import QUERY_PRIOR_FIELD_NAMES, sample_query_prior_fields
+from workloads.generation.workload_profiles import (
+    RANGE_WORKLOAD_V1_FINAL_PROFILE_IDS,
+    normalize_workload_profile_id,
+)
 
 
 def _points_outside_prior_extent_fraction(
@@ -172,20 +176,20 @@ def evaluate_workload_stability_gate(
     selection_workload: Any | None,
 ) -> dict[str, Any]:
     """Return final-candidate gate evidence for statistically stable workloads."""
-    allowed_coverage_targets = (0.05, 0.10, 0.15, 0.30)
     min_train_replicates = 4
     min_queries_per_workload = 8
     gate_mode = str(getattr(config.query, "workload_stability_gate_mode", "final")).lower()
-    required_profile_id = "range_workload_v1"
+    allowed_workload_profile_ids = RANGE_WORKLOAD_V1_FINAL_PROFILE_IDS
+    required_profile_id = normalize_workload_profile_id(
+        getattr(config.query, "workload_profile_id", None)
+    )
     coverage_tolerance = 1e-6
     failed_checks: list[str] = []
 
     configured_target = _normalize_fraction_for_gate(getattr(config.query, "target_coverage", None))
-    configured_target_in_grid = configured_target is not None and any(
-        abs(configured_target - target) <= 1e-9 for target in allowed_coverage_targets
-    )
-    if not configured_target_in_grid:
-        failed_checks.append("coverage_target_not_in_final_grid")
+    configured_profile_in_grid = required_profile_id in allowed_workload_profile_ids
+    if not configured_profile_in_grid:
+        failed_checks.append("workload_profile_not_in_final_grid")
     if len(train_label_workloads) < min_train_replicates:
         failed_checks.append("too_few_train_workload_replicates")
 
@@ -309,8 +313,9 @@ def evaluate_workload_stability_gate(
         "gate_pass": not failed_checks,
         "failed_checks": failed_checks,
         "configured_target_coverage": configured_target,
-        "allowed_coverage_targets": list(allowed_coverage_targets),
-        "configured_target_in_grid": bool(configured_target_in_grid),
+        "configured_workload_profile_id": required_profile_id,
+        "allowed_workload_profile_ids": list(allowed_workload_profile_ids),
+        "configured_workload_profile_in_grid": bool(configured_profile_in_grid),
         "gate_mode": gate_mode,
         "train_workload_replicate_count": len(train_label_workloads),
         "min_train_workload_replicates": int(min_train_replicates),
@@ -337,8 +342,8 @@ def _coverage_overshoot_tolerance_for_target(target: float | None) -> float | No
 
 def evaluate_global_sanity_gate(
     *,
-    primary: MethodEvaluation,
-    uniform: MethodEvaluation | None,
+    primary: MethodScore,
+    uniform: MethodScore | None,
     compression_ratio: float,
 ) -> dict[str, Any]:
     """Return final-candidate geometry sanity gate evidence."""

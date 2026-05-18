@@ -8,16 +8,14 @@ from typing import Any, cast
 import pytest
 import torch
 
-from data.ais_loader import generate_synthetic_ais_data
-from evaluation.evaluate_methods import score_range_usefulness
-from evaluation.metrics import MethodEvaluation, compute_length_preservation
-from evaluation.query_useful_v1 import query_useful_v1_from_range_audit
+from data_preparation.ais_loader import generate_synthetic_ais_data
 from models.workload_blind_range_v2 import WorkloadBlindRangeV2Model
 from orchestration.causality import (
     build_learned_slot_summary,
     causality_ablation_diagnostics_payload,
     causality_ablation_tradeoff_summary,
     head_ablation_sensitivity,
+    head_output_sensitivity,
     learning_causality_delta_gate_config,
     model_prior_feature_sensitivity,
     prior_feature_sample_sensitivity,
@@ -26,7 +24,7 @@ from orchestration.causality import (
     retained_mask_comparison,
     score_ablation_sensitivity,
 )
-from orchestration.final_summary import build_final_run_summaries
+from orchestration.final_gate_summary import build_final_run_summaries
 from orchestration.gates import (
     evaluate_global_sanity_gate,
     evaluate_support_overlap_gate,
@@ -45,7 +43,7 @@ from orchestration.segment_audits import (
     segment_oracle_allocation_audit,
     target_segment_oracle_alignment_audit,
 )
-from orchestration.selection_causality import build_selection_causality_diagnostics
+from orchestration.selection_causality_diagnostics import build_selection_causality_diagnostics
 from orchestration.selector_diagnostics import (
     learned_segment_frozen_method,
     neutral_segment_scores_for_ablation,
@@ -53,25 +51,16 @@ from orchestration.selector_diagnostics import (
     segment_score_quantile_bands_for_ablation,
     segment_score_top_band_for_ablation,
 )
-from queries.generation.anchors import _anchor_weights_for_family
-from queries.generation.profile_planning import (
-    _profile_query_plan,
-    _profile_query_settings,
-    _weighted_choice_with_deterministic_key,
-)
-from queries.generation.profiles import range_workload_profile
-from queries.generation.workload import (
-    _make_range_query,
-    generate_typed_query_workload,
-)
-from queries.query_types import QUERY_TYPE_ID_RANGE
-from simplification.learned_segment_budget import (
+from scoring.method_scoring import score_range_usefulness
+from scoring.metrics import MethodScore, compute_length_preservation
+from scoring.query_useful_v1 import query_useful_v1_from_range_audit
+from selection.learned_segment_budget import (
     blend_segment_support_scores,
     learned_segment_budget_diagnostics,
     simplify_with_learned_segment_budget_v1,
     simplify_with_learned_segment_budget_v1_with_trace,
 )
-from simplification.mlqds_scoring import simplify_mlqds_predictions
+from selection.model_score_conversion import simplify_mlqds_predictions
 from training.model_features import (
     WORKLOAD_BLIND_RANGE_V2_MODEL_DISABLED_PRIOR_FIELDS,
     WORKLOAD_BLIND_RANGE_V2_POINT_DIM,
@@ -105,13 +94,27 @@ from training.train_model import (
 from training.training_diagnostics import _training_target_diagnostics
 from training.training_epoch import (
     _behavior_head_rank_loss,
+    _calibrated_sparse_head_bce_targets,
     _factorized_query_useful_loss,
     _segment_budget_head_segment_level_loss,
+    _sparse_head_rank_loss,
 )
 from training.training_validation import (
     _validation_factorized_target_fit_metrics,
     _validation_query_useful_selection_score,
 )
+from workloads.generation.anchors import _anchor_weights_for_family
+from workloads.generation.generator import (
+    _make_range_query,
+    generate_typed_query_workload,
+)
+from workloads.generation.profile_query_plan import (
+    _profile_query_plan,
+    _profile_query_settings,
+    _weighted_choice_with_deterministic_key,
+)
+from workloads.generation.workload_profiles import range_workload_profile
+from workloads.query_types import QUERY_TYPE_ID_RANGE
 
 
 def _boundaries(trajectories: list[torch.Tensor]) -> list[tuple[int, int]]:
@@ -211,6 +214,7 @@ def test_range_workload_v1_target_coverage_keeps_requested_query_count() -> None
         coverage_calibration_mode="profile_sampled_query_count",
         range_max_point_hit_fraction=1.0,
         range_duplicate_iou_threshold=1.0,
+        range_max_coverage_overshoot=1.0,
     )
 
     generation = (workload.generation_diagnostics or {})["query_generation"]
@@ -2327,6 +2331,133 @@ def test_behavior_head_rank_loss_penalizes_reversed_behavior_order() -> None:
     assert float(with_behavior_rank.item()) > float(without_behavior_rank.item())
 
 
+def test_sparse_head_rank_loss_penalizes_reversed_tiny_query_and_boundary_targets() -> None:
+    head_targets = torch.zeros((1, 8, len(QUERY_USEFUL_V1_HEAD_NAMES)), dtype=torch.float32)
+    head_mask = torch.zeros_like(head_targets, dtype=torch.bool)
+    query_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("query_hit_probability")
+    boundary_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("boundary_event_utility")
+    tiny_order = torch.tensor(
+        [0.0010, 0.0008, 0.0006, 0.0004, 0.0001, 0.0, 0.0, 0.0],
+        dtype=torch.float32,
+    )
+    head_targets[0, :, query_idx] = tiny_order
+    head_targets[0, :, boundary_idx] = tiny_order * 0.1
+    head_mask[0, :, query_idx] = True
+    head_mask[0, :, boundary_idx] = True
+    aligned_logits = torch.zeros_like(head_targets)
+    reversed_logits = torch.zeros_like(head_targets)
+    aligned_logits[0, :, query_idx] = torch.linspace(4.0, -4.0, 8)
+    aligned_logits[0, :, boundary_idx] = torch.linspace(4.0, -4.0, 8)
+    reversed_logits[0, :, query_idx] = torch.linspace(-4.0, 4.0, 8)
+    reversed_logits[0, :, boundary_idx] = torch.linspace(-4.0, 4.0, 8)
+
+    aligned = _sparse_head_rank_loss(
+        head_logits=aligned_logits,
+        head_targets=head_targets,
+        head_mask=head_mask,
+    )
+    reversed_loss = _sparse_head_rank_loss(
+        head_logits=reversed_logits,
+        head_targets=head_targets,
+        head_mask=head_mask,
+    )
+    without_sparse_rank = _factorized_query_useful_loss(
+        head_logits=reversed_logits,
+        head_targets=head_targets,
+        head_mask=head_mask,
+        sparse_head_rank_loss_weight=0.0,
+    )
+    with_sparse_rank = _factorized_query_useful_loss(
+        head_logits=reversed_logits,
+        head_targets=head_targets,
+        head_mask=head_mask,
+        sparse_head_rank_loss_weight=1.0,
+    )
+
+    assert float(aligned.item()) < float(reversed_loss.item())
+    assert float(with_sparse_rank.item()) > float(without_sparse_rank.item())
+
+
+def test_sparse_head_bce_target_calibration_rescales_tiny_query_and_boundary_heads() -> None:
+    head_targets = torch.zeros((1, 4, len(QUERY_USEFUL_V1_HEAD_NAMES)), dtype=torch.float32)
+    head_mask = torch.zeros_like(head_targets, dtype=torch.bool)
+    query_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("query_hit_probability")
+    boundary_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("boundary_event_utility")
+    behavior_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("conditional_behavior_utility")
+    head_targets[0, :, query_idx] = torch.tensor([0.0010, 0.0005, 0.0, 0.0])
+    head_targets[0, :, boundary_idx] = torch.tensor([0.000010, 0.000005, 0.0, 0.0])
+    head_targets[0, :, behavior_idx] = torch.tensor([0.20, 0.40, 0.60, 0.80])
+    head_mask[0, :, query_idx] = True
+    head_mask[0, :, boundary_idx] = True
+    head_mask[0, :, behavior_idx] = True
+
+    raw = _calibrated_sparse_head_bce_targets(
+        head_targets=head_targets,
+        head_mask=head_mask,
+        mode="raw",
+    )
+    calibrated = _calibrated_sparse_head_bce_targets(
+        head_targets=head_targets,
+        head_mask=head_mask,
+        mode="window_max_normalized",
+    )
+
+    assert torch.allclose(raw, head_targets)
+    assert calibrated[0, :, query_idx].tolist() == pytest.approx([1.0, 0.5, 0.0, 0.0])
+    assert calibrated[0, :, boundary_idx].tolist() == pytest.approx([1.0, 0.5, 0.0, 0.0])
+    assert torch.allclose(calibrated[0, :, behavior_idx], head_targets[0, :, behavior_idx])
+
+
+def test_sparse_head_bce_target_calibration_makes_aligned_tiny_heads_cheaper() -> None:
+    head_targets = torch.zeros((1, 8, len(QUERY_USEFUL_V1_HEAD_NAMES)), dtype=torch.float32)
+    head_mask = torch.zeros_like(head_targets, dtype=torch.bool)
+    query_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("query_hit_probability")
+    boundary_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("boundary_event_utility")
+    tiny_order = torch.tensor(
+        [0.0010, 0.0008, 0.0006, 0.0004, 0.0001, 0.0, 0.0, 0.0],
+        dtype=torch.float32,
+    )
+    head_targets[0, :, query_idx] = tiny_order
+    head_targets[0, :, boundary_idx] = tiny_order * 0.1
+    head_mask[0, :, query_idx] = True
+    head_mask[0, :, boundary_idx] = True
+    aligned_logits = torch.zeros_like(head_targets)
+    reversed_logits = torch.zeros_like(head_targets)
+    aligned_logits[0, :, query_idx] = torch.linspace(4.0, -4.0, 8)
+    aligned_logits[0, :, boundary_idx] = torch.linspace(4.0, -4.0, 8)
+    reversed_logits[0, :, query_idx] = torch.linspace(-4.0, 4.0, 8)
+    reversed_logits[0, :, boundary_idx] = torch.linspace(-4.0, 4.0, 8)
+
+    raw_aligned = _factorized_query_useful_loss(
+        head_logits=aligned_logits,
+        head_targets=head_targets,
+        head_mask=head_mask,
+    )
+    raw_reversed = _factorized_query_useful_loss(
+        head_logits=reversed_logits,
+        head_targets=head_targets,
+        head_mask=head_mask,
+    )
+    calibrated_aligned = _factorized_query_useful_loss(
+        head_logits=aligned_logits,
+        head_targets=head_targets,
+        head_mask=head_mask,
+        sparse_head_bce_target_mode="window_max_normalized",
+    )
+    calibrated_reversed = _factorized_query_useful_loss(
+        head_logits=reversed_logits,
+        head_targets=head_targets,
+        head_mask=head_mask,
+        sparse_head_bce_target_mode="window_max_normalized",
+    )
+
+    raw_gap = float((raw_reversed - raw_aligned).abs().item())
+    calibrated_gap = float((calibrated_reversed - calibrated_aligned).item())
+    assert raw_gap < 0.01
+    assert float(calibrated_aligned.item()) < float(calibrated_reversed.item())
+    assert calibrated_gap > raw_gap * 100.0
+
+
 def test_factorized_head_fit_diagnostics_reports_each_head() -> None:
     head_targets = torch.tensor(
         [
@@ -2581,7 +2712,9 @@ def test_selection_causality_diagnostics_reports_unavailable_preconditions() -> 
 def _final_summary_config(*, final_candidate: bool = True) -> SimpleNamespace:
     return SimpleNamespace(
         query=SimpleNamespace(
-            workload_profile_id="range_workload_v1" if final_candidate else "legacy_generator",
+            workload_profile_id=(
+                "range_workload_v1_local" if final_candidate else "legacy_generator"
+            ),
             target_coverage=0.10,
             range_max_coverage_overshoot=0.0075,
             workload_stability_gate_mode="final",
@@ -2595,6 +2728,7 @@ def _final_summary_config(*, final_candidate: bool = True) -> SimpleNamespace:
             learned_segment_score_blend_weight=0.05,
             learned_segment_fairness_preallocation=True,
             learned_segment_length_repair_fraction=0.6,
+            learned_segment_length_repair_score_protection_fraction=0.0,
             learned_segment_length_support_blend_weight=0.0,
         ),
     )
@@ -2606,7 +2740,7 @@ def _final_summary_workload() -> SimpleNamespace:
         coverage_fraction=0.10,
         generation_diagnostics={
             "query_generation": {
-                "workload_profile_id": "range_workload_v1",
+                "workload_profile_id": "range_workload_v1_local",
                 "mode": "target_coverage",
                 "coverage_calibration_mode": "profile_sampled_query_count",
                 "query_count_mode": "calibrated_to_coverage",
@@ -2625,8 +2759,8 @@ def _final_summary_workload() -> SimpleNamespace:
     )
 
 
-def _final_summary_metrics(score: float, *, range_score: float = 0.2) -> MethodEvaluation:
-    return MethodEvaluation(
+def _final_summary_metrics(score: float, *, range_score: float = 0.2) -> MethodScore:
+    return MethodScore(
         aggregate_f1=0.0,
         per_type_f1={},
         query_useful_v1_score=score,
@@ -2663,7 +2797,7 @@ def test_final_run_summaries_block_final_grid_until_benchmark_evidence() -> None
         matched=matched,
         selector_budget_diagnostics={},
         primary_selector_trace=None,
-        causality_ablation_evaluations={},
+        causality_ablation_scores={},
         causality_ablation_mask_diagnostics={},
         causal_ablation_freeze_failures={},
         prior_sensitivity_diagnostics={},
@@ -2686,7 +2820,10 @@ def test_final_run_summaries_block_final_grid_until_benchmark_evidence() -> None
     assert summaries.final_candidate is True
     assert summaries.final_claim_summary["primary_metric"] == "QueryUsefulV1"
     assert summaries.final_claim_summary["final_success_allowed"] is False
-    assert "full_coverage_compression_grid" in summaries.final_claim_summary["blocking_gates"]
+    assert (
+        "full_workload_profile_compression_grid"
+        in summaries.final_claim_summary["blocking_gates"]
+    )
     assert summaries.learning_causality_summary["final_success_allowed"] is False
     assert summaries.diagnostic_summary["workload_stability_gate_available"] is True
 
@@ -2715,7 +2852,7 @@ def test_final_run_summaries_reject_non_final_candidate_profile() -> None:
         },
         selector_budget_diagnostics={},
         primary_selector_trace=None,
-        causality_ablation_evaluations={},
+        causality_ablation_scores={},
         causality_ablation_mask_diagnostics={},
         causal_ablation_freeze_failures={},
         prior_sensitivity_diagnostics={},
@@ -2742,12 +2879,12 @@ def test_final_run_summaries_reject_non_final_candidate_profile() -> None:
 
 
 def test_learning_causality_delta_gate_requires_material_ablation_loss() -> None:
-    primary = MethodEvaluation(
+    primary = MethodScore(
         aggregate_f1=0.0,
         per_type_f1={},
         query_useful_v1_score=0.30,
     )
-    uniform = MethodEvaluation(
+    uniform = MethodScore(
         aggregate_f1=0.0,
         per_type_f1={},
         query_useful_v1_score=0.25,
@@ -2764,7 +2901,7 @@ def test_learning_causality_delta_gate_requires_material_ablation_loss() -> None
 
 
 def test_query_useful_component_delta_summary_reports_weighted_tradeoffs() -> None:
-    primary = MethodEvaluation(
+    primary = MethodScore(
         aggregate_f1=0.0,
         per_type_f1={},
         query_useful_v1_score=0.108,
@@ -2774,7 +2911,7 @@ def test_query_useful_component_delta_summary_reports_weighted_tradeoffs() -> No
             "length_preservation_guardrail": 0.80,
         },
     )
-    ablation = MethodEvaluation(
+    ablation = MethodScore(
         aggregate_f1=0.0,
         per_type_f1={},
         query_useful_v1_score=0.092,
@@ -2807,7 +2944,7 @@ def test_query_useful_component_delta_summary_reports_weighted_tradeoffs() -> No
 
 
 def test_causality_ablation_tradeoff_summary_connects_mask_and_component_changes() -> None:
-    primary = MethodEvaluation(
+    primary = MethodScore(
         aggregate_f1=0.0,
         per_type_f1={},
         query_useful_v1_score=0.108,
@@ -2817,7 +2954,7 @@ def test_causality_ablation_tradeoff_summary_connects_mask_and_component_changes
             "length_preservation_guardrail": 0.80,
         },
     )
-    ablation = MethodEvaluation(
+    ablation = MethodScore(
         aggregate_f1=0.0,
         per_type_f1={},
         query_useful_v1_score=0.092,
@@ -2863,7 +3000,7 @@ def test_causality_ablation_tradeoff_summary_connects_mask_and_component_changes
 
 
 def test_causality_ablation_diagnostics_payload_reuses_component_and_mask_tradeoffs() -> None:
-    primary = MethodEvaluation(
+    primary = MethodScore(
         aggregate_f1=0.0,
         per_type_f1={},
         query_useful_v1_score=0.108,
@@ -2872,7 +3009,7 @@ def test_causality_ablation_diagnostics_payload_reuses_component_and_mask_tradeo
             "ship_f1": 0.40,
         },
     )
-    ablation = MethodEvaluation(
+    ablation = MethodScore(
         aggregate_f1=0.0,
         per_type_f1={},
         query_useful_v1_score=0.092,
@@ -2953,6 +3090,39 @@ def test_head_ablation_sensitivity_reports_selector_raw_and_segment_channels() -
     assert diagnostics["selector_score"]["retained_mask_changed"] is True
     assert diagnostics["raw_prediction"]["mean_abs_score_delta"] > 0.0
     assert diagnostics["segment_score"]["mean_abs_score_delta"] > 0.0
+
+
+def test_head_output_sensitivity_reports_per_head_logit_and_probability_deltas() -> None:
+    primary_head_logits = torch.tensor(
+        [
+            [2.0, -1.0, 0.0, 0.5, 1.0, -0.5],
+            [1.5, -0.5, 0.2, 0.3, 0.8, -0.2],
+        ],
+        dtype=torch.float32,
+    )
+    ablation_head_logits = primary_head_logits.clone()
+    ablation_head_logits[:, 0] -= 0.4
+    ablation_head_logits[:, 4] += 0.2
+
+    diagnostics = head_output_sensitivity(
+        primary_head_logits=primary_head_logits,
+        ablation_head_logits=ablation_head_logits,
+    )
+
+    assert diagnostics["available"] is True
+    assert diagnostics["head_logits_changed"] is True
+    assert diagnostics["head_probabilities_changed"] is True
+    assert diagnostics["mean_abs_head_logit_delta"] > 0.0
+    assert diagnostics["mean_abs_head_probability_delta"] > 0.0
+    assert diagnostics["per_head"]["query_hit_probability"][
+        "mean_abs_logit_delta"
+    ] == pytest.approx(0.4)
+    assert diagnostics["per_head"]["segment_budget_target"][
+        "mean_abs_logit_delta"
+    ] == pytest.approx(0.2)
+    assert diagnostics["per_head"]["conditional_behavior_utility"][
+        "mean_abs_logit_delta"
+    ] == pytest.approx(0.0)
 
 
 def test_retained_mask_comparison_reports_ablation_overlap() -> None:
@@ -3287,6 +3457,9 @@ def test_query_prior_predictability_score_gates_behavior_utility_by_query_mass()
 def test_route_corridor_family_has_actual_corridor_semantics_or_is_not_final() -> None:
     profile = range_workload_profile("range_workload_v1")
     assert profile.final_success_allowed is True
+    assert profile.target_coverage == pytest.approx(0.30)
+    assert profile.max_coverage_overshoot == pytest.approx(0.020)
+    assert range_workload_profile("range_workload_v1_local").target_coverage == pytest.approx(0.10)
     assert profile.footprint_families["route_corridor_like"]["elongation_allowed"] is True
     points = torch.tensor(
         [
@@ -3350,7 +3523,6 @@ def test_final_profile_does_not_chase_uncovered_points_unless_declared() -> None
         n_queries=4,
         workload_map={"range": 1.0},
         seed=22,
-        target_coverage=0.30,
         max_queries=8,
         workload_profile_id="range_workload_v1",
         range_max_point_hit_fraction=1.0,
@@ -3372,12 +3544,17 @@ def test_final_profile_does_not_chase_uncovered_points_unless_declared() -> None
     legacy_generation = (legacy.generation_diagnostics or {})["query_generation"]
 
     assert generation["coverage_calibration_mode"] == "profile_sampled_query_count"
+    assert generation["target_coverage"] == pytest.approx(0.30)
     assert legacy_generation["coverage_calibration_mode"] == "uncovered_anchor_chasing"
 
 
 def test_workload_stability_gate_rejects_tiny_fixed_count_workloads() -> None:
     config = SimpleNamespace(
-        query=SimpleNamespace(target_coverage=None, range_max_coverage_overshoot=None)
+        query=SimpleNamespace(
+            target_coverage=None,
+            range_max_coverage_overshoot=None,
+            workload_profile_id="legacy_generator",
+        )
     )
     workload = SimpleNamespace(
         typed_queries=[{} for _ in range(4)],
@@ -3401,7 +3578,7 @@ def test_workload_stability_gate_rejects_tiny_fixed_count_workloads() -> None:
     )
 
     assert gate["gate_pass"] is False
-    assert "coverage_target_not_in_final_grid" in gate["failed_checks"]
+    assert "workload_profile_not_in_final_grid" in gate["failed_checks"]
     assert "too_few_train_workload_replicates" in gate["failed_checks"]
     assert "train_r0:not_target_coverage_generation" in gate["failed_checks"]
     assert "eval:too_few_queries" in gate["failed_checks"]
@@ -3409,20 +3586,24 @@ def test_workload_stability_gate_rejects_tiny_fixed_count_workloads() -> None:
 
 def test_workload_stability_gate_accepts_coverage_calibrated_replicates() -> None:
     config = SimpleNamespace(
-        query=SimpleNamespace(target_coverage=0.10, range_max_coverage_overshoot=0.0075)
+        query=SimpleNamespace(
+            target_coverage=0.30,
+            range_max_coverage_overshoot=0.020,
+            workload_profile_id="range_workload_v1",
+        )
     )
 
     def workload() -> SimpleNamespace:
         return SimpleNamespace(
             typed_queries=[{} for _ in range(8)],
-            coverage_fraction=0.105,
+            coverage_fraction=0.305,
             generation_diagnostics={
                 "query_generation": {
                     "mode": "target_coverage",
                     "workload_profile_id": "range_workload_v1",
                     "coverage_calibration_mode": "profile_sampled_query_count",
                     "query_count_mode": "calibrated_to_coverage",
-                    "target_coverage": 0.10,
+                    "target_coverage": 0.30,
                     "coverage_guard_enabled": True,
                     "stop_reason": "target_coverage_reached",
                 }
@@ -3446,6 +3627,7 @@ def test_workload_stability_gate_rejects_exhausted_generation_after_coverage_sat
         query=SimpleNamespace(
             target_coverage=0.10,
             range_max_coverage_overshoot=0.0075,
+            workload_profile_id="range_workload_v1_local",
             workload_stability_gate_mode="final",
         )
     )
@@ -3455,7 +3637,7 @@ def test_workload_stability_gate_rejects_exhausted_generation_after_coverage_sat
         generation_diagnostics={
             "query_generation": {
                 "mode": "target_coverage",
-                "workload_profile_id": "range_workload_v1",
+                "workload_profile_id": "range_workload_v1_local",
                 "coverage_calibration_mode": "profile_sampled_query_count",
                 "query_count_mode": "calibrated_to_coverage",
                 "target_coverage": 0.10,
@@ -3490,6 +3672,7 @@ def test_workload_stability_gate_rejects_calibrated_low_query_count_in_final_mod
         query=SimpleNamespace(
             target_coverage=0.05,
             range_max_coverage_overshoot=0.005,
+            workload_profile_id="range_workload_v1_focused",
             workload_stability_gate_mode="final",
         )
     )
@@ -3499,7 +3682,7 @@ def test_workload_stability_gate_rejects_calibrated_low_query_count_in_final_mod
         generation_diagnostics={
             "query_generation": {
                 "mode": "target_coverage",
-                "workload_profile_id": "range_workload_v1",
+                "workload_profile_id": "range_workload_v1_focused",
                 "coverage_calibration_mode": "profile_sampled_query_count",
                 "query_count_mode": "calibrated_to_coverage",
                 "target_coverage": 0.05,
@@ -3526,6 +3709,7 @@ def test_workload_stability_gate_smoke_mode_allows_calibrated_low_query_count() 
         query=SimpleNamespace(
             target_coverage=0.05,
             range_max_coverage_overshoot=0.005,
+            workload_profile_id="range_workload_v1_focused",
             workload_stability_gate_mode="smoke",
         )
     )
@@ -3535,7 +3719,7 @@ def test_workload_stability_gate_smoke_mode_allows_calibrated_low_query_count() 
         generation_diagnostics={
             "query_generation": {
                 "mode": "target_coverage",
-                "workload_profile_id": "range_workload_v1",
+                "workload_profile_id": "range_workload_v1_focused",
                 "coverage_calibration_mode": "profile_sampled_query_count",
                 "query_count_mode": "calibrated_to_coverage",
                 "target_coverage": 0.05,
@@ -3558,14 +3742,14 @@ def test_workload_stability_gate_smoke_mode_allows_calibrated_low_query_count() 
 
 
 def test_global_sanity_gate_enforces_endpoint_length_and_sed_ratio() -> None:
-    primary = MethodEvaluation(
+    primary = MethodScore(
         aggregate_f1=0.0,
         per_type_f1={},
         avg_length_preserved=0.90,
         geometric_distortion={"avg_sed_km": 0.90},
         range_audit={"endpoint_sanity": 1.0},
     )
-    uniform = MethodEvaluation(
+    uniform = MethodScore(
         aggregate_f1=0.0,
         per_type_f1={},
         avg_length_preserved=0.95,

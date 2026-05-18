@@ -6,8 +6,7 @@ import math
 
 import torch
 
-from queries.query_types import QUERY_TYPE_ID_RANGE
-from simplification.simplify_trajectories import (
+from selection.retained_mask_selectors import (
     deterministic_topk_with_jitter,
     evenly_spaced_indices,
 )
@@ -16,6 +15,7 @@ from training.targets.common import (
     _target_budget_ratios,
     _target_budget_weights,
 )
+from workloads.query_types import QUERY_TYPE_ID_RANGE
 
 
 def _local_window_sum(values: torch.Tensor, radius: int) -> torch.Tensor:

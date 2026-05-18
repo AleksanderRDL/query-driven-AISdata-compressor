@@ -6,8 +6,6 @@ import pytest
 import torch
 
 from config.experiment_config import ModelConfig
-from queries.query_types import pad_query_features
-from queries.workload import TypedQueryWorkload
 from training.targets.aggregation import (
     aggregate_range_component_label_sets,
     aggregate_range_component_retained_frequency_training_labels,
@@ -37,6 +35,8 @@ from training.targets.retained_frequency import (
 )
 from training.targets.set_utility import range_set_utility_frequency_training_labels
 from training.targets.structural import range_structural_retained_frequency_training_labels
+from workloads.query_types import pad_query_features
+from workloads.typed_workload import TypedQueryWorkload
 
 
 def _toy_points() -> torch.Tensor:

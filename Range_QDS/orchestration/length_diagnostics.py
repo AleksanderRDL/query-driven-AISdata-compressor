@@ -7,7 +7,7 @@ from typing import Any
 
 import torch
 
-from evaluation.metrics import compute_length_preservation
+from scoring.metrics import compute_length_preservation
 
 
 def _local_distance_matrix_km(local_points: torch.Tensor) -> torch.Tensor:

@@ -8,8 +8,6 @@ from models.historical_prior_qds_model import (
 )
 from models.workload_blind_qds_model import SegmentContextRangeQDSModel
 from models.workload_blind_range_v2 import WorkloadBlindRangeV2Model
-from queries.query_types import pad_query_features
-from queries.workload import TypedQueryWorkload
 from training.checkpoints import ModelArtifacts, load_checkpoint, save_checkpoint
 from training.inference import forward_predict, windowed_predict
 from training.model_features import (
@@ -30,6 +28,8 @@ from training.model_features import (
     build_query_free_point_features_for_dim,
 )
 from training.scaler import FeatureScaler
+from workloads.query_types import pad_query_features
+from workloads.typed_workload import TypedQueryWorkload
 
 
 def _range_workload() -> TypedQueryWorkload:

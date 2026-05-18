@@ -2,13 +2,13 @@ import pytest
 import torch
 
 from config.experiment_config import build_experiment_config
-from evaluation.baselines import MLQDSMethod
 from models.workload_blind_qds_model import WorkloadBlindRangeQDSModel
-from queries.query_types import NUM_QUERY_TYPES, pad_query_features
-from queries.workload import TypedQueryWorkload
+from scoring.methods import MLQDSMethod
 from training.scaler import FeatureScaler
 from training.training_outputs import TrainingOutputs
 from training.training_validation import _validation_query_score
+from workloads.query_types import NUM_QUERY_TYPES, pad_query_features
+from workloads.typed_workload import TypedQueryWorkload
 
 
 def _points() -> torch.Tensor:
@@ -113,7 +113,7 @@ def test_mlqds_method_reuses_scores_across_compression_ratios(
         calls["count"] += 1
         return torch.linspace(-1.0, 1.0, steps=points.shape[0])
 
-    monkeypatch.setattr("evaluation.baselines.windowed_predict", fake_predict)
+    monkeypatch.setattr("scoring.methods.windowed_predict", fake_predict)
     method = MLQDSMethod(
         name="MLQDS",
         trained=trained,

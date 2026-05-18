@@ -7,7 +7,7 @@ from typing import Any
 
 import torch
 
-from simplification.mlqds_scoring import workload_type_head
+from selection.model_score_conversion import workload_type_head
 from training.targets.query_useful_v1 import (
     QUERY_USEFUL_V1_HEAD_NAMES,
     build_query_useful_v1_targets,

@@ -9,7 +9,7 @@ from typing import Any
 import torch
 import torch.nn.functional as F
 
-from queries.range_geometry import points_in_range_box, segment_box_bracket_indices
+from workloads.range_geometry import points_in_range_box, segment_box_bracket_indices
 
 QUERY_PRIOR_FIELD_SCHEMA_VERSION = 3
 QUERY_PRIOR_FIELD_NAMES = (

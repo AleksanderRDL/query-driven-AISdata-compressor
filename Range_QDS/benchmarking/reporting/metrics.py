@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from benchmarking.benchmark_common import as_float
+from benchmarking.common import as_float
 from training.model_features import is_workload_blind_model_type
 
 MIN_MATCHED_LEARNED_SLOT_FRACTION_FOR_BLIND_CLAIM = 0.25

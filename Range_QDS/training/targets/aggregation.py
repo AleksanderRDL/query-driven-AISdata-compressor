@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import torch
 
-from evaluation.range_usefulness import RANGE_USEFULNESS_WEIGHTS
-from queries.query_types import QUERY_TYPE_ID_RANGE
+from scoring.range_usefulness import RANGE_USEFULNESS_WEIGHTS
 from training.targets.common import (
     _apply_temporal_target_blend,
     _retained_frequency_from_scores,
@@ -19,6 +18,7 @@ from training.targets.retained_frequency import (
     range_retained_frequency_training_labels,
 )
 from training.targets.structural import range_structural_retained_frequency_training_labels
+from workloads.query_types import QUERY_TYPE_ID_RANGE
 
 RANGE_CONTINUITY_TARGET_WEIGHTS = {
     "range_entry_exit_f1": 0.22,

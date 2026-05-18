@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import torch
 
-from queries.query_types import NUM_QUERY_TYPES
 from training.trajectory_batching import TrajectoryBatch
+from workloads.query_types import NUM_QUERY_TYPES
 
 
 def _window_has_positive_supervision(

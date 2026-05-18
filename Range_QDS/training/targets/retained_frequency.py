@@ -6,8 +6,7 @@ import math
 
 import torch
 
-from queries.query_types import QUERY_TYPE_ID_RANGE
-from simplification.simplify_trajectories import (
+from selection.retained_mask_selectors import (
     simplify_with_global_score_budget,
     simplify_with_temporal_score_hybrid,
 )
@@ -24,6 +23,7 @@ from training.targets.common import (
     _target_budget_weights,
 )
 from training.training_losses import _safe_quantile
+from workloads.query_types import QUERY_TYPE_ID_RANGE
 
 
 def range_retained_frequency_training_labels(

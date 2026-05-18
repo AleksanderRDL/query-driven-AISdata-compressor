@@ -6,13 +6,13 @@ import math
 
 import torch
 
-from queries.query_types import QUERY_TYPE_ID_RANGE
-from simplification.simplify_trajectories import (
+from selection.retained_mask_selectors import (
     evenly_spaced_indices,
     simplify_with_temporal_score_hybrid,
 )
 from training.targets.modes import RANGE_TARGET_BALANCE_MODES
 from training.training_losses import _safe_quantile
+from workloads.query_types import QUERY_TYPE_ID_RANGE
 
 
 def _scaled_training_target_for_type(

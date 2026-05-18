@@ -8,14 +8,14 @@ from typing import Any
 import torch
 
 from config.experiment_config import ModelConfig
-from queries.query_types import NUM_QUERY_TYPES, QUERY_TYPE_ID_RANGE
-from queries.workload import TypedQueryWorkload
-from simplification.mlqds_scoring import pure_workload_scores
-from simplification.simplify_trajectories import simplify_with_temporal_score_hybrid
+from selection.model_score_conversion import pure_workload_scores
+from selection.retained_mask_selectors import simplify_with_temporal_score_hybrid
 from training.inference import windowed_predict
 from training.model_features import build_model_point_features
 from training.training_losses import _budget_loss_ratios, _safe_quantile
 from training.training_outputs import TrainingOutputs
+from workloads.query_types import NUM_QUERY_TYPES, QUERY_TYPE_ID_RANGE
+from workloads.typed_workload import TypedQueryWorkload
 
 RANGE_TEACHER_DISTILLATION_MODES = ("none", "rank_percentile", "retained_frequency")
 

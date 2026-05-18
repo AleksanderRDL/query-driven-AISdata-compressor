@@ -5,10 +5,10 @@ from typing import Any
 
 import pytest
 
-from benchmarking.benchmark_common import audit_ratio_prefix
-from benchmarking.benchmark_final_grid import (
+from benchmarking.common import audit_ratio_prefix
+from benchmarking.final_grid import (
     QUERY_DRIVEN_FINAL_COMPRESSION_RATIOS,
-    QUERY_DRIVEN_FINAL_COVERAGE_TARGETS,
+    QUERY_DRIVEN_FINAL_WORKLOAD_PROFILE_IDS,
     query_driven_final_grid_summary,
 )
 from benchmarking.reporting.row_fields import _row_from_run
@@ -16,11 +16,11 @@ from benchmarking.reporting.row_fields import _row_from_run
 pytestmark = pytest.mark.regression
 
 
-def _final_grid_row(coverage: float) -> dict[str, Any]:
+def _final_grid_row(workload_profile_id: str, profile_index: int) -> dict[str, Any]:
     row: dict[str, Any] = {
-        "run_label": f"coverage_{coverage:.2f}",
+        "run_label": workload_profile_id,
         "returncode": 0,
-        "query_target_coverage": coverage,
+        "workload_profile_id": workload_profile_id,
         "mlqds_primary_metric": "query_useful_v1",
         "workload_stability_gate_pass": True,
         "support_overlap_gate_pass": True,
@@ -34,7 +34,7 @@ def _final_grid_row(coverage: float) -> dict[str, Any]:
     }
     for ratio in QUERY_DRIVEN_FINAL_COMPRESSION_RATIOS:
         prefix = audit_ratio_prefix(ratio)
-        base = 0.50 + coverage + ratio
+        base = 0.50 + (0.05 * profile_index) + ratio
         row[f"{prefix}_mlqds_query_useful_v1"] = base + 0.05
         row[f"{prefix}_uniform_query_useful_v1"] = base
         row[f"{prefix}_douglas_peucker_query_useful_v1"] = base - 0.05
@@ -115,6 +115,7 @@ def _minimal_query_driven_run_json_fixture() -> dict[str, Any]:
                 "segment_score_blend_weight": 0.5,
                 "fairness_preallocation_enabled": True,
                 "length_repair_fraction": 0.0,
+                "length_repair_score_protection_fraction": 0.0,
             },
         },
         "global_sanity_gate": {
@@ -128,11 +129,14 @@ def _minimal_query_driven_run_json_fixture() -> dict[str, Any]:
 
 
 def test_query_driven_final_grid_summary_regression(data_regression: Any) -> None:
-    rows = [_final_grid_row(coverage) for coverage in QUERY_DRIVEN_FINAL_COVERAGE_TARGETS]
+    rows = [
+        _final_grid_row(profile_id, profile_index)
+        for profile_index, profile_id in enumerate(QUERY_DRIVEN_FINAL_WORKLOAD_PROFILE_IDS)
+    ]
     run_config = {
         "profile_settings": {
             "final_product_candidate": True,
-            "range_coverage_sweep_targets": list(QUERY_DRIVEN_FINAL_COVERAGE_TARGETS),
+            "range_workload_profile_sweep_ids": list(QUERY_DRIVEN_FINAL_WORKLOAD_PROFILE_IDS),
             "range_compression_sweep_ratios": list(QUERY_DRIVEN_FINAL_COMPRESSION_RATIOS),
         }
     }
@@ -169,7 +173,7 @@ def test_benchmark_row_field_set_regression(data_regression: Any, tmp_path: Path
             "--",
             "python",
             "-m",
-            "orchestration.run_ais_experiment",
+            "orchestration.train_and_score",
         ],
         returncode=0,
         elapsed_seconds=1.0,

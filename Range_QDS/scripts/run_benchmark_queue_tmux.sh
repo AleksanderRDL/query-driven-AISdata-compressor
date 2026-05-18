@@ -3,9 +3,9 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: scripts/run_benchmark_queue_tmux.sh [launcher options] [benchmark_runner args...]
+Usage: scripts/run_benchmark_queue_tmux.sh [launcher options] [runner args...]
 
-Launch a sequential benchmark_runner queue in tmux with a second pane logging
+Launch a sequential runner queue in tmux with a second pane logging
 lightweight system/GPU telemetry. Use this for multi-seed batches where runs
 must not compete for the same GPU/CPU/RAM.
 
@@ -17,14 +17,14 @@ Launcher options:
 Environment overrides:
   UV                           uv executable. Default: uv.
   UV_GROUP                     uv dependency group. Default: dev.
-  PROFILE                      benchmark_runner profile. Default: range_workload_v1_workload_blind_v2.
-  WORKLOADS                    benchmark_runner --workloads value. Default: range.
+  PROFILE                      runner profile. Default: range_workload_v1_workload_blind_v2.
+  WORKLOADS                    runner --workloads value. Default: range.
   CSV_PATH                     Cleaned CSV file/directory. Default: ../AISDATA/cleaned.
   CACHE_DIR                    Cache directory, relative to Range_QDS when not absolute.
   ARTIFACT_ROOT                Benchmark family directory. Default:
                                artifacts/benchmarks/query_driven_workload_blind_v2 relative to Range_QDS.
   SEEDS                        Comma-separated seeds for default plan. Default: 42,43,44.
-  CHILD_EXTRA_ARGS             String passed as benchmark_runner --extra_args for
+  CHILD_EXTRA_ARGS             String passed as runner --extra_args for
                                every default-plan run. Example:
                                "--ranking_top_quantile 0.70".
   PLAN_FILE                    Optional tab-separated plan file with rows:
@@ -43,7 +43,7 @@ Environment overrides:
                                Default: 0.
   ATTACH                       Attach to tmux after start. Default: 1.
 
-Any remaining arguments are appended to every benchmark_runner command.
+Any remaining arguments are appended to every runner command.
 EOF
 }
 
@@ -260,7 +260,7 @@ run_one() {
     --group "$UV_GROUP"
     --
     python
-    -m benchmarking.benchmark_runner
+    -m benchmarking.runner
     --profile "$PROFILE"
     --workloads "$WORKLOADS"
     --csv_path "$CSV_PATH"

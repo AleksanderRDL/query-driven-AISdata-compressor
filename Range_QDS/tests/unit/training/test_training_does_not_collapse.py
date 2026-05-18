@@ -8,14 +8,12 @@ import pytest
 import torch
 
 from config.experiment_config import build_experiment_config
-from data.ais_loader import generate_synthetic_ais_data
-from data.trajectory_dataset import TrajectoryDataset
-from evaluation.baselines import MLQDSMethod
-from evaluation.evaluate_methods import score_range_usefulness, score_retained_mask
+from data_preparation.ais_loader import generate_synthetic_ais_data
+from data_preparation.trajectory_dataset import TrajectoryDataset
 from models.historical_prior_qds_model import HistoricalPriorRangeQDSModel
 from models.trajectory_qds_model import TrajectoryQDSModel
-from queries.generation.workload import generate_typed_query_workload
-from queries.query_types import NUM_QUERY_TYPES, QUERY_TYPE_ID_RANGE
+from scoring.method_scoring import score_range_usefulness, score_retained_mask
+from scoring.methods import MLQDSMethod
 from training.checkpoint_selection import (
     selection_score as _selection_score,
 )
@@ -46,6 +44,8 @@ from training.training_setup import _single_active_type_id
 from training.training_validation import _validation_checkpoint_scores, _validation_query_score
 from training.training_windows import _filter_supervised_windows
 from training.trajectory_batching import build_trajectory_windows
+from workloads.generation.generator import generate_typed_query_workload
+from workloads.query_types import NUM_QUERY_TYPES, QUERY_TYPE_ID_RANGE
 
 
 def test_selection_score_penalizes_collapsed_predictions() -> None:
@@ -694,7 +694,7 @@ def test_validation_query_score_matches_final_mlqds_scoring(
     )
 
     monkeypatch.setattr(
-        "evaluation.baselines.windowed_predict",
+        "scoring.methods.windowed_predict",
         lambda **_kwargs: predictions.clone(),
     )
 
@@ -778,7 +778,7 @@ def test_validation_range_usefulness_matches_final_audit(monkeypatch: pytest.Mon
     )
 
     monkeypatch.setattr(
-        "evaluation.baselines.windowed_predict",
+        "scoring.methods.windowed_predict",
         lambda **_kwargs: predictions.clone(),
     )
 

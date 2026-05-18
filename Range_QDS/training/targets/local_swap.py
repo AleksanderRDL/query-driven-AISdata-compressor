@@ -6,16 +6,16 @@ import math
 
 import torch
 
-from evaluation.evaluate_methods import score_range_usefulness
-from evaluation.query_cache import EvaluationQueryCache
-from queries.query_types import QUERY_TYPE_ID_RANGE
-from queries.range_geometry import points_in_range_box
-from simplification.simplify_trajectories import (
+from scoring.method_scoring import score_range_usefulness
+from scoring.query_cache import ScoringQueryCache
+from selection.retained_mask_selectors import (
     deterministic_topk_with_jitter,
     evenly_spaced_indices,
 )
 from training.targets.common import _target_budget_ratios, _target_budget_weights
 from training.targets.set_utility import _range_set_utility_candidates
+from workloads.query_types import QUERY_TYPE_ID_RANGE
+from workloads.range_geometry import points_in_range_box
 
 
 def _local_swap_base_plan(
@@ -186,7 +186,7 @@ def _range_local_swap_utility_scores(
                 continue
 
             query_list = [query]
-            query_cache = EvaluationQueryCache.for_workload(points, boundaries, query_list)
+            query_cache = ScoringQueryCache.for_workload(points, boundaries, query_list)
             base_score = float(
                 score_range_usefulness(
                     points=points,
@@ -502,7 +502,7 @@ def _range_local_swap_gain_cost_scores(
                 continue
 
             query_list = [query]
-            query_cache = EvaluationQueryCache.for_workload(points, boundaries, query_list)
+            query_cache = ScoringQueryCache.for_workload(points, boundaries, query_list)
             base_score = float(
                 score_range_usefulness(
                     points=points,

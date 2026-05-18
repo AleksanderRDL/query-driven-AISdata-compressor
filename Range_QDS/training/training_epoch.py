@@ -12,7 +12,6 @@ import torch
 import torch.nn.functional as F
 
 from config.experiment_config import ModelConfig
-from queries.query_types import NUM_QUERY_TYPES
 from runtime.torch_runtime import torch_autocast_context
 from training.targets.query_useful_v1 import QUERY_USEFUL_V1_HEAD_NAMES
 from training.training_losses import (
@@ -26,6 +25,7 @@ from training.training_losses import (
 )
 from training.training_windows import _trajectory_batch_to_device
 from training.trajectory_batching import TrajectoryBatch
+from workloads.query_types import NUM_QUERY_TYPES
 
 
 class _GradScalerLike(Protocol):
@@ -64,6 +64,8 @@ def _factorized_query_useful_loss(
     segment_budget_head_weight: float = 0.10,
     segment_level_loss_weight: float = 0.25,
     behavior_rank_loss_weight: float = 0.0,
+    sparse_head_rank_loss_weight: float = 0.0,
+    sparse_head_bce_target_mode: str = "raw",
 ) -> torch.Tensor:
     """Return auxiliary multi-head QueryUsefulV1 loss for v2 models."""
     if head_logits.shape != head_targets.shape or head_mask.shape != head_logits.shape:
@@ -73,9 +75,14 @@ def _factorized_query_useful_loss(
         return head_logits.new_tensor(0.0)
     # q_hit, boundary, and segment budget are probability-like.  Behavior and
     # replacement are smooth utilities but BCE keeps useful gradients near 0/1.
+    bce_targets = _calibrated_sparse_head_bce_targets(
+        head_targets=head_targets,
+        head_mask=head_mask,
+        mode=sparse_head_bce_target_mode,
+    )
     per_element = F.binary_cross_entropy_with_logits(
         head_logits,
-        head_targets.clamp(0.0, 1.0),
+        bce_targets,
         reduction="none",
     )
     segment_weight = max(0.0, float(segment_budget_head_weight))
@@ -108,11 +115,113 @@ def _factorized_query_useful_loss(
         head_targets=head_targets,
         head_mask=head_mask,
     )
+    sparse_rank_weight = max(0.0, float(sparse_head_rank_loss_weight))
+    sparse_head_rank_loss = head_logits.new_tensor(0.0)
+    if sparse_rank_weight > 0.0:
+        sparse_head_rank_loss = _sparse_head_rank_loss(
+            head_logits=head_logits,
+            head_targets=head_targets,
+            head_mask=head_mask,
+        )
     return (
         point_loss
         + max(0.0, float(segment_level_loss_weight)) * segment_loss
         + max(0.0, float(behavior_rank_loss_weight)) * behavior_rank_loss
+        + sparse_rank_weight * sparse_head_rank_loss
     )
+
+
+def _sparse_head_rank_loss(
+    *,
+    head_logits: torch.Tensor,
+    head_targets: torch.Tensor,
+    head_mask: torch.Tensor,
+    head_names: tuple[str, ...] = ("query_hit_probability", "boundary_event_utility"),
+    top_fraction: float = 0.05,
+) -> torch.Tensor:
+    """Return a rank loss for tiny-magnitude factorized heads.
+
+    This normalizes target gaps by the row span, so sparse soft labels still
+    provide ordering pressure when BCE is dominated by base-rate calibration.
+    """
+    if head_logits.shape != head_targets.shape or head_mask.shape != head_logits.shape:
+        raise ValueError("factorized head logits, targets, and mask must have matching shape.")
+    fraction = min(1.0, max(0.0, float(top_fraction)))
+    if fraction <= 0.0:
+        return head_logits.new_tensor(0.0)
+    losses: list[torch.Tensor] = []
+    schema = tuple(QUERY_USEFUL_V1_HEAD_NAMES)
+    for head_name in head_names:
+        try:
+            head_idx = schema.index(head_name)
+        except ValueError:  # pragma: no cover - constant schema guard.
+            continue
+        if int(head_logits.shape[-1]) <= head_idx:
+            continue
+        logits = head_logits[..., head_idx].float()
+        targets = head_targets[..., head_idx].float().clamp(0.0, 1.0)
+        mask = head_mask[..., head_idx].to(dtype=torch.bool)
+        for row in range(int(logits.shape[0])):
+            valid_positions = torch.where(mask[row])[0]
+            valid_count = int(valid_positions.numel())
+            if valid_count < 2:
+                continue
+            local_targets = targets[row, valid_positions]
+            target_span = local_targets.max() - local_targets.min()
+            if float(target_span.item()) <= 0.0:
+                continue
+            local_logits = logits[row, valid_positions]
+            top_count = max(1, math.ceil(fraction * valid_count))
+            top_positions = torch.topk(local_targets, k=top_count, largest=True).indices
+            top_targets = local_targets[top_positions]
+            top_logits = local_logits[top_positions]
+            target_gap = top_targets.unsqueeze(1) - local_targets.unsqueeze(0)
+            pair_mask = target_gap > 0.0
+            if not bool(pair_mask.any().item()):
+                continue
+            logit_gap = top_logits.unsqueeze(1) - local_logits.unsqueeze(0)
+            normalized_gap = (target_gap[pair_mask] / target_span.clamp(min=1e-8)).clamp(0.0, 1.0)
+            losses.append((F.softplus(-logit_gap[pair_mask]) * normalized_gap).mean())
+    if not losses:
+        return head_logits.new_tensor(0.0)
+    return torch.stack(losses).mean()
+
+
+def _calibrated_sparse_head_bce_targets(
+    *,
+    head_targets: torch.Tensor,
+    head_mask: torch.Tensor,
+    mode: str = "raw",
+    head_names: tuple[str, ...] = ("query_hit_probability", "boundary_event_utility"),
+) -> torch.Tensor:
+    """Return BCE targets, optionally rescaling sparse heads within each window."""
+    out = head_targets.float().clamp(0.0, 1.0)
+    normalized_mode = str(mode).lower()
+    if normalized_mode in {"", "raw", "none"}:
+        return out
+    if normalized_mode != "window_max_normalized":
+        raise ValueError("sparse_head_bce_target_mode must be 'raw' or 'window_max_normalized'.")
+    out = out.clone()
+    schema = tuple(QUERY_USEFUL_V1_HEAD_NAMES)
+    for head_name in head_names:
+        try:
+            head_idx = schema.index(head_name)
+        except ValueError:  # pragma: no cover - constant schema guard.
+            continue
+        if int(out.shape[-1]) <= head_idx:
+            continue
+        targets = out[..., head_idx]
+        mask = head_mask[..., head_idx].to(dtype=torch.bool)
+        for row in range(int(targets.shape[0])):
+            valid = mask[row]
+            if not bool(valid.any().item()):
+                continue
+            local = targets[row, valid]
+            max_value = local.max()
+            if float(max_value.item()) <= 1e-12:
+                continue
+            targets[row, valid] = (local / max_value.clamp(min=1e-12)).clamp(0.0, 1.0)
+    return out
 
 
 def _behavior_head_rank_loss(
@@ -334,6 +443,12 @@ def _train_one_epoch(
                 ),
                 behavior_rank_loss_weight=float(
                     getattr(model_config, "query_useful_behavior_rank_loss_weight", 0.0)
+                ),
+                sparse_head_rank_loss_weight=float(
+                    getattr(model_config, "query_useful_sparse_head_rank_loss_weight", 0.0)
+                ),
+                sparse_head_bce_target_mode=str(
+                    getattr(model_config, "query_useful_sparse_head_bce_target_mode", "raw")
                 ),
             )
         positive_row_mask = (batch_label_mask & (batch_labels > 0)).any(dim=1)

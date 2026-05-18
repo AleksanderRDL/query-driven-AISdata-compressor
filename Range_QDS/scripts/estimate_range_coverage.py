@@ -17,15 +17,15 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from data.ais_loader import load_ais_csv
-from data.trajectory_cache import load_or_build_ais_cache
-from queries.coverage_estimator import (
+from data_preparation.ais_loader import load_ais_csv
+from data_preparation.trajectory_cache import load_or_build_ais_cache
+from workloads.coverage_estimator import (
     RangeCoverageEstimate,
     best_query_count,
     estimate_range_coverage,
 )
-from queries.generation.anchors import RANGE_ANCHOR_MODES
-from queries.generation.workload import RANGE_TIME_DOMAIN_MODES
+from workloads.generation.anchors import RANGE_ANCHOR_MODES
+from workloads.generation.generator import RANGE_TIME_DOMAIN_MODES
 
 
 def _parse_int_list(value: str) -> list[int]:

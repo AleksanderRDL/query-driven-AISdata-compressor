@@ -7,8 +7,8 @@ from typing import Any
 
 import torch
 
-from queries.workload import TypedQueryWorkload
 from training.query_prior_fields import QUERY_PRIOR_FIELD_NAMES, sample_query_prior_fields
+from workloads.typed_workload import TypedQueryWorkload
 
 RANGE_AWARE_EXTRA_DIM = 8
 RANGE_AWARE_POINT_DIM = 8 + RANGE_AWARE_EXTRA_DIM

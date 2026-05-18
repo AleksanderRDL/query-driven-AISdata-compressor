@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import torch
 
-from queries.query_types import QUERY_TYPE_ID_RANGE
 from training.targets.common import (
     _apply_temporal_target_blend,
     _retained_frequency_from_scores,
@@ -13,6 +12,7 @@ from training.targets.common import (
     _target_budget_weights,
 )
 from training.training_losses import _safe_quantile
+from workloads.query_types import QUERY_TYPE_ID_RANGE
 
 RANGE_STRUCTURAL_TARGET_WEIGHTS = {
     "uniqueness": 0.40,

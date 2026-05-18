@@ -8,12 +8,12 @@ from typing import Any
 
 import torch
 
-from queries.query_types import NUM_QUERY_TYPES, QUERY_TYPE_ID_RANGE
-from queries.range_geometry import points_in_range_box, segment_box_bracket_indices
 from training.factorized_target_diagnostics import (
     factorized_target_diagnostics,
     support_fraction_by_threshold,
 )
+from workloads.query_types import NUM_QUERY_TYPES, QUERY_TYPE_ID_RANGE
+from workloads.range_geometry import points_in_range_box, segment_box_bracket_indices
 
 QUERY_USEFUL_V1_TARGET_MODES = frozenset({"query_useful_v1_factorized"})
 QUERY_USEFUL_V1_HEAD_NAMES = (

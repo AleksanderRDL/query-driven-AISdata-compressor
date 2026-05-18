@@ -65,7 +65,7 @@ prior_predictive_alignment_gate
 workload_signature_gate
 learning_causality_ablations
 global_sanity_gates
-full_coverage_compression_grid
+full_workload_profile_compression_grid
 ```
 
 Support overlap and target diffusion passed. That means the model had nonzero prior-field input support and labels were not obviously too diffuse. The first active blocker is **workload generation health and signature stability**, not model architecture.
@@ -549,6 +549,8 @@ mlqds_score_mode: rank_confidence
 query_useful_segment_budget_head_weight: 0.10
 query_useful_segment_level_loss_weight: 0.25
 query_useful_behavior_rank_loss_weight: 0.0
+query_useful_sparse_head_rank_loss_weight: 0.0
+query_useful_sparse_head_bce_target_mode: raw
 ```
 
 For real AIS probes, increase capacity only after workload health and predictability gates pass.
@@ -559,6 +561,18 @@ a default because it worsened retained-mask causality despite slightly better
 head fit. Keep it disabled unless a future checkpoint has a specific
 hypothesis, and do not treat better head fit alone as evidence of learned
 workload-blind success.
+
+The sparse-head rank auxiliary is training-only pressure on the numerically
+sparse `query_hit_probability` and `boundary_event_utility` heads. It exists to
+test the Checkpoint 5.37 head-saturation diagnosis. Default `0.0` preserves the
+current candidate; any nonzero run is diagnostic until a strict replay proves
+head dispersion improves retained-mask causality and global sanity.
+
+The sparse-head BCE target mode is a stronger diagnostic for the same blocker.
+Default `raw` preserves current labels. `window_max_normalized` may be used only
+to test whether per-window relative query-hit/boundary supervision fixes
+base-rate saturation; it must not be treated as accepted target semantics until
+a strict replay proves retained-mask causality and global sanity.
 
 ### Selector
 
@@ -586,6 +600,7 @@ learned_segment_allocation_length_support_weight: 0.12
 learned_segment_allocation_weight_floor: 0.50
 learned_segment_score_blend_weight: 0.05
 learned_segment_fairness_preallocation: true
+learned_segment_length_repair_score_protection_fraction: 0.0
 ```
 
 These are query-free selector guardrails. Geometry-gain tie-breaking and
@@ -593,7 +608,10 @@ segment allocation length support are separate controls and must be reported
 separately. The allocation weight floor is a score-contrast diagnostic control;
 lower values can make learned segment scores more decisive, but any lower-floor
 result is diagnostic until a strict replay proves causality and global sanity.
-They must be ablated before any final causality claim.
+Length-repair score protection is a query-free diagnostic control for testing
+whether repair is erasing the highest learned-score decisions; default `0.0`
+preserves current behavior. They must be ablated before any final causality
+claim.
 
 Causality ablation must include:
 
@@ -798,7 +816,7 @@ accepted queries:     4-8
 train replicates:     1-2
 epochs:               1-2
 compression:          one ratio, usually 5% or 20%
-coverage:             one target, usually 10%
+workload profile:     one profile, usually range_workload_v1 for implementation smoke
 ```
 
 Allowed conclusions:
@@ -839,7 +857,7 @@ accepted queries:     16-32
 train replicates:     4
 epochs:               3-5
 compression:          5%
-coverage:             10%
+workload profile:     one final profile, usually range_workload_v1
 acceptance attempts:  20,000+
 ```
 
@@ -859,7 +877,7 @@ Still forbidden:
 final model-quality claim
 full predictability claim
 low-budget robustness claim
-coverage-grid claim
+workload-profile grid claim
 ```
 
 If this level fails because of generator exhaustion, too few accepted queries, signature drift, or tiny learned-slot counts, do not tune the model. Increase scale or fix the workload profile first.
@@ -882,7 +900,7 @@ accepted queries:     32-64
 train replicates:     4-8
 epochs:               5-10
 compression:          5%
-coverage:             10% or 15%
+workload profile:     one final profile, usually range_workload_v1_local or range_workload_v1
 acceptance attempts:  30,000-60,000
 ```
 
@@ -928,7 +946,7 @@ accepted queries:         64-128 per workload
 train replicates:         4-8
 epochs:                   5-10
 compression:              5%
-coverage:                 10% or 15%
+workload profile:         one final profile, usually range_workload_v1_local or range_workload_v1
 ```
 
 Required evidence:
@@ -961,7 +979,7 @@ Recommended scale:
 ```text
 seeds:                    3-5
 real train/eval splits:    2-4 when data is available
-coverage targets:          at least 10% and 15%
+workload profiles:         at least range_workload_v1_local and range_workload_v1
 compression ratios:        at least 2%, 5%, and 10%
 accepted queries:          64-128 per workload
 train replicates:          4-8
@@ -996,7 +1014,8 @@ final acceptance
 Required grid:
 
 ```text
-coverage targets:     5%, 10%, 15%, 30%
+workload profiles:    range_workload_v1_focused, range_workload_v1_local,
+                      range_workload_v1_operational, range_workload_v1
 compression ratios:   1%, 2%, 5%, 10%, 15%, 20%, 30%
 cells:                28
 ```
@@ -1058,6 +1077,11 @@ production-like caps/workload shape where runtime permits
 clearly marked exploratory output directory and report labels
 ```
 
+Before running a pre-gate benchmark snapshot, record the exact question it is
+meant to answer and why the next smaller evidence level cannot answer it. After
+the run, log the failed child gates first; do not summarize the snapshot as a
+candidate-quality result.
+
 Allowed conclusions:
 
 ```text
@@ -1077,16 +1101,55 @@ gate success by visual inspection or encouraging partial numbers
 
 Do not run these slices or snapshots repeatedly to search for a lucky result, compensate for failed causality/support/workload gates, or justify loosening thresholds. If the result is interesting but child gates still fail, diagnose the failed gates before changing code.
 
+### Precision and runtime diagnostics
+
+It is worth testing precision/runtime configurations occasionally, but only after
+the candidate is coherent enough that runtime and numerical stability matter.
+Treat TF32, AMP FP16, and AMP BF16 comparisons as engineering diagnostics, not
+as model-quality experiments.
+
+Use precision sweeps to answer concrete questions:
+
+```text
+does TF32/BF16/FP16 materially reduce runtime or memory?
+does a precision mode flip any strict gate or child gate?
+are retained masks and QueryUsefulV1 stable under the same seed/config/data?
+does the artifact report enough torch-runtime metadata to reproduce the result?
+```
+
+Required protocol:
+
+```text
+change only precision/runtime knobs
+use the same candidate, seeds, data split, query scale, and caps
+record float32_matmul_precision, allow_tf32, amp_mode, and child torch_runtime
+compare against an FP32/highest-precision control artifact
+reject any mode that flips a gate or causes material metric drift
+```
+
+Do not use precision changes to tune selector behavior, compensate for weak
+learning, or claim success from a candidate that fails the standard evidence
+ladder. If precision affects quality, treat that as a numerical-stability bug or
+hardware-specific diagnostic until reproduced under the normal gates.
+
 ---
 
 ## 11. Full final grid requirements
 
 Run the full final grid only after a strict single-cell probe passes.
 
-Coverage targets:
+The exploratory pre-gate snapshot exception in Section 10 is not a final-grid
+run, even if it uses the same 4x7 shape. Keep that output under exploratory
+labels, report failed child gates first, and exclude it from acceptance claims,
+current-best evidence boundaries, and final comparison tables.
+
+Workload profiles:
 
 ```text
-0.05, 0.10, 0.15, 0.30
+range_workload_v1_focused
+range_workload_v1_local
+range_workload_v1_operational
+range_workload_v1
 ```
 
 Compression ratios:
@@ -1098,7 +1161,7 @@ Compression ratios:
 Required cells:
 
 ```text
-4 coverage targets × 7 compression ratios = 28 cells
+4 workload profiles × 7 compression ratios = 28 cells
 ```
 
 ### Numeric success bars
@@ -1115,7 +1178,7 @@ MLQDS beats uniform in at least 3 / 4 matched 5% compression cells
 Low-budget cells are:
 
 ```text
-compression ratios 0.01, 0.02, 0.05 across all 4 coverage targets
+compression ratios 0.01, 0.02, 0.05 across all 4 workload profiles
 ```
 
 These thresholds are a practical minimum for claiming “most grid cells” without requiring impossible perfection. If the project later demands a stricter standard, raise these thresholds, do not lower them to fit weak results.
@@ -1172,11 +1235,11 @@ Use range_workload_v1.
 Use profile_sampled_query_count.
 Use final gate mode for any acceptance evidence.
 Use 4-8 train workload replicates.
-Use strict overshoot tolerance by coverage:
-  5%  -> 0.005
-  10% -> 0.0075
-  15% -> 0.010
-  30% -> 0.020
+Use workload-profile defaults unless a diagnostic explicitly overrides them:
+  range_workload_v1_focused     -> target_coverage 0.05, overshoot 0.005
+  range_workload_v1_local       -> target_coverage 0.10, overshoot 0.0075
+  range_workload_v1_operational -> target_coverage 0.15, overshoot 0.010
+  range_workload_v1             -> target_coverage 0.30, overshoot 0.020
 ```
 
 Recommended query scale by evidence level:
@@ -1187,7 +1250,7 @@ minimum strict diagnostic:         16-32 accepted queries
 standard strict diagnostic:        32-64 accepted queries
 real AIS single-cell evidence:     64-128 accepted queries
 multi-seed confirmation:           64-128 accepted queries
-final grid:                        64-256 accepted queries where data/runtime permits
+final grid:                        64-256 accepted queries where data_preparation/runtime permits
 ```
 
 A run with only 8 accepted queries can verify gates exist. It should not be used to claim workload stability or model learning.
@@ -1490,7 +1553,7 @@ Use the standard strict diagnostic scale unless runtime makes it impossible. A s
 Recommended command shape:
 
 ```bash
-uv run --group dev -- python -m orchestration.run_ais_experiment \
+uv run --group dev -- python -m orchestration.train_and_score \
   --results_dir Range_QDS/artifacts/results/query_driven_v2_checkpoint01_generator_health_probe_standard_c10_r05 \
   --n_ships 64 \
   --n_points 256 \
@@ -1652,7 +1715,8 @@ global sanity passes
 Goal:
 
 ```text
-Run the 4x7 grid only after a strict real-AIS single-cell passes.
+Run the 4 workload-profile × 7 compression grid only after a strict real-AIS
+single-cell passes.
 ```
 
 Pass condition:
@@ -1740,7 +1804,7 @@ Keep the progress log short. Detailed stdout and raw metrics belong in artifacts
 The redesign is complete only when:
 
 ```text
-1. the full 4x7 grid is present
+1. the full workload-profile/compression grid is present
 2. QueryUsefulV1 final-grid numeric success bars pass
 3. all child gates pass
 4. workload-blind protocol flags prove no eval query leakage

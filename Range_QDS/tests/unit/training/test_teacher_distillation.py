@@ -6,11 +6,11 @@ import torch
 
 from config.experiment_config import ModelConfig
 from models.trajectory_qds_model import TrajectoryQDSModel
-from queries.query_types import pad_query_features
-from queries.workload import TypedQueryWorkload
 from training.scaler import FeatureScaler
 from training.teacher_distillation import build_range_teacher_config, distill_range_teacher_labels
 from training.training_outputs import TrainingOutputs
+from workloads.query_types import pad_query_features
+from workloads.typed_workload import TypedQueryWorkload
 
 
 def _toy_points() -> torch.Tensor:

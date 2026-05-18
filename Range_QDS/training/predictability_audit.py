@@ -556,7 +556,7 @@ def query_prior_predictability_audit(
     return {
         "schema_version": PREDICTABILITY_AUDIT_SCHEMA_VERSION,
         "available": True,
-        "evaluation_stage": "after_masks_frozen_diagnostic_only",
+        "scoring_stage": "after_masks_frozen_diagnostic_only",
         "score_source": "train_query_prior_fields",
         "target_source": "heldout_eval_query_useful_v1_targets",
         "score_formula": "query_mass_gated_behavior_boundary",
