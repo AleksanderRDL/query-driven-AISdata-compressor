@@ -30,6 +30,7 @@ from learning.model_setup import _pure_query_type_id
 from learning.scaler import FeatureScaler
 from learning.targets.query_useful_v1 import (
     QUERY_USEFUL_V1_HEAD_NAMES,
+    QUERY_USEFUL_V1_TARGET_MODES,
     build_query_useful_v1_targets,
 )
 from runtime.torch_runtime import normalize_amp_mode
@@ -276,6 +277,7 @@ def _validation_factorized_target_fit_metrics(
     boundaries: list[tuple[int, int]],
     workload: TypedQueryWorkload,
     segment_size: int = 32,
+    target_mode: str = "query_useful_v1_factorized",
 ) -> dict[str, float]:
     """Return validation target-fit diagnostics for factorized heads without affecting selection."""
     metrics: dict[str, float] = {
@@ -292,6 +294,11 @@ def _validation_factorized_target_fit_metrics(
         boundaries=boundaries,
         typed_queries=workload.typed_queries,
         segment_size=segment_size,
+        target_mode=(
+            str(target_mode).lower()
+            if str(target_mode).lower() in QUERY_USEFUL_V1_TARGET_MODES
+            else "query_useful_v1_factorized"
+        ),
     )
     if targets.head_targets.shape != logits.shape or targets.head_mask.shape != logits.shape:
         return metrics
@@ -676,6 +683,7 @@ def _validation_checkpoint_scores(
         points=points,
         boundaries=boundaries,
         workload=workload,
+        target_mode=str(getattr(model_config, "range_training_target_mode", "")),
     )
     segment_scores = _validation_selector_segment_scores(
         segment_scores=segment_budget_scores,

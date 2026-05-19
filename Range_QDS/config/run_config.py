@@ -11,6 +11,7 @@ from selection.learned_segment_budget.constants import (
     SEGMENT_ALLOCATION_WEIGHT_FLOOR,
     SEGMENT_LENGTH_SUPPORT_ALLOCATION_WEIGHT,
     SEGMENT_SCORE_POINT_BLEND_WEIGHT,
+    SEGMENT_TRANSFER_CALIBRATION_MODE_NONE,
 )
 from selection.selector_types import TEMPORAL_HYBRID_SELECTOR_TYPE
 
@@ -23,6 +24,7 @@ DEFAULT_LEARNED_SEGMENT_ALLOCATION_LENGTH_SUPPORT_WEIGHT = (
 )
 DEFAULT_LEARNED_SEGMENT_ALLOCATION_WEIGHT_FLOOR = SEGMENT_ALLOCATION_WEIGHT_FLOOR
 DEFAULT_LEARNED_SEGMENT_SCORE_BLEND_WEIGHT = SEGMENT_SCORE_POINT_BLEND_WEIGHT
+DEFAULT_LEARNED_SEGMENT_TRANSFER_CALIBRATION_MODE = SEGMENT_TRANSFER_CALIBRATION_MODE_NONE
 DEFAULT_VALIDATION_GLOBAL_SANITY_PENALTY_WEIGHT = 0.10
 DEFAULT_VALIDATION_SED_PENALTY_WEIGHT = 0.05
 DEFAULT_VALIDATION_ENDPOINT_PENALTY_WEIGHT = 0.10
@@ -199,6 +201,9 @@ class ModelConfig:
         DEFAULT_LEARNED_SEGMENT_ALLOCATION_WEIGHT_FLOOR
     )
     learned_segment_score_blend_weight: float = DEFAULT_LEARNED_SEGMENT_SCORE_BLEND_WEIGHT
+    learned_segment_transfer_calibration_mode: str = (
+        DEFAULT_LEARNED_SEGMENT_TRANSFER_CALIBRATION_MODE
+    )
     learned_segment_fairness_preallocation: bool = True
     learned_segment_length_repair_fraction: float = 0.0
     learned_segment_length_repair_score_protection_fraction: float = 0.0
@@ -417,6 +422,9 @@ def build_run_config(
         DEFAULT_LEARNED_SEGMENT_ALLOCATION_WEIGHT_FLOOR
     ),
     learned_segment_score_blend_weight: float = DEFAULT_LEARNED_SEGMENT_SCORE_BLEND_WEIGHT,
+    learned_segment_transfer_calibration_mode: str = (
+        DEFAULT_LEARNED_SEGMENT_TRANSFER_CALIBRATION_MODE
+    ),
     learned_segment_fairness_preallocation: bool = True,
     learned_segment_length_repair_fraction: float = 0.0,
     learned_segment_length_repair_score_protection_fraction: float = 0.0,
@@ -588,6 +596,9 @@ def build_run_config(
             ),
             learned_segment_allocation_weight_floor=learned_segment_allocation_weight_floor,
             learned_segment_score_blend_weight=learned_segment_score_blend_weight,
+            learned_segment_transfer_calibration_mode=(
+                learned_segment_transfer_calibration_mode
+            ),
             learned_segment_fairness_preallocation=learned_segment_fairness_preallocation,
             learned_segment_length_repair_fraction=learned_segment_length_repair_fraction,
             learned_segment_length_repair_score_protection_fraction=(

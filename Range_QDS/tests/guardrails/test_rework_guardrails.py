@@ -23,7 +23,11 @@ from benchmarking.profiles import (
 from benchmarking.reporting.row_fields import _row_from_run
 from learning.model_features import model_type_metadata
 from learning.targets.modes import SCALAR_RANGE_TARGET_MODES
-from learning.targets.query_useful_v1 import QUERY_USEFUL_V1_TARGET_MODES
+from learning.targets.query_useful_v1 import (
+    QUERY_USEFUL_V1_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE,
+    QUERY_USEFUL_V1_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE,
+    QUERY_USEFUL_V1_TARGET_MODES,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -152,7 +156,18 @@ def test_scalar_and_query_useful_target_modes_are_separated() -> None:
     assert "retained_frequency" in SCALAR_RANGE_TARGET_MODES
     assert "historical_prior_retained_frequency" in SCALAR_RANGE_TARGET_MODES
     assert "query_useful_v1_factorized" not in SCALAR_RANGE_TARGET_MODES
-    assert QUERY_USEFUL_V1_TARGET_MODES == frozenset({"query_useful_v1_factorized"})
+    assert (
+        QUERY_USEFUL_V1_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE
+        not in SCALAR_RANGE_TARGET_MODES
+    )
+    assert QUERY_USEFUL_V1_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE not in SCALAR_RANGE_TARGET_MODES
+    assert QUERY_USEFUL_V1_TARGET_MODES == frozenset(
+        {
+            "query_useful_v1_factorized",
+            QUERY_USEFUL_V1_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE,
+            QUERY_USEFUL_V1_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE,
+        }
+    )
 
 
 def test_historical_prior_metadata_blocks_success() -> None:

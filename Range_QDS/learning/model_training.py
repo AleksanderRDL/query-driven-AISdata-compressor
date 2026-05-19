@@ -68,6 +68,7 @@ from learning.targets.common import (
 from learning.targets.query_useful_v1 import (
     QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE,
     QUERY_USEFUL_V1_HEAD_NAMES,
+    QUERY_USEFUL_V1_TARGET_MODES,
     build_query_useful_v1_targets,
 )
 from learning.trajectory_batching import batch_windows, build_trajectory_windows
@@ -172,7 +173,7 @@ def _scalar_training_target_for_mode(
 ) -> tuple[torch.Tensor, str]:
     """Return the scalar target used by the primary loss and its diagnostic basis."""
     mode = str(range_training_target_mode).lower()
-    if mode == QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE:
+    if mode in QUERY_USEFUL_V1_TARGET_MODES:
         return labels[:, int(workload_type_id)].clone().float().clamp(0.0, 1.0), (
             "raw_query_useful_v1_final_label_for_loss"
         )
@@ -233,11 +234,12 @@ def train_model(
     range_training_target_mode = str(
         getattr(model_config, "range_training_target_mode", "")
     ).lower()
-    if range_training_target_mode == QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE:
+    if range_training_target_mode in QUERY_USEFUL_V1_TARGET_MODES:
         factorized_bundle = build_query_useful_v1_targets(
             points=all_points,
             boundaries=train_boundaries,
             typed_queries=prior_queries,
+            target_mode=range_training_target_mode,
         )
         labels = factorized_bundle.labels
         labelled_mask = factorized_bundle.labelled_mask
@@ -1284,6 +1286,9 @@ def train_model(
                 head_logits=train_head_logits,
                 factorized_targets=factorized_targets,
                 factorized_mask=factorized_mask,
+                points=all_points,
+                boundaries=train_boundaries,
+                typed_queries=prior_queries,
                 seed=seed,
             )
         )

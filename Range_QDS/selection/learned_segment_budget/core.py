@@ -9,6 +9,7 @@ import torch
 
 from selection.learned_segment_budget.allocation import (
     _allocate_segment_budgets,
+    _apply_segment_transfer_calibration,
     _max_skeleton_fraction,
     _segment_rows,
     _segment_score_stats,
@@ -21,6 +22,8 @@ from selection.learned_segment_budget.constants import (
     SEGMENT_ALLOCATION_WEIGHT_FLOOR,
     SEGMENT_LENGTH_SUPPORT_ALLOCATION_WEIGHT,
     SEGMENT_SCORE_POINT_BLEND_WEIGHT,
+    SEGMENT_TRANSFER_CALIBRATION_MODE_CHOICES,
+    SEGMENT_TRANSFER_CALIBRATION_MODE_NONE,
 )
 from selection.learned_segment_budget.diagnostics import (
     _allocation_counterfactual_diagnostics,
@@ -42,6 +45,8 @@ __all__ = [
     "SEGMENT_ALLOCATION_WEIGHT_FLOOR",
     "SEGMENT_LENGTH_SUPPORT_ALLOCATION_WEIGHT",
     "SEGMENT_SCORE_POINT_BLEND_WEIGHT",
+    "SEGMENT_TRANSFER_CALIBRATION_MODE_CHOICES",
+    "SEGMENT_TRANSFER_CALIBRATION_MODE_NONE",
     "blend_segment_support_scores",
     "learned_segment_budget_diagnostics",
     "simplify_with_learned_segment_budget_v1",
@@ -86,6 +91,7 @@ def simplify_with_learned_segment_budget_v1_with_trace(
     segment_length_support_weight: float = SEGMENT_LENGTH_SUPPORT_ALLOCATION_WEIGHT,
     segment_allocation_weight_floor: float = SEGMENT_ALLOCATION_WEIGHT_FLOOR,
     segment_score_point_blend_weight: float = SEGMENT_SCORE_POINT_BLEND_WEIGHT,
+    segment_transfer_calibration_mode: str = SEGMENT_TRANSFER_CALIBRATION_MODE_NONE,
     fairness_preallocation_enabled: bool = True,
     length_repair_fraction: float = 0.0,
     length_repair_score_protection_fraction: float = 0.0,
@@ -120,6 +126,15 @@ def simplify_with_learned_segment_budget_v1_with_trace(
             segment_length_support_weight=segment_length_support_weight,
             segment_allocation_weight_floor=segment_allocation_weight_floor,
             segment_score_point_blend_weight=segment_score_point_blend_weight,
+            segment_transfer_calibration_summary={
+                "mode": SEGMENT_TRANSFER_CALIBRATION_MODE_NONE,
+                "applied": False,
+                "reason": "no_points",
+                "uses_post_selection_attribution": False,
+                "uses_length_support_counter_signal": False,
+                "base_segment_length_support_weight": float(segment_length_support_weight),
+                "effective_segment_length_support_weight": float(segment_length_support_weight),
+            },
             length_repair_fraction=0.0,
             length_repair_score_protection_fraction=0.0,
             length_repair_swap_count=0,
@@ -185,6 +200,15 @@ def simplify_with_learned_segment_budget_v1_with_trace(
             segment_length_support_weight=segment_length_support_weight,
             segment_allocation_weight_floor=segment_allocation_weight_floor,
             segment_score_point_blend_weight=segment_score_point_blend_weight,
+            segment_transfer_calibration_summary={
+                "mode": str(segment_transfer_calibration_mode).lower(),
+                "applied": False,
+                "reason": "no_learned_slots",
+                "uses_post_selection_attribution": False,
+                "uses_length_support_counter_signal": False,
+                "base_segment_length_support_weight": float(segment_length_support_weight),
+                "effective_segment_length_support_weight": float(segment_length_support_weight),
+            },
             length_repair_fraction=0.0,
             length_repair_score_protection_fraction=0.0,
             length_repair_swap_count=0,
@@ -219,6 +243,22 @@ def simplify_with_learned_segment_budget_v1_with_trace(
         if segment_scores is not None
         else "point_score_top20_mean"
     )
+    effective_segment_length_support_weight = (
+        float(segment_length_support_weight) if points is not None else 0.0
+    )
+    segment_transfer_calibration_summary, effective_segment_length_support_weight = (
+        _apply_segment_transfer_calibration(
+            segment_rows,
+            mode=segment_transfer_calibration_mode,
+            segment_length_support_weight=effective_segment_length_support_weight,
+            segment_allocation_weight_floor=float(segment_allocation_weight_floor),
+        )
+    )
+    if bool(segment_transfer_calibration_summary.get("applied", False)):
+        segment_rows.sort(key=lambda row: (float(row["score"]), -int(row["start"])), reverse=True)
+        segment_score_source = (
+            f"{segment_score_source}+{segment_transfer_calibration_summary['mode']}"
+        )
     segment_score_stats = _segment_score_stats(segment_rows)
     segment_allocations = _allocate_segment_budgets(
         segment_rows=segment_rows,
@@ -228,9 +268,7 @@ def simplify_with_learned_segment_budget_v1_with_trace(
         boundaries=boundaries,
         max_budget_share_per_trajectory=max_budget_share_per_trajectory,
         fairness_preallocation_enabled=fairness_preallocation_enabled,
-        segment_length_support_weight=(
-            float(segment_length_support_weight) if points is not None else 0.0
-        ),
+        segment_length_support_weight=effective_segment_length_support_weight,
         segment_allocation_weight_floor=float(segment_allocation_weight_floor),
     )
     skeleton_retained_for_diagnostic = retained.detach().cpu().bool().clone()
@@ -377,10 +415,11 @@ def simplify_with_learned_segment_budget_v1_with_trace(
         fairness_preallocation_enabled=fairness_preallocation_enabled,
         geometry_gain_weight=geometry_gain_weight,
         segment_length_support_weight=(
-            float(segment_length_support_weight) if points is not None else 0.0
+            effective_segment_length_support_weight
         ),
         segment_allocation_weight_floor=float(segment_allocation_weight_floor),
         segment_score_point_blend_weight=segment_score_point_blend_weight,
+        segment_transfer_calibration_summary=segment_transfer_calibration_summary,
         length_repair_fraction=float(length_repair_fraction),
         length_repair_score_protection_fraction=float(length_repair_score_protection_fraction),
         length_repair_swap_count=length_repair_swap_count,
@@ -409,6 +448,7 @@ def simplify_with_learned_segment_budget_v1(
     segment_length_support_weight: float = SEGMENT_LENGTH_SUPPORT_ALLOCATION_WEIGHT,
     segment_allocation_weight_floor: float = SEGMENT_ALLOCATION_WEIGHT_FLOOR,
     segment_score_point_blend_weight: float = SEGMENT_SCORE_POINT_BLEND_WEIGHT,
+    segment_transfer_calibration_mode: str = SEGMENT_TRANSFER_CALIBRATION_MODE_NONE,
     fairness_preallocation_enabled: bool = True,
     length_repair_fraction: float = 0.0,
     length_repair_score_protection_fraction: float = 0.0,
@@ -429,6 +469,7 @@ def simplify_with_learned_segment_budget_v1(
         segment_length_support_weight=segment_length_support_weight,
         segment_allocation_weight_floor=segment_allocation_weight_floor,
         segment_score_point_blend_weight=segment_score_point_blend_weight,
+        segment_transfer_calibration_mode=segment_transfer_calibration_mode,
         fairness_preallocation_enabled=fairness_preallocation_enabled,
         length_repair_fraction=length_repair_fraction,
         length_repair_score_protection_fraction=length_repair_score_protection_fraction,

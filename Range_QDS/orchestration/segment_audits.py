@@ -10,6 +10,7 @@ import torch
 from learning.targets.query_useful_v1 import (
     QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE,
     QUERY_USEFUL_V1_HEAD_NAMES,
+    QUERY_USEFUL_V1_TARGET_MODES,
     build_query_useful_v1_targets,
 )
 from selection.model_score_conversion import workload_type_head
@@ -477,6 +478,7 @@ def target_segment_oracle_alignment_audit(
     workload_type: str,
     retained_mask: torch.Tensor | None = None,
     segment_size: int = 32,
+    target_mode: str = QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE,
     paired_row_limit: int = 16,
 ) -> dict[str, Any]:
     """Compare eval QueryUsefulV1 target heads with eval-only oracle segment mass after mask freeze."""
@@ -490,6 +492,11 @@ def target_segment_oracle_alignment_audit(
         boundaries=boundaries,
         typed_queries=typed_queries,
         segment_size=segment_size,
+        target_mode=(
+            str(target_mode).lower()
+            if str(target_mode).lower() in QUERY_USEFUL_V1_TARGET_MODES
+            else QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE
+        ),
     )
     final_target = targets.labels[:, int(type_id)].detach().cpu().float()
     head_targets = targets.head_targets.detach().cpu().float()

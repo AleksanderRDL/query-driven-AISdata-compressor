@@ -58,8 +58,12 @@ from learning.query_prior_fields import (
     zero_query_prior_field_like,
 )
 from learning.targets.query_useful_v1 import (
+    QUERY_USEFUL_V1_FINAL_LABEL_FORMULA,
     QUERY_USEFUL_V1_HEAD_NAMES,
+    QUERY_USEFUL_V1_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE,
+    QUERY_USEFUL_V1_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE,
     build_query_useful_v1_targets,
+    query_useful_v1_point_score,
 )
 from models.workload_blind_range_v2 import WorkloadBlindRangeV2Model
 from orchestration.causality import (
@@ -81,6 +85,9 @@ from orchestration.causality import (
     score_ablation_sensitivity,
     training_outputs_with_query_prior_field,
 )
+from orchestration.family_transfer_path_diagnostic import (
+    build_family_transfer_path_diagnostic,
+)
 from orchestration.final_gate_summary import build_final_run_summaries
 from orchestration.gates import (
     evaluate_global_sanity_gate,
@@ -94,6 +101,12 @@ from orchestration.length_diagnostics import (
     score_protected_length_frontier,
 )
 from orchestration.model_ablations import reset_module_parameters
+from orchestration.query_ship_local_heads_failure_diagnostic import (
+    build_query_ship_local_heads_failure_diagnostic,
+)
+from orchestration.query_ship_max_pool_transfer_diagnostic import (
+    build_query_ship_max_pool_transfer_diagnostic,
+)
 from orchestration.range_diagnostics import range_workload_distribution_comparison
 from orchestration.segment_audits import (
     factorized_head_probability_sources_from_logits,
@@ -101,14 +114,32 @@ from orchestration.segment_audits import (
     target_segment_oracle_alignment_audit,
 )
 from orchestration.selection_causality_diagnostics import build_selection_causality_diagnostics
+from orchestration.selection_eval_segment_teacher_transfer_diagnostic import (
+    build_selection_eval_segment_teacher_transfer_diagnostic,
+)
+from orchestration.selection_marginal_segment_calibration_diagnostic import (
+    build_selection_marginal_segment_calibration_diagnostic,
+)
+from orchestration.selection_segment_transfer_feature_admissibility_diagnostic import (
+    build_selection_segment_transfer_feature_admissibility_diagnostic,
+)
 from orchestration.selector_diagnostics import (
+    _separated_marginal_teacher_targets,
+    hybrid_marginal_teacher_selector_score_vectors,
     learned_segment_frozen_method,
     neutral_segment_scores_for_ablation,
     pre_repair_frozen_method_from_trace,
     retained_decision_marginal_query_useful_diagnostics,
     segment_score_quantile_bands_for_ablation,
     segment_score_top_band_for_ablation,
+    separated_marginal_teacher_selector_score_vectors,
     source_masks_from_selector_trace,
+)
+from orchestration.selector_marginal_calibration_diagnostic import (
+    build_selector_marginal_calibration_diagnostic,
+)
+from orchestration.workload_component_compatibility import (
+    build_workload_component_compatibility_diagnostic,
 )
 from scoring.geometry_thresholds import (
     FINAL_LENGTH_PRESERVATION_MIN,
@@ -542,7 +573,7 @@ def test_factorized_replacement_target_is_query_local_and_final_label_keeps_quer
     )
     assert (
         targets.diagnostics["final_label_formula"]
-        == "query_hit_times_behavior_with_conditional_replacement_modulation_plus_boundary"
+        == QUERY_USEFUL_V1_FINAL_LABEL_FORMULA
     )
 
 
@@ -563,6 +594,10 @@ def test_conditional_behavior_target_is_masked_to_query_hits() -> None:
             "lat_max": 3.0,
             "lon_min": -1.0,
             "lon_max": 1.0,
+        },
+        "_metadata": {
+            "anchor_family": "density_route",
+            "footprint_family": "small_local",
         },
     }
 
@@ -608,6 +643,10 @@ def test_path_length_support_target_is_query_free_segment_geometry() -> None:
             "lat_max": 7.5,
             "lon_min": -1.0,
             "lon_max": 1.0,
+        },
+        "_metadata": {
+            "anchor_family": "density_route",
+            "footprint_family": "small_local",
         },
     }
 
@@ -655,6 +694,10 @@ def test_conditional_behavior_target_alignment_diagnostics_report_final_mass_rec
             "lon_min": -1.0,
             "lon_max": 1.0,
         },
+        "_metadata": {
+            "anchor_family": "density_route",
+            "footprint_family": "small_local",
+        },
     }
 
     targets = build_query_useful_v1_targets(
@@ -692,6 +735,1619 @@ def test_conditional_behavior_target_alignment_diagnostics_report_final_mass_rec
     assert current["ship_query_topk_selected_point_count"] == 1
     assert current["ship_query_pair_coverage_at_topk"] == 0.5
     assert "topk_ship_query_evidence_mass_recall_ranked_by_behavior" in replacement_gated
+
+    ship_alignment = targets.diagnostics["ship_query_evidence_target_alignment"]
+    assert ship_alignment["available"] is True
+    assert ship_alignment["diagnostic_only"] is True
+    assert ship_alignment["reference"] == "ship_query_evidence"
+    assert ship_alignment["valid_point_count"] == 10
+    assert ship_alignment["reference_positive_point_count"] == 10
+    assert ship_alignment["reference_mass"] == pytest.approx(2.0)
+    assert set(ship_alignment["rankers"]) == {
+        "final_score",
+        "query_hit_probability",
+        "conditional_behavior_utility",
+        "boundary_event_utility",
+        "replacement_representative_value",
+        "segment_budget_target",
+        "path_length_support_target",
+    }
+    final_alignment = ship_alignment["rankers"]["final_score"]
+    assert "spearman_with_ship_query_evidence" in final_alignment
+    assert final_alignment["topk_ship_query_evidence_mass_recall"] > 0.0
+    assert final_alignment["ship_query_pair_count"] == 2
+    segment_candidates = targets.diagnostics["segment_budget_ship_presence_candidate_alignment"]
+    assert segment_candidates["available"] is True
+    assert segment_candidates["diagnostic_only"] is True
+    assert segment_candidates["active_training_target_unchanged"] is True
+    assert set(segment_candidates["candidates"]) == {
+        "active_segment_budget_target",
+        "ship_presence_segment_budget_candidate",
+        "final_score_ship_presence_blend_segment_budget_candidate",
+        "query_hit_ship_presence_blend_segment_budget_candidate",
+    }
+    family_trainability = targets.diagnostics["family_conditioned_target_trainability"]
+    assert family_trainability["available"] is True
+    assert family_trainability["diagnostic_only"] is True
+    density_row = family_trainability["group_by"]["anchor_family"]["density_route"]
+    small_local_row = family_trainability["group_by"]["footprint_family"]["small_local"]
+    assert density_row["focus_family"] is True
+    assert density_row["query_count"] == 1
+    assert density_row["valid_hit_point_count"] == 10
+    assert "segment_budget_target" in density_row["ranker_alignment"]
+    assert small_local_row["focus_family"] is True
+    family_candidates = targets.diagnostics["family_local_target_candidate_alignment"]
+    assert family_candidates["available"] is True
+    assert family_candidates["diagnostic_only"] is True
+    assert family_candidates["active_training_target_unchanged"] is True
+    candidate_row = family_candidates["group_by"]["footprint_family"]["small_local"]
+    assert candidate_row["focus_family"] is True
+    assert set(candidate_row["candidate_alignment"]) == {
+        "family_query_hit_ship_blend_candidate",
+        "family_ship_gated_behavior_candidate",
+        "family_boundary_replacement_ship_score_candidate",
+        "family_local_composed_score_candidate",
+        "family_local_segment_budget_candidate",
+        "family_query_hit_ship_segment_top20_mean_candidate",
+        "family_query_hit_ship_segment_max_candidate",
+        "family_composed_segment_top20_mean_candidate",
+        "family_ship_query_pair_fractional_segment_candidate",
+    }
+    assert "active_final_score" in candidate_row["active_baseline_alignment"]
+    segment_top20 = candidate_row["candidate_alignment"][
+        "family_query_hit_ship_segment_top20_mean_candidate"
+    ]
+    assert segment_top20["two_stage_point_ranker"] == "family_query_hit_ship_blend_candidate"
+    assert "two_stage_ship_query_pair_coverage" in segment_top20
+
+
+def test_ship_presence_segment_budget_candidate_improves_ship_evidence_alignment() -> None:
+    points = torch.zeros((8, 8), dtype=torch.float32)
+    points[:, 0] = torch.arange(8, dtype=torch.float32)
+    points[:, 1] = torch.arange(8, dtype=torch.float32) * 0.01
+    points[:, 2] = 0.0
+    points[:6, 7] = 1.0
+    points[6:, 7] = 0.0
+    query = {
+        "type": "range",
+        "params": {
+            "t_start": -1.0,
+            "t_end": 8.0,
+            "lat_min": -1.0,
+            "lat_max": 1.0,
+            "lon_min": -1.0,
+            "lon_max": 1.0,
+        },
+    }
+
+    targets = build_query_useful_v1_targets(
+        points=points,
+        boundaries=[(0, 6), (6, 8)],
+        typed_queries=[query],
+        segment_size=2,
+    )
+
+    candidates = targets.diagnostics["segment_budget_ship_presence_candidate_alignment"][
+        "candidates"
+    ]
+    active = candidates["active_segment_budget_target"]
+    ship_presence = candidates["ship_presence_segment_budget_candidate"]
+    query_hit_blend = candidates["query_hit_ship_presence_blend_segment_budget_candidate"]
+
+    assert ship_presence["spearman_with_ship_query_evidence"] > active[
+        "spearman_with_ship_query_evidence"
+    ]
+    assert ship_presence["topk_ship_query_evidence_mass_recall"] == pytest.approx(1.0)
+    assert ship_presence["ship_query_pair_coverage_at_topk"] == pytest.approx(0.5)
+    assert query_hit_blend["spearman_with_ship_query_evidence"] > active[
+        "spearman_with_ship_query_evidence"
+    ]
+
+
+def test_family_local_target_candidate_improves_small_local_ship_evidence_signal() -> None:
+    points = torch.zeros((8, 8), dtype=torch.float32)
+    points[:, 0] = torch.arange(8, dtype=torch.float32)
+    points[:, 1] = torch.arange(8, dtype=torch.float32) * 0.01
+    points[:, 2] = 0.0
+    points[:6, 7] = 1.0
+    points[6:, 7] = 0.0
+    query = {
+        "type": "range",
+        "params": {
+            "t_start": -1.0,
+            "t_end": 8.0,
+            "lat_min": -1.0,
+            "lat_max": 1.0,
+            "lon_min": -1.0,
+            "lon_max": 1.0,
+        },
+        "_metadata": {
+            "anchor_family": "density_route",
+            "footprint_family": "small_local",
+        },
+    }
+
+    targets = build_query_useful_v1_targets(
+        points=points,
+        boundaries=[(0, 6), (6, 8)],
+        typed_queries=[query],
+        segment_size=2,
+    )
+
+    family_candidates = targets.diagnostics["family_local_target_candidate_alignment"]
+    small_local = family_candidates["group_by"]["footprint_family"]["small_local"]
+    active_final = small_local["active_baseline_alignment"]["active_final_score"]
+    query_hit_candidate = small_local["candidate_alignment"][
+        "family_query_hit_ship_blend_candidate"
+    ]
+    composed_candidate = small_local["candidate_alignment"]["family_local_composed_score_candidate"]
+    segment_top20 = small_local["candidate_alignment"][
+        "family_query_hit_ship_segment_top20_mean_candidate"
+    ]
+    segment_sum = small_local["candidate_alignment"]["family_local_segment_budget_candidate"]
+
+    assert family_candidates["candidate_usage"] == (
+        "diagnostic_only_family_local_not_training_semantics"
+    )
+    assert small_local["candidate_signal_status"] == (
+        "diagnostic_candidate_improves_family_ship_signal"
+    )
+    assert query_hit_candidate["spearman_with_ship_query_evidence"] > active_final[
+        "spearman_with_ship_query_evidence"
+    ]
+    assert composed_candidate["spearman_with_ship_query_evidence"] > active_final[
+        "spearman_with_ship_query_evidence"
+    ]
+    assert "topk_active_final_score_mass_recall" in composed_candidate
+    assert segment_top20["two_stage_ship_query_pair_coverage"] >= segment_sum[
+        "two_stage_ship_query_pair_coverage"
+    ]
+    assert segment_top20["two_stage_selected_point_count"] == segment_sum[
+        "two_stage_selected_point_count"
+    ]
+
+
+def test_query_ship_max_pool_target_mode_only_changes_segment_budget_head() -> None:
+    points = torch.zeros((8, 8), dtype=torch.float32)
+    points[:, 0] = torch.arange(8, dtype=torch.float32)
+    points[:, 1] = torch.arange(8, dtype=torch.float32) * 0.01
+    points[:, 2] = 0.0
+    points[:2, 7] = 1.0
+    query = {
+        "type": "range",
+        "params": {
+            "t_start": -1.0,
+            "t_end": 6.0,
+            "lat_min": -1.0,
+            "lat_max": 1.0,
+            "lon_min": -1.0,
+            "lon_max": 1.0,
+        },
+        "_metadata": {
+            "anchor_family": "density_route",
+            "footprint_family": "small_local",
+        },
+    }
+
+    active = build_query_useful_v1_targets(
+        points=points,
+        boundaries=[(0, 6), (6, 8)],
+        typed_queries=[query],
+        segment_size=2,
+    )
+    variant = build_query_useful_v1_targets(
+        points=points,
+        boundaries=[(0, 6), (6, 8)],
+        typed_queries=[query],
+        segment_size=2,
+        target_mode=QUERY_USEFUL_V1_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE,
+    )
+
+    assert torch.allclose(active.labels, variant.labels)
+    assert torch.equal(active.labelled_mask, variant.labelled_mask)
+    assert torch.equal(active.head_mask, variant.head_mask)
+    for head_idx, head_name in enumerate(QUERY_USEFUL_V1_HEAD_NAMES):
+        active_head = active.head_targets[:, head_idx]
+        variant_head = variant.head_targets[:, head_idx]
+        if head_name == "segment_budget_target":
+            assert not torch.allclose(active_head, variant_head)
+        else:
+            assert torch.allclose(active_head, variant_head)
+
+    assert active.diagnostics["segment_budget_target_aggregation"] == "sum"
+    assert active.diagnostics["final_success_allowed"] is True
+    assert variant.diagnostics["target_mode"] == (
+        QUERY_USEFUL_V1_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE
+    )
+    assert variant.diagnostics["segment_budget_target_variant"] == "query_ship_blend_max_pool"
+    assert variant.diagnostics["segment_budget_target_aggregation"] == "max_pool"
+    assert variant.diagnostics["segment_budget_target_experimental"] is True
+    assert variant.diagnostics["final_success_allowed"] is False
+
+
+def test_query_ship_local_heads_target_mode_changes_composed_head_contract() -> None:
+    points = torch.zeros((8, 8), dtype=torch.float32)
+    points[:, 0] = torch.arange(8, dtype=torch.float32)
+    points[:, 1] = torch.arange(8, dtype=torch.float32) * 0.01
+    points[:, 2] = 0.0
+    points[:2, 7] = 1.0
+    query = {
+        "type": "range",
+        "params": {
+            "t_start": -1.0,
+            "t_end": 9.0,
+            "lat_min": -1.0,
+            "lat_max": 1.0,
+            "lon_min": -1.0,
+            "lon_max": 1.0,
+        },
+        "_metadata": {
+            "anchor_family": "crossing_turn_change",
+            "footprint_family": "small_local",
+        },
+    }
+
+    active = build_query_useful_v1_targets(
+        points=points,
+        boundaries=[(0, 6), (6, 8)],
+        typed_queries=[query],
+        segment_size=2,
+    )
+    variant = build_query_useful_v1_targets(
+        points=points,
+        boundaries=[(0, 6), (6, 8)],
+        typed_queries=[query],
+        segment_size=2,
+        target_mode=QUERY_USEFUL_V1_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE,
+    )
+
+    assert torch.equal(active.labelled_mask, variant.labelled_mask)
+    assert torch.equal(active.head_mask, variant.head_mask)
+    changed_heads = {
+        head_name
+        for head_idx, head_name in enumerate(QUERY_USEFUL_V1_HEAD_NAMES)
+        if not torch.allclose(active.head_targets[:, head_idx], variant.head_targets[:, head_idx])
+    }
+    assert changed_heads == {
+        "query_hit_probability",
+        "conditional_behavior_utility",
+        "segment_budget_target",
+    }
+    assert not torch.allclose(active.labels, variant.labels)
+    assert variant.diagnostics["target_mode"] == QUERY_USEFUL_V1_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE
+    assert variant.diagnostics["query_hit_target_variant"] == (
+        "query_ship_local_presence_utility"
+    )
+    assert variant.diagnostics["conditional_behavior_target_variant"] == (
+        "query_ship_local_behavior_utility"
+    )
+    assert variant.diagnostics["segment_budget_target_variant"] == (
+        "query_ship_local_heads_max_pool"
+    )
+    assert variant.diagnostics["segment_budget_target_aggregation"] == "max_pool"
+    assert variant.diagnostics["segment_budget_target_experimental"] is True
+    assert variant.diagnostics["final_label_variant"] == "query_ship_local_heads_composed_score"
+    assert variant.diagnostics["final_success_allowed"] is False
+
+
+def test_workload_component_compatibility_diagnostic_finds_blocking_families() -> None:
+    artifact = {
+        "matched": {
+            "MLQDS": {
+                "query_useful_v1_score": 0.16,
+                "range_audit": {
+                    "query_useful_v1_component_weights": {
+                        "ship_balanced_query_point_recall": 0.18,
+                        "query_local_interpolation_fidelity": 0.10,
+                    },
+                    "query_useful_v1_components": {
+                        "ship_balanced_query_point_recall": 0.20,
+                        "query_local_interpolation_fidelity": 0.70,
+                    },
+                    "range_query_metadata_component_summary": {
+                        "group_by": {
+                            "anchor_family": {
+                                "density_route": {
+                                    "query_useful_v1_query_local_components": {
+                                        "ship_balanced_query_point_recall": 0.20,
+                                        "query_local_interpolation_fidelity": 0.70,
+                                    }
+                                },
+                                "crossing_turn_change": {
+                                    "query_useful_v1_query_local_components": {
+                                        "ship_balanced_query_point_recall": 0.30,
+                                        "query_local_interpolation_fidelity": 0.60,
+                                    }
+                                },
+                            }
+                        }
+                    },
+                },
+            },
+            "DouglasPeucker": {
+                "query_useful_v1_score": 0.18,
+                "range_audit": {
+                    "query_useful_v1_components": {
+                        "ship_balanced_query_point_recall": 0.50,
+                        "query_local_interpolation_fidelity": 0.60,
+                    },
+                    "range_query_metadata_component_summary": {
+                        "group_by": {
+                            "anchor_family": {
+                                "density_route": {
+                                    "query_useful_v1_query_local_components": {
+                                        "ship_balanced_query_point_recall": 0.50,
+                                        "query_local_interpolation_fidelity": 0.60,
+                                    }
+                                },
+                                "crossing_turn_change": {
+                                    "query_useful_v1_query_local_components": {
+                                        "ship_balanced_query_point_recall": 0.40,
+                                        "query_local_interpolation_fidelity": 0.50,
+                                    }
+                                },
+                            }
+                        }
+                    }
+                },
+            },
+        },
+        "workload_scoring_compatibility_diagnostics": {
+            "comparisons_vs_baseline": {
+                "DouglasPeucker": {
+                    "anchor_family": {
+                        "density_route": {
+                            "query_count": 10,
+                            "query_local_score_delta": -0.02,
+                            "range_usefulness_delta": -0.03,
+                            "range_component_deltas": {"range_ship_f1": -0.20},
+                            "ship_evidence_count_deltas": {
+                                "missed_trajectory_hit_count_total": 3,
+                                "ship_presence_recall": -0.10,
+                            },
+                        },
+                        "crossing_turn_change": {
+                            "query_count": 5,
+                            "query_local_score_delta": -0.01,
+                            "range_usefulness_delta": -0.01,
+                            "range_component_deltas": {"range_ship_f1": -0.10},
+                            "ship_evidence_count_deltas": {
+                                "missed_trajectory_hit_count_total": 1,
+                                "ship_presence_recall": -0.05,
+                            },
+                        },
+                    }
+                }
+            }
+        },
+    }
+
+    diagnostic = build_workload_component_compatibility_diagnostic([("strict", artifact)])
+
+    assert diagnostic["summary"]["primary_minus_baseline_query_useful_v1"] == pytest.approx(
+        -0.02
+    )
+    blocking = diagnostic["summary"]["blocking_families"]
+    assert blocking[0]["family"] == "density_route"
+    assert blocking[0]["missed_trajectory_hit_count_delta"] == 3
+    components = diagnostic["summary"]["persistent_negative_query_local_components"]
+    assert components[0]["component"] == "ship_balanced_query_point_recall"
+    assert components[0]["negative_family_count"] == 2
+    candidate_deltas = diagnostic["summary"]["recalibration_candidate_score_deltas"]
+    assert candidate_deltas["active_component_weights"] < 0.0
+    assert (
+        candidate_deltas["query_local_sensible_component_weights_v0"]
+        > candidate_deltas["active_component_weights"]
+    )
+    assert (
+        candidate_deltas["ship_point_preserving_smooth_component_weights_v0"]
+        > candidate_deltas["active_component_weights"]
+    )
+    assert (
+        diagnostic["summary"]["blocker_preserving_candidate_status"]
+        == "still_blocked"
+    )
+    unresolved = diagnostic["summary"]["blocker_preserving_candidate_unresolved_families"]
+    assert unresolved[0]["family"] == "density_route"
+    recalibration = diagnostic["artifacts"][0]["recalibration_diagnostics"]
+    assert recalibration["diagnostic_only"] is True
+    assert recalibration["masking_risk"] == "high"
+    blocker_outcome = recalibration["blocker_preserving_outcome"]
+    assert blocker_outcome["critical_family_pressure_preserved"] is False
+    assert blocker_outcome["unresolved_blocker_family_count"] == 2
+
+
+def test_query_ship_max_pool_transfer_diagnostic_flags_small_local_transfer_gap() -> None:
+    def artifact(
+        *,
+        mode: str,
+        mlqds_score: float,
+        segment_target_ship: float,
+        segment_fit_ship: float,
+        no_segment_delta: float,
+        failed_checks: list[str],
+    ) -> dict[str, Any]:
+        return {
+            "matched": {
+                "MLQDS": {
+                    "query_useful_v1_score": mlqds_score,
+                    "range_usefulness_score": 0.15,
+                },
+                "uniform": {"query_useful_v1_score": 0.14},
+                "DouglasPeucker": {
+                    "query_useful_v1_score": 0.167,
+                    "range_usefulness_score": 0.151,
+                },
+            },
+            "final_claim_summary": {"final_success_allowed": False},
+            "workload_stability_gate": {"gate_pass": True},
+            "support_overlap_gate": {"gate_pass": True},
+            "target_diffusion_gate": {"gate_pass": True},
+            "global_sanity_gate": {"gate_pass": True},
+            "workload_distribution_comparison": {
+                "workload_signature_gate": {"all_pass": True}
+            },
+            "predictability_audit": {
+                "gate_pass": False,
+                "gate_checks": {"spearman_min": False},
+                "prior_predictive_alignment_gate": {"gate_pass": True},
+                "metrics": {
+                    "spearman": 0.11,
+                    "pr_auc_lift_over_base_rate": 1.23,
+                    "lift_at_5_percent": 1.2,
+                },
+            },
+            "learning_causality_summary": {
+                "learning_causality_gate_pass": False,
+                "learning_causality_failed_checks": failed_checks,
+                "learning_causality_delta_gate": {
+                    "thresholds": {
+                        "without_segment_budget_head_should_lose": 0.005,
+                        "without_behavior_utility_head_should_lose": 0.005,
+                    }
+                },
+                "no_segment_budget_head_ablation_delta": no_segment_delta,
+                "no_behavior_head_ablation_delta": 0.003,
+            },
+            "training_target_diagnostics": {
+                "query_useful_v1_factorized": {
+                    "target_mode": mode,
+                    "segment_budget_target_variant": "query_ship_blend_max_pool",
+                    "segment_budget_target_aggregation": "max_pool",
+                    "family_conditioned_target_trainability": {
+                        "group_by": {
+                            "footprint_family": {
+                                "small_local": {
+                                    "query_count": 4,
+                                    "valid_hit_point_count": 12,
+                                    "target_trainability_status": (
+                                        "weak_active_target_signal"
+                                    ),
+                                    "weak_ship_evidence_rankers": ["final_score"],
+                                    "ranker_alignment": {
+                                        "segment_budget_target": {
+                                            "spearman_with_ship_query_evidence": (
+                                                segment_target_ship
+                                            ),
+                                            "topk_ship_query_evidence_mass_recall": 0.5,
+                                        }
+                                    },
+                                    "target_shapes": {
+                                        "segment_budget_target": {
+                                            "target_std": 0.2,
+                                            "target_mean": 0.3,
+                                        }
+                                    },
+                                }
+                            }
+                        }
+                    },
+                    "family_local_target_candidate_alignment": {
+                        "group_by": {
+                            "footprint_family": {
+                                "small_local": {
+                                    "best_segment_candidate_two_stage_ship_query_pair_coverage": 0.4,
+                                    "best_segment_candidate_two_stage_ship_query_evidence_mass_recall": 0.8,
+                                }
+                            }
+                        }
+                    },
+                }
+            },
+            "training_fit_diagnostics": {
+                "family_conditioned_head_trainability": {
+                    "group_by": {
+                        "footprint_family": {
+                            "small_local": {
+                                "query_count": 4,
+                                "valid_hit_point_count": 12,
+                                "head_trainability_status": "weak_family_head_signal",
+                                "weak_ship_evidence_heads": [
+                                    "segment_budget_target",
+                                    "factorized_composed_score",
+                                ],
+                                "head_fit": {
+                                    "segment_budget_target": {
+                                        "spearman_with_family_ship_query_evidence": (
+                                            segment_fit_ship
+                                        ),
+                                        "topk_family_ship_query_evidence_mass_recall": 0.2,
+                                        "kendall_tau_with_head_target": 0.3,
+                                        "prediction_std": 0.05,
+                                        "target_std": 0.2,
+                                    }
+                                },
+                                "factorized_composed_score_fit": {
+                                    "spearman_with_family_ship_query_evidence": -0.07,
+                                    "topk_family_ship_query_evidence_mass_recall": 0.2,
+                                },
+                            }
+                        }
+                    }
+                }
+            },
+            "selector_trace_diagnostics": {
+                "eval_primary": {
+                    "retained_decision_marginal_query_useful_alignment": {
+                        "available": True,
+                        "candidate_count": 2,
+                        "overall": {
+                            "selector_score": {
+                                "spearman": -0.01,
+                                "top_minus_bottom_marginal": 0.0,
+                            }
+                        },
+                    }
+                }
+            },
+        }
+
+    diagnostic = build_query_ship_max_pool_transfer_diagnostic(
+        [
+            (
+                "checkpoint85",
+                artifact(
+                    mode="query_useful_v1_factorized",
+                    mlqds_score=0.166,
+                    segment_target_ship=-0.34,
+                    segment_fit_ship=-0.09,
+                    no_segment_delta=0.003,
+                    failed_checks=[
+                        "without_segment_budget_head_should_lose",
+                        "without_behavior_utility_head_should_lose",
+                    ],
+                ),
+            ),
+            (
+                "checkpoint86",
+                artifact(
+                    mode="query_useful_v1_factorized_segment_budget_query_ship_max_pool",
+                    mlqds_score=0.1673,
+                    segment_target_ship=0.12,
+                    segment_fit_ship=-0.08,
+                    no_segment_delta=0.006,
+                    failed_checks=["without_behavior_utility_head_should_lose"],
+                ),
+            ),
+        ]
+    )
+
+    comparison = diagnostic["summary"]["comparison"]
+    assert comparison["causality_changes"]["newly_passing_child_gates"] == [
+        "without_segment_budget_head_should_lose"
+    ]
+    transfer_rows = comparison["families_with_positive_target_negative_fit"]
+    assert transfer_rows[0]["family"] == "small_local"
+    assert transfer_rows[0]["segment_budget_transfer_status"] == (
+        "target_positive_fit_negative"
+    )
+    assert comparison["decision"] == "continue_with_family_transfer_diagnosis_not_promotion"
+    assert diagnostic["summary"]["candidate_final_success_allowed"] is False
+
+
+def test_query_ship_local_heads_failure_diagnostic_rejects_broad_head_target() -> None:
+    def artifact(
+        *,
+        mlqds_score: float,
+        target_diffusion_gate_pass: bool,
+        prior_gate_pass: bool,
+        qhit_target_ship: float,
+        behavior_target_ship: float,
+        segment_target_ship: float,
+        qhit_fit_ship: float,
+        behavior_fit_ship: float,
+        segment_fit_ship: float,
+    ) -> dict[str, Any]:
+        return {
+            "matched": {
+                "MLQDS": {"query_useful_v1_score": mlqds_score},
+                "uniform": {"query_useful_v1_score": 0.14},
+                "DouglasPeucker": {"query_useful_v1_score": 0.167},
+            },
+            "final_claim_summary": {"final_success_allowed": False},
+            "workload_stability_gate": {"gate_pass": True},
+            "support_overlap_gate": {"gate_pass": True},
+            "target_diffusion_gate": {
+                "gate_pass": target_diffusion_gate_pass,
+                "failed_checks": (
+                    ["conditional_behavior_utility:support_fraction_above_max"]
+                    if not target_diffusion_gate_pass
+                    else []
+                ),
+                "final_label_support_fraction": 0.32,
+                "max_support_fraction": 0.5,
+                "head_rows": [
+                    {
+                        "head": "conditional_behavior_utility",
+                        "blocking": True,
+                        "support_fraction": 0.94,
+                        "top5_label_mass_fraction": 0.13,
+                        "failed_checks": (
+                            ["support_fraction_above_max"]
+                            if not target_diffusion_gate_pass
+                            else []
+                        ),
+                    }
+                ],
+            },
+            "global_sanity_gate": {"gate_pass": True},
+            "workload_distribution_comparison": {
+                "workload_signature_gate": {"all_pass": True}
+            },
+            "predictability_audit": {
+                "gate_pass": False,
+                "prior_predictive_alignment_gate": {
+                    "gate_pass": prior_gate_pass,
+                    "failed_checks": (
+                        ["query_hit_spearman_below_min"] if not prior_gate_pass else []
+                    ),
+                    "positive_spearman_head_count": 5,
+                },
+                "metrics": {
+                    "spearman": 0.11,
+                    "positive_target_spearman": -0.02,
+                    "pr_auc_lift_over_base_rate": 1.23,
+                    "lift_at_5_percent": 1.30,
+                },
+            },
+            "learning_causality_summary": {
+                "learning_causality_gate_pass": False,
+                "learning_causality_failed_checks": [
+                    "shuffled_scores_should_lose",
+                    "without_segment_budget_head_should_lose",
+                ],
+                "learning_causality_delta_gate": {
+                    "thresholds": {
+                        "shuffled_scores_should_lose": 0.012,
+                        "without_segment_budget_head_should_lose": 0.005,
+                    }
+                },
+                "shuffled_score_ablation_delta": 0.006,
+                "no_segment_budget_head_ablation_delta": 0.0005,
+            },
+            "training_target_diagnostics": {
+                "query_useful_v1_factorized": {
+                    "target_mode": "query_useful_v1_factorized_query_ship_local_heads",
+                    "query_hit_target_variant": "query_ship_local_presence_utility",
+                    "conditional_behavior_target_variant": (
+                        "query_ship_local_behavior_utility"
+                    ),
+                    "final_label_variant": "query_ship_local_heads_composed_score",
+                    "segment_budget_target_variant": "query_ship_local_heads_max_pool",
+                    "segment_budget_target_aggregation": "max_pool",
+                    "final_success_allowed": False,
+                    "family_conditioned_target_trainability": {
+                        "group_by": {
+                            "footprint_family": {
+                                "small_local": {
+                                    "weak_ship_evidence_rankers": [],
+                                    "ranker_alignment": {
+                                        "query_hit_probability": {
+                                            "spearman_with_ship_query_evidence": (
+                                                qhit_target_ship
+                                            )
+                                        },
+                                        "conditional_behavior_utility": {
+                                            "spearman_with_ship_query_evidence": (
+                                                behavior_target_ship
+                                            )
+                                        },
+                                        "segment_budget_target": {
+                                            "spearman_with_ship_query_evidence": (
+                                                segment_target_ship
+                                            )
+                                        },
+                                        "final_score": {
+                                            "spearman_with_ship_query_evidence": 0.25
+                                        },
+                                    },
+                                }
+                            }
+                        }
+                    },
+                }
+            },
+            "training_fit_diagnostics": {
+                "family_conditioned_head_trainability": {
+                    "group_by": {
+                        "footprint_family": {
+                            "small_local": {
+                                "weak_ship_evidence_heads": [
+                                    "query_hit_probability",
+                                    "conditional_behavior_utility",
+                                    "segment_budget_target",
+                                    "factorized_composed_score",
+                                ],
+                                "head_fit": {
+                                    "query_hit_probability": {
+                                        "spearman_with_family_ship_query_evidence": (
+                                            qhit_fit_ship
+                                        )
+                                    },
+                                    "conditional_behavior_utility": {
+                                        "spearman_with_family_ship_query_evidence": (
+                                            behavior_fit_ship
+                                        )
+                                    },
+                                    "segment_budget_target": {
+                                        "spearman_with_family_ship_query_evidence": (
+                                            segment_fit_ship
+                                        )
+                                    },
+                                },
+                                "factorized_composed_score_fit": {
+                                    "spearman_with_family_ship_query_evidence": -0.07
+                                },
+                            }
+                        }
+                    }
+                }
+            },
+        }
+
+    diagnostic = build_query_ship_local_heads_failure_diagnostic(
+        [
+            (
+                "checkpoint86",
+                artifact(
+                    mlqds_score=0.1673,
+                    target_diffusion_gate_pass=True,
+                    prior_gate_pass=True,
+                    qhit_target_ship=-0.1,
+                    behavior_target_ship=-0.1,
+                    segment_target_ship=0.12,
+                    qhit_fit_ship=-0.08,
+                    behavior_fit_ship=-0.08,
+                    segment_fit_ship=-0.08,
+                ),
+            ),
+            (
+                "checkpoint90",
+                artifact(
+                    mlqds_score=0.1632,
+                    target_diffusion_gate_pass=False,
+                    prior_gate_pass=False,
+                    qhit_target_ship=0.20,
+                    behavior_target_ship=0.30,
+                    segment_target_ship=0.12,
+                    qhit_fit_ship=-0.07,
+                    behavior_fit_ship=-0.08,
+                    segment_fit_ship=-0.07,
+                ),
+            ),
+        ]
+    )
+
+    comparison = diagnostic["summary"]["comparison"]
+    assert comparison["decision"] == (
+        "reject_broad_local_heads_preserve_diffusion_before_next_transfer_probe"
+    )
+    assert comparison["score_delta"]["primary_query_useful_v1"] == pytest.approx(-0.0041)
+    assert "target_diffusion" in comparison["gate_regressions"]
+    assert comparison["target_diffusion_failure"]["failed_checks"] == [
+        "conditional_behavior_utility:support_fraction_above_max"
+    ]
+    small_local = comparison["family_failure_rows"][2]
+    assert small_local["family"] == "small_local"
+    assert small_local["candidate_positive_target_negative_fit_heads"] == [
+        "query_hit_probability",
+        "conditional_behavior_utility",
+        "segment_budget_target",
+    ]
+    assert diagnostic["summary"]["candidate_label"] == "checkpoint90"
+
+
+def test_family_transfer_path_diagnostic_flags_missing_family_prior_surface() -> None:
+    artifact = {
+        "matched": {
+            "MLQDS": {"query_useful_v1_score": 0.1673},
+            "uniform": {"query_useful_v1_score": 0.142},
+            "DouglasPeucker": {"query_useful_v1_score": 0.1671},
+        },
+        "final_claim_summary": {"final_success_allowed": False},
+        "workload_stability_gate": {"gate_pass": True},
+        "support_overlap_gate": {"gate_pass": True},
+        "target_diffusion_gate": {"gate_pass": True},
+        "global_sanity_gate": {"gate_pass": True},
+        "workload_distribution_comparison": {"workload_signature_gate": {"all_pass": True}},
+        "query_generation_diagnostics": {
+            "train": {
+                "workload_profile": {
+                    "anchor_family_weights": {"crossing_turn_change": 0.15},
+                    "footprint_family_weights": {"small_local": 0.25},
+                },
+                "workload_signature": {
+                    "anchor_family_counts": {"crossing_turn_change": 7},
+                    "footprint_family_counts": {"small_local": 12},
+                },
+            }
+        },
+        "predictability_audit": {
+            "gate_pass": False,
+            "gate_checks": {"spearman_min": False, "pr_auc_lift_over_base_rate": False},
+            "prior_predictive_alignment_gate": {
+                "gate_pass": True,
+                "failed_checks": [],
+            },
+            "metrics": {
+                "spearman": 0.11,
+                "pr_auc_lift_over_base_rate": 1.23,
+                "lift_at_5_percent": 1.20,
+            },
+            "best_prior_channel_by_head": {
+                "segment_budget_target": {
+                    "best_spearman": {
+                        "channel": "boundary_entry_exit_likelihood",
+                        "value": 0.149,
+                    },
+                    "best_lift_at_5_percent": {
+                        "channel": "spatiotemporal_query_hit_probability",
+                        "value": 1.41,
+                    },
+                }
+            },
+            "prior_channel_by_head_predictability": {
+                "segment_budget_target": {
+                    "boundary_entry_exit_likelihood": {
+                        "available": True,
+                        "spearman": 0.149,
+                        "positive_target_spearman": -0.10,
+                        "lift_at_5_percent": 1.15,
+                        "pr_auc_lift_over_base_rate": 1.22,
+                        "score_std": 0.01,
+                        "target_mean": 0.09,
+                    },
+                    "spatiotemporal_query_hit_probability": {
+                        "available": True,
+                        "spearman": 0.126,
+                        "positive_target_spearman": -0.05,
+                        "lift_at_5_percent": 1.41,
+                        "pr_auc_lift_over_base_rate": 1.20,
+                        "score_std": 0.02,
+                        "target_mean": 0.09,
+                    },
+                }
+            },
+        },
+        "learning_causality_summary": {
+            "learning_causality_gate_pass": False,
+            "selection_causality_diagnostics": {"available": True},
+        },
+        "training_target_diagnostics": {
+            "query_useful_v1_factorized": {
+                "target_mode": (
+                    "query_useful_v1_factorized_segment_budget_query_ship_max_pool"
+                ),
+                "segment_budget_target_variant": "query_ship_blend_max_pool",
+                "segment_budget_target_aggregation": "max_pool",
+                "final_success_allowed": False,
+                "family_conditioned_target_trainability": {
+                    "group_by": {
+                        "footprint_family": {
+                            "small_local": {
+                                "ranker_alignment": {
+                                    "segment_budget_target": {
+                                        "spearman_with_ship_query_evidence": 0.12,
+                                        "topk_ship_query_evidence_mass_recall": 0.34,
+                                    }
+                                },
+                                "target_shapes": {
+                                    "segment_budget_target": {
+                                        "target_mean": 0.39,
+                                        "target_std": 0.19,
+                                    }
+                                },
+                            }
+                        }
+                    }
+                },
+            }
+        },
+        "training_fit_diagnostics": {
+            "family_conditioned_head_trainability": {
+                "group_by": {
+                    "footprint_family": {
+                        "small_local": {
+                            "query_count": 4,
+                            "valid_hit_point_count": 64,
+                            "weak_ship_evidence_heads": ["segment_budget_target"],
+                            "head_fit": {
+                                "segment_budget_target": {
+                                    "spearman_with_family_ship_query_evidence": -0.08,
+                                    "topk_family_ship_query_evidence_mass_recall": 0.28,
+                                    "kendall_tau_with_head_target": 0.34,
+                                    "topk_head_target_mass_recall": 0.61,
+                                    "prediction_std": 0.05,
+                                    "target_std": 0.19,
+                                }
+                            },
+                        }
+                    }
+                }
+            }
+        },
+        "selector_trace_diagnostics": {
+            "eval_primary": {
+                "retained_decision_marginal_query_useful_alignment": {
+                    "available": True,
+                    "candidate_count": 160,
+                    "overall": {
+                        "selector_score": {
+                            "spearman": -0.04,
+                            "top_minus_bottom_marginal": 0.00002,
+                        },
+                        "raw_score": {
+                            "spearman": -0.06,
+                            "top_minus_bottom_marginal": 0.00001,
+                        },
+                    },
+                    "by_decision": {
+                        "retained_removal_loss": {
+                            "selector_score": {
+                                "spearman": -0.03,
+                                "top_minus_bottom_marginal": -0.00006,
+                            }
+                        }
+                    },
+                }
+            }
+        },
+    }
+
+    diagnostic = build_family_transfer_path_diagnostic([("checkpoint86", artifact)])
+
+    summary = diagnostic["summary"]
+    assert summary["decision"] == (
+        "add_family_conditioned_prior_predictability_before_model_or_scoring_change"
+    )
+    assert summary["retained_marginal_alignment_layout"] == (
+        "selector_trace_diagnostics.eval_primary."
+        "retained_decision_marginal_query_useful_alignment"
+    )
+    blocked = summary["blocked_family_head_rows"]
+    assert blocked[0]["family"] == "small_local"
+    assert blocked[0]["head"] == "segment_budget_target"
+    assert blocked[0]["transfer_status"] == "fits_target_but_misorders_ship_evidence"
+    retained = diagnostic["artifacts"][0]["retained_marginal_alignment"]
+    assert retained["misleading_learning_causality_layout_present"] is False
+    prior = diagnostic["artifacts"][0]["predictability"][
+        "aggregate_best_prior_channel_by_head"
+    ]
+    assert prior["segment_budget_target"]["best_spearman"] == pytest.approx(0.149)
+
+
+def test_selector_marginal_calibration_diagnostic_separates_score_and_segment_failures() -> None:
+    artifact = {
+        "matched": {
+            "MLQDS": {"query_useful_v1_score": 0.1673},
+            "uniform": {"query_useful_v1_score": 0.142},
+            "DouglasPeucker": {"query_useful_v1_score": 0.1671},
+        },
+        "final_claim_summary": {"final_success_allowed": False},
+        "target_diffusion_gate": {"gate_pass": True},
+        "global_sanity_gate": {"gate_pass": True},
+        "predictability_audit": {"gate_pass": False},
+        "learning_causality_summary": {"learning_causality_gate_pass": False},
+        "selector_trace_diagnostics": {
+            "eval_primary": {
+                "segments_considered_count": 100,
+                "segment_allocation_alignment_diagnostics": {
+                    "available": True,
+                    "segment_count": 100,
+                    "allocation_count_total": 120,
+                    "extra_allocation_count_total": 20,
+                    "length_support_to_allocation_spearman": -0.01,
+                    "segment_score_to_allocation_spearman": 0.83,
+                    "allocation_weight_to_allocation_spearman": 0.82,
+                    "top_groups": {
+                        "top_10_percent": {
+                            "length_support_segment_score_overlap_fraction": 0.10,
+                        },
+                        "top_20_percent": {
+                            "length_support_segment_score_overlap_fraction": 0.20,
+                        },
+                    },
+                    "component_diagnosis": (
+                        "extra_slots_score_dominated_not_length_support_aligned"
+                    ),
+                },
+                "allocation_point_selection_diagnostics": {
+                    "available": True,
+                    "primary_length_preservation": 0.66,
+                    "same_allocation_length_only_point_selection_preservation": 0.76,
+                    "same_allocation_length_only_delta": 0.10,
+                    "same_allocation_length_only_gate_would_pass": True,
+                    "component_diagnosis": (
+                        "point_selection_can_clear_length_with_current_allocation"
+                    ),
+                },
+                "allocation_counterfactual_diagnostics": {
+                    "available": True,
+                    "allocation_overlap_fraction": 0.83,
+                    "extra_allocation_overlap_fraction": 0.37,
+                    "length_support_allocation_counterfactual_preservation": 0.77,
+                    "length_support_allocation_counterfactual_gate_would_pass": True,
+                    "component_diagnosis": (
+                        "length_support_allocation_counterfactual_can_clear_length"
+                    ),
+                },
+                "retained_decision_marginal_query_useful_alignment": {
+                    "available": True,
+                    "candidate_count": 4,
+                    "overall": {
+                        "raw_score": {
+                            "spearman": -0.06,
+                            "top_minus_bottom_marginal": 0.00001,
+                        },
+                        "selector_score": {
+                            "spearman": -0.04,
+                            "top_minus_bottom_marginal": 0.00002,
+                        },
+                        "segment_score": {
+                            "spearman": -0.02,
+                            "top_minus_bottom_marginal": 0.00002,
+                        },
+                        "score_component_alignment": {
+                            "head_probability_path_length_support_target": {
+                                "available": True,
+                                "spearman": 0.28,
+                                "top_minus_bottom_marginal": 0.00007,
+                            }
+                        },
+                        "query_free_teacher_proxy_alignment": {
+                            "query_free_endpoint_support": {
+                                "available": True,
+                                "spearman": 0.58,
+                                "top_minus_bottom_marginal": 0.00016,
+                            }
+                        },
+                    },
+                    "by_decision": {
+                        "retained_removal_loss": {
+                            "selector_score": {
+                                "spearman": -0.03,
+                                "top_minus_bottom_marginal": -0.00006,
+                            }
+                        }
+                    },
+                    "top_marginal_miss_summary": {
+                        "bucket_counts": {
+                            "high_score_low_exact_marginal": 1,
+                            "high_marginal_under_ranked_by_scores": 1,
+                        }
+                    },
+                    "separated_marginal_teacher_summary": {
+                        "available": True,
+                        "teacher_usage_split": "eval_primary",
+                        "teacher_usage_allowed_for_train_or_checkpoint": False,
+                        "teacher_target_shape_viable": True,
+                        "candidate_for_train_side_teacher": False,
+                        "candidate_for_train_side_teacher_reason": (
+                            "eval_split_query_conditioned_teacher_not_allowed_for_training"
+                        ),
+                        "segment_target_count": 1,
+                        "point_target_count": 1,
+                        "segment_target_rows": [
+                            {
+                                "segment_index": 12,
+                                "trajectory_index": 3,
+                                "top_point_index": 384,
+                                "segment_target": 1.0,
+                                "raw_segment_positive_marginal_sum": 0.003,
+                                "selector_segment_score_rank": 80,
+                                "selector_segment_allocation_weight_rank": 90,
+                                "selector_segment_length_support_rank": 65,
+                                "selector_segment_allocation_count": 1,
+                                "selector_segment_learned_count": 1,
+                            }
+                        ],
+                        "point_target_rows": [
+                            {
+                                "point_index": 384,
+                                "trajectory_index": 3,
+                                "segment_index": 12,
+                                "raw_point_marginal": 0.003,
+                                "point_target_global": 1.0,
+                                "selector_score_candidate_rank_fraction": 0.80,
+                                "segment_score_candidate_rank_fraction": 0.90,
+                                "selector_segment_score_rank": 80,
+                                "selector_segment_allocation_count": 1,
+                            }
+                        ],
+                    },
+                    "learned_controllable_marginal_teacher_summary": {
+                        "learned_controllable_retained_removal_count": 1,
+                    },
+                    "rows": [
+                        {
+                            "point_index": 384,
+                            "trajectory_index": 3,
+                            "source": "learned",
+                            "decision": "retained_removal_loss",
+                            "marginal_query_useful_v1": 0.003,
+                            "marginal_query_useful_v1_candidate_rank": 1,
+                            "marginal_query_useful_v1_candidate_rank_fraction": 0.05,
+                            "raw_score_candidate_rank": 75,
+                            "raw_score_candidate_rank_fraction": 0.75,
+                            "selector_score_candidate_rank": 80,
+                            "selector_score_candidate_rank_fraction": 0.80,
+                            "segment_score_candidate_rank": 90,
+                            "segment_score_candidate_rank_fraction": 0.90,
+                            "failure_buckets": [
+                                "high_marginal_under_ranked_by_scores",
+                            ],
+                            "selector_segment_context": {
+                                "segment_index": 12,
+                                "segment_score_rank": 80,
+                                "segment_length_support_rank": 65,
+                                "segment_allocation_weight_rank": 90,
+                                "segment_allocation_count": 1,
+                                "learned_count": 1,
+                                "length_repair_count": 0,
+                            },
+                            "selector_stage_state": {"learned_retained": True},
+                        },
+                        {
+                            "point_index": 32,
+                            "trajectory_index": 0,
+                            "source": "removed",
+                            "decision": "removed_addition_gain",
+                            "marginal_query_useful_v1": 0.00001,
+                            "marginal_query_useful_v1_candidate_rank": 4,
+                            "marginal_query_useful_v1_candidate_rank_fraction": 0.90,
+                            "raw_score_candidate_rank": 1,
+                            "raw_score_candidate_rank_fraction": 0.02,
+                            "selector_score_candidate_rank": 2,
+                            "selector_score_candidate_rank_fraction": 0.04,
+                            "segment_score_candidate_rank": 1,
+                            "segment_score_candidate_rank_fraction": 0.02,
+                            "failure_buckets": ["high_score_low_exact_marginal"],
+                            "selector_segment_context": {
+                                "segment_index": 1,
+                                "segment_score_rank": 1,
+                                "segment_allocation_weight_rank": 2,
+                                "segment_allocation_count": 2,
+                                "learned_count": 2,
+                                "length_repair_count": 0,
+                            },
+                        },
+                    ],
+                },
+            }
+        },
+    }
+
+    diagnostic = build_selector_marginal_calibration_diagnostic(
+        [("checkpoint93", artifact)]
+    )
+
+    summary = diagnostic["summary"]
+    assert summary["decision"] == (
+        "diagnose_train_side_marginal_segment_calibration_not_promotion"
+    )
+    assert summary["retained_marginal_alignment_layout"] == (
+        "selector_trace_diagnostics.eval_primary."
+        "retained_decision_marginal_query_useful_alignment"
+    )
+    alignment = diagnostic["artifacts"][0]["retained_marginal_alignment"]
+    assert alignment["failure_mode_summary"]["selector_spearman"] == pytest.approx(-0.04)
+    assert alignment["failure_mode_summary"]["high_score_low_exact_marginal_count"] == 1
+    top_row = alignment["top_marginal_diagnostics"]["top_rows"][0]
+    assert top_row["point_segment_score_rank"] == 90
+    assert top_row["selector_segment_score_rank"] == 80
+    segment_teacher = alignment["segment_marginal_teacher_diagnostics"]
+    assert segment_teacher["candidate_for_train_side_teacher"] is False
+    assert segment_teacher["top_segment_target_low_selector_segment_score_count"] == 1
+    assert segment_teacher["top_segment_target_low_allocation_weight_count"] == 1
+    allocation = alignment["allocation_diagnostics"]
+    assert allocation["segment_allocation_alignment"]["component_diagnosis"] == (
+        "extra_slots_score_dominated_not_length_support_aligned"
+    )
+    assert allocation["allocation_point_selection"][
+        "same_allocation_length_only_gate_would_pass"
+    ] is True
+
+
+def test_selection_marginal_segment_calibration_diagnostic_flags_split_transfer_gap() -> None:
+    def _trace(
+        *,
+        split: str,
+        candidate: bool,
+        first_segment: int,
+        second_segment: int,
+    ) -> dict[str, object]:
+        return {
+            "segments_considered_count": 100,
+            "segment_allocation_alignment_diagnostics": {
+                "available": True,
+                "length_support_to_allocation_spearman": -0.01,
+                "segment_score_to_allocation_spearman": 0.84,
+                "component_diagnosis": (
+                    "extra_slots_score_dominated_not_length_support_aligned"
+                ),
+            },
+            "allocation_point_selection_diagnostics": {
+                "available": True,
+                "primary_length_preservation": 0.67,
+                "same_allocation_length_only_point_selection_preservation": 0.77,
+                "same_allocation_length_only_gate_would_pass": True,
+                "component_diagnosis": (
+                    "point_selection_can_clear_length_with_current_allocation"
+                ),
+            },
+            "retained_decision_marginal_query_useful_alignment": {
+                "available": True,
+                "candidate_count": 160,
+                "overall": {
+                    "raw_score": {"spearman": -0.16},
+                    "selector_score": {"spearman": -0.15},
+                    "segment_score": {"spearman": -0.10},
+                },
+                "separated_marginal_teacher_summary": {
+                    "available": True,
+                    "teacher_usage_split": split,
+                    "teacher_target_shape_viable": True,
+                    "candidate_for_train_side_teacher": candidate,
+                    "candidate_for_train_side_teacher_reason": (
+                        "candidate_available"
+                        if candidate
+                        else "eval_split_query_conditioned_teacher_not_allowed_for_training"
+                    ),
+                    "segment_target_count": 2,
+                    "point_target_count": 2,
+                    "segment_target_rows": [
+                        {
+                            "segment_index": first_segment,
+                            "trajectory_index": 1,
+                            "top_point_index": first_segment * 32,
+                            "segment_target": 1.0,
+                            "raw_segment_positive_marginal_sum": 0.004,
+                            "selector_segment_score_rank": 80,
+                            "selector_segment_allocation_weight_rank": 90,
+                            "selector_segment_length_support_rank": 70,
+                            "selector_segment_allocation_count": 1,
+                            "selector_segment_learned_count": 1,
+                        },
+                        {
+                            "segment_index": second_segment,
+                            "trajectory_index": 2,
+                            "top_point_index": second_segment * 32,
+                            "segment_target": 0.5,
+                            "raw_segment_positive_marginal_sum": 0.002,
+                            "selector_segment_score_rank": 75,
+                            "selector_segment_allocation_weight_rank": 85,
+                            "selector_segment_length_support_rank": 60,
+                            "selector_segment_allocation_count": 1,
+                            "selector_segment_learned_count": 1,
+                        },
+                    ],
+                    "point_target_rows": [
+                        {
+                            "point_index": first_segment * 32,
+                            "segment_index": first_segment,
+                            "raw_point_marginal": 0.004,
+                            "point_target_global": 1.0,
+                            "selector_score_candidate_rank_fraction": 0.75,
+                            "segment_score_candidate_rank_fraction": 0.80,
+                            "selector_segment_score_rank": 80,
+                            "selector_segment_allocation_count": 1,
+                        }
+                    ],
+                },
+            },
+        }
+
+    artifact = {
+        "matched": {
+            "MLQDS": {"query_useful_v1_score": 0.1673},
+            "uniform": {"query_useful_v1_score": 0.142},
+            "DouglasPeucker": {"query_useful_v1_score": 0.1671},
+        },
+        "workload_stability_gate": {"gate_pass": True},
+        "support_overlap_gate": {"gate_pass": True},
+        "target_diffusion_gate": {"gate_pass": True},
+        "workload_distribution_comparison": {
+            "workload_signature_gate": {"all_pass": True}
+        },
+        "predictability_audit": {"gate_pass": False},
+        "learning_causality_summary": {"learning_causality_gate_pass": False},
+        "global_sanity_gate": {"gate_pass": True},
+        "final_claim_summary": {"final_success_allowed": False},
+        "selector_trace_diagnostics": {
+            "selection_primary": _trace(
+                split="checkpoint_selection",
+                candidate=True,
+                first_segment=10,
+                second_segment=20,
+            ),
+            "eval_primary": _trace(
+                split="eval_primary",
+                candidate=False,
+                first_segment=30,
+                second_segment=40,
+            ),
+        },
+    }
+
+    diagnostic = build_selection_marginal_segment_calibration_diagnostic(
+        [("checkpoint93", artifact)]
+    )
+
+    summary = diagnostic["summary"]
+    assert summary["decision"] == (
+        "diagnose_selection_marginal_segment_transfer_before_training_semantics"
+    )
+    assert summary["selection_layout"] == (
+        "selector_trace_diagnostics.selection_primary."
+        "retained_decision_marginal_query_useful_alignment"
+    )
+    result = diagnostic["artifacts"][0]
+    selection = result["selection_teacher"]
+    assert selection["candidate_for_train_side_teacher"] is True
+    assert selection["top_segment_low_selector_score_count"] == 2
+    assert selection["top_segment_low_allocation_weight_count"] == 2
+    overlap = result["selection_eval_segment_overlap"]
+    assert overlap["segment_overlap_count"] == 0
+    assert overlap["top_segment_overlap_fraction_of_selection_top"] == 0.0
+    assert result["selection_allocation"]["same_allocation_length_only_gate_would_pass"] is True
+
+
+def test_selection_eval_segment_teacher_transfer_diagnostic_blocks_direct_probe_on_weak_transfer() -> None:
+    def _trace(
+        *,
+        split: str,
+        candidate: bool,
+        target_segments: tuple[int, int],
+    ) -> dict[str, object]:
+        return {
+            "segment_source_attribution": {
+                "available": True,
+                "rows": [
+                    {
+                        "segment_index": 1,
+                        "segment_score": 0.90,
+                        "segment_allocation_weight": 0.90,
+                        "segment_length_support_score": 0.10,
+                        "segment_allocation_count": 2,
+                        "learned_count": 1,
+                        "length_repair_count": 0,
+                    },
+                    {
+                        "segment_index": 2,
+                        "segment_score": 0.80,
+                        "segment_allocation_weight": 0.80,
+                        "segment_length_support_score": 0.20,
+                        "segment_allocation_count": 2,
+                        "learned_count": 1,
+                        "length_repair_count": 0,
+                    },
+                    {
+                        "segment_index": 3,
+                        "segment_score": 0.10,
+                        "segment_allocation_weight": 0.10,
+                        "segment_length_support_score": 0.90,
+                        "segment_allocation_count": 1,
+                        "learned_count": 0,
+                        "length_repair_count": 1,
+                    },
+                    {
+                        "segment_index": 4,
+                        "segment_score": 0.20,
+                        "segment_allocation_weight": 0.20,
+                        "segment_length_support_score": 0.80,
+                        "segment_allocation_count": 1,
+                        "learned_count": 0,
+                        "length_repair_count": 1,
+                    },
+                ],
+            },
+            "retained_decision_marginal_query_useful_alignment": {
+                "available": True,
+                "separated_marginal_teacher_summary": {
+                    "available": True,
+                    "teacher_usage_split": split,
+                    "teacher_target_shape_viable": True,
+                    "candidate_for_train_side_teacher": candidate,
+                    "candidate_for_train_side_teacher_reason": (
+                        "candidate_available"
+                        if candidate
+                        else "eval_split_query_conditioned_teacher_not_allowed_for_training"
+                    ),
+                    "segment_target_count": 2,
+                    "point_target_count": 2,
+                    "segment_target_rows": [
+                        {
+                            "segment_index": target_segments[0],
+                            "segment_target": 1.0,
+                        },
+                        {
+                            "segment_index": target_segments[1],
+                            "segment_target": 0.5,
+                        },
+                    ],
+                },
+            },
+        }
+
+    artifact = {
+        "matched": {
+            "MLQDS": {"query_useful_v1_score": 0.1673},
+            "uniform": {"query_useful_v1_score": 0.142},
+            "DouglasPeucker": {"query_useful_v1_score": 0.1671},
+        },
+        "workload_stability_gate": {"gate_pass": True},
+        "support_overlap_gate": {"gate_pass": True},
+        "target_diffusion_gate": {"gate_pass": True},
+        "workload_distribution_comparison": {
+            "workload_signature_gate": {"all_pass": True}
+        },
+        "predictability_audit": {"gate_pass": False},
+        "learning_causality_summary": {"learning_causality_gate_pass": False},
+        "global_sanity_gate": {"gate_pass": True},
+        "final_claim_summary": {"final_success_allowed": False},
+        "selector_trace_diagnostics": {
+            "selection_primary": _trace(
+                split="checkpoint_selection",
+                candidate=True,
+                target_segments=(1, 2),
+            ),
+            "eval_primary": _trace(
+                split="eval_primary",
+                candidate=False,
+                target_segments=(3, 4),
+            ),
+        },
+    }
+
+    diagnostic = build_selection_eval_segment_teacher_transfer_diagnostic(
+        [("checkpoint93", artifact)]
+    )
+
+    summary = diagnostic["summary"]
+    assert summary["decision"] == (
+        "diagnose_transfer_features_before_guarded_calibration_probe"
+    )
+    result = diagnostic["artifacts"][0]
+    overlap = result["target_overlap"]
+    assert overlap["positive_overlap_count"] == 0
+    assert overlap["top_0.1_overlap_fraction_of_selection"] == 0.0
+    assert overlap["selection_eval_teacher_target_spearman"] < 0.0
+    selection_features = result["selection_feature_alignment"]["feature_alignment"]
+    eval_features = result["eval_feature_alignment"]["feature_alignment"]
+    assert selection_features["segment_score"][
+        "spearman_with_segment_teacher_target"
+    ] > 0.0
+    assert eval_features["segment_score"]["spearman_with_segment_teacher_target"] < 0.0
+    transfer = result["feature_transfer_summary"]
+    assert transfer["contradictory_feature_count"] > 0
+
+
+def test_selection_segment_transfer_feature_admissibility_rejects_post_selection_signal() -> None:
+    def _trace() -> dict[str, object]:
+        return {
+            "segment_source_attribution": {
+                "available": True,
+                "rows": [
+                    {
+                        "segment_index": 1,
+                        "segment_score": 0.10,
+                        "segment_allocation_weight": 0.10,
+                        "segment_length_support_score": 0.30,
+                        "segment_allocation_count": 1,
+                        "learned_count": 0,
+                        "length_repair_count": 1,
+                        "retained_count": 2,
+                        "retained_fraction": 0.05,
+                    },
+                    {
+                        "segment_index": 2,
+                        "segment_score": 0.20,
+                        "segment_allocation_weight": 0.20,
+                        "segment_length_support_score": 0.20,
+                        "segment_allocation_count": 1,
+                        "learned_count": 0,
+                        "length_repair_count": 1,
+                        "retained_count": 2,
+                        "retained_fraction": 0.05,
+                    },
+                    {
+                        "segment_index": 3,
+                        "segment_score": 0.30,
+                        "segment_allocation_weight": 0.30,
+                        "segment_length_support_score": 0.10,
+                        "segment_allocation_count": 2,
+                        "learned_count": 1,
+                        "length_repair_count": 0,
+                        "retained_count": 3,
+                        "retained_fraction": 0.10,
+                    },
+                    {
+                        "segment_index": 4,
+                        "segment_score": 0.40,
+                        "segment_allocation_weight": 0.40,
+                        "segment_length_support_score": 0.05,
+                        "segment_allocation_count": 2,
+                        "learned_count": 1,
+                        "length_repair_count": 0,
+                        "retained_count": 3,
+                        "retained_fraction": 0.10,
+                    },
+                ],
+            },
+            "retained_decision_marginal_query_useful_alignment": {
+                "separated_marginal_teacher_summary": {
+                    "available": True,
+                    "candidate_for_train_side_teacher": True,
+                    "segment_target_count": 2,
+                    "segment_target_rows": [
+                        {"segment_index": 3, "segment_target": 1.0},
+                        {"segment_index": 4, "segment_target": 0.8},
+                    ],
+                }
+            },
+        }
+
+    artifact = {
+        "matched": {
+            "MLQDS": {"query_useful_v1_score": 0.1673},
+            "uniform": {"query_useful_v1_score": 0.142},
+            "DouglasPeucker": {"query_useful_v1_score": 0.1671},
+        },
+        "workload_stability_gate": {"gate_pass": True},
+        "support_overlap_gate": {"gate_pass": True},
+        "target_diffusion_gate": {"gate_pass": True},
+        "workload_distribution_comparison": {
+            "workload_signature_gate": {"all_pass": True}
+        },
+        "predictability_audit": {"gate_pass": False},
+        "learning_causality_summary": {"learning_causality_gate_pass": False},
+        "global_sanity_gate": {"gate_pass": True},
+        "final_claim_summary": {"final_success_allowed": False},
+        "selector_trace_diagnostics": {
+            "selection_primary": _trace(),
+            "eval_primary": _trace(),
+        },
+    }
+
+    diagnostic = build_selection_segment_transfer_feature_admissibility_diagnostic(
+        [("checkpoint93", artifact)]
+    )
+
+    result = diagnostic["artifacts"][0]
+    candidates = {row["name"]: row for row in result["candidate_rows"]}
+    learned_count = candidates["learned_count_post_selection_coupled"]
+    assert learned_count["classification"]["uses_post_selection_coupling"] is True
+    assert learned_count["probe_admissible"] is False
+    assert learned_count["rejection_reason"] == "uses_post_selection_or_unknown_features"
+    assert result["feature_coupling_summary"][
+        "post_selection_positive_candidate_names"
+    ] == ["learned_count_post_selection_coupled"]
+    assert diagnostic["summary"]["decision"] == (
+        "guarded_pre_selection_transfer_calibration_probe_admissible"
+    )
+    assert "segment_score" in result["feature_coupling_summary"][
+        "admissible_candidate_names"
+    ]
 
 
 def test_target_diffusion_gate_blocks_broad_low_budget_labels() -> None:
@@ -1427,16 +3083,25 @@ def test_factorized_head_ablation_uses_neutral_multiplicative_heads() -> None:
         disabled_head_names=("conditional_behavior_utility",),
     )
     path_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("path_length_support_target")
+    segment_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("segment_budget_target")
     low_path = head_logits.clone()
     high_path = head_logits.clone()
     low_path[..., path_idx] = -10.0
     high_path[..., path_idx] = 10.0
+    low_segment = head_logits.clone()
+    high_segment = head_logits.clone()
+    low_segment[..., segment_idx] = -10.0
+    high_segment[..., segment_idx] = 10.0
     expected_score = torch.tensor(0.34375, dtype=torch.float32)
 
     assert torch.allclose(disabled.squeeze(), torch.logit(expected_score), atol=1e-6)
     assert torch.allclose(disabled, disabled_with_large_calibration)
     assert torch.allclose(
         model.final_logit_from_head_logits(low_path), model.final_logit_from_head_logits(high_path)
+    )
+    assert torch.allclose(
+        model.final_logit_from_head_logits(low_segment),
+        model.final_logit_from_head_logits(high_segment),
     )
     assert all(not parameter.requires_grad for parameter in model.calibration_head.parameters())
 
@@ -1458,11 +3123,11 @@ def test_range_v2_final_score_composition_matches_query_useful_target_formula() 
 
     final_probabilities = torch.sigmoid(model.final_logit_from_head_logits(head_logits))
 
-    expected = (
-        head_probabilities[..., 0]
-        * (0.5 + head_probabilities[..., 1])
-        * (0.75 + 0.25 * head_probabilities[..., 3])
-        + 0.25 * head_probabilities[..., 2]
+    expected = query_useful_v1_point_score(
+        q_hit=head_probabilities[..., 0],
+        behavior=head_probabilities[..., 1],
+        boundary=head_probabilities[..., 2],
+        replacement=head_probabilities[..., 3],
     )
     assert torch.allclose(final_probabilities, expected, atol=1e-5)
     assert final_probabilities[0, 0] > 0.5
@@ -1976,6 +3641,70 @@ def test_learned_segment_budget_can_split_allocation_and_point_segment_scores() 
     assert trace["fallback_retained_count"] == 0
 
 
+def test_learned_segment_budget_transfer_calibration_is_guarded_non_default() -> None:
+    steps = torch.arange(0, 16, dtype=torch.float32)
+    points = torch.stack(
+        [
+            steps,
+            torch.where((steps.long() % 2) == 0, torch.zeros_like(steps), torch.ones_like(steps)),
+            steps * 0.10,
+        ],
+        dim=1,
+    )
+    scores = torch.zeros((16,), dtype=torch.float32)
+    segment_scores = torch.tensor(
+        [0.0, 0.1, 0.2, 0.1, 0.8, 0.9, 1.0, 0.8, 0.2, 0.1, 0.0, 0.1, 0.5, 0.4, 0.3, 0.2],
+        dtype=torch.float32,
+    )
+
+    _default_retained, default_trace = simplify_with_learned_segment_budget_v1_with_trace(
+        scores,
+        [(0, 16)],
+        compression_ratio=0.50,
+        segment_size=4,
+        segment_scores=segment_scores,
+        points=points,
+        segment_length_support_weight=0.50,
+        geometry_gain_weight=0.0,
+    )
+    _calibrated_retained, calibrated_trace = simplify_with_learned_segment_budget_v1_with_trace(
+        scores,
+        [(0, 16)],
+        compression_ratio=0.50,
+        segment_size=4,
+        segment_scores=segment_scores,
+        points=points,
+        segment_length_support_weight=0.50,
+        segment_transfer_calibration_mode="segment_score_allocation_weight_zblend",
+        geometry_gain_weight=0.0,
+    )
+
+    assert default_trace["segment_transfer_calibration"]["mode"] == "none"
+    assert default_trace["segment_transfer_calibration"]["applied"] is False
+    assert default_trace["segment_length_support_weight"] == pytest.approx(0.50)
+    calibration = calibrated_trace["segment_transfer_calibration"]
+    assert calibration["mode"] == "segment_score_allocation_weight_zblend"
+    assert calibration["applied"] is True
+    assert calibration["uses_post_selection_attribution"] is False
+    assert calibration["uses_length_support_counter_signal"] is False
+    assert calibration["base_segment_length_support_weight"] == pytest.approx(0.50)
+    assert calibration["effective_segment_length_support_weight"] == pytest.approx(0.0)
+    assert calibrated_trace["segment_length_support_weight"] == pytest.approx(0.0)
+    assert (
+        calibrated_trace["segment_score_source"]
+        == "segment_budget_head_mean+segment_score_allocation_weight_zblend"
+    )
+    rows = calibrated_trace["segment_source_attribution"]["rows"]
+    assert rows
+    assert {row["segment_transfer_calibration_mode"] for row in rows} == {
+        "segment_score_allocation_weight_zblend"
+    }
+    assert any(
+        row["segment_pre_transfer_calibration_score"] != row["segment_score"]
+        for row in rows
+    )
+
+
 def test_mlqds_scoring_passes_segment_point_scores_to_learned_selector() -> None:
     predictions = torch.zeros((64,), dtype=torch.float32)
     allocation_scores = torch.zeros_like(predictions)
@@ -2352,7 +4081,60 @@ def test_retained_decision_marginal_query_useful_diagnostic_scores_true_marginal
         raw_scores=raw_scores,
         selector_scores=selector_scores,
         segment_scores=segment_scores,
+        score_component_vectors={
+            "factorized_composed_score": torch.tensor([0.0, 0.2, 0.85, 0.75, 0.0]),
+            "head_logit_query_hit_probability": torch.tensor([-8.0, -2.0, 2.0, 1.5, -8.0]),
+            "head_probability_query_hit_probability": torch.tensor(
+                [0.0, 0.1, 0.9, 0.8, 0.0]
+            )
+        },
+        sampled_prior_vectors={
+            "spatial_query_hit_probability": torch.tensor([0.0, 0.1, 0.7, 0.8, 0.0]),
+            "route_density_prior": torch.tensor([0.0, 0.0, 0.2, 0.1, 0.0]),
+        },
+        query_free_teacher_proxy_vectors={
+            "query_free_constant_proxy": torch.zeros((5,), dtype=torch.float32),
+            "query_free_path_length_support_target": torch.tensor([0.0, 0.1, 0.8, 0.9, 0.0]),
+            "query_free_endpoint_support": torch.tensor([1.0, 0.0, 0.0, 0.0, 1.0]),
+        },
+        model_prior_vectors={
+            "spatial_query_hit_probability": torch.tensor([0.0, 0.1, 0.7, 0.8, 0.0]),
+            "route_density_prior": torch.zeros((5,), dtype=torch.float32),
+        },
         source_masks=source_masks,
+        selector_trace={
+            "pre_repair_retained_mask": {"available": True, "indices": [0, 2]},
+            "length_repair_retained_mask": {"available": True, "indices": [4]},
+            "retained_mask": {"available": True, "indices": [0, 2, 4]},
+            "segment_source_attribution": {
+                "available": True,
+                "rows": [
+                    {
+                        "segment_index": 7,
+                        "allocation_order_index": 3,
+                        "trajectory_id": 0,
+                        "start": 1,
+                        "end": 4,
+                        "length": 3,
+                        "segment_score": 2.5,
+                        "segment_score_rank": 1,
+                        "segment_score_source": "segment_budget_head_top20_mean",
+                        "segment_length_support_score": 0.75,
+                        "segment_length_support_rank": 2,
+                        "segment_allocation_weight": 1.25,
+                        "segment_allocation_weight_rank": 1,
+                        "segment_allocation_count": 2,
+                        "retained_count": 1,
+                        "retained_fraction": 1.0 / 3.0,
+                        "skeleton_count": 0,
+                        "learned_count": 1,
+                        "fallback_count": 0,
+                        "length_repair_count": 0,
+                        "unattributed_count": 0,
+                    }
+                ],
+            },
+        },
         max_retained_per_source=8,
         max_removed_candidates=4,
     )
@@ -2381,10 +4163,288 @@ def test_retained_decision_marginal_query_useful_diagnostic_scores_true_marginal
         "selector_score": True,
         "segment_score": True,
     }
+    assert diagnostics["score_component_fields_available"] == {
+        "factorized_composed_score": True,
+        "head_logit_query_hit_probability": True,
+        "head_probability_query_hit_probability": True,
+    }
+    assert diagnostics["context_fields_available"]["sampled_prior_channels"] == {
+        "route_density_prior": True,
+        "spatial_query_hit_probability": True,
+    }
+    assert diagnostics["context_fields_available"]["model_prior_channels"] == {
+        "route_density_prior": True,
+        "spatial_query_hit_probability": True,
+    }
+    assert diagnostics["context_fields_available"]["query_free_teacher_proxies"] == {
+        "query_free_constant_proxy": True,
+        "query_free_endpoint_support": True,
+        "query_free_path_length_support_target": True,
+    }
+    assert diagnostics["context_fields_available"]["selector_stage_state"] == {
+        "final_retained": True,
+        "length_repair_retained": True,
+        "pre_repair_retained": True,
+    }
+    assert diagnostics["context_fields_available"]["selector_segment_context"] is True
+    assert diagnostics["top_marginal_miss_summary"]["available"] is True
+    assert diagnostics["top_marginal_miss_summary"]["top_marginal_rows_in_selector_trace_only"] is True
+    assert diagnostics["top_marginal_miss_diagnostics"]["top_marginal_rows"]
+    assert (
+        learned_removal["score_components"]["head_probability_query_hit_probability"]
+        == pytest.approx(0.9)
+    )
+    assert learned_removal["head_probabilities"]["query_hit_probability"] == pytest.approx(0.9)
+    assert learned_removal["head_logits"]["query_hit_probability"] == pytest.approx(2.0)
+    assert learned_removal["sampled_prior_channels"]["spatial_query_hit_probability"] == (
+        pytest.approx(0.7)
+    )
+    assert learned_removal["model_prior_channels"]["spatial_query_hit_probability"] == (
+        pytest.approx(0.7)
+    )
+    assert learned_removal["query_free_teacher_proxies"][
+        "query_free_path_length_support_target"
+    ] == pytest.approx(0.8)
+    assert learned_removal["query_useful_v1_score_components"]["factorized_composed_score"] == (
+        pytest.approx(0.85)
+    )
+    assert learned_removal["selector_stage_state"]["pre_repair_retained"] is True
+    assert learned_removal["selector_stage_state"]["final_retained"] is True
+    assert learned_removal["selector_segment_context"] == {
+        "source": "segment_source_attribution",
+        "segment_index": 7,
+        "allocation_order_index": 3,
+        "trajectory_index": 0,
+        "segment_start": 1,
+        "segment_end": 4,
+        "segment_length": 3,
+        "point_offset_in_segment": 1,
+        "point_fraction_in_segment": pytest.approx(0.5),
+        "segment_score": pytest.approx(2.5),
+        "segment_score_rank": 1,
+        "segment_score_source": "segment_budget_head_top20_mean",
+        "segment_length_support_score": pytest.approx(0.75),
+        "segment_length_support_rank": 2,
+        "segment_allocation_weight": pytest.approx(1.25),
+        "segment_allocation_weight_rank": 1,
+        "segment_allocation_count": 2,
+        "retained_count": 1,
+        "retained_fraction": pytest.approx(1.0 / 3.0),
+        "skeleton_count": 0,
+        "learned_count": 1,
+        "fallback_count": 0,
+        "length_repair_count": 0,
+        "unattributed_count": 0,
+    }
+    assert learned_removal["trajectory_index"] == 0
+    assert "marginal_query_useful_v1_candidate_rank" in learned_removal
+    assert "query_useful_v1_component_minus_marginal_rank" in learned_removal
+    assert "query_free_teacher_proxy_minus_marginal_rank" in learned_removal
+    assert "failure_buckets" in learned_removal
+    guard_summary = diagnostics["query_free_teacher_proxy_guard_coupling_summary"]
+    assert guard_summary["available"] is True
+    assert guard_summary["primary_proxy"] == "query_free_endpoint_support"
+    assert guard_summary["retained_removal_count"] == 4
+    assert guard_summary["learned_controllable_retained_removal_count"] == 1
+    assert guard_summary["guard_owned_retained_removal_count"] == 3
+    assert (
+        guard_summary["subsets"]["learned_controllable_retained_removal"][
+            "query_free_teacher_proxy_alignment"
+        ]["query_free_path_length_support_target"]["available"]
+        is False
+    )
+    teacher_summary = diagnostics["learned_controllable_marginal_teacher_summary"]
+    assert teacher_summary["available"] is True
+    assert teacher_summary["teacher_signal"] == "exact_retained_removal_marginal_query_useful_v1"
+    assert teacher_summary["teacher_scope"] == "learned_controllable_retained_removal"
+    assert teacher_summary["learned_controllable_retained_removal_count"] == 1
+    assert teacher_summary["candidate_for_train_side_calibration"] is False
+    assert teacher_summary["eval_time_feature_allowed"] is False
+    separated_teacher = diagnostics["separated_marginal_teacher_summary"]
+    assert separated_teacher["available"] is True
+    assert separated_teacher["teacher_shape"] == (
+        "separated_segment_and_within_segment_point_targets"
+    )
+    assert separated_teacher["eval_time_feature_allowed"] is False
+    assert separated_teacher["learned_controllable_retained_removal_count"] == 1
+    assert separated_teacher["rows_with_selector_segment_context"] == 1
+    assert separated_teacher["segment_target_count"] == 1
+    assert separated_teacher["point_target_count"] == 1
+    assert separated_teacher["teacher_usage_split"] == "unknown"
+    assert separated_teacher["teacher_usage_allowed_for_train_or_checkpoint"] is False
+    assert separated_teacher["teacher_target_shape_viable"] is False
+    assert separated_teacher["candidate_for_train_side_teacher"] is False
+    assert (
+        separated_teacher["candidate_for_train_side_teacher_reason"]
+        == "insufficient_teacher_target_shape"
+    )
+    assert separated_teacher["segment_target_rows"][0]["segment_index"] == 7
+    assert separated_teacher["segment_target_rows"][0]["segment_target"] == pytest.approx(1.0)
+    assert separated_teacher["point_target_rows"][0]["point_index"] == 2
+    assert separated_teacher["point_target_rows"][0]["point_target_within_segment"] == (
+        pytest.approx(1.0)
+    )
     assert learned_removal["marginal_query_useful_v1"] > 0.0
     assert removed_addition["marginal_query_useful_v1"] > 0.0
     assert diagnostics["by_source"]["learned"]["mean_marginal_query_useful_v1"] > 0.0
     assert diagnostics["by_decision"]["removed_addition_gain"]["selector_score"]["available"] is True
+    assert (
+        diagnostics["overall"]["score_component_alignment"][
+            "head_probability_query_hit_probability"
+        ]["available"]
+        is True
+    )
+    assert diagnostics["overall"]["query_free_teacher_proxy_alignment"][
+        "query_free_path_length_support_target"
+    ]["available"] is True
+    constant_proxy = diagnostics["overall"]["query_free_teacher_proxy_alignment"][
+        "query_free_constant_proxy"
+    ]
+    assert constant_proxy["available"] is False
+    assert constant_proxy["reason"] == "no_value_variation"
+    assert "top_minus_bottom_marginal" not in constant_proxy
+
+
+def test_separated_marginal_teacher_targets_separate_shape_from_split_eligibility() -> None:
+    def learned_row(
+        *,
+        point_index: int,
+        marginal: float,
+        segment_index: int,
+    ) -> dict[str, Any]:
+        return {
+            "point_index": point_index,
+            "trajectory_index": 0,
+            "decision": "retained_removal_loss",
+            "source": "learned",
+            "marginal_query_useful_v1": marginal,
+            "selector_segment_context": {
+                "trajectory_index": 0,
+                "segment_index": segment_index,
+                "segment_start": segment_index * 8,
+                "segment_end": segment_index * 8 + 8,
+                "segment_length": 8,
+                "point_offset_in_segment": point_index % 8,
+                "segment_score_rank": segment_index + 1,
+                "segment_allocation_count": 2,
+            },
+        }
+
+    rows = [
+        learned_row(point_index=2, marginal=0.40, segment_index=0),
+        learned_row(point_index=3, marginal=0.10, segment_index=0),
+        learned_row(point_index=11, marginal=0.25, segment_index=1),
+    ]
+
+    eval_summary = _separated_marginal_teacher_targets(
+        rows,
+        teacher_usage_split="eval_primary",
+    )
+    assert eval_summary["available"] is True
+    assert eval_summary["teacher_target_shape_viable"] is True
+    assert eval_summary["teacher_usage_split"] == "eval_primary"
+    assert eval_summary["teacher_usage_allowed_for_train_or_checkpoint"] is False
+    assert eval_summary["candidate_for_train_side_teacher"] is False
+    assert (
+        eval_summary["candidate_for_train_side_teacher_reason"]
+        == "eval_split_query_conditioned_teacher_not_allowed_for_training"
+    )
+
+    checkpoint_summary = _separated_marginal_teacher_targets(
+        rows,
+        teacher_usage_split="checkpoint_selection",
+    )
+    assert checkpoint_summary["available"] is True
+    assert checkpoint_summary["teacher_target_shape_viable"] is True
+    assert checkpoint_summary["teacher_usage_split"] == "checkpoint_selection"
+    assert checkpoint_summary["teacher_usage_allowed_for_train_or_checkpoint"] is True
+    assert checkpoint_summary["candidate_for_train_side_teacher"] is True
+    assert checkpoint_summary["candidate_for_train_side_teacher_reason"] == "candidate_available"
+
+    eval_segment_scores, eval_point_scores, eval_vector_diag = (
+        separated_marginal_teacher_selector_score_vectors(
+            eval_summary,
+            point_count=16,
+        )
+    )
+    assert eval_segment_scores is None
+    assert eval_point_scores is None
+    assert (
+        eval_vector_diag["reason"]
+        == "eval_split_query_conditioned_teacher_not_allowed_for_training"
+    )
+
+    compact_checkpoint_summary = dict(checkpoint_summary)
+    compact_checkpoint_summary.pop("segment_target_rows")
+    compact_checkpoint_summary.pop("point_target_rows")
+    compact_segment_scores, compact_point_scores, compact_vector_diag = (
+        separated_marginal_teacher_selector_score_vectors(
+            compact_checkpoint_summary,
+            point_count=16,
+        )
+    )
+    assert compact_segment_scores is None
+    assert compact_point_scores is None
+    assert (
+        compact_vector_diag["reason"]
+        == "missing_target_rows_full_selector_trace_required"
+    )
+
+    segment_scores, point_scores, vector_diag = separated_marginal_teacher_selector_score_vectors(
+        checkpoint_summary,
+        point_count=16,
+    )
+    assert vector_diag["available"] is True
+    assert vector_diag["teacher_usage_split"] == "checkpoint_selection"
+    assert vector_diag["positive_segment_score_point_count"] == 16
+    assert vector_diag["positive_point_score_count"] == 3
+    assert segment_scores is not None
+    assert point_scores is not None
+    assert segment_scores[:8].tolist() == pytest.approx([1.0] * 8)
+    assert segment_scores[8:16].tolist() == pytest.approx([0.5] * 8)
+    assert point_scores[2] == pytest.approx(1.0)
+    assert point_scores[3] == pytest.approx(0.25)
+    assert point_scores[11] == pytest.approx(1.0)
+
+    primary_point_scores = torch.linspace(0.0, 15.0, steps=16)
+    primary_segment_scores = torch.linspace(15.0, 0.0, steps=16)
+    hybrid_segment_scores, hybrid_point_scores, hybrid_diag = (
+        hybrid_marginal_teacher_selector_score_vectors(
+            primary_point_scores=primary_point_scores,
+            primary_segment_scores=primary_segment_scores,
+            primary_segment_score_source_label="primary_selector_segment_scores",
+            teacher_point_scores=point_scores,
+            teacher_segment_scores=segment_scores,
+            teacher_weight=0.25,
+        )
+    )
+    assert hybrid_diag["available"] is True
+    assert hybrid_diag["teacher_weight"] == pytest.approx(0.25)
+    assert hybrid_diag["primary_segment_score_source"] == "primary_selector_segment_scores"
+    assert hybrid_diag["teacher_positive_point_score_count"] == 3
+    assert hybrid_diag["teacher_positive_segment_score_point_count"] == 16
+    assert hybrid_diag["hybrid_positive_point_score_count"] == 15
+    assert hybrid_segment_scores is not None
+    assert hybrid_point_scores is not None
+    assert hybrid_point_scores[2] == pytest.approx(0.75 * (2.0 / 15.0) + 0.25)
+    assert hybrid_point_scores[3] == pytest.approx(0.75 * (3.0 / 15.0) + 0.0625)
+    assert hybrid_point_scores[11] == pytest.approx(0.75 * (11.0 / 15.0) + 0.25)
+    assert hybrid_segment_scores[0] == pytest.approx(0.75 + 0.25)
+    assert hybrid_segment_scores[8] == pytest.approx(0.75 * (7.0 / 15.0) + 0.125)
+
+    mismatch_segment_scores, mismatch_point_scores, mismatch_diag = (
+        hybrid_marginal_teacher_selector_score_vectors(
+            primary_point_scores=primary_point_scores[:-1],
+            primary_segment_scores=primary_segment_scores[:-1],
+            teacher_point_scores=point_scores,
+            teacher_segment_scores=segment_scores,
+            teacher_weight=0.25,
+        )
+    )
+    assert mismatch_segment_scores is None
+    assert mismatch_point_scores is None
+    assert mismatch_diag["available"] is False
+    assert mismatch_diag["reason"] == "score_shape_mismatch"
 
 
 def test_retained_decision_marginal_query_useful_diagnostic_uses_provided_cache() -> None:
@@ -2423,6 +4483,8 @@ def test_retained_decision_marginal_query_useful_diagnostic_uses_provided_cache(
     assert diagnostics["query_cache_range_audit_support_count"] == 1
     assert len(query_cache.range_audit_supports) == 1
     assert diagnostics["candidate_count"] == 4
+    assert diagnostics["context_fields_available"]["selector_segment_context"] is False
+    assert all(row["selector_segment_context"] is None for row in diagnostics["rows"])
 
 
 def test_segment_source_attribution_uses_canonical_segment_index_after_score_sort() -> None:
@@ -2707,11 +4769,42 @@ def test_factorized_head_fit_diagnostics_reports_each_head() -> None:
     )
     head_logits = torch.logit(head_targets.clamp(1e-4, 1.0 - 1e-4))
     head_mask = torch.ones_like(head_targets, dtype=torch.bool)
+    points = torch.tensor(
+        [
+            [0.0, 0.0, 0.0, 1.0, 0.0],
+            [1.0, 0.1, 0.0, 1.0, 0.0],
+            [2.0, 0.2, 0.0, 1.0, 0.0],
+            [3.0, 0.0, 0.0, 1.0, 0.0],
+            [4.0, 2.0, 0.0, 1.0, 0.0],
+            [5.0, 3.0, 0.0, 1.0, 0.0],
+        ],
+        dtype=torch.float32,
+    )
+    typed_queries = [
+        {
+            "type": "range",
+            "params": {
+                "t_start": -1.0,
+                "t_end": 6.0,
+                "lat_min": -0.1,
+                "lat_max": 0.25,
+                "lon_min": -1.0,
+                "lon_max": 1.0,
+            },
+            "_metadata": {
+                "anchor_family": "density_route",
+                "footprint_family": "small_local",
+            },
+        }
+    ]
 
     diagnostics = _factorized_head_fit_diagnostics(
         head_logits=head_logits,
         factorized_targets=head_targets,
         factorized_mask=head_mask,
+        points=points,
+        boundaries=[(0, 3), (3, 6)],
+        typed_queries=typed_queries,
         seed=19,
     )
     behavior = diagnostics["factorized_head_fit"]["conditional_behavior_utility"]
@@ -2724,6 +4817,15 @@ def test_factorized_head_fit_diagnostics_reports_each_head() -> None:
     assert behavior["kendall_tau"] > 0.99
     assert behavior["topk_mass_recall_at_5_percent"] == 1.0
     assert diagnostics["conditional_behavior_utility_head_tau"] == behavior["kendall_tau"]
+    family_fit = diagnostics["family_conditioned_head_trainability"]
+    assert family_fit["available"] is True
+    assert family_fit["diagnostic_only"] is True
+    density = family_fit["group_by"]["anchor_family"]["density_route"]
+    assert density["focus_family"] is True
+    assert density["query_count"] == 1
+    assert density["valid_hit_point_count"] == 4
+    assert density["head_fit"]["segment_budget_target"]["available"] is True
+    assert density["factorized_composed_score_fit"]["available"] is True
 
 
 def test_factorized_final_score_composition_diagnostics_match_scalar_target() -> None:
@@ -2735,10 +4837,12 @@ def test_factorized_final_score_composition_diagnostics_match_scalar_target() ->
     head_targets[:, 3] = torch.linspace(0.10, 0.90, steps=point_count)
     head_targets[:, 4] = torch.linspace(0.00, 1.00, steps=point_count)
     head_targets[:, 5] = torch.linspace(1.00, 0.00, steps=point_count)
-    scalar_target = (
-        head_targets[:, 0] * (0.5 + head_targets[:, 1]) * (0.75 + 0.25 * head_targets[:, 3])
-        + 0.25 * head_targets[:, 2]
-    ).clamp(0.0, 1.0)
+    scalar_target = query_useful_v1_point_score(
+        q_hit=head_targets[:, 0],
+        behavior=head_targets[:, 1],
+        boundary=head_targets[:, 2],
+        replacement=head_targets[:, 3],
+    )
     head_logits = torch.logit(head_targets.clamp(1e-4, 1.0 - 1e-4))
 
     diagnostics = _factorized_final_score_composition_diagnostics(
@@ -2750,6 +4854,7 @@ def test_factorized_final_score_composition_diagnostics_match_scalar_target() ->
     )
 
     assert diagnostics["factorized_final_score_composition_available"] is True
+    assert diagnostics["factorized_final_score_formula"] == QUERY_USEFUL_V1_FINAL_LABEL_FORMULA
     assert diagnostics["factorized_final_score_tau"] > 0.99
     assert diagnostics["factorized_final_score_topk_mass_recall_at_5_percent"] == pytest.approx(1.0)
     assert diagnostics["factorized_final_score_prediction_std_to_target_std"] == pytest.approx(
@@ -2944,7 +5049,11 @@ def test_selection_causality_diagnostics_reports_unavailable_preconditions() -> 
     }
 
 
-def _final_summary_config(*, final_candidate: bool = True) -> SimpleNamespace:
+def _final_summary_config(
+    *,
+    final_candidate: bool = True,
+    range_training_target_mode: str = "query_useful_v1_factorized",
+) -> SimpleNamespace:
     return SimpleNamespace(
         query=SimpleNamespace(
             workload_profile_id=(
@@ -2956,7 +5065,7 @@ def _final_summary_config(*, final_candidate: bool = True) -> SimpleNamespace:
         ),
         model=SimpleNamespace(
             model_type="workload_blind_range_v2",
-            range_training_target_mode="query_useful_v1_factorized",
+            range_training_target_mode=range_training_target_mode,
             selector_type="learned_segment_budget_v1",
             compression_ratio=0.10,
             learned_segment_geometry_gain_weight=0.0,
@@ -3060,6 +5169,106 @@ def test_final_run_summaries_block_final_grid_until_benchmark_evidence() -> None
     )
     assert summaries.learning_causality_summary["final_success_allowed"] is False
     assert summaries.diagnostic_summary["workload_stability_gate_available"] is True
+
+
+def test_learning_causality_summary_does_not_duplicate_retained_marginal_trace() -> None:
+    workloads = [_final_summary_workload() for _idx in range(4)]
+    trace = {
+        "retained_decision_marginal_query_useful_alignment": {
+            "available": True,
+            "diagnostic_only": True,
+            "exact_query_useful_v1_marginals": True,
+            "performance_mode": "exact_cached_query_support",
+            "candidate_count": 2,
+            "score_fields_available": {"selector_score": True},
+            "score_component_fields_available": {"factorized_composed_score": True},
+            "context_fields_available": {"trajectory_index": True},
+            "query_free_teacher_proxy_guard_coupling_summary": {
+                "available": True,
+                "diagnostic_only": True,
+            },
+            "learned_controllable_marginal_teacher_summary": {
+                "available": True,
+                "candidate_count": 1,
+                "eval_time_feature_allowed": False,
+            },
+            "separated_marginal_teacher_summary": {
+                "available": True,
+                "teacher_usage_split": "eval_primary",
+                "teacher_usage_allowed_for_train_or_checkpoint": False,
+                "teacher_target_shape_viable": True,
+                "candidate_for_train_side_teacher": False,
+                "candidate_for_train_side_teacher_reason": (
+                    "eval_split_query_conditioned_teacher_not_allowed_for_training"
+                ),
+                "segment_target_count": 1,
+                "point_target_count": 1,
+                "segment_target_rows": [{"segment_index": 7}],
+                "point_target_rows": [{"point_index": 1}],
+            },
+            "top_marginal_miss_summary": {
+                "available": True,
+                "top_marginal_rows": [{"point_index": 1}],
+            },
+            "overall": {"candidate_count": 2},
+            "by_source": {"learned": {"candidate_count": 1}},
+            "by_decision": {"retained_removal_loss": {"candidate_count": 1}},
+            "rows": [{"point_index": 1}],
+        }
+    }
+
+    summaries = build_final_run_summaries(
+        config=cast(Any, _final_summary_config(final_candidate=True)),
+        trained=cast(
+            Any,
+            SimpleNamespace(
+                fit_diagnostics={},
+                target_diagnostics={},
+                feature_context={},
+            ),
+        ),
+        train_points=torch.zeros((3, 8), dtype=torch.float32),
+        test_points=torch.zeros((3, 8), dtype=torch.float32),
+        train_label_workloads=workloads,
+        eval_workload=_final_summary_workload(),
+        selection_workload=_final_summary_workload(),
+        matched={
+            "MLQDS": _final_summary_metrics(0.30),
+            "uniform": _final_summary_metrics(0.25),
+            "DouglasPeucker": _final_summary_metrics(0.20),
+        },
+        selector_budget_diagnostics={},
+        primary_selector_trace=trace,
+        causality_ablation_scores={},
+        causality_ablation_mask_diagnostics={},
+        causal_ablation_freeze_failures={},
+        prior_sensitivity_diagnostics={},
+        prior_channel_ablation_diagnostics={},
+        head_ablation_sensitivity_diagnostics={},
+        selection_causality_diagnostics={"available": True},
+        segment_oracle_allocation_audit={},
+        target_segment_oracle_alignment_audit={},
+        segment_budget_head_ablation_mode="neutral_constant_segment_scores",
+        predictability_audit={
+            "available": True,
+            "gate_pass": True,
+            "prior_predictive_alignment_gate": {"gate_pass": True},
+        },
+        workload_distribution_comparison={
+            "workload_signature_gate": {"all_available": True, "all_pass": True}
+        },
+    )
+
+    selection = summaries.learning_causality_summary["selection_causality_diagnostics"]
+    retained = trace["retained_decision_marginal_query_useful_alignment"]
+    assert selection == {"available": True}
+    assert "retained_decision_marginal_alignment" not in selection
+    assert retained["available"] is True
+    assert retained["candidate_count"] == 2
+    assert retained["score_component_fields_available"] == {
+        "factorized_composed_score": True
+    }
+    assert retained["rows"] == [{"point_index": 1}]
 
 
 def test_final_run_summaries_reject_non_final_candidate_profile() -> None:
@@ -3703,6 +5912,20 @@ def test_predictability_audit_is_diagnostic_only_and_reports_gate_fields() -> No
     best_by_head = audit["best_prior_channel_by_head"]
     assert "query_hit_probability" in best_by_head
     assert "channel" in best_by_head["query_hit_probability"]["best_lift_at_5_percent"]
+    family_prior = audit["family_conditioned_prior_predictability"]
+    assert family_prior["available"] is True
+    assert family_prior["diagnostic_only"] is True
+    assert family_prior["used_for_gate"] is False
+    assert "small_local" in family_prior["group_by"]["footprint_family"]
+    small_local = family_prior["group_by"]["footprint_family"]["small_local"]
+    assert small_local["focus_family"] is True
+    assert small_local["valid_hit_point_count"] > 0
+    assert "segment_budget_target" in small_local["heads"]
+    segment_budget = small_local["heads"]["segment_budget_target"]
+    assert segment_budget["available"] is True
+    assert "mapped_prior_channel" in segment_budget
+    assert "best_spearman" in segment_budget
+    assert "best_lift_at_5_percent" in segment_budget
 
 
 def test_predictability_rankdata_uses_average_tie_ranks() -> None:

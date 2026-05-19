@@ -5,10 +5,13 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any, cast
 
+import pytest
+
 from config.run_config import build_run_config
 from learning.outputs import TrainingOutputs
 from orchestration.final_gate_summary import FinalRunSummaries
 from orchestration.run_payload import build_run_payload
+from orchestration.scoring_stage import build_workload_scoring_compatibility_diagnostics
 from scoring.metrics import MethodScore
 
 
@@ -18,6 +21,65 @@ def _workload(query_count: int, coverage: float) -> SimpleNamespace:
         coverage_fraction=coverage,
         generation_diagnostics={"accepted": query_count},
     )
+
+
+def _family_component_summary(score: float) -> dict[str, Any]:
+    group = {
+        "query_count": 1,
+        "range_components": {"range_point_f1": score},
+        "range_usefulness_score": score,
+        "query_useful_v1_query_local_weighted_score_normalized": score,
+        "ship_evidence_counts": {
+            "full_trajectory_hit_count_total": 10,
+            "retained_trajectory_hit_count_total": int(score * 10),
+            "missed_trajectory_hit_count_total": 10 - int(score * 10),
+            "ship_presence_recall": score,
+        },
+    }
+    return {
+        "available": True,
+        "group_by": {
+            "anchor_family": {"density_route": group},
+            "footprint_family": {},
+            "anchor_footprint_family": {},
+        },
+    }
+
+
+def test_workload_scoring_compatibility_diagnostics_compares_family_components() -> None:
+    diagnostics = build_workload_scoring_compatibility_diagnostics(
+        {
+            "MLQDS": MethodScore(
+                aggregate_f1=0.0,
+                per_type_f1={},
+                range_audit={
+                    "range_query_metadata_component_summary": _family_component_summary(0.7)
+                },
+            ),
+            "uniform": MethodScore(
+                aggregate_f1=0.0,
+                per_type_f1={},
+                range_audit={
+                    "range_query_metadata_component_summary": _family_component_summary(0.5)
+                },
+            ),
+        }
+    )
+
+    assert diagnostics["available"] is True
+    comparison = diagnostics["comparisons_vs_baseline"]["uniform"]["anchor_family"][
+        "density_route"
+    ]
+    assert comparison["query_local_score_delta"] == 0.19999999999999996
+    assert comparison["range_component_deltas"]["range_point_f1"] == 0.19999999999999996
+    assert comparison["top_primary_better_component_deltas"] == [
+        {"component": "range_point_f1", "delta": 0.19999999999999996}
+    ]
+    assert comparison["top_baseline_better_component_deltas"] == []
+    assert comparison["ship_evidence_count_deltas"]["ship_presence_recall"] == pytest.approx(
+        0.2
+    )
+    assert comparison["ship_evidence_count_deltas"]["missed_trajectory_hit_count_total"] == -2
 
 
 def test_build_run_payload_preserves_stable_artifact_fields() -> None:
@@ -60,6 +122,7 @@ def test_build_run_payload_preserves_stable_artifact_fields() -> None:
         data_split_diagnostics={"split": "ok"},
         selector_budget_diagnostics={"eval": {}},
         primary_selector_trace=None,
+        selection_selector_trace=None,
         segment_oracle_allocation_audit={},
         target_segment_oracle_alignment_audit={},
         matched={"MLQDS": MethodScore(aggregate_f1=0.7, per_type_f1={"range": 0.7})},
@@ -67,6 +130,7 @@ def test_build_run_payload_preserves_stable_artifact_fields() -> None:
         learned_fill_diagnostics={},
         range_learned_fill_summary={},
         predictability_audit={"gate_pass": False},
+        workload_scoring_compatibility_diagnostics={"available": True},
         range_compression_audit={},
         shift_pairs={},
         range_training_target_transform={},
@@ -89,7 +153,9 @@ def test_build_run_payload_preserves_stable_artifact_fields() -> None:
     assert payload["eval_query_count"] == 3
     assert payload["selection_query_count"] is None
     assert payload["matched"]["MLQDS"]["aggregate_f1"] == 0.7
+    assert payload["workload_scoring_compatibility_diagnostics"] == {"available": True}
     assert payload["selector_trace_diagnostics"]["eval_primary"] == {"available": False}
+    assert payload["selector_trace_diagnostics"]["selection_primary"] == {"available": False}
     assert payload["workload_blind_protocol"]["primary_masks_frozen_before_eval_query_scoring"]
     assert payload["workload_blind_protocol"]["frozen_audit_ratios"] == ["0.0500"]
     assert payload["training_history"] == [{"loss": 1.0}]

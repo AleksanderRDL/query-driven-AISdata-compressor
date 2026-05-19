@@ -28,6 +28,7 @@ def build_run_payload(
     data_split_diagnostics: dict[str, Any],
     selector_budget_diagnostics: dict[str, Any],
     primary_selector_trace: dict[str, Any] | None,
+    selection_selector_trace: dict[str, Any] | None,
     segment_oracle_allocation_audit: dict[str, Any],
     target_segment_oracle_alignment_audit: dict[str, Any],
     matched: dict[str, MethodScore],
@@ -35,6 +36,7 @@ def build_run_payload(
     learned_fill_diagnostics: dict[str, MethodScore],
     range_learned_fill_summary: dict[str, Any],
     predictability_audit: dict[str, Any],
+    workload_scoring_compatibility_diagnostics: dict[str, Any],
     range_compression_audit: dict[str, dict[str, Any]],
     shift_pairs: dict[str, dict[str, float]],
     range_training_target_transform: dict[str, Any],
@@ -94,7 +96,10 @@ def build_run_payload(
         "selector_trace_diagnostics": {
             "eval_primary": primary_selector_trace
             if primary_selector_trace is not None
-            else {"available": False}
+            else {"available": False},
+            "selection_primary": selection_selector_trace
+            if selection_selector_trace is not None
+            else {"available": False},
         },
         "segment_oracle_allocation_audit": segment_oracle_allocation_audit,
         "target_segment_oracle_alignment_audit": target_segment_oracle_alignment_audit,
@@ -109,6 +114,9 @@ def build_run_payload(
         },
         "range_learned_fill_summary": range_learned_fill_summary,
         "predictability_audit": predictability_audit,
+        "workload_scoring_compatibility_diagnostics": (
+            workload_scoring_compatibility_diagnostics
+        ),
         "workload_stability_gate": final_summaries.workload_stability_gate,
         "range_compression_audit": range_compression_audit,
         "shift": shift_pairs,

@@ -9,11 +9,15 @@ import torch
 
 from learning.query_prior_fields import QUERY_PRIOR_FIELD_NAMES, sample_query_prior_fields
 from learning.targets.query_useful_v1 import (
+    FAMILY_TRAINABILITY_FOCUS,
+    FAMILY_TRAINABILITY_GROUP_KEYS,
     QUERY_USEFUL_V1_HEAD_NAMES,
+    QUERY_USEFUL_V1_TARGET_MODES,
+    _range_query_family_evidence,
     build_query_useful_v1_targets,
 )
 
-PREDICTABILITY_AUDIT_SCHEMA_VERSION = 2
+PREDICTABILITY_AUDIT_SCHEMA_VERSION = 3
 PREDICTABILITY_GATE_THRESHOLDS = {
     "lift_at_1_percent": 1.10,
     "lift_at_2_percent": 1.15,
@@ -26,6 +30,14 @@ PRIOR_ALIGNMENT_GATE_THRESHOLDS = {
     "query_hit_lift_at_5_percent_min": 1.10,
     "segment_budget_lift_at_5_percent_min": 1.05,
     "min_positive_spearman_head_count": 2,
+}
+HEAD_PRIOR_SCORE_MAP = {
+    "query_hit_probability": "query_mass_prior",
+    "conditional_behavior_utility": "behavior_utility_prior",
+    "boundary_event_utility": "boundary_event_prior",
+    "replacement_representative_value": "replacement_representative_prior",
+    "segment_budget_target": "segment_budget_prior",
+    "path_length_support_target": "behavior_utility_prior",
 }
 
 
@@ -333,20 +345,12 @@ def _per_head_predictability(
 ) -> dict[str, Any]:
     """Return per-head prior predictability diagnostics for factorized targets."""
     channels = _prior_channel_scores(points, query_prior_field)
-    head_score_map = {
-        "query_hit_probability": "query_mass_prior",
-        "conditional_behavior_utility": "behavior_utility_prior",
-        "boundary_event_utility": "boundary_event_prior",
-        "replacement_representative_value": "replacement_representative_prior",
-        "segment_budget_target": "segment_budget_prior",
-        "path_length_support_target": "behavior_utility_prior",
-    }
     per_head: dict[str, Any] = {}
     positive_spearman_count = 0
     for head_idx, head_name in enumerate(QUERY_USEFUL_V1_HEAD_NAMES):
         if head_idx >= int(head_targets.shape[1]):
             continue
-        score_name = head_score_map.get(head_name, "combined_prior_score")
+        score_name = HEAD_PRIOR_SCORE_MAP.get(head_name, "combined_prior_score")
         metrics = _score_target_metrics(
             score=channels[score_name],
             target=head_targets[:, head_idx],
@@ -441,6 +445,149 @@ def _per_head_predictability(
     }
 
 
+def _metric_subset(metrics: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "available": bool(metrics.get("available", False)),
+        "valid_count": metrics.get("valid_count"),
+        "positive_count": metrics.get("positive_count"),
+        "spearman": metrics.get("spearman"),
+        "positive_target_spearman": metrics.get("positive_target_spearman"),
+        "lift_at_5_percent": metrics.get("lift_at_5_percent"),
+        "pr_auc_lift_over_base_rate": metrics.get("pr_auc_lift_over_base_rate"),
+        "score_std": metrics.get("score_std"),
+        "target_mean": metrics.get("target_mean"),
+    }
+
+
+def _family_conditioned_prior_predictability(
+    *,
+    points: torch.Tensor,
+    boundaries: list[tuple[int, int]],
+    range_queries: list[dict[str, Any]],
+    query_prior_field: dict[str, Any],
+    head_targets: torch.Tensor,
+    head_mask: torch.Tensor,
+) -> dict[str, Any]:
+    """Return focus-family prior predictability diagnostics without changing gates."""
+    family_evidence = _range_query_family_evidence(
+        points=points,
+        boundaries=boundaries,
+        range_queries=range_queries,
+        group_keys=FAMILY_TRAINABILITY_GROUP_KEYS,
+    )
+    channels = _prior_channel_scores(points, query_prior_field)
+    out: dict[str, Any] = {
+        "schema_version": 1,
+        "available": bool(range_queries) and bool(family_evidence),
+        "diagnostic_only": True,
+        "used_for_gate": False,
+        "used_for_training": False,
+        "used_for_checkpoint_selection": False,
+        "used_for_retained_mask_decision": False,
+        "focus_families": {
+            group_key: sorted(values) for group_key, values in FAMILY_TRAINABILITY_FOCUS.items()
+        },
+        "group_by": {},
+        "interpretation": (
+            "Family-conditioned prior predictability localizes whether "
+            "train-derived prior channels expose held-out family target signal. "
+            "It is diagnostic only and does not change gates."
+        ),
+    }
+    if not range_queries:
+        out["available"] = False
+        out["reason"] = "no_range_queries"
+        return out
+
+    for group_key, family_rows in family_evidence.items():
+        group_out: dict[str, Any] = {}
+        for family, evidence in family_rows.items():
+            focus_family = family in FAMILY_TRAINABILITY_FOCUS.get(group_key, frozenset())
+            if not focus_family:
+                continue
+            family_valid = evidence["query_hit_probability"].detach().cpu().float() > 0.0
+            family_out: dict[str, Any] = {
+                "available": bool(family_valid.any().item()),
+                "focus_family": True,
+                "query_count": int(evidence["query_count"]),
+                "valid_hit_point_count": int(family_valid.sum().item()),
+                "heads": {},
+                "weak_family_prior_heads": [],
+            }
+            if not family_out["available"]:
+                family_out["reason"] = "no_family_hit_points"
+                group_out[str(family)] = family_out
+                continue
+            weak_heads: list[str] = []
+            for head_idx, head_name in enumerate(QUERY_USEFUL_V1_HEAD_NAMES):
+                if head_idx >= int(head_targets.shape[1]):
+                    continue
+                valid_mask = head_mask[:, head_idx].detach().cpu().bool() & family_valid
+                target = head_targets[:, head_idx].detach().cpu().float()
+                channel_rows = {
+                    channel_name: _score_target_metrics(
+                        score=score,
+                        target=target,
+                        valid_mask=valid_mask,
+                    )
+                    for channel_name, score in channels.items()
+                }
+                available_rows = {
+                    channel_name: metrics
+                    for channel_name, metrics in channel_rows.items()
+                    if isinstance(metrics, dict) and metrics.get("available")
+                }
+                if not available_rows:
+                    family_out["heads"][head_name] = {
+                        "available": False,
+                        "reason": "no_valid_family_head_pairs",
+                    }
+                    weak_heads.append(str(head_name))
+                    continue
+                mapped_channel = HEAD_PRIOR_SCORE_MAP.get(head_name, "combined_prior_score")
+                mapped_metrics = available_rows.get(mapped_channel, {})
+                best_spearman_name, best_spearman_metrics = max(
+                    available_rows.items(),
+                    key=lambda item: float(item[1].get("spearman", 0.0) or 0.0),
+                )
+                best_lift_name, best_lift_metrics = max(
+                    available_rows.items(),
+                    key=lambda item: float(item[1].get("lift_at_5_percent", 0.0) or 0.0),
+                )
+                best_spearman = float(best_spearman_metrics.get("spearman", 0.0) or 0.0)
+                best_lift = float(best_lift_metrics.get("lift_at_5_percent", 0.0) or 0.0)
+                weak_prior = best_spearman <= 0.0 or best_lift < 1.05
+                if weak_prior:
+                    weak_heads.append(str(head_name))
+                family_out["heads"][head_name] = {
+                    "available": True,
+                    "mapped_prior_channel": mapped_channel,
+                    "mapped_prior_metrics": _metric_subset(mapped_metrics),
+                    "best_spearman": {
+                        "channel": best_spearman_name,
+                        "value": best_spearman,
+                        "metrics": _metric_subset(best_spearman_metrics),
+                    },
+                    "best_lift_at_5_percent": {
+                        "channel": best_lift_name,
+                        "value": best_lift,
+                        "metrics": _metric_subset(best_lift_metrics),
+                    },
+                    "family_prior_status": (
+                        "weak_family_prior_alignment"
+                        if weak_prior
+                        else "diagnostic_only"
+                    ),
+                }
+            family_out["weak_family_prior_heads"] = weak_heads
+            family_out["family_prior_status"] = (
+                "weak_focus_family_prior_alignment" if weak_heads else "diagnostic_only"
+            )
+            group_out[str(family)] = family_out
+        out["group_by"][group_key] = group_out
+    return out
+
+
 def _prior_predictability_score(
     points: torch.Tensor, query_prior_field: dict[str, Any]
 ) -> torch.Tensor:
@@ -484,6 +631,7 @@ def query_prior_predictability_audit(
     boundaries: list[tuple[int, int]],
     eval_typed_queries: list[dict[str, Any]],
     query_prior_field: dict[str, Any] | None,
+    target_mode: str = "query_useful_v1_factorized",
 ) -> dict[str, Any]:
     """Measure whether train-derived query-prior fields predict held-out eval usefulness."""
     if query_prior_field is None:
@@ -497,6 +645,11 @@ def query_prior_predictability_audit(
         points=points,
         boundaries=boundaries,
         typed_queries=eval_typed_queries,
+        target_mode=(
+            str(target_mode).lower()
+            if str(target_mode).lower() in QUERY_USEFUL_V1_TARGET_MODES
+            else "query_useful_v1_factorized"
+        ),
     )
     target = eval_targets.labels[:, 0].float().detach().cpu()
     score = _prior_predictability_score(points, query_prior_field).detach().cpu()
@@ -553,12 +706,26 @@ def query_prior_predictability_audit(
         head_targets=eval_targets.head_targets.detach().cpu().float(),
         head_mask=eval_targets.head_mask.detach().cpu().bool(),
     )
+    range_queries = [
+        query
+        for query in eval_typed_queries
+        if str(query.get("type", "")).lower() == "range" and isinstance(query.get("params"), dict)
+    ]
+    family_prior_predictability = _family_conditioned_prior_predictability(
+        points=points,
+        boundaries=boundaries,
+        range_queries=range_queries,
+        query_prior_field=query_prior_field,
+        head_targets=eval_targets.head_targets.detach().cpu().float(),
+        head_mask=eval_targets.head_mask.detach().cpu().bool(),
+    )
     return {
         "schema_version": PREDICTABILITY_AUDIT_SCHEMA_VERSION,
         "available": True,
         "scoring_stage": "after_masks_frozen_diagnostic_only",
         "score_source": "train_query_prior_fields",
         "target_source": "heldout_eval_query_useful_v1_targets",
+        "target_mode": str(target_mode).lower(),
         "score_formula": "query_mass_gated_behavior_boundary",
         "used_for_training": False,
         "used_for_checkpoint_selection": False,
@@ -569,6 +736,7 @@ def query_prior_predictability_audit(
         "prior_channel_predictability": per_head_predictability["channel_vs_segment_budget_target"],
         "prior_channel_by_head_predictability": per_head_predictability["channel_vs_head_target"],
         "best_prior_channel_by_head": per_head_predictability["best_channel_by_head"],
+        "family_conditioned_prior_predictability": family_prior_predictability,
         "prior_predictive_alignment_gate": per_head_predictability[
             "prior_predictive_alignment_gate"
         ],

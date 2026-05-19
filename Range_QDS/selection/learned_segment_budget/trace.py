@@ -45,6 +45,7 @@ def _selector_trace(
     segment_length_support_weight: float = 0.0,
     segment_allocation_weight_floor: float = SEGMENT_ALLOCATION_WEIGHT_FLOOR,
     segment_score_point_blend_weight: float = SEGMENT_SCORE_POINT_BLEND_WEIGHT,
+    segment_transfer_calibration_summary: dict[str, Any] | None = None,
     length_repair_fraction: float = 0.0,
     length_repair_score_protection_fraction: float = 0.0,
     length_repair_swap_count: int = 0,
@@ -119,6 +120,17 @@ def _selector_trace(
         "segment_length_support_weight": float(segment_length_support_weight),
         "segment_allocation_weight_floor": float(segment_allocation_weight_floor),
         "segment_score_point_blend_weight": float(segment_score_point_blend_weight),
+        "segment_transfer_calibration": (
+            segment_transfer_calibration_summary
+            if segment_transfer_calibration_summary is not None
+            else {
+                "mode": "none",
+                "applied": False,
+                "reason": "not_run",
+                "uses_post_selection_attribution": False,
+                "uses_length_support_counter_signal": False,
+            }
+        ),
         "no_fixed_85_percent_temporal_scaffold": True,
         "point_attribution_available": True,
         "retained_mask": _mask_indices_payload(retained),

@@ -473,6 +473,7 @@ def test_benchmark_row_records_effective_child_torch_runtime(tmp_path) -> None:
                 "allocation_length_support_weight": 0.4,
                 "allocation_weight_floor": 0.25,
                 "segment_score_blend_weight": 0.05,
+                "segment_transfer_calibration_mode": "segment_score_allocation_weight_zblend",
                 "fairness_preallocation_enabled": True,
                 "length_repair_fraction": 0.25,
                 "length_repair_score_protection_fraction": 0.15,
@@ -1106,6 +1107,9 @@ def test_benchmark_row_records_effective_child_torch_runtime(tmp_path) -> None:
     assert row["learned_segment_allocation_length_support_weight"] == 0.4
     assert row["learned_segment_allocation_weight_floor"] == 0.25
     assert row["learned_segment_score_blend_weight"] == 0.05
+    assert row["learned_segment_transfer_calibration_mode"] == (
+        "segment_score_allocation_weight_zblend"
+    )
     assert row["learned_segment_fairness_preallocation_enabled"] is True
     assert row["learned_segment_length_repair_fraction"] == 0.25
     assert row["learned_segment_length_repair_score_protection_fraction"] == 0.15

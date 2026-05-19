@@ -39,7 +39,7 @@ def _component_value(components: Mapping[str, float], key: str, default: float =
     value = components.get(key, default)
     try:
         return float(value)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return float(default)
 
 

@@ -290,6 +290,7 @@ def run_learning_scoring_pipeline(
             ),
         }
     selection_causality_payload: dict[str, Any] = {"available": False, "reason": "not_run"}
+    selection_selector_trace: dict[str, Any] | None = None
     if workload_blind_eval:
         with _phase("selection-causality-diagnostics"):
             selection_causality_payload = build_selection_causality_diagnostics(
@@ -302,6 +303,12 @@ def run_learning_scoring_pipeline(
                 config=config,
                 seeds=seeds,
             )
+            raw_selection_trace = selection_causality_payload.pop(
+                "selection_selector_trace_diagnostics",
+                None,
+            )
+            if isinstance(raw_selection_trace, dict):
+                selection_selector_trace = raw_selection_trace
     retained_mask_freezing = freeze_workload_blind_retained_masks(
         methods=methods,
         retention_methods=retention_methods,
@@ -372,6 +379,9 @@ def run_learning_scoring_pipeline(
     causality_ablation_mask_diagnostics = scoring_stage.causality_ablation_mask_diagnostics
     range_compression_audit = scoring_stage.range_compression_audit
     range_compression_audit_table = scoring_stage.range_compression_audit_table
+    workload_scoring_compatibility_diagnostics = (
+        scoring_stage.workload_scoring_compatibility_diagnostics
+    )
     shift_pairs = scoring_stage.shift_pairs
     shift_table = scoring_stage.shift_table
     segment_oracle_allocation_audit = scoring_stage.segment_oracle_allocation_audit
@@ -451,6 +461,7 @@ def run_learning_scoring_pipeline(
         boundaries=test_boundaries,
         eval_typed_queries=eval_workload.typed_queries,
         query_prior_field=trained.feature_context.get("query_prior_field"),
+        target_mode=str(getattr(config.model, "range_training_target_mode", "")),
     )
     final_summaries = build_final_run_summaries(
         config=config,
@@ -488,6 +499,7 @@ def run_learning_scoring_pipeline(
         data_split_diagnostics=data_split.split_diagnostics,
         selector_budget_diagnostics=selector_budget_diagnostics,
         primary_selector_trace=primary_selector_trace,
+        selection_selector_trace=selection_selector_trace,
         segment_oracle_allocation_audit=segment_oracle_allocation_audit,
         target_segment_oracle_alignment_audit=target_segment_oracle_alignment_audit,
         matched=matched,
@@ -495,6 +507,9 @@ def run_learning_scoring_pipeline(
         learned_fill_diagnostics=learned_fill_diagnostics,
         range_learned_fill_summary=range_learned_fill_summary,
         predictability_audit=predictability_audit,
+        workload_scoring_compatibility_diagnostics=(
+            workload_scoring_compatibility_diagnostics
+        ),
         range_compression_audit=range_compression_audit,
         shift_pairs=shift_pairs,
         range_training_target_transform=range_training_target_transform,

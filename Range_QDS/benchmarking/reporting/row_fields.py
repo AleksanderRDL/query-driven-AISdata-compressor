@@ -526,6 +526,10 @@ def _row_from_run(
         "learned_segment_score_blend_weight": learned_segment_selector_config.get(
             "segment_score_blend_weight", model_config.get("learned_segment_score_blend_weight")
         ),
+        "learned_segment_transfer_calibration_mode": learned_segment_selector_config.get(
+            "segment_transfer_calibration_mode",
+            model_config.get("learned_segment_transfer_calibration_mode"),
+        ),
         "learned_segment_fairness_preallocation_enabled": learned_segment_selector_config.get(
             "fairness_preallocation_enabled",
             model_config.get("learned_segment_fairness_preallocation"),

@@ -705,6 +705,116 @@ def test_range_usefulness_ship_coverage_penalizes_sparse_hit_ship_representation
     assert audit["range_ship_coverage"] < audit["range_ship_f1"]
 
 
+def test_range_usefulness_reports_query_family_component_summary() -> None:
+    points = torch.tensor(
+        [
+            [0.0, 0.0, 0.0, 1.0],
+            [1.0, 0.0, 0.1, 1.0],
+            [2.0, 0.0, 0.2, 1.0],
+            [3.0, 0.0, 0.3, 1.0],
+        ],
+        dtype=torch.float32,
+    )
+    boundaries = [(0, 4)]
+    params = {
+        "lat_min": -1.0,
+        "lat_max": 1.0,
+        "lon_min": -1.0,
+        "lon_max": 1.0,
+        "t_start": -1.0,
+        "t_end": 4.0,
+    }
+    queries = [
+        {
+            "type": "range",
+            "params": params,
+            "_metadata": {
+                "anchor_family": "density_route",
+                "footprint_family": "medium_operational",
+            },
+        },
+        {
+            "type": "range",
+            "params": params,
+            "_metadata": {
+                "anchor_family": "boundary_entry_exit",
+                "footprint_family": "route_corridor_like",
+            },
+        },
+    ]
+    retained = torch.tensor([True, True, True, True])
+
+    audit = score_range_usefulness(points, boundaries, retained, queries)
+
+    summary = audit["range_query_metadata_component_summary"]
+    assert summary["available"] is True
+    assert summary["diagnostic_only"] is True
+    assert summary["query_count"] == 2
+    assert len(summary["query_rows"]) == 2
+    assert "length_preservation_guardrail" in summary["excluded_query_useful_v1_components"]
+    anchor_groups = summary["group_by"]["anchor_family"]
+    assert set(anchor_groups) == {"boundary_entry_exit", "density_route"}
+    density = anchor_groups["density_route"]
+    assert density["query_count"] == 1
+    assert density["range_components"]["range_point_f1"] == pytest.approx(1.0)
+    assert density["query_useful_v1_query_local_weighted_score_normalized"] == pytest.approx(
+        1.0
+    )
+
+
+def test_range_usefulness_reports_ship_evidence_counts_by_query_family() -> None:
+    points = torch.tensor(
+        [
+            [0.0, 0.0, 0.0, 1.0],
+            [1.0, 0.0, 0.1, 1.0],
+            [0.0, 0.2, 0.0, 1.0],
+            [1.0, 0.2, 0.1, 1.0],
+        ],
+        dtype=torch.float32,
+    )
+    boundaries = [(0, 2), (2, 4)]
+    queries = [
+        {
+            "type": "range",
+            "params": {
+                "lat_min": -1.0,
+                "lat_max": 1.0,
+                "lon_min": -1.0,
+                "lon_max": 1.0,
+                "t_start": -1.0,
+                "t_end": 2.0,
+            },
+            "_metadata": {
+                "anchor_family": "density_route",
+                "footprint_family": "small_local",
+            },
+        }
+    ]
+    retained = torch.tensor([True, False, False, False])
+
+    audit = score_range_usefulness(points, boundaries, retained, queries)
+
+    row = audit["range_query_metadata_component_summary"]["query_rows"][0]
+    ship_counts = row["ship_evidence_counts"]
+    assert ship_counts["full_trajectory_hit_count"] == 2
+    assert ship_counts["retained_trajectory_hit_count"] == 1
+    assert ship_counts["missed_trajectory_hit_count"] == 1
+    assert ship_counts["missed_trajectory_hit_fraction"] == pytest.approx(0.5)
+    assert ship_counts["multi_point_full_trajectory_hit_count"] == 2
+    assert ship_counts["multi_point_retained_trajectory_hit_count"] == 1
+    assert ship_counts["multi_point_ship_presence_recall"] == pytest.approx(0.5)
+
+    density = audit["range_query_metadata_component_summary"]["group_by"]["anchor_family"][
+        "density_route"
+    ]
+    group_counts = density["ship_evidence_counts"]
+    assert group_counts["full_trajectory_hit_count_total"] == 2
+    assert group_counts["retained_trajectory_hit_count_total"] == 1
+    assert group_counts["missed_trajectory_hit_count_total"] == 1
+    assert group_counts["ship_presence_recall"] == pytest.approx(0.5)
+    assert group_counts["multi_point_ship_presence_recall"] == pytest.approx(0.5)
+
+
 def test_range_usefulness_gap_coverage_penalizes_interior_gap() -> None:
     points = torch.tensor(
         [

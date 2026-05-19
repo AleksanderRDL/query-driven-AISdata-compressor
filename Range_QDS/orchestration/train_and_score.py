@@ -252,6 +252,7 @@ def main() -> None:
         ),
         learned_segment_allocation_weight_floor=args.learned_segment_allocation_weight_floor,
         learned_segment_score_blend_weight=args.learned_segment_score_blend_weight,
+        learned_segment_transfer_calibration_mode=args.learned_segment_transfer_calibration_mode,
         learned_segment_fairness_preallocation=args.learned_segment_fairness_preallocation,
         learned_segment_length_repair_fraction=args.learned_segment_length_repair_fraction,
         learned_segment_length_repair_score_protection_fraction=(
@@ -374,6 +375,7 @@ def main() -> None:
         f"learned_segment_allocation_length_support_weight={args.learned_segment_allocation_length_support_weight}  "
         f"learned_segment_allocation_weight_floor={args.learned_segment_allocation_weight_floor}  "
         f"learned_segment_score_blend_weight={args.learned_segment_score_blend_weight}  "
+        f"learned_segment_transfer_calibration_mode={args.learned_segment_transfer_calibration_mode}  "
         f"learned_segment_fairness_preallocation={args.learned_segment_fairness_preallocation}  "
         f"learned_segment_length_repair_fraction={args.learned_segment_length_repair_fraction}  "
         "learned_segment_length_repair_score_protection_fraction="

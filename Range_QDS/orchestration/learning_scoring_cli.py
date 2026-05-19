@@ -12,6 +12,7 @@ from config.run_config import (
     DEFAULT_LEARNED_SEGMENT_ALLOCATION_WEIGHT_FLOOR,
     DEFAULT_LEARNED_SEGMENT_GEOMETRY_GAIN_WEIGHT,
     DEFAULT_LEARNED_SEGMENT_SCORE_BLEND_WEIGHT,
+    DEFAULT_LEARNED_SEGMENT_TRANSFER_CALIBRATION_MODE,
     DEFAULT_VALIDATION_ENDPOINT_PENALTY_WEIGHT,
     DEFAULT_VALIDATION_GLOBAL_SANITY_PENALTY_WEIGHT,
     DEFAULT_VALIDATION_LENGTH_PRESERVATION_MIN,
@@ -23,6 +24,7 @@ from learning.model_features import SUPPORTED_MODEL_TYPES
 from learning.targets.modes import RANGE_TARGET_BALANCE_MODES, RANGE_TRAINING_TARGET_MODES
 from learning.teacher_distillation import RANGE_TEACHER_DISTILLATION_MODES
 from runtime.torch_runtime import AMP_MODE_CHOICES, FLOAT32_MATMUL_PRECISION_CHOICES
+from selection.learned_segment_budget import SEGMENT_TRANSFER_CALIBRATION_MODE_CHOICES
 from selection.model_score_conversion import MLQDS_SCORE_MODES
 from selection.selector_types import SELECTOR_TYPE_CHOICES, TEMPORAL_HYBRID_SELECTOR_TYPE
 from workloads.generation.anchors import RANGE_ANCHOR_MODES
@@ -457,7 +459,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--loss_objective",
         type=str,
         default="budget_topk",
-        choices=["ranking_bce", "budget_topk", "stratified_budget_topk", "pointwise_bce"],
+        choices=[
+            "ranking_bce",
+            "budget_topk",
+            "stratified_budget_topk",
+            "pointwise_bce",
+        ],
         help=(
             "Training objective. 'ranking_bce' is the pairwise ranking plus BCE ablation; "
             "'budget_topk' optimizes soft retained-budget target mass across budget ratios; "
@@ -831,6 +838,18 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Within-segment blend weight for the segment-budget head in "
             "learned_segment_budget_v1. Exposed so it cannot silently mask weak heads."
+        ),
+    )
+    parser.add_argument(
+        "--learned_segment_transfer_calibration_mode",
+        type=str,
+        default=DEFAULT_LEARNED_SEGMENT_TRANSFER_CALIBRATION_MODE,
+        choices=SEGMENT_TRANSFER_CALIBRATION_MODE_CHOICES,
+        help=(
+            "Guarded non-default pre-selection segment transfer calibration for "
+            "learned_segment_budget_v1. 'none' preserves current behavior; "
+            "segment_score_allocation_weight_zblend is diagnostic until unchanged "
+            "strict gates justify it."
         ),
     )
     parser.add_argument(

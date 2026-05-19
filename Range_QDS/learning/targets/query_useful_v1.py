@@ -20,7 +20,24 @@ from workloads.range_geometry import (
 )
 
 QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE = "query_useful_v1_factorized"
-QUERY_USEFUL_V1_TARGET_MODES = frozenset({QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE})
+QUERY_USEFUL_V1_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE = (
+    "query_useful_v1_factorized_segment_budget_query_ship_max_pool"
+)
+QUERY_USEFUL_V1_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE = (
+    "query_useful_v1_factorized_query_ship_local_heads"
+)
+QUERY_USEFUL_V1_EXPERIMENTAL_TARGET_MODES = frozenset(
+    {
+        QUERY_USEFUL_V1_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE,
+        QUERY_USEFUL_V1_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE,
+    }
+)
+QUERY_USEFUL_V1_TARGET_MODES = frozenset(
+    {
+        QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE,
+        *QUERY_USEFUL_V1_EXPERIMENTAL_TARGET_MODES,
+    }
+)
 QUERY_USEFUL_V1_HEAD_NAMES = (
     "query_hit_probability",
     "conditional_behavior_utility",
@@ -29,6 +46,14 @@ QUERY_USEFUL_V1_HEAD_NAMES = (
     "segment_budget_target",
     "path_length_support_target",
 )
+QUERY_USEFUL_V1_FINAL_LABEL_FORMULA = (
+    "query_hit_times_behavior_with_conditional_replacement_modulation_plus_boundary"
+)
+FAMILY_TRAINABILITY_GROUP_KEYS = ("anchor_family", "footprint_family")
+FAMILY_TRAINABILITY_FOCUS = {
+    "anchor_family": frozenset({"density_route", "crossing_turn_change"}),
+    "footprint_family": frozenset({"small_local", "medium_operational"}),
+}
 
 
 @dataclass
@@ -40,6 +65,60 @@ class QueryUsefulTargetBundle:
     head_targets: torch.Tensor
     head_mask: torch.Tensor
     diagnostics: dict[str, Any]
+
+
+def query_useful_v1_point_score(
+    *,
+    q_hit: torch.Tensor,
+    behavior: torch.Tensor,
+    boundary: torch.Tensor,
+    replacement: torch.Tensor,
+) -> torch.Tensor:
+    """Return the scalar QueryUsefulV1 point score used by labels and v2 logits."""
+    q_hit = q_hit.float().clamp(0.0, 1.0)
+    behavior = behavior.float().clamp(0.0, 1.0)
+    boundary = boundary.float().clamp(0.0, 1.0)
+    replacement = replacement.float().clamp(0.0, 1.0)
+    return (q_hit * (0.5 + behavior) * (0.75 + 0.25 * replacement) + 0.25 * boundary).clamp(
+        0.0, 1.0
+    )
+
+
+def _query_ship_blend_signal(
+    *,
+    q_hit: torch.Tensor,
+    ship_query_evidence: torch.Tensor,
+    valid: torch.Tensor,
+) -> torch.Tensor:
+    """Return a query-local presence utility that preserves ship-level evidence."""
+    valid = valid.to(dtype=torch.bool)
+    normalized_q_hit = _normalize_0_1(q_hit, valid)
+    normalized_ship = _normalize_0_1(ship_query_evidence, valid)
+    blended = (0.65 * normalized_q_hit + 0.35 * normalized_ship).clamp(0.0, 1.0)
+    return torch.where(valid, blended, torch.zeros_like(blended))
+
+
+def _query_ship_local_behavior_signal(
+    *,
+    behavior: torch.Tensor,
+    boundary: torch.Tensor,
+    replacement: torch.Tensor,
+    ship_query_evidence: torch.Tensor,
+    valid: torch.Tensor,
+) -> torch.Tensor:
+    """Return a compact query-local behavior utility for retained-set value."""
+    valid = valid.to(dtype=torch.bool)
+    normalized_behavior = _normalize_0_1(behavior, valid)
+    normalized_boundary = _normalize_0_1(boundary, valid)
+    normalized_replacement = _normalize_0_1(replacement, valid)
+    normalized_ship = _normalize_0_1(ship_query_evidence, valid)
+    utility = (
+        0.45 * normalized_ship
+        + 0.25 * normalized_behavior
+        + 0.20 * normalized_replacement
+        + 0.10 * normalized_boundary
+    ).clamp(0.0, 1.0)
+    return torch.where(valid, utility, torch.zeros_like(utility))
 
 
 def _normalize_0_1(values: torch.Tensor, mask: torch.Tensor | None = None) -> torch.Tensor:
@@ -151,6 +230,106 @@ def _segment_budget_targets(
     return out
 
 
+def _segment_pooled_targets(
+    point_value: torch.Tensor,
+    boundaries: list[tuple[int, int]],
+    segment_size: int,
+    *,
+    pool: str,
+) -> torch.Tensor:
+    """Assign each point its segment's pooled point value for allocation diagnostics."""
+    out = torch.zeros_like(point_value.float())
+    segment_values: list[torch.Tensor] = []
+    segment_slices: list[tuple[int, int]] = []
+    size = max(1, int(segment_size))
+    for start, end in boundaries:
+        for seg_start in range(int(start), int(end), size):
+            seg_end = min(int(end), seg_start + size)
+            if seg_end <= seg_start:
+                continue
+            local = point_value[seg_start:seg_end].float().clamp(min=0.0)
+            if int(local.numel()) <= 0:
+                continue
+            if str(pool) == "max":
+                value = local.max()
+            elif str(pool) == "top20_mean":
+                keep = min(int(local.numel()), max(1, math.ceil(0.20 * int(local.numel()))))
+                value = torch.topk(local, k=keep, largest=True).values.mean()
+            elif str(pool) == "mean":
+                value = local.mean()
+            else:
+                raise ValueError(f"Unsupported segment pool: {pool!r}")
+            segment_values.append(value)
+            segment_slices.append((seg_start, seg_end))
+    if not segment_values:
+        return out
+    values = torch.stack(segment_values)
+    max_value = values.max().clamp(min=1e-6)
+    normalized = (values / max_value).clamp(0.0, 1.0)
+    for value, (seg_start, seg_end) in zip(normalized, segment_slices, strict=True):
+        out[seg_start:seg_end] = value
+    return out
+
+
+def _ship_query_pair_fractional_segment_targets(
+    *,
+    query_hit_masks: list[torch.Tensor],
+    boundaries: list[tuple[int, int]],
+    segment_size: int,
+    point_count: int,
+    device: torch.device,
+) -> torch.Tensor:
+    """Return segment scores with one fractional credit per ship-query pair."""
+    out = torch.zeros((int(point_count),), dtype=torch.float32, device=device)
+    segment_values: list[float] = []
+    segment_slices: list[tuple[int, int, int]] = []
+    size = max(1, int(segment_size))
+    for trajectory_id, (start, end) in enumerate(boundaries):
+        for seg_start in range(int(start), int(end), size):
+            seg_end = min(int(end), seg_start + size)
+            if seg_end <= seg_start:
+                continue
+            segment_slices.append((int(trajectory_id), int(seg_start), int(seg_end)))
+            segment_values.append(0.0)
+    if not segment_slices:
+        return out
+
+    segments_by_trajectory: dict[int, list[int]] = {}
+    for segment_idx, (trajectory_id, _seg_start, _seg_end) in enumerate(segment_slices):
+        segments_by_trajectory.setdefault(int(trajectory_id), []).append(int(segment_idx))
+
+    for query_mask in query_hit_masks:
+        query_hit = query_mask.to(device=device, dtype=torch.bool)
+        for _trajectory_id, segment_indices in segments_by_trajectory.items():
+            hit_segment_indices = [
+                segment_idx
+                for segment_idx in segment_indices
+                if bool(
+                    query_hit[
+                        segment_slices[segment_idx][1] : segment_slices[segment_idx][2]
+                    ]
+                    .any()
+                    .item()
+                )
+            ]
+            if not hit_segment_indices:
+                continue
+            credit = 1.0 / float(len(hit_segment_indices))
+            for segment_idx in hit_segment_indices:
+                segment_values[segment_idx] += credit
+
+    if max(segment_values, default=0.0) <= 1e-12:
+        return out
+    max_value = max(segment_values)
+    for value, (_trajectory_id, seg_start, seg_end) in zip(
+        segment_values,
+        segment_slices,
+        strict=True,
+    ):
+        out[int(seg_start) : int(seg_end)] = float(value / max_value)
+    return out
+
+
 def _lat_lon_distance_km(
     points: torch.Tensor, left_idx: torch.Tensor, right_idx: torch.Tensor
 ) -> torch.Tensor:
@@ -218,6 +397,22 @@ def _path_length_support_targets(
         for value, (seg_start, seg_end) in zip(normalized, segment_slices, strict=True):
             out[seg_start:seg_end] = value
     return out
+
+
+def query_useful_v1_path_length_support_targets(
+    points: torch.Tensor,
+    boundaries: list[tuple[int, int]],
+    *,
+    segment_size: int = 32,
+    highpass_quantile: float = 0.50,
+) -> torch.Tensor:
+    """Return the query-free path-length support target used by QueryUsefulV1 heads."""
+    return _path_length_support_targets(
+        points,
+        boundaries,
+        segment_size=max(1, int(segment_size)),
+        highpass_quantile=float(highpass_quantile),
+    )
 
 
 def _query_replacement_support(
@@ -334,6 +529,54 @@ def _conditional_behavior_target_alignment(
     return out
 
 
+def _ship_query_evidence_target_alignment(
+    *,
+    ship_query_evidence: torch.Tensor,
+    valid: torch.Tensor,
+    rankers: dict[str, torch.Tensor],
+    query_hit_masks: list[torch.Tensor],
+    boundaries: list[tuple[int, int]],
+    ratio: float = 0.05,
+) -> dict[str, Any]:
+    """Summarize whether active target rankers recover one-credit-per-ship evidence."""
+    valid = valid.to(dtype=torch.bool)
+    reference = ship_query_evidence.float().clamp(min=0.0)
+    valid_reference = reference[valid]
+    out: dict[str, Any] = {
+        "available": bool(valid.any().item()),
+        "diagnostic_only": True,
+        "reference": "ship_query_evidence",
+        "valid_point_count": int(valid.sum().item()),
+        "reference_positive_point_count": int((valid_reference > 0.0).sum().item()),
+        "reference_mass": float(valid_reference.sum().item()),
+        "topk_ratio": float(ratio),
+        "rankers": {},
+    }
+    for ranker_name, ranker in rankers.items():
+        topk = _topk_overlap_and_mass_recall(
+            ranker=ranker,
+            reference=reference,
+            valid=valid,
+            ratio=ratio,
+        )
+        row: dict[str, Any] = {
+            "spearman_with_ship_query_evidence": _rank_correlation(ranker, reference, valid),
+            "topk_overlap_with_ship_query_evidence": topk["overlap"],
+            "topk_ship_query_evidence_mass_recall": topk["reference_mass_recall"],
+        }
+        row.update(
+            _ship_query_pair_coverage_at_topk(
+                ranker=ranker,
+                valid=valid,
+                query_hit_masks=query_hit_masks,
+                boundaries=boundaries,
+                ratio=ratio,
+            )
+        )
+        out["rankers"][str(ranker_name)] = row
+    return out
+
+
 def _ship_query_pair_coverage_at_topk(
     *,
     ranker: torch.Tensor,
@@ -360,11 +603,35 @@ def _ship_query_pair_coverage_at_topk(
     top_local = torch.topk(ranker[valid].float(), k=keep, largest=True).indices
     selected = torch.zeros_like(valid, dtype=torch.bool)
     selected[valid_indices[top_local]] = True
+    coverage = _ship_query_pair_coverage_for_selected(
+        selected=selected,
+        query_hit_masks=query_hit_masks,
+        boundaries=boundaries,
+    )
+    out.update(
+        {
+            "ship_query_topk_selected_point_count": keep,
+            "ship_query_pair_count": coverage["ship_query_pair_count"],
+            "ship_query_pair_covered_count": coverage["ship_query_pair_covered_count"],
+            "ship_query_pair_coverage_at_topk": coverage["ship_query_pair_coverage"],
+        }
+    )
+    return out
+
+
+def _ship_query_pair_coverage_for_selected(
+    *,
+    selected: torch.Tensor,
+    query_hit_masks: list[torch.Tensor],
+    boundaries: list[tuple[int, int]],
+) -> dict[str, Any]:
+    """Return trajectory-query pair coverage for a selected point mask."""
+    selected = selected.to(dtype=torch.bool)
 
     pair_count = 0
     covered_count = 0
     for query_mask in query_hit_masks:
-        query_hit = query_mask.to(device=valid.device, dtype=torch.bool)
+        query_hit = query_mask.to(device=selected.device, dtype=torch.bool)
         for start, end in boundaries:
             local_hit = query_hit[int(start) : int(end)]
             if not bool(local_hit.any().item()):
@@ -372,14 +639,238 @@ def _ship_query_pair_coverage_at_topk(
             pair_count += 1
             if bool((selected[int(start) : int(end)] & local_hit).any().item()):
                 covered_count += 1
+    return {
+        "ship_query_pair_count": int(pair_count),
+        "ship_query_pair_covered_count": int(covered_count),
+        "ship_query_pair_coverage": float(covered_count / max(1, pair_count)),
+    }
+
+
+def _two_stage_segment_point_selection_diagnostics(
+    *,
+    segment_scores: torch.Tensor,
+    point_scores: torch.Tensor,
+    reference: torch.Tensor,
+    valid: torch.Tensor,
+    query_hit_masks: list[torch.Tensor],
+    boundaries: list[tuple[int, int]],
+    segment_size: int,
+    ratio: float,
+) -> dict[str, Any]:
+    """Approximate segment allocation followed by within-segment point choice."""
+    valid = valid.to(dtype=torch.bool)
+    valid_count = int(valid.sum().item())
+    out: dict[str, Any] = {
+        "two_stage_available": valid_count > 0,
+        "two_stage_topk_ratio": float(ratio),
+        "two_stage_selected_point_count": 0,
+        "two_stage_selected_segment_count": 0,
+        "two_stage_ship_query_evidence_mass_recall": 0.0,
+        "two_stage_ship_query_pair_count": 0,
+        "two_stage_ship_query_pair_covered_count": 0,
+        "two_stage_ship_query_pair_coverage": 0.0,
+    }
+    if valid_count <= 0:
+        return out
+
+    keep = min(valid_count, max(1, math.ceil(float(ratio) * valid_count)))
+    device = valid.device
+    segment_rows: list[tuple[float, int, int]] = []
+    size = max(1, int(segment_size))
+    for start, end in boundaries:
+        for seg_start in range(int(start), int(end), size):
+            seg_end = min(int(end), seg_start + size)
+            if seg_end <= seg_start:
+                continue
+            local_valid = valid[seg_start:seg_end]
+            if not bool(local_valid.any().item()):
+                continue
+            local_segment_scores = segment_scores[seg_start:seg_end].float()[local_valid]
+            top_count = min(
+                int(local_segment_scores.numel()),
+                max(1, math.ceil(0.20 * int(local_segment_scores.numel()))),
+            )
+            segment_score = float(
+                torch.topk(local_segment_scores, k=top_count, largest=True).values.mean().item()
+            )
+            segment_rows.append((segment_score, int(seg_start), int(seg_end)))
+    if not segment_rows:
+        out["two_stage_available"] = False
+        out["reason"] = "no_valid_segments"
+        return out
+    segment_rows.sort(key=lambda row: (float(row[0]), -int(row[1])), reverse=True)
+
+    selected = torch.zeros_like(valid, dtype=torch.bool, device=device)
+    selected_segment_indices: set[int] = set()
+    made_progress = True
+    while int(selected.sum().item()) < keep and made_progress:
+        made_progress = False
+        for segment_rank, (_score, seg_start, seg_end) in enumerate(segment_rows):
+            if int(selected.sum().item()) >= keep:
+                break
+            local_available = valid[seg_start:seg_end] & ~selected[seg_start:seg_end]
+            if not bool(local_available.any().item()):
+                continue
+            local_indices = torch.where(local_available)[0] + int(seg_start)
+            local_scores = point_scores[local_indices].float()
+            best_local = local_indices[torch.argmax(local_scores)]
+            selected[int(best_local.item())] = True
+            selected_segment_indices.add(int(segment_rank))
+            made_progress = True
+
+    selected_count = int(selected.sum().item())
+    valid_reference = reference[valid].float().clamp(min=0.0)
+    ideal_indices = torch.topk(valid_reference, k=keep, largest=True).indices
+    ideal_mass = float(valid_reference[ideal_indices].sum().item())
+    selected_mass = float(reference[selected].float().clamp(min=0.0).sum().item())
+    coverage = _ship_query_pair_coverage_for_selected(
+        selected=selected,
+        query_hit_masks=query_hit_masks,
+        boundaries=boundaries,
+    )
     out.update(
         {
-            "ship_query_topk_selected_point_count": keep,
-            "ship_query_pair_count": pair_count,
-            "ship_query_pair_covered_count": covered_count,
-            "ship_query_pair_coverage_at_topk": float(covered_count / max(1, pair_count)),
+            "two_stage_selected_point_count": selected_count,
+            "two_stage_selected_segment_count": len(selected_segment_indices),
+            "two_stage_ship_query_evidence_mass_recall": float(
+                selected_mass / max(ideal_mass, 1e-12)
+            ),
+            "two_stage_ship_query_pair_count": coverage["ship_query_pair_count"],
+            "two_stage_ship_query_pair_covered_count": coverage[
+                "ship_query_pair_covered_count"
+            ],
+            "two_stage_ship_query_pair_coverage": coverage["ship_query_pair_coverage"],
         }
     )
+    return out
+
+
+def _query_family_label(query: dict[str, Any], group_key: str) -> str:
+    metadata = query.get("_metadata")
+    if not isinstance(metadata, dict):
+        return "unspecified"
+    raw_value = metadata.get(group_key)
+    if raw_value is None:
+        return "unspecified"
+    value = str(raw_value).strip()
+    return value if value else "unspecified"
+
+
+def _range_query_family_evidence(
+    *,
+    points: torch.Tensor,
+    boundaries: list[tuple[int, int]],
+    range_queries: list[dict[str, Any]],
+    group_keys: tuple[str, ...] = FAMILY_TRAINABILITY_GROUP_KEYS,
+) -> dict[str, dict[str, dict[str, Any]]]:
+    """Return per-family query-hit and one-credit-per-ship evidence tensors."""
+    device = points.device
+    n_points = int(points.shape[0])
+    out: dict[str, dict[str, dict[str, Any]]] = {group_key: {} for group_key in group_keys}
+    for group_key in group_keys:
+        families = sorted({_query_family_label(query, group_key) for query in range_queries})
+        for family in families:
+            family_queries = [
+                query for query in range_queries if _query_family_label(query, group_key) == family
+            ]
+            query_hit_count = torch.zeros((n_points,), dtype=torch.float32, device=device)
+            ship_query_evidence_mass = torch.zeros_like(query_hit_count)
+            query_hit_masks: list[torch.Tensor] = []
+            for query in family_queries:
+                mask = points_in_range_box(points, query["params"]).to(
+                    device=device,
+                    dtype=torch.bool,
+                )
+                query_hit_masks.append(mask)
+                if not bool(mask.any().item()):
+                    continue
+                query_hit_count[mask] += 1.0
+                for start, end in boundaries:
+                    local_mask = mask[int(start) : int(end)]
+                    if not bool(local_mask.any().item()):
+                        continue
+                    local_hit_count = int(local_mask.sum().item())
+                    if local_hit_count <= 0:
+                        continue
+                    local_indices = torch.where(local_mask)[0] + int(start)
+                    ship_query_evidence_mass[local_indices] += float(1.0 / local_hit_count)
+            query_count = float(max(1, len(family_queries)))
+            out[group_key][family] = {
+                "query_count": len(family_queries),
+                "query_hit_probability": (query_hit_count / query_count).clamp(0.0, 1.0),
+                "ship_query_evidence": (ship_query_evidence_mass / query_count).clamp(0.0, 1.0),
+                "query_hit_masks": query_hit_masks,
+            }
+    return out
+
+
+def _family_conditioned_target_trainability_diagnostics(
+    *,
+    family_evidence: dict[str, dict[str, dict[str, Any]]],
+    rankers: dict[str, torch.Tensor],
+    boundaries: list[tuple[int, int]],
+    ratio: float = 0.05,
+) -> dict[str, Any]:
+    """Summarize target-signal quality by workload family."""
+    out: dict[str, Any] = {
+        "available": bool(family_evidence),
+        "diagnostic_only": True,
+        "group_by": {},
+        "focus_families": {
+            group_key: sorted(values) for group_key, values in FAMILY_TRAINABILITY_FOCUS.items()
+        },
+        "interpretation": (
+            "Target-side diagnostic only. It identifies whether current heads and "
+            "candidate rankers expose ship/point evidence within blocker families."
+        ),
+    }
+    for group_key, family_rows in family_evidence.items():
+        group_out: dict[str, Any] = {}
+        for family, evidence in family_rows.items():
+            ship_evidence = evidence["ship_query_evidence"]
+            family_valid = evidence["query_hit_probability"] > 0.0
+            alignment = _ship_query_evidence_target_alignment(
+                ship_query_evidence=ship_evidence,
+                valid=family_valid,
+                rankers=rankers,
+                query_hit_masks=evidence["query_hit_masks"],
+                boundaries=boundaries,
+                ratio=ratio,
+            )
+            ranker_rows = alignment.get("rankers", {})
+            target_shapes = {
+                name: _target_distribution_summary(ranker, family_valid)
+                for name, ranker in rankers.items()
+            }
+            weak_rankers = []
+            ranker_items = ranker_rows.items() if isinstance(ranker_rows, dict) else []
+            for name, row in ranker_items:
+                if not isinstance(row, dict):
+                    continue
+                spearman = row.get("spearman_with_ship_query_evidence")
+                if spearman is None or float(spearman) < 0.0:
+                    weak_rankers.append(str(name))
+            focus_family = family in FAMILY_TRAINABILITY_FOCUS.get(group_key, frozenset())
+            group_out[family] = {
+                "available": alignment["available"],
+                "focus_family": focus_family,
+                "query_count": int(evidence["query_count"]),
+                "valid_hit_point_count": int(family_valid.sum().item()),
+                "ship_query_evidence_positive_point_count": alignment[
+                    "reference_positive_point_count"
+                ],
+                "ship_query_evidence_mass": alignment["reference_mass"],
+                "topk_ratio": float(ratio),
+                "ranker_alignment": ranker_rows,
+                "target_shapes": target_shapes,
+                "weak_ship_evidence_rankers": weak_rankers,
+                "target_trainability_status": (
+                    "weak_active_target_signal"
+                    if focus_family and weak_rankers
+                    else "diagnostic_only"
+                ),
+            }
+        out["group_by"][group_key] = group_out
     return out
 
 
@@ -442,14 +933,456 @@ def _conditional_behavior_candidate_diagnostics(
     return out
 
 
+def _target_distribution_summary(values: torch.Tensor, valid: torch.Tensor) -> dict[str, Any]:
+    """Return compact target-shape stats on the selected support."""
+    valid = valid.to(dtype=torch.bool)
+    valid_values = values[valid].float().clamp(min=0.0)
+    return {
+        "support_fraction_by_threshold": support_fraction_by_threshold(values, valid),
+        "target_mass": float(valid_values.sum().item()),
+        "target_mean": (
+            float(valid_values.mean().item()) if int(valid_values.numel()) > 0 else 0.0
+        ),
+        "target_std": (
+            float(valid_values.std(unbiased=False).item())
+            if int(valid_values.numel()) > 0
+            else 0.0
+        ),
+    }
+
+
+def _segment_budget_ship_presence_candidate_alignment(
+    *,
+    active_segment_budget: torch.Tensor,
+    final_score: torch.Tensor,
+    q_hit: torch.Tensor,
+    ship_query_evidence: torch.Tensor,
+    valid: torch.Tensor,
+    query_hit_masks: list[torch.Tensor],
+    boundaries: list[tuple[int, int]],
+    segment_size: int,
+    ratio: float = 0.05,
+) -> dict[str, Any]:
+    """Compare diagnostic segment-budget candidates against ship-query evidence."""
+    valid = valid.to(dtype=torch.bool)
+    normalized_final = _normalize_0_1(final_score, valid)
+    normalized_q_hit = _normalize_0_1(q_hit, valid)
+    normalized_ship = _normalize_0_1(ship_query_evidence, valid)
+    candidates = {
+        "active_segment_budget_target": active_segment_budget,
+        "ship_presence_segment_budget_candidate": _segment_budget_targets(
+            ship_query_evidence,
+            boundaries,
+            segment_size,
+        ),
+        "final_score_ship_presence_blend_segment_budget_candidate": _segment_budget_targets(
+            0.50 * normalized_final + 0.50 * normalized_ship,
+            boundaries,
+            segment_size,
+        ),
+        "query_hit_ship_presence_blend_segment_budget_candidate": _segment_budget_targets(
+            0.50 * normalized_q_hit + 0.50 * normalized_ship,
+            boundaries,
+            segment_size,
+        ),
+    }
+    alignment = _ship_query_evidence_target_alignment(
+        ship_query_evidence=ship_query_evidence,
+        valid=valid,
+        rankers=candidates,
+        query_hit_masks=query_hit_masks,
+        boundaries=boundaries,
+        ratio=ratio,
+    )
+    out: dict[str, Any] = {
+        "available": alignment["available"],
+        "diagnostic_only": True,
+        "active_training_target_unchanged": True,
+        "candidate_usage": "diagnostic_only_not_training_semantics",
+        "segment_size_points": int(segment_size),
+        "topk_ratio": float(ratio),
+        "reference": "ship_query_evidence",
+        "candidates": {},
+    }
+    ranker_rows = alignment.get("rankers", {})
+    for name, candidate in candidates.items():
+        row: dict[str, Any] = {}
+        if isinstance(ranker_rows, dict) and isinstance(ranker_rows.get(name), dict):
+            row.update(ranker_rows[name])
+        row.update(_target_distribution_summary(candidate, valid))
+        row["spearman_with_final_score"] = _rank_correlation(candidate, final_score, valid)
+        row["spearman_with_query_hit_probability"] = _rank_correlation(candidate, q_hit, valid)
+        final_topk = _topk_overlap_and_mass_recall(
+            ranker=candidate,
+            reference=final_score,
+            valid=valid,
+            ratio=ratio,
+        )
+        q_hit_topk = _topk_overlap_and_mass_recall(
+            ranker=candidate,
+            reference=q_hit,
+            valid=valid,
+            ratio=ratio,
+        )
+        row["topk_overlap_with_final_score"] = final_topk["overlap"]
+        row["topk_final_score_mass_recall"] = final_topk["reference_mass_recall"]
+        row["topk_overlap_with_query_hit_probability"] = q_hit_topk["overlap"]
+        row["topk_query_hit_probability_mass_recall"] = q_hit_topk["reference_mass_recall"]
+        out["candidates"][str(name)] = row
+    return out
+
+
+def _family_local_target_candidate_alignment(
+    *,
+    family_evidence: dict[str, dict[str, dict[str, Any]]],
+    rankers: dict[str, torch.Tensor],
+    boundaries: list[tuple[int, int]],
+    segment_size: int,
+    ratio: float = 0.05,
+) -> dict[str, Any]:
+    """Compare simple family-local target candidates without changing labels."""
+    required_rankers = {
+        "final_score",
+        "query_hit_probability",
+        "conditional_behavior_utility",
+        "boundary_event_utility",
+        "replacement_representative_value",
+        "segment_budget_target",
+    }
+    missing = sorted(required_rankers.difference(rankers))
+    out: dict[str, Any] = {
+        "available": bool(family_evidence) and not missing,
+        "diagnostic_only": True,
+        "active_training_target_unchanged": True,
+        "candidate_usage": "diagnostic_only_family_local_not_training_semantics",
+        "segment_size_points": int(segment_size),
+        "topk_ratio": float(ratio),
+        "reference": "family_ship_query_evidence",
+        "focus_families": {
+            group_key: sorted(values) for group_key, values in FAMILY_TRAINABILITY_FOCUS.items()
+        },
+        "group_by": {},
+    }
+    if missing:
+        out["reason"] = "missing_required_rankers"
+        out["missing_rankers"] = missing
+        return out
+
+    final_score = rankers["final_score"].float().clamp(0.0, 1.0)
+    active_q_hit = rankers["query_hit_probability"].float().clamp(0.0, 1.0)
+    behavior = rankers["conditional_behavior_utility"].float().clamp(0.0, 1.0)
+    boundary = rankers["boundary_event_utility"].float().clamp(0.0, 1.0)
+    replacement = rankers["replacement_representative_value"].float().clamp(0.0, 1.0)
+    active_segment_budget = rankers["segment_budget_target"].float().clamp(0.0, 1.0)
+    zero = torch.zeros_like(final_score)
+
+    for group_key, family_rows in family_evidence.items():
+        group_out: dict[str, Any] = {}
+        for family, evidence in family_rows.items():
+            family_q_hit = evidence["query_hit_probability"].float().clamp(0.0, 1.0)
+            family_ship = evidence["ship_query_evidence"].float().clamp(0.0, 1.0)
+            family_valid = family_q_hit > 0.0
+            focus_family = family in FAMILY_TRAINABILITY_FOCUS.get(group_key, frozenset())
+            if not bool(family_valid.any().item()):
+                group_out[str(family)] = {
+                    "available": False,
+                    "focus_family": focus_family,
+                    "query_count": int(evidence["query_count"]),
+                    "reason": "no_family_hit_points",
+                }
+                continue
+
+            normalized_family_hit = _normalize_0_1(family_q_hit, family_valid)
+            normalized_ship = _normalize_0_1(family_ship, family_valid)
+            normalized_boundary = _normalize_0_1(boundary, family_valid)
+            normalized_replacement = _normalize_0_1(replacement, family_valid)
+
+            query_hit_ship_blend = torch.where(
+                family_valid,
+                (0.65 * normalized_family_hit + 0.35 * normalized_ship).clamp(0.0, 1.0),
+                zero,
+            )
+            ship_gated_behavior = torch.where(
+                family_valid,
+                (behavior * (0.35 + 0.65 * normalized_ship)).clamp(0.0, 1.0),
+                zero,
+            )
+            boundary_replacement_ship_score = torch.where(
+                family_valid,
+                (
+                    0.45 * normalized_ship
+                    + 0.30 * normalized_replacement
+                    + 0.25 * normalized_boundary
+                ).clamp(0.0, 1.0),
+                zero,
+            )
+            composed_score = torch.where(
+                family_valid,
+                query_useful_v1_point_score(
+                    q_hit=query_hit_ship_blend,
+                    behavior=ship_gated_behavior,
+                    boundary=boundary,
+                    replacement=replacement,
+                ),
+                zero,
+            )
+            segment_budget_sum = _segment_budget_targets(
+                composed_score,
+                boundaries,
+                segment_size,
+            )
+            query_hit_ship_segment_top20 = _segment_pooled_targets(
+                query_hit_ship_blend,
+                boundaries,
+                segment_size,
+                pool="top20_mean",
+            )
+            query_hit_ship_segment_max = _segment_pooled_targets(
+                query_hit_ship_blend,
+                boundaries,
+                segment_size,
+                pool="max",
+            )
+            composed_segment_top20 = _segment_pooled_targets(
+                composed_score,
+                boundaries,
+                segment_size,
+                pool="top20_mean",
+            )
+            ship_pair_fractional_segment = _ship_query_pair_fractional_segment_targets(
+                query_hit_masks=evidence["query_hit_masks"],
+                boundaries=boundaries,
+                segment_size=segment_size,
+                point_count=int(final_score.numel()),
+                device=final_score.device,
+            )
+            candidates = {
+                "family_query_hit_ship_blend_candidate": query_hit_ship_blend,
+                "family_ship_gated_behavior_candidate": ship_gated_behavior,
+                "family_boundary_replacement_ship_score_candidate": (
+                    boundary_replacement_ship_score
+                ),
+                "family_local_composed_score_candidate": composed_score,
+                "family_local_segment_budget_candidate": segment_budget_sum,
+                "family_query_hit_ship_segment_top20_mean_candidate": (
+                    query_hit_ship_segment_top20
+                ),
+                "family_query_hit_ship_segment_max_candidate": query_hit_ship_segment_max,
+                "family_composed_segment_top20_mean_candidate": composed_segment_top20,
+                "family_ship_query_pair_fractional_segment_candidate": (
+                    ship_pair_fractional_segment
+                ),
+            }
+            baselines = {
+                "active_final_score": final_score,
+                "active_query_hit_probability": active_q_hit,
+                "active_segment_budget_target": active_segment_budget,
+            }
+            alignment = _ship_query_evidence_target_alignment(
+                ship_query_evidence=family_ship,
+                valid=family_valid,
+                rankers={**baselines, **candidates},
+                query_hit_masks=evidence["query_hit_masks"],
+                boundaries=boundaries,
+                ratio=ratio,
+            )
+            ranker_rows = alignment.get("rankers", {})
+
+            candidate_rows: dict[str, Any] = {}
+            segment_candidate_names = {
+                "family_local_segment_budget_candidate",
+                "family_query_hit_ship_segment_top20_mean_candidate",
+                "family_query_hit_ship_segment_max_candidate",
+                "family_composed_segment_top20_mean_candidate",
+                "family_ship_query_pair_fractional_segment_candidate",
+            }
+            for name, candidate in candidates.items():
+                row: dict[str, Any] = {}
+                if isinstance(ranker_rows, dict) and isinstance(ranker_rows.get(name), dict):
+                    row.update(ranker_rows[name])
+                row.update(_target_distribution_summary(candidate, family_valid))
+                row["spearman_with_active_final_score"] = _rank_correlation(
+                    candidate,
+                    final_score,
+                    family_valid,
+                )
+                row["spearman_with_active_query_hit_probability"] = _rank_correlation(
+                    candidate,
+                    active_q_hit,
+                    family_valid,
+                )
+                final_topk = _topk_overlap_and_mass_recall(
+                    ranker=candidate,
+                    reference=final_score,
+                    valid=family_valid,
+                    ratio=ratio,
+                )
+                q_hit_topk = _topk_overlap_and_mass_recall(
+                    ranker=candidate,
+                    reference=active_q_hit,
+                    valid=family_valid,
+                    ratio=ratio,
+                )
+                row["topk_overlap_with_active_final_score"] = final_topk["overlap"]
+                row["topk_active_final_score_mass_recall"] = final_topk[
+                    "reference_mass_recall"
+                ]
+                row["topk_overlap_with_active_query_hit_probability"] = q_hit_topk["overlap"]
+                row["topk_active_query_hit_probability_mass_recall"] = q_hit_topk[
+                    "reference_mass_recall"
+                ]
+                if name in segment_candidate_names:
+                    row["two_stage_point_ranker"] = "family_query_hit_ship_blend_candidate"
+                    row.update(
+                        _two_stage_segment_point_selection_diagnostics(
+                            segment_scores=candidate,
+                            point_scores=query_hit_ship_blend,
+                            reference=family_ship,
+                            valid=family_valid,
+                            query_hit_masks=evidence["query_hit_masks"],
+                            boundaries=boundaries,
+                            segment_size=segment_size,
+                            ratio=ratio,
+                        )
+                    )
+                candidate_rows[str(name)] = row
+
+            baseline_rows: dict[str, Any] = {}
+            for name in baselines:
+                if isinstance(ranker_rows, dict) and isinstance(ranker_rows.get(name), dict):
+                    baseline_rows[str(name)] = dict(ranker_rows[name])
+
+            candidate_spearmans = [
+                float(row["spearman_with_ship_query_evidence"])
+                for row in candidate_rows.values()
+                if row.get("spearman_with_ship_query_evidence") is not None
+            ]
+            baseline_spearmans = [
+                float(row["spearman_with_ship_query_evidence"])
+                for row in baseline_rows.values()
+                if row.get("spearman_with_ship_query_evidence") is not None
+            ]
+            segment_candidate_two_stage_pair_coverages = [
+                float(row["two_stage_ship_query_pair_coverage"])
+                for name, row in candidate_rows.items()
+                if name in segment_candidate_names
+                and row.get("two_stage_ship_query_pair_coverage") is not None
+            ]
+            segment_candidate_two_stage_mass_recalls = [
+                float(row["two_stage_ship_query_evidence_mass_recall"])
+                for name, row in candidate_rows.items()
+                if name in segment_candidate_names
+                and row.get("two_stage_ship_query_evidence_mass_recall") is not None
+            ]
+            best_candidate_spearman = max(candidate_spearmans) if candidate_spearmans else None
+            best_baseline_spearman = max(baseline_spearmans) if baseline_spearmans else None
+            group_out[str(family)] = {
+                "available": alignment["available"],
+                "focus_family": focus_family,
+                "query_count": int(evidence["query_count"]),
+                "valid_hit_point_count": int(family_valid.sum().item()),
+                "ship_query_evidence_positive_point_count": alignment[
+                    "reference_positive_point_count"
+                ],
+                "ship_query_evidence_mass": alignment["reference_mass"],
+                "active_baseline_alignment": baseline_rows,
+                "candidate_alignment": candidate_rows,
+                "best_candidate_spearman_with_ship_query_evidence": best_candidate_spearman,
+                "best_active_baseline_spearman_with_ship_query_evidence": best_baseline_spearman,
+                "best_segment_candidate_two_stage_ship_query_pair_coverage": (
+                    max(segment_candidate_two_stage_pair_coverages)
+                    if segment_candidate_two_stage_pair_coverages
+                    else None
+                ),
+                "best_segment_candidate_two_stage_ship_query_evidence_mass_recall": (
+                    max(segment_candidate_two_stage_mass_recalls)
+                    if segment_candidate_two_stage_mass_recalls
+                    else None
+                ),
+                "candidate_signal_status": (
+                    "diagnostic_candidate_improves_family_ship_signal"
+                    if focus_family
+                    and best_candidate_spearman is not None
+                    and (
+                        best_baseline_spearman is None
+                        or best_candidate_spearman > best_baseline_spearman
+                    )
+                    else "diagnostic_only"
+                ),
+            }
+        out["group_by"][group_key] = group_out
+    return out
+
+
+def _segment_budget_point_value_for_target_mode(
+    *,
+    target_mode: str,
+    final_score: torch.Tensor,
+    q_hit: torch.Tensor,
+    ship_query_evidence: torch.Tensor,
+    valid: torch.Tensor,
+) -> tuple[torch.Tensor, dict[str, Any]]:
+    """Return the point value used to build the active segment-budget head target."""
+    mode = str(target_mode).lower()
+    if mode == QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE:
+        return final_score, {
+            "segment_budget_target_base_source": "query_useful_v1_final_score",
+            "segment_budget_target_variant": "active_final_score",
+            "segment_budget_target_aggregation": "sum",
+            "segment_budget_target_experimental": False,
+            "final_success_allowed": True,
+        }
+    if mode == QUERY_USEFUL_V1_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE:
+        point_value = _query_ship_blend_signal(
+            q_hit=q_hit,
+            ship_query_evidence=ship_query_evidence,
+            valid=valid,
+        )
+        return point_value, {
+            "segment_budget_target_base_source": (
+                "normalized_query_hit_probability_plus_normalized_ship_query_evidence"
+            ),
+            "segment_budget_target_variant": "query_ship_blend_max_pool",
+            "segment_budget_target_aggregation": "max_pool",
+            "segment_budget_target_point_formula": (
+                "0.65_normalized_query_hit_probability_plus_"
+                "0.35_normalized_ship_query_evidence"
+            ),
+            "segment_budget_target_experimental": True,
+            "final_success_allowed": False,
+        }
+    if mode == QUERY_USEFUL_V1_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE:
+        return q_hit.float().clamp(0.0, 1.0), {
+            "segment_budget_target_base_source": "query_ship_local_presence_head_target",
+            "segment_budget_target_variant": "query_ship_local_heads_max_pool",
+            "segment_budget_target_aggregation": "max_pool",
+            "segment_budget_target_point_formula": (
+                "query_ship_local_presence_head_target"
+            ),
+            "segment_budget_target_experimental": True,
+            "final_success_allowed": False,
+        }
+    raise ValueError(
+        "Unsupported QueryUsefulV1 target mode: "
+        f"{target_mode!r}. Expected one of {sorted(QUERY_USEFUL_V1_TARGET_MODES)!r}."
+    )
+
+
 def build_query_useful_v1_targets(
     *,
     points: torch.Tensor,
     boundaries: list[tuple[int, int]],
     typed_queries: list[dict[str, Any]],
     segment_size: int = 32,
+    target_mode: str = QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE,
 ) -> QueryUsefulTargetBundle:
     """Build factorized QueryUsefulV1 labels from learning range workloads only."""
+    target_mode = str(target_mode).lower()
+    if target_mode not in QUERY_USEFUL_V1_TARGET_MODES:
+        raise ValueError(
+            "target_mode must be one of "
+            f"{sorted(QUERY_USEFUL_V1_TARGET_MODES)!r}; got {target_mode!r}."
+        )
     n_points = int(points.shape[0])
     device = points.device
     labels = torch.zeros((n_points, NUM_QUERY_TYPES), dtype=torch.float32, device=device)
@@ -522,22 +1455,93 @@ def build_query_useful_v1_targets(
         replacement_mass[hit_positive] / query_hit_count[hit_positive].clamp(min=1.0)
     ).clamp(0.0, 1.0)
     ship_query_evidence = (ship_query_evidence_mass / query_count).clamp(0.0, 1.0)
-    final_score = (q_hit * (0.5 + behavior) * (0.75 + 0.25 * replacement) + 0.25 * boundary).clamp(
-        0.0, 1.0
+    target_q_hit = q_hit
+    target_behavior = behavior
+    head_variant_diagnostics: dict[str, Any] = {
+        "query_hit_target_variant": "active_query_hit_probability",
+        "query_hit_target_base_source": "range_query_point_hit_probability",
+        "conditional_behavior_target_variant": "active_local_behavior_change",
+        "conditional_behavior_target_base_source": "query_hit_conditioned_trajectory_change",
+        "final_label_variant": "active_query_useful_v1_point_score",
+    }
+    if target_mode == QUERY_USEFUL_V1_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE:
+        target_q_hit = _query_ship_blend_signal(
+            q_hit=q_hit,
+            ship_query_evidence=ship_query_evidence,
+            valid=hit_positive,
+        )
+        target_behavior = _query_ship_local_behavior_signal(
+            behavior=behavior,
+            boundary=boundary,
+            replacement=replacement,
+            ship_query_evidence=ship_query_evidence,
+            valid=hit_positive,
+        )
+        head_variant_diagnostics.update(
+            {
+                "query_hit_target_variant": "query_ship_local_presence_utility",
+                "query_hit_target_base_source": (
+                    "0.65_normalized_query_hit_probability_plus_"
+                    "0.35_normalized_ship_query_evidence"
+                ),
+                "conditional_behavior_target_variant": "query_ship_local_behavior_utility",
+                "conditional_behavior_target_base_source": (
+                    "0.45_normalized_ship_query_evidence_plus_"
+                    "0.25_normalized_behavior_change_plus_"
+                    "0.20_normalized_replacement_value_plus_"
+                    "0.10_normalized_boundary_event_utility"
+                ),
+                "final_label_variant": "query_ship_local_heads_composed_score",
+            }
+        )
+    final_score = query_useful_v1_point_score(
+        q_hit=target_q_hit,
+        behavior=target_behavior,
+        boundary=boundary,
+        replacement=replacement,
     )
-    segment_budget = _segment_budget_targets(
-        final_score,
-        boundaries,
-        segment_size,
+    segment_budget_point_value, segment_budget_variant_diagnostics = (
+        _segment_budget_point_value_for_target_mode(
+            target_mode=target_mode,
+            final_score=final_score,
+            q_hit=target_q_hit,
+            ship_query_evidence=ship_query_evidence,
+            valid=hit_positive,
+        )
     )
-    path_length_support = _path_length_support_targets(
+    segment_budget_aggregation = str(
+        segment_budget_variant_diagnostics.get("segment_budget_target_aggregation", "sum")
+    )
+    if segment_budget_aggregation == "sum":
+        segment_budget = _segment_budget_targets(
+            segment_budget_point_value,
+            boundaries,
+            segment_size,
+        )
+    elif segment_budget_aggregation == "max_pool":
+        segment_budget = _segment_pooled_targets(
+            segment_budget_point_value,
+            boundaries,
+            segment_size,
+            pool="max",
+        )
+    else:
+        raise ValueError(
+            "Unsupported QueryUsefulV1 segment-budget aggregation: "
+            f"{segment_budget_aggregation!r}."
+        )
+    path_length_support = query_useful_v1_path_length_support_targets(
         points,
         boundaries,
-        segment_size,
+        segment_size=segment_size,
     )
-
-    head_targets[:, 0] = q_hit
-    head_targets[:, 1] = behavior
+    family_evidence = _range_query_family_evidence(
+        points=points,
+        boundaries=boundaries,
+        range_queries=range_queries,
+    )
+    head_targets[:, 0] = target_q_hit
+    head_targets[:, 1] = target_behavior
     head_targets[:, 2] = boundary
     head_targets[:, 3] = replacement
     head_targets[:, 4] = segment_budget
@@ -556,10 +1560,12 @@ def build_query_useful_v1_targets(
     diagnostics.update(
         {
             "target_family": "QueryUsefulV1Factorized",
+            "target_mode": target_mode,
             "range_query_count": len(range_queries),
             "segment_size_points": int(segment_size),
             "segment_budget_target_training": "point_repeated_plus_segment_level_listwise_loss",
-            "segment_budget_target_base_source": "query_useful_v1_final_score",
+            **head_variant_diagnostics,
+            **segment_budget_variant_diagnostics,
             "segment_budget_segment_level_loss_enabled": True,
             "path_length_support_target_training": "query_free_segment_path_length_removal_loss_highpass",
             "path_length_support_target_base_source": "per_point_path_length_removal_loss_segment_highpass_mass",
@@ -569,17 +1575,17 @@ def build_query_useful_v1_targets(
             "conditional_behavior_utility_training": "masked_to_query_hit_points",
             "replacement_representative_value_normalization": "conditional_on_query_hit",
             "replacement_value_is_true_counterfactual_marginal_gain": False,
-            "final_label_formula": "query_hit_times_behavior_with_conditional_replacement_modulation_plus_boundary",
+            "final_label_formula": QUERY_USEFUL_V1_FINAL_LABEL_FORMULA,
             "final_boundary_bonus_uses_squared_event_probability": True,
             "final_label_positive_fraction": float((final_score > 0.0).float().mean().item()),
             "final_label_support_fraction_by_threshold": support_fraction_by_threshold(final_score),
             "final_label_mass": float(final_score.sum().item()),
             "conditional_behavior_target_alignment": _conditional_behavior_target_alignment(
-                behavior=behavior,
+                behavior=target_behavior,
                 valid=hit_positive,
                 references={
                     "final_score": final_score,
-                    "query_hit_probability": q_hit,
+                    "query_hit_probability": target_q_hit,
                     "ship_query_evidence": ship_query_evidence,
                     "replacement_representative_value": replacement,
                     "segment_budget_target": segment_budget,
@@ -587,13 +1593,13 @@ def build_query_useful_v1_targets(
                 },
             ),
             "conditional_behavior_candidate_alignment": _conditional_behavior_candidate_diagnostics(
-                current_behavior=behavior,
+                current_behavior=target_behavior,
                 valid=hit_positive,
                 replacement=replacement,
                 segment_budget=segment_budget,
                 references={
                     "final_score": final_score,
-                    "query_hit_probability": q_hit,
+                    "query_hit_probability": target_q_hit,
                     "ship_query_evidence": ship_query_evidence,
                     "replacement_representative_value": replacement,
                     "segment_budget_target": segment_budget,
@@ -601,6 +1607,64 @@ def build_query_useful_v1_targets(
                 },
                 query_hit_masks=query_hit_masks,
                 boundaries=boundaries,
+            ),
+            "ship_query_evidence_target_alignment": _ship_query_evidence_target_alignment(
+                ship_query_evidence=ship_query_evidence,
+                valid=hit_positive,
+                rankers={
+                    "final_score": final_score,
+                    "query_hit_probability": target_q_hit,
+                    "conditional_behavior_utility": target_behavior,
+                    "boundary_event_utility": boundary,
+                    "replacement_representative_value": replacement,
+                    "segment_budget_target": segment_budget,
+                    "path_length_support_target": path_length_support,
+                },
+                query_hit_masks=query_hit_masks,
+                boundaries=boundaries,
+            ),
+            "family_conditioned_target_trainability": (
+                _family_conditioned_target_trainability_diagnostics(
+                    family_evidence=family_evidence,
+                    rankers={
+                        "final_score": final_score,
+                        "query_hit_probability": target_q_hit,
+                        "conditional_behavior_utility": target_behavior,
+                        "boundary_event_utility": boundary,
+                        "replacement_representative_value": replacement,
+                        "segment_budget_target": segment_budget,
+                        "path_length_support_target": path_length_support,
+                    },
+                    boundaries=boundaries,
+                )
+            ),
+            "family_local_target_candidate_alignment": (
+                _family_local_target_candidate_alignment(
+                    family_evidence=family_evidence,
+                    rankers={
+                        "final_score": final_score,
+                        "query_hit_probability": target_q_hit,
+                        "conditional_behavior_utility": target_behavior,
+                        "boundary_event_utility": boundary,
+                        "replacement_representative_value": replacement,
+                        "segment_budget_target": segment_budget,
+                        "path_length_support_target": path_length_support,
+                    },
+                    boundaries=boundaries,
+                    segment_size=segment_size,
+                )
+            ),
+            "segment_budget_ship_presence_candidate_alignment": (
+                _segment_budget_ship_presence_candidate_alignment(
+                    active_segment_budget=segment_budget,
+                    final_score=final_score,
+                    q_hit=target_q_hit,
+                    ship_query_evidence=ship_query_evidence,
+                    valid=hit_positive,
+                    query_hit_masks=query_hit_masks,
+                    boundaries=boundaries,
+                    segment_size=segment_size,
+                )
             ),
         }
     )

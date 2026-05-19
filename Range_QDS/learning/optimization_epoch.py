@@ -412,6 +412,7 @@ def _train_one_epoch(
         aux_loss_weight = max(
             0.0, float(getattr(model_config, "query_useful_aux_loss_weight", 0.50))
         )
+        batch_segment_ids = None
         if (
             head_logits_batch is not None
             and factorized_targets_dev is not None
@@ -419,7 +420,6 @@ def _train_one_epoch(
         ):
             batch_head_targets = factorized_targets_dev[safe_global_idx].float()
             batch_head_mask = factorized_mask_dev[safe_global_idx] & valid_batch.unsqueeze(-1)
-            batch_segment_ids = None
             if canonical_segment_ids_dev is not None:
                 batch_segment_ids = canonical_segment_ids_dev[safe_global_idx].to(
                     device=device, dtype=torch.long
@@ -465,7 +465,10 @@ def _train_one_epoch(
             generator=training_sample_generator,
         )
 
-        if loss_objective in {"budget_topk", "stratified_budget_topk"}:
+        if loss_objective in {
+            "budget_topk",
+            "stratified_budget_topk",
+        }:
             if temporal_residual_budget_masks:
                 rank_loss_rows, _rank_active_rows = _budget_topk_temporal_residual_loss_rows(
                     pred=pred_batch,

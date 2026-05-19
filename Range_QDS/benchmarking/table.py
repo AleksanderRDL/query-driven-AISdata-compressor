@@ -167,6 +167,7 @@ BENCHMARK_REPORT_TABLE_COLUMNS = (
     "learned_segment_allocation_length_support_weight",
     "learned_segment_allocation_weight_floor",
     "learned_segment_score_blend_weight",
+    "learned_segment_transfer_calibration_mode",
     "learned_segment_fairness_preallocation_enabled",
     "learned_segment_length_repair_fraction",
     "learned_segment_length_repair_score_protection_fraction",

@@ -13,6 +13,10 @@ from config.run_config import build_run_config, derive_seed_bundle
 from learning.outputs import TrainingOutputs
 from orchestration.retained_mask_ablation_stage import freeze_retained_mask_ablations
 from orchestration.retained_mask_stage import freeze_workload_blind_retained_masks
+from orchestration.selector_diagnostics import (
+    factorized_score_component_vectors_from_logits,
+    query_free_retained_removal_teacher_proxy_vectors,
+)
 from scoring.methods import FrozenMaskMethod
 from workloads.query_types import pad_query_features
 from workloads.typed_workload import TypedQueryWorkload
@@ -45,7 +49,7 @@ class _CachingMethod:
         self.calls.append(float(compression_ratio))
         self._score_cache = base
         self._raw_pred_cache = base + 0.1
-        self._head_logit_cache = torch.stack([base, base + 0.2], dim=1)
+        self._head_logit_cache = torch.stack([base + 0.1 * idx for idx in range(6)], dim=1)
         self._segment_score_cache = base + 0.3
         self._path_length_support_score_cache = base + 0.4
         self._selector_segment_score_cache = base + 0.5
@@ -249,8 +253,84 @@ def test_retained_mask_freezing_captures_learned_selector_trace() -> None:
         "selector_score": True,
         "segment_score": True,
     }
+    assert marginal["score_component_fields_available"]["factorized_composed_score"] is True
+    assert (
+        marginal["score_component_fields_available"]["head_probability_query_hit_probability"]
+        is True
+    )
+    assert marginal["overall"]["score_component_alignment"]["factorized_composed_score"][
+        "available"
+    ] is True
+    assert marginal["context_fields_available"]["query_free_teacher_proxies"] == {
+        "query_free_endpoint_or_path_support": True,
+        "query_free_endpoint_support": True,
+        "query_free_path_length_support_target": True,
+    }
+    assert marginal["context_fields_available"]["selector_segment_context"] is False
+    assert marginal["query_free_teacher_proxy_guard_coupling_summary"]["available"] is True
+    assert marginal["rows"][0]["score_components"]["factorized_composed_score"] >= 0.0
+    assert all(row["selector_segment_context"] is None for row in marginal["rows"])
     assert marginal["candidate_count"] > 0
     assert outputs.causality_ablation_methods
+
+
+def test_factorized_score_component_vectors_from_logits_reports_score_terms() -> None:
+    logits = torch.tensor(
+        [
+            [0.0, 1.0, -1.0, 0.5, 0.2, -0.3],
+            [2.0, -1.0, 0.0, -0.5, 0.7, 0.1],
+        ],
+        dtype=torch.float32,
+    )
+
+    components = factorized_score_component_vectors_from_logits(logits)
+
+    assert sorted(components) == [
+        "factorized_behavior_multiplier",
+        "factorized_boundary_bonus",
+        "factorized_composed_score",
+        "factorized_q_behavior_replacement_term",
+        "factorized_replacement_multiplier",
+        "head_logit_boundary_event_utility",
+        "head_logit_conditional_behavior_utility",
+        "head_logit_path_length_support_target",
+        "head_logit_query_hit_probability",
+        "head_logit_replacement_representative_value",
+        "head_logit_segment_budget_target",
+        "head_probability_boundary_event_utility",
+        "head_probability_conditional_behavior_utility",
+        "head_probability_path_length_support_target",
+        "head_probability_query_hit_probability",
+        "head_probability_replacement_representative_value",
+        "head_probability_segment_budget_target",
+    ]
+    assert components["factorized_composed_score"].shape == (2,)
+    assert torch.all(components["factorized_composed_score"] >= 0.0)
+
+
+def test_query_free_retained_removal_teacher_proxy_vectors_report_path_and_endpoints() -> None:
+    points = torch.zeros((5, 5), dtype=torch.float32)
+    points[:, 0] = torch.arange(5, dtype=torch.float32)
+    points[:, 1] = torch.tensor([0.0, 1.0, 2.0, 3.0, 4.0])
+    points[:, 2] = torch.tensor([0.0, 0.0, 2.0, 0.0, 0.0])
+
+    proxies = query_free_retained_removal_teacher_proxy_vectors(
+        points,
+        [(0, 5)],
+        segment_size=2,
+    )
+
+    assert sorted(proxies) == [
+        "query_free_endpoint_or_path_support",
+        "query_free_endpoint_support",
+        "query_free_path_length_support_target",
+    ]
+    assert torch.equal(
+        proxies["query_free_endpoint_support"],
+        torch.tensor([1.0, 0.0, 0.0, 0.0, 1.0]),
+    )
+    assert torch.all(proxies["query_free_path_length_support_target"] >= 0.0)
+    assert torch.all(proxies["query_free_endpoint_or_path_support"] >= proxies["query_free_endpoint_support"])
 
 
 def test_retained_mask_ablations_freeze_pre_repair_and_shuffled_scores() -> None:

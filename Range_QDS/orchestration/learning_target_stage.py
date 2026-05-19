@@ -34,7 +34,10 @@ from learning.targets.local_swap import (
 from learning.targets.marginal_coverage import range_marginal_coverage_training_labels
 from learning.targets.query_residual import range_query_residual_frequency_training_labels
 from learning.targets.query_spine import range_query_spine_frequency_training_labels
-from learning.targets.query_useful_v1 import QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE
+from learning.targets.query_useful_v1 import (
+    QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE,
+    QUERY_USEFUL_V1_TARGET_MODES,
+)
 from learning.targets.retained_frequency import (
     range_global_budget_retained_frequency_training_labels,
     range_historical_prior_retained_frequency_training_labels,
@@ -128,14 +131,21 @@ def prepare_training_targets(
         "enabled": False,
         "mode": str(getattr(config.model, "range_teacher_distillation_mode", "none")),
     }
-    if range_training_target_mode == QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE:
+    if range_training_target_mode in QUERY_USEFUL_V1_TARGET_MODES:
         range_training_target_transform.update(
             {
                 "enabled": True,
                 "target_family": "QueryUsefulV1Factorized",
-                "final_success_allowed": True,
+                "final_success_allowed": (
+                    range_training_target_mode == QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE
+                ),
             }
         )
+        if range_training_target_mode != QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE:
+            range_training_target_transform["diagnostic_reason"] = (
+                "Experimental QueryUsefulV1 target mode. "
+                "Not valid for final-candidate acceptance until promoted."
+            )
     selection_query_cache: ScoringQueryCache | None = None
     selection_geometry_scores: torch.Tensor | None = None
     mlqds_range_geometry_blend = max(
@@ -145,7 +155,7 @@ def prepare_training_targets(
         train_label_sets: list[RangeLabels] = []
         train_component_label_sets: list[dict[str, torch.Tensor] | None] = []
         if (
-            range_training_target_mode != QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE
+            range_training_target_mode not in QUERY_USEFUL_V1_TARGET_MODES
             or range_teacher_distillation_enabled(config.model)
         ):
             for replicate_index, label_workload in enumerate(train_label_workloads):
@@ -502,7 +512,7 @@ def prepare_training_targets(
                 f"mass={range_training_target_transform['positive_label_mass']:.4f}",
                 flush=True,
             )
-    elif range_training_target_mode not in {"point_value", QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE}:
+    elif range_training_target_mode not in {"point_value", *QUERY_USEFUL_V1_TARGET_MODES}:
         if range_training_target_mode in {
             "component_retained_frequency",
             "continuity_retained_frequency",
@@ -604,7 +614,7 @@ def prepare_training_targets(
                 "'query_residual_frequency', 'set_utility_frequency', 'local_swap_utility_frequency', "
                 "'local_swap_gain_cost_frequency', 'structural_retained_frequency', "
                 "'component_retained_frequency', or "
-                "'continuity_retained_frequency', or 'query_useful_v1_factorized'."
+                "'continuity_retained_frequency', or a QueryUsefulV1 factorized target mode."
             )
     range_target_balance_mode = str(
         getattr(config.model, "range_target_balance_mode", "none")
@@ -632,7 +642,7 @@ def prepare_training_targets(
                 f"trajectories={range_target_balance_diagnostics['balanced_trajectory_count']}",
                 flush=True,
             )
-    if range_training_target_mode != QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE:
+    if range_training_target_mode not in QUERY_USEFUL_V1_TARGET_MODES:
         range_training_target_transform.setdefault("target_family", "legacy_range_useful_scalar")
         range_training_target_transform.setdefault("final_success_allowed", False)
         range_training_target_transform.setdefault(

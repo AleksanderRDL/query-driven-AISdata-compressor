@@ -7,7 +7,11 @@ from typing import Any
 
 import torch
 
-from selection.learned_segment_budget.constants import SEGMENT_ALLOCATION_WEIGHT_FLOOR
+from selection.learned_segment_budget.constants import (
+    SEGMENT_ALLOCATION_WEIGHT_FLOOR,
+    SEGMENT_TRANSFER_CALIBRATION_MODE_NONE,
+    SEGMENT_TRANSFER_CALIBRATION_MODE_SCORE_ALLOCATION_ZBLEND,
+)
 from workloads.range_geometry import local_equirectangular_distance_km
 
 
@@ -131,6 +135,117 @@ def _segment_score_stats(segment_rows: list[dict[str, Any]]) -> dict[str, float 
         "segment_score_std": float(values.std(unbiased=False).item()),
         "segment_score_span": float((values.max() - values.min()).item()),
     }
+
+
+def _finite_row_values(segment_rows: list[dict[str, Any]], key: str) -> list[float]:
+    return [
+        float(row.get(key, 0.0)) if math.isfinite(float(row.get(key, 0.0))) else 0.0
+        for row in segment_rows
+    ]
+
+
+def _zscore_values(values: list[float]) -> list[float]:
+    if not values:
+        return []
+    mean = float(sum(values) / len(values))
+    variance = float(sum((value - mean) ** 2 for value in values) / len(values))
+    std = math.sqrt(variance)
+    if std <= 1e-12:
+        return [0.0 for _value in values]
+    return [float((value - mean) / std) for value in values]
+
+
+def _apply_segment_transfer_calibration(
+    segment_rows: list[dict[str, Any]],
+    *,
+    mode: str,
+    segment_length_support_weight: float,
+    segment_allocation_weight_floor: float = SEGMENT_ALLOCATION_WEIGHT_FLOOR,
+) -> tuple[dict[str, Any], float]:
+    """Optionally calibrate pre-selection segment scores for a guarded probe."""
+    normalized_mode = str(mode).lower()
+    effective_length_support_weight = float(segment_length_support_weight)
+    if normalized_mode in {"", SEGMENT_TRANSFER_CALIBRATION_MODE_NONE}:
+        return {
+            "mode": SEGMENT_TRANSFER_CALIBRATION_MODE_NONE,
+            "applied": False,
+            "reason": "disabled",
+            "uses_post_selection_attribution": False,
+            "uses_length_support_counter_signal": False,
+            "base_segment_length_support_weight": float(segment_length_support_weight),
+            "effective_segment_length_support_weight": effective_length_support_weight,
+        }, effective_length_support_weight
+    if normalized_mode != SEGMENT_TRANSFER_CALIBRATION_MODE_SCORE_ALLOCATION_ZBLEND:
+        raise ValueError(f"Unsupported segment transfer calibration mode: {mode}")
+    if not segment_rows:
+        return {
+            "mode": SEGMENT_TRANSFER_CALIBRATION_MODE_SCORE_ALLOCATION_ZBLEND,
+            "applied": False,
+            "reason": "no_segment_rows",
+            "uses_post_selection_attribution": False,
+            "uses_length_support_counter_signal": False,
+            "base_segment_length_support_weight": float(segment_length_support_weight),
+            "effective_segment_length_support_weight": effective_length_support_weight,
+        }, effective_length_support_weight
+
+    base_scores = _finite_row_values(segment_rows, "score")
+    preliminary_weights = _segment_allocation_weights(
+        segment_rows,
+        segment_length_support_weight=float(segment_length_support_weight),
+        segment_allocation_weight_floor=float(segment_allocation_weight_floor),
+    )
+    score_z = _zscore_values(base_scores)
+    weight_z = _zscore_values(preliminary_weights)
+    calibrated_scores = [
+        0.50 * score_value + 0.50 * weight_value
+        for score_value, weight_value in zip(score_z, weight_z, strict=True)
+    ]
+    for row, base_score, preliminary_weight, score_value, weight_value, calibrated_score in zip(
+        segment_rows,
+        base_scores,
+        preliminary_weights,
+        score_z,
+        weight_z,
+        calibrated_scores,
+        strict=True,
+    ):
+        row["pre_transfer_calibration_score"] = float(base_score)
+        row["transfer_calibration_preliminary_allocation_weight"] = float(preliminary_weight)
+        row["transfer_calibration_score_z"] = float(score_value)
+        row["transfer_calibration_allocation_weight_z"] = float(weight_value)
+        row["transfer_calibrated_score"] = float(calibrated_score)
+        row["transfer_calibration_mode"] = (
+            SEGMENT_TRANSFER_CALIBRATION_MODE_SCORE_ALLOCATION_ZBLEND
+        )
+        row["score"] = float(calibrated_score)
+        row["score_source"] = (
+            f"{row.get('score_source', 'segment_score')}"
+            "+segment_score_allocation_weight_zblend"
+        )
+
+    # The calibrated score already embeds the active pre-selection allocation
+    # weight once. Applying length-support allocation again would double-count a
+    # query-free guard signal and obscure whether learned segment scores matter.
+    effective_length_support_weight = 0.0
+    weight_has_signal = max(weight_z, default=0.0) - min(weight_z, default=0.0) > 1e-12
+    score_has_signal = max(score_z, default=0.0) - min(score_z, default=0.0) > 1e-12
+    return {
+        "mode": SEGMENT_TRANSFER_CALIBRATION_MODE_SCORE_ALLOCATION_ZBLEND,
+        "applied": True,
+        "candidate_count": len(segment_rows),
+        "uses_post_selection_attribution": False,
+        "uses_length_support_counter_signal": False,
+        "base_segment_length_support_weight": float(segment_length_support_weight),
+        "effective_segment_length_support_weight": float(effective_length_support_weight),
+        "segment_allocation_weight_floor": float(segment_allocation_weight_floor),
+        "score_z_weight": 0.50,
+        "allocation_weight_z_weight": 0.50,
+        "score_z_has_signal": bool(score_has_signal),
+        "allocation_weight_z_has_signal": bool(weight_has_signal),
+        "calibrated_score_min": float(min(calibrated_scores)),
+        "calibrated_score_max": float(max(calibrated_scores)),
+        "calibrated_score_mean": float(sum(calibrated_scores) / len(calibrated_scores)),
+    }, effective_length_support_weight
 
 
 def _normalized_row_values(segment_rows: list[dict[str, Any]], key: str) -> list[float]:

@@ -320,6 +320,9 @@ def build_final_run_summaries(
             "allocation_length_support_weight": allocation_length_support_weight,
             "allocation_weight_floor": allocation_weight_floor,
             "segment_score_blend_weight": float(config.model.learned_segment_score_blend_weight),
+            "segment_transfer_calibration_mode": str(
+                getattr(config.model, "learned_segment_transfer_calibration_mode", "none")
+            ),
             "fairness_preallocation_enabled": bool(
                 config.model.learned_segment_fairness_preallocation
             ),
@@ -337,7 +340,7 @@ def build_final_run_summaries(
         "prior_sensitivity_diagnostics": prior_sensitivity_diagnostics,
         "prior_channel_ablation_diagnostics": prior_channel_ablation_diagnostics,
         "head_ablation_sensitivity_diagnostics": head_ablation_sensitivity_diagnostics,
-        "selection_causality_diagnostics": selection_causality_diagnostics,
+        "selection_causality_diagnostics": dict(selection_causality_diagnostics),
         "segment_oracle_allocation_audit": segment_oracle_allocation_audit,
         "target_segment_oracle_alignment_audit": target_segment_oracle_alignment_audit,
         "score_protected_length_feasibility": (

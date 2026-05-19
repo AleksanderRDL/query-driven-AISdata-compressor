@@ -27,7 +27,11 @@ from scoring.query_cache import (
     RangeTrajectoryAuditSupport,
     ScoringQueryCache,
 )
-from scoring.query_useful_v1 import query_useful_v1_from_range_audit
+from scoring.query_useful_v1 import (
+    QUERY_USEFUL_V1_COMPONENT_WEIGHTS,
+    query_useful_v1_components_from_range_audit,
+    query_useful_v1_from_range_audit,
+)
 from scoring.range_usefulness import (
     RANGE_USEFULNESS_SCHEMA_VERSION,
     RANGE_USEFULNESS_WEIGHTS,
@@ -41,6 +45,32 @@ from workloads.range_geometry import (
     points_in_range_box,
     segment_box_bracket_indices,
     segment_pairs_box_crossings,
+)
+
+RANGE_QUERY_METADATA_COMPONENT_SUMMARY_SCHEMA_VERSION = 2
+
+RANGE_QUERY_COMPONENT_KEYS: tuple[str, ...] = (
+    "range_point_f1",
+    "range_ship_f1",
+    "range_ship_coverage",
+    "range_entry_exit_f1",
+    "range_crossing_f1",
+    "range_temporal_coverage",
+    "range_gap_coverage",
+    "range_gap_time_coverage",
+    "range_gap_distance_coverage",
+    "range_gap_min_coverage",
+    "range_turn_coverage",
+    "range_shape_score",
+    "range_query_local_interpolation_fidelity",
+)
+
+QUERY_USEFUL_V1_QUERY_LOCAL_EXCLUDED_COMPONENTS: frozenset[str] = frozenset(
+    {
+        "endpoint_or_skeleton_sanity",
+        "global_shape_guardrail_score",
+        "length_preservation_guardrail",
+    }
 )
 
 
@@ -96,6 +126,208 @@ def _point_index_subset_f1(retained_mask: torch.Tensor, support_indices_cpu: tor
 def _mean(values: list[float], default: float = 0.0) -> float:
     """Return a float mean with an explicit empty-list default."""
     return float(sum(values) / len(values)) if values else float(default)
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return float(default)
+    if result != result:
+        return float(default)
+    return float(result)
+
+
+def _range_query_family_labels(query: dict[str, Any]) -> tuple[str, str]:
+    metadata = query.get("_metadata")
+    if not isinstance(metadata, dict):
+        return "unspecified", "unspecified"
+
+    def label(key: str) -> str:
+        raw = metadata.get(key)
+        if raw is None:
+            return "unspecified"
+        value = str(raw).strip()
+        return value if value else "unspecified"
+
+    return label("anchor_family"), label("footprint_family")
+
+
+def _query_local_query_useful_summary(range_components: dict[str, float]) -> dict[str, Any]:
+    query_components = query_useful_v1_components_from_range_audit(
+        range_components,
+        length_preservation=1.0,
+        avg_sed_km=0.0,
+        endpoint_sanity=1.0,
+    )
+    included = {
+        key: float(value)
+        for key, value in query_components.items()
+        if key not in QUERY_USEFUL_V1_QUERY_LOCAL_EXCLUDED_COMPONENTS
+    }
+    weighted_score = 0.0
+    weight_sum = 0.0
+    for key, value in included.items():
+        weight = float(QUERY_USEFUL_V1_COMPONENT_WEIGHTS.get(key, 0.0))
+        weighted_score += weight * float(value)
+        weight_sum += weight
+    normalized = weighted_score / weight_sum if weight_sum > 0.0 else 0.0
+    return {
+        "query_useful_v1_query_local_components": included,
+        "query_useful_v1_query_local_weighted_score": float(weighted_score),
+        "query_useful_v1_query_local_weighted_score_normalized": float(normalized),
+        "query_useful_v1_query_local_weight_sum": float(weight_sum),
+    }
+
+
+def _range_query_component_summary_for_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    range_components = {
+        key: _mean(
+            [
+                _safe_float(
+                    row.get("range_components", {}).get(key)
+                    if isinstance(row.get("range_components"), dict)
+                    else None
+                )
+                for row in rows
+            ]
+        )
+        for key in RANGE_QUERY_COMPONENT_KEYS
+    }
+    full_point_counts = [_safe_float(row.get("full_point_hit_count")) for row in rows]
+    retained_point_counts = [_safe_float(row.get("retained_point_hit_count")) for row in rows]
+    full_ship_counts = [_safe_float(row.get("full_trajectory_hit_count")) for row in rows]
+    retained_ship_counts = [
+        _safe_float(row.get("retained_trajectory_hit_count")) for row in rows
+    ]
+    ship_evidence_rows: list[dict[str, Any]] = []
+    for row in rows:
+        ship_evidence = row.get("ship_evidence_counts")
+        if isinstance(ship_evidence, dict):
+            ship_evidence_rows.append(ship_evidence)
+    missed_ship_counts = [
+        _safe_float(row.get("missed_trajectory_hit_count")) for row in ship_evidence_rows
+    ]
+    missed_ship_fractions = [
+        _safe_float(row.get("missed_trajectory_hit_fraction")) for row in ship_evidence_rows
+    ]
+    single_full = [
+        _safe_float(row.get("single_point_full_trajectory_hit_count"))
+        for row in ship_evidence_rows
+    ]
+    single_retained = [
+        _safe_float(row.get("single_point_retained_trajectory_hit_count"))
+        for row in ship_evidence_rows
+    ]
+    multi_full = [
+        _safe_float(row.get("multi_point_full_trajectory_hit_count"))
+        for row in ship_evidence_rows
+    ]
+    multi_retained = [
+        _safe_float(row.get("multi_point_retained_trajectory_hit_count"))
+        for row in ship_evidence_rows
+    ]
+    full_ship_total = sum(full_ship_counts)
+    retained_ship_total = sum(retained_ship_counts)
+    single_full_total = sum(single_full)
+    single_retained_total = sum(single_retained)
+    multi_full_total = sum(multi_full)
+    multi_retained_total = sum(multi_retained)
+    return {
+        "query_count": len(rows),
+        "hit_counts": {
+            "full_point_hit_count_total": int(sum(full_point_counts)),
+            "retained_point_hit_count_total": int(sum(retained_point_counts)),
+            "full_trajectory_hit_count_total": int(full_ship_total),
+            "retained_trajectory_hit_count_total": int(retained_ship_total),
+            "full_trajectory_hit_count_mean": _mean(full_ship_counts),
+            "retained_trajectory_hit_count_mean": _mean(retained_ship_counts),
+            "full_point_hit_count_mean": _mean(full_point_counts),
+            "retained_point_hit_count_mean": _mean(retained_point_counts),
+        },
+        "ship_evidence_counts": {
+            "full_trajectory_hit_count_total": int(full_ship_total),
+            "retained_trajectory_hit_count_total": int(retained_ship_total),
+            "missed_trajectory_hit_count_total": int(sum(missed_ship_counts)),
+            "missed_trajectory_hit_count_mean": _mean(missed_ship_counts),
+            "missed_trajectory_hit_fraction_mean": _mean(missed_ship_fractions),
+            "ship_presence_recall": float(
+                retained_ship_total / full_ship_total if full_ship_total > 0.0 else 1.0
+            ),
+            "single_point_full_trajectory_hit_count_total": int(single_full_total),
+            "single_point_retained_trajectory_hit_count_total": int(single_retained_total),
+            "single_point_ship_presence_recall": float(
+                single_retained_total / single_full_total if single_full_total > 0.0 else 1.0
+            ),
+            "multi_point_full_trajectory_hit_count_total": int(multi_full_total),
+            "multi_point_retained_trajectory_hit_count_total": int(multi_retained_total),
+            "multi_point_ship_presence_recall": float(
+                multi_retained_total / multi_full_total if multi_full_total > 0.0 else 1.0
+            ),
+            "full_query_hit_points_per_hit_trajectory_mean": _mean(
+                [
+                    _safe_float(row.get("full_query_hit_points_per_hit_trajectory_mean"))
+                    for row in ship_evidence_rows
+                ]
+            ),
+            "retained_query_hit_points_per_hit_trajectory_mean": _mean(
+                [
+                    _safe_float(row.get("retained_query_hit_points_per_hit_trajectory_mean"))
+                    for row in ship_evidence_rows
+                ]
+            ),
+        },
+        "range_components": range_components,
+        "range_usefulness_score": float(range_usefulness_score_from_components(range_components)),
+        **_query_local_query_useful_summary(range_components),
+    }
+
+
+def _range_query_metadata_component_summary(
+    query_rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if not query_rows:
+        return {
+            "available": False,
+            "diagnostic_only": True,
+            "schema_version": int(RANGE_QUERY_METADATA_COMPONENT_SUMMARY_SCHEMA_VERSION),
+            "reason": "no_range_queries",
+            "query_count": 0,
+        }
+
+    def grouped(fields: tuple[str, ...]) -> dict[str, Any]:
+        groups: dict[str, list[dict[str, Any]]] = {}
+        for row in query_rows:
+            key = "::".join(str(row.get(field, "unspecified")) for field in fields)
+            groups.setdefault(key, []).append(row)
+        return {
+            key: _range_query_component_summary_for_rows(rows)
+            for key, rows in sorted(groups.items())
+        }
+
+    query_local_components = [
+        key
+        for key in QUERY_USEFUL_V1_COMPONENT_WEIGHTS
+        if key not in QUERY_USEFUL_V1_QUERY_LOCAL_EXCLUDED_COMPONENTS
+    ]
+    return {
+        "available": True,
+        "diagnostic_only": True,
+        "schema_version": int(RANGE_QUERY_METADATA_COMPONENT_SUMMARY_SCHEMA_VERSION),
+        "source": "range_query_metadata_and_range_audit_component_rows",
+        "query_count": len(query_rows),
+        "component_keys": list(RANGE_QUERY_COMPONENT_KEYS),
+        "query_useful_v1_query_local_component_keys": query_local_components,
+        "excluded_query_useful_v1_components": sorted(
+            QUERY_USEFUL_V1_QUERY_LOCAL_EXCLUDED_COMPONENTS
+        ),
+        "query_rows": query_rows,
+        "group_by": {
+            "anchor_family": grouped(("anchor_family",)),
+            "footprint_family": grouped(("footprint_family",)),
+            "anchor_footprint_family": grouped(("anchor_family", "footprint_family")),
+        },
+    }
 
 
 def _range_boundary_indices_for_trajectories(
@@ -531,6 +763,69 @@ def _range_trajectory_detail_scores_for_query(
     )
 
 
+def _range_ship_evidence_counts_for_query(
+    *,
+    retained_cpu: torch.Tensor,
+    trajectory_support: tuple[RangeTrajectoryAuditSupport, ...],
+) -> dict[str, Any]:
+    """Return per-query ship-presence evidence counts for family diagnostics."""
+    full_counts: list[int] = []
+    retained_counts: list[int] = []
+    single_full = 0
+    single_retained = 0
+    multi_full = 0
+    multi_retained = 0
+    for support in trajectory_support:
+        in_offsets = support.in_offsets_cpu
+        full_count = int(in_offsets.numel())
+        if full_count <= 0:
+            continue
+        start = int(support.start)
+        retained_local = retained_cpu[start + in_offsets]
+        retained_count = int(retained_local.sum().item())
+        full_counts.append(full_count)
+        retained_counts.append(retained_count)
+        if full_count == 1:
+            single_full += 1
+            if retained_count > 0:
+                single_retained += 1
+        else:
+            multi_full += 1
+            if retained_count > 0:
+                multi_retained += 1
+
+    full_ship_count = len(full_counts)
+    retained_ship_count = sum(1 for count in retained_counts if count > 0)
+    missed_ship_count = max(0, full_ship_count - retained_ship_count)
+    return {
+        "full_trajectory_hit_count": int(full_ship_count),
+        "retained_trajectory_hit_count": int(retained_ship_count),
+        "missed_trajectory_hit_count": int(missed_ship_count),
+        "missed_trajectory_hit_fraction": float(
+            missed_ship_count / full_ship_count if full_ship_count > 0 else 0.0
+        ),
+        "ship_presence_recall": float(
+            retained_ship_count / full_ship_count if full_ship_count > 0 else 1.0
+        ),
+        "single_point_full_trajectory_hit_count": int(single_full),
+        "single_point_retained_trajectory_hit_count": int(single_retained),
+        "single_point_ship_presence_recall": float(
+            single_retained / single_full if single_full > 0 else 1.0
+        ),
+        "multi_point_full_trajectory_hit_count": int(multi_full),
+        "multi_point_retained_trajectory_hit_count": int(multi_retained),
+        "multi_point_ship_presence_recall": float(
+            multi_retained / multi_full if multi_full > 0 else 1.0
+        ),
+        "full_query_hit_points_per_hit_trajectory_mean": _mean(
+            [float(count) for count in full_counts]
+        ),
+        "retained_query_hit_points_per_hit_trajectory_mean": _mean(
+            [float(count) for count in retained_counts]
+        ),
+    }
+
+
 def score_range_usefulness(
     points: torch.Tensor,
     boundaries: list[tuple[int, int]],
@@ -564,6 +859,7 @@ def score_range_usefulness(
     turn_scores: list[float] = []
     shape_scores: list[float] = []
     interpolation_scores: list[float] = []
+    query_component_rows: list[dict[str, Any]] = []
 
     for query_index, query in enumerate(typed_queries):
         if str(query.get("type", "")).lower() != "range":
@@ -579,17 +875,23 @@ def score_range_usefulness(
         )
         range_mask = support.range_mask.to(device=points.device, dtype=torch.bool)
         retained_in_range = retained_bool & range_mask
-        point_scores.append(_range_point_f1(retained_bool, range_mask))
+        point_score = _range_point_f1(retained_bool, range_mask)
+        point_scores.append(point_score)
 
         retained_ids = trajectory_ids_from_mask(retained_in_range, point_trajectory_ids)
-        ship_scores.append(f1_score(set(support.full_trajectory_ids), set(retained_ids)))
+        ship_score = f1_score(set(support.full_trajectory_ids), set(retained_ids))
+        ship_scores.append(ship_score)
+        ship_evidence_counts = _range_ship_evidence_counts_for_query(
+            retained_cpu=retained_cpu,
+            trajectory_support=support.trajectories,
+        )
 
-        entry_exit_scores.append(
-            _point_index_subset_f1(retained_bool, support.boundary_indices_cpu)
+        entry_exit_score = _point_index_subset_f1(retained_bool, support.boundary_indices_cpu)
+        crossing_score = _point_index_subset_f1(
+            retained_bool, support.crossing_bracket_indices_cpu
         )
-        crossing_scores.append(
-            _point_index_subset_f1(retained_bool, support.crossing_bracket_indices_cpu)
-        )
+        entry_exit_scores.append(entry_exit_score)
+        crossing_scores.append(crossing_score)
 
         (
             ship_coverage,
@@ -613,6 +915,40 @@ def score_range_usefulness(
         turn_scores.append(turn_score)
         shape_scores.append(shape_score)
         interpolation_scores.append(interpolation_score)
+        range_gap_min_coverage = min(float(gap_time_score), float(gap_distance_score))
+        row_components = {
+            "range_point_f1": float(point_score),
+            "range_ship_f1": float(ship_score),
+            "range_ship_coverage": float(ship_coverage),
+            "range_entry_exit_f1": float(entry_exit_score),
+            "range_crossing_f1": float(crossing_score),
+            "range_temporal_coverage": float(temporal_score),
+            "range_gap_coverage": float(gap_score),
+            "range_gap_time_coverage": float(gap_time_score),
+            "range_gap_distance_coverage": float(gap_distance_score),
+            "range_gap_min_coverage": float(range_gap_min_coverage),
+            "range_turn_coverage": float(turn_score),
+            "range_shape_score": float(shape_score),
+            "range_query_local_interpolation_fidelity": float(interpolation_score),
+        }
+        anchor_family, footprint_family = _range_query_family_labels(cast(dict[str, Any], query))
+        query_component_rows.append(
+            {
+                "query_index": int(query_index),
+                "anchor_family": anchor_family,
+                "footprint_family": footprint_family,
+                "full_point_hit_count": int(range_mask.sum().item()),
+                "retained_point_hit_count": int(retained_in_range.sum().item()),
+                "full_trajectory_hit_count": len(support.full_trajectory_ids),
+                "retained_trajectory_hit_count": len(retained_ids),
+                "ship_evidence_counts": ship_evidence_counts,
+                "range_components": row_components,
+                "range_usefulness_score": float(
+                    range_usefulness_score_from_components(row_components)
+                ),
+                **_query_local_query_useful_summary(row_components),
+            }
+        )
 
     query_count = len(point_scores)
     range_point_f1 = _mean(point_scores)
@@ -674,6 +1010,9 @@ def score_range_usefulness(
         ),
         "range_usefulness_weights": dict(RANGE_USEFULNESS_WEIGHTS),
         "range_usefulness_weight_summary": range_usefulness_weight_summary(),
+        "range_query_metadata_component_summary": _range_query_metadata_component_summary(
+            query_component_rows
+        ),
     }
 
 

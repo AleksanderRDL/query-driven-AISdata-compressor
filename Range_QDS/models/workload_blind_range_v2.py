@@ -6,7 +6,10 @@ import torch
 import torch.nn as nn
 
 from learning.query_prior_fields import QUERY_PRIOR_FIELD_NAMES
-from learning.targets.query_useful_v1 import QUERY_USEFUL_V1_HEAD_NAMES
+from learning.targets.query_useful_v1 import (
+    QUERY_USEFUL_V1_HEAD_NAMES,
+    query_useful_v1_point_score,
+)
 from models.positional_encoding import CachedSinusoidalPositionalEncodingMixin
 
 WORKLOAD_BLIND_RANGE_V2_SCHEMA_VERSION = 6
@@ -145,8 +148,12 @@ class WorkloadBlindRangeV2Model(CachedSinusoidalPositionalEncodingMixin, nn.Modu
             or "marginal_replacement_gain" in disabled
         ):
             replacement = torch.full_like(replacement, 0.5)
-        replacement_multiplier = 0.75 + 0.25 * replacement
-        interpretable_score = q_hit * (0.5 + behavior) * replacement_multiplier + 0.25 * boundary
+        interpretable_score = query_useful_v1_point_score(
+            q_hit=q_hit,
+            behavior=behavior,
+            boundary=boundary,
+            replacement=replacement,
+        )
         return torch.logit(interpretable_score.clamp(1e-5, 1.0 - 1e-5))
 
     def _encoded(

@@ -9,7 +9,16 @@ import torch
 
 from learning.fit_diagnostics import _discriminative_sample, _kendall_tau
 from learning.losses import _safe_quantile
-from learning.targets.query_useful_v1 import QUERY_USEFUL_V1_HEAD_NAMES
+from learning.targets.query_useful_v1 import (
+    FAMILY_TRAINABILITY_FOCUS,
+    FAMILY_TRAINABILITY_GROUP_KEYS,
+    QUERY_USEFUL_V1_FINAL_LABEL_FORMULA,
+    QUERY_USEFUL_V1_HEAD_NAMES,
+    _range_query_family_evidence,
+    _rank_correlation,
+    _topk_overlap_and_mass_recall,
+    query_useful_v1_point_score,
+)
 
 
 def _initialize_factorized_head_output_biases_from_targets(
@@ -206,6 +215,9 @@ def _factorized_head_fit_diagnostics(
     head_logits: torch.Tensor | None,
     factorized_targets: torch.Tensor | None,
     factorized_mask: torch.Tensor | None,
+    points: torch.Tensor | None = None,
+    boundaries: list[tuple[int, int]] | None = None,
+    typed_queries: list[dict[str, Any]] | None = None,
     seed: int,
 ) -> dict[str, Any]:
     """Summarize training-set fit for every factorized QueryUsefulV1 head."""
@@ -262,7 +274,197 @@ def _factorized_head_fit_diagnostics(
         diagnostics[f"{head_name}_head_tau"] = tau
         diagnostics[f"{head_name}_head_topk_mass_recall_at_5_percent"] = topk_recall
     diagnostics["factorized_head_fit"] = head_rows
+    diagnostics["family_conditioned_head_trainability"] = (
+        _family_conditioned_head_trainability_diagnostics(
+            head_logits=head_logits,
+            factorized_targets=factorized_targets,
+            factorized_mask=factorized_mask,
+            points=points,
+            boundaries=boundaries,
+            typed_queries=typed_queries,
+            seed=seed,
+        )
+    )
     return diagnostics
+
+
+def _family_conditioned_head_trainability_diagnostics(
+    *,
+    head_logits: torch.Tensor | None,
+    factorized_targets: torch.Tensor | None,
+    factorized_mask: torch.Tensor | None,
+    points: torch.Tensor | None,
+    boundaries: list[tuple[int, int]] | None,
+    typed_queries: list[dict[str, Any]] | None,
+    seed: int,
+    ratio: float = 0.05,
+) -> dict[str, Any]:
+    """Return head-fit diagnostics split by workload family."""
+    if (
+        head_logits is None
+        or factorized_targets is None
+        or factorized_mask is None
+        or points is None
+        or boundaries is None
+        or typed_queries is None
+    ):
+        return {"available": False, "reason": "missing_inputs"}
+    if head_logits.shape != factorized_targets.shape or factorized_mask.shape != head_logits.shape:
+        return {"available": False, "reason": "shape_mismatch"}
+    if int(head_logits.shape[-1]) != len(QUERY_USEFUL_V1_HEAD_NAMES):
+        return {"available": False, "reason": "head_count_mismatch"}
+    range_queries = [
+        query for query in typed_queries if str(query.get("type", "")).lower() == "range"
+    ]
+    if not range_queries:
+        return {"available": False, "reason": "no_range_queries"}
+
+    logits = head_logits.detach().cpu().float()
+    targets = factorized_targets.detach().cpu().float().clamp(0.0, 1.0)
+    masks = factorized_mask.detach().cpu().bool()
+    probabilities = torch.sigmoid(logits)
+    points_cpu = points.detach().cpu().float()
+    family_evidence = _range_query_family_evidence(
+        points=points_cpu,
+        boundaries=boundaries,
+        range_queries=range_queries,
+        group_keys=FAMILY_TRAINABILITY_GROUP_KEYS,
+    )
+    target_composed = query_useful_v1_point_score(
+        q_hit=targets[:, 0],
+        behavior=targets[:, 1],
+        boundary=targets[:, 2],
+        replacement=targets[:, 3],
+    )
+    predicted_composed = query_useful_v1_point_score(
+        q_hit=probabilities[:, 0],
+        behavior=probabilities[:, 1],
+        boundary=probabilities[:, 2],
+        replacement=probabilities[:, 3],
+    )
+    generator = torch.Generator().manual_seed(int(seed) + 4211)
+
+    def fit_row(
+        *,
+        scores: torch.Tensor,
+        target_values: torch.Tensor,
+        reference: torch.Tensor,
+        valid: torch.Tensor,
+    ) -> dict[str, Any]:
+        valid = valid.bool()
+        if int(valid.sum().item()) < 2:
+            return {"available": False, "reason": "insufficient_valid_points"}
+        valid_scores = scores[valid].float()
+        valid_targets = target_values[valid].float().clamp(0.0, 1.0)
+        sampled_scores, sampled_targets = _discriminative_sample(
+            valid_scores,
+            valid_targets,
+            n_each=200,
+            generator=generator,
+        )
+        k = max(1, math.ceil(float(ratio) * int(valid_scores.numel())))
+        selected = torch.topk(valid_scores, k=k, largest=True).indices
+        ideal = torch.topk(valid_targets, k=k, largest=True).indices
+        selected_target_mass = float(valid_targets[selected].sum().item())
+        ideal_target_mass = float(valid_targets[ideal].sum().item())
+        ship_topk = _topk_overlap_and_mass_recall(
+            ranker=scores,
+            reference=reference,
+            valid=valid,
+            ratio=ratio,
+        )
+        return {
+            "available": True,
+            "valid_point_count": int(valid_scores.numel()),
+            "positive_target_count": int((valid_targets > 0.0).sum().item()),
+            "target_mass": float(valid_targets.sum().item()),
+            "target_mean": float(valid_targets.mean().item()),
+            "target_std": float(valid_targets.std(unbiased=False).item())
+            if int(valid_targets.numel()) > 1
+            else 0.0,
+            "prediction_mean": float(valid_scores.mean().item()),
+            "prediction_std": float(valid_scores.std(unbiased=False).item())
+            if int(valid_scores.numel()) > 1
+            else 0.0,
+            "kendall_tau_with_head_target": float(_kendall_tau(sampled_scores, sampled_targets)),
+            "topk_head_target_mass_recall": float(
+                selected_target_mass / max(ideal_target_mass, 1e-12)
+            ),
+            "spearman_with_family_ship_query_evidence": _rank_correlation(
+                scores,
+                reference,
+                valid,
+            ),
+            "topk_family_ship_query_evidence_mass_recall": ship_topk[
+                "reference_mass_recall"
+            ],
+        }
+
+    out: dict[str, Any] = {
+        "available": True,
+        "diagnostic_only": True,
+        "topk_ratio": float(ratio),
+        "group_by": {},
+        "focus_families": {
+            group_key: sorted(values) for group_key, values in FAMILY_TRAINABILITY_FOCUS.items()
+        },
+    }
+    for group_key, family_rows in family_evidence.items():
+        group_out: dict[str, Any] = {}
+        for family, evidence in family_rows.items():
+            family_valid = evidence["query_hit_probability"].detach().cpu().bool()
+            reference = evidence["ship_query_evidence"].detach().cpu().float()
+            head_rows: dict[str, Any] = {}
+            weak_heads = []
+            for head_idx, head_name in enumerate(QUERY_USEFUL_V1_HEAD_NAMES):
+                valid = family_valid & masks[:, head_idx]
+                row = fit_row(
+                    scores=probabilities[:, head_idx],
+                    target_values=targets[:, head_idx],
+                    reference=reference,
+                    valid=valid,
+                )
+                head_rows[str(head_name)] = row
+                spearman = row.get("spearman_with_family_ship_query_evidence")
+                if row.get("available") is True and (spearman is None or float(spearman) < 0.0):
+                    weak_heads.append(str(head_name))
+            composed_valid = family_valid & masks[:, 0] & masks[:, 1] & masks[:, 2] & masks[:, 3]
+            composed_row = fit_row(
+                scores=predicted_composed,
+                target_values=target_composed,
+                reference=reference,
+                valid=composed_valid,
+            )
+            spearman = composed_row.get("spearman_with_family_ship_query_evidence")
+            if composed_row.get("available") is True and (
+                spearman is None or float(spearman) < 0.0
+            ):
+                weak_heads.append("factorized_composed_score")
+            focus_family = family in FAMILY_TRAINABILITY_FOCUS.get(group_key, frozenset())
+            group_out[str(family)] = {
+                "available": bool(family_valid.any().item()),
+                "focus_family": focus_family,
+                "query_count": int(evidence["query_count"]),
+                "valid_hit_point_count": int(family_valid.sum().item()),
+                "ship_query_evidence_positive_point_count": int(
+                    (reference[family_valid] > 0.0).sum().item()
+                )
+                if bool(family_valid.any().item())
+                else 0,
+                "ship_query_evidence_mass": float(reference[family_valid].sum().item())
+                if bool(family_valid.any().item())
+                else 0.0,
+                "head_fit": head_rows,
+                "factorized_composed_score_fit": composed_row,
+                "weak_ship_evidence_heads": weak_heads,
+                "head_trainability_status": (
+                    "weak_family_head_signal"
+                    if focus_family and weak_heads
+                    else "diagnostic_only"
+                ),
+            }
+        out["group_by"][group_key] = group_out
+    return out
 
 
 def _factorized_final_score_composition_diagnostics(
@@ -300,8 +502,11 @@ def _factorized_final_score_composition_diagnostics(
         behavior = probabilities[:, 1].float().clamp(0.0, 1.0)
         boundary = probabilities[:, 2].float().clamp(0.0, 1.0)
         replacement = probabilities[:, 3].float().clamp(0.0, 1.0)
-        return (q_hit * (0.5 + behavior) * (0.75 + 0.25 * replacement) + 0.25 * boundary).clamp(
-            0.0, 1.0
+        return query_useful_v1_point_score(
+            q_hit=q_hit,
+            behavior=behavior,
+            boundary=boundary,
+            replacement=replacement,
         )
 
     def topk_mass_and_overlap(scores: torch.Tensor, reference: torch.Tensor) -> tuple[float, float]:
@@ -343,9 +548,7 @@ def _factorized_final_score_composition_diagnostics(
     behavior_multiplier = (0.5 + probabilities[:, 1].float().clamp(0.0, 1.0))[mask]
     diagnostics: dict[str, Any] = {
         "factorized_final_score_composition_available": True,
-        "factorized_final_score_formula": (
-            "q_hit_times_behavior_multiplier_times_replacement_multiplier_plus_boundary_bonus"
-        ),
+        "factorized_final_score_formula": QUERY_USEFUL_V1_FINAL_LABEL_FORMULA,
         "factorized_final_score_prediction_mean": float(composed.mean().item()),
         "factorized_final_score_prediction_std": prediction_std,
         "factorized_final_score_prediction_p05": prediction_p05,

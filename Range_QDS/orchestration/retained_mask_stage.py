@@ -18,6 +18,9 @@ from orchestration.length_diagnostics import (
 )
 from orchestration.retained_mask_ablation_stage import freeze_retained_mask_ablations
 from orchestration.selector_diagnostics import (
+    factorized_score_component_vectors_from_logits,
+    query_free_retained_removal_teacher_proxy_vectors,
+    query_prior_component_vectors_for_points,
     retained_decision_marginal_query_useful_diagnostics,
     selector_segment_score_source_label,
 )
@@ -180,6 +183,9 @@ def freeze_workload_blind_retained_masks(
                     segment_score_point_blend_weight=float(
                         config.model.learned_segment_score_blend_weight
                     ),
+                    segment_transfer_calibration_mode=str(
+                        config.model.learned_segment_transfer_calibration_mode
+                    ),
                     fairness_preallocation_enabled=bool(
                         config.model.learned_segment_fairness_preallocation
                     ),
@@ -209,6 +215,17 @@ def freeze_workload_blind_retained_masks(
                 trace["retained_mask_freeze_timing"] = freeze_timing_diagnostics
                 diagnostic_started_at = time.perf_counter()
                 try:
+                    primary_head_logits = frozen_primary_head_logits.get("MLQDS")
+                    sampled_prior_vectors, model_prior_vectors = (
+                        query_prior_component_vectors_for_points(
+                            test_points.detach().cpu().float(),
+                            trained.feature_context.get("query_prior_field"),
+                        )
+                    )
+                    teacher_proxy_vectors = query_free_retained_removal_teacher_proxy_vectors(
+                        test_points.detach().cpu().float(),
+                        test_boundaries,
+                    )
                     trace["retained_decision_marginal_query_useful_alignment"] = (
                         retained_decision_marginal_query_useful_diagnostics(
                             points=test_points.detach().cpu().float(),
@@ -218,9 +235,18 @@ def freeze_workload_blind_retained_masks(
                             raw_scores=primary_raw_preds,
                             selector_scores=primary_scores,
                             segment_scores=primary_segment_scores,
+                            score_component_vectors=(
+                                factorized_score_component_vectors_from_logits(
+                                    primary_head_logits
+                                )
+                            ),
+                            query_free_teacher_proxy_vectors=teacher_proxy_vectors,
+                            sampled_prior_vectors=sampled_prior_vectors,
+                            model_prior_vectors=model_prior_vectors,
                             selector_trace=trace,
                             max_retained_per_source=32,
                             max_removed_candidates=64,
+                            teacher_usage_split="eval_primary",
                         )
                     )
                 except Exception as exc:  # pragma: no cover - diagnostic must not break freezing.

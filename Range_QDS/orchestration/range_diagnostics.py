@@ -744,7 +744,7 @@ def _target_budget_row(
             continue
         try:
             ratio = float(raw_ratio)
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             continue
         distance = abs(ratio - float(compression_ratio))
         if distance < best_distance:

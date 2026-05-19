@@ -40,10 +40,256 @@ The target product result is not “best possible geometric simplification.” I
 
 ## 2. Current evidence and active blocker
 
-The latest relevant strict single-cell evidence is:
+The current active strict-cell reference is:
 
 ```text
-artifacts/results/query_driven_v2_checkpoint42_mode_aware_current_best_strict_local/example_run.json
+artifacts/results/query_driven_v2_checkpoint85_segment_aggregation_current_best_strict_local/example_run.json
+```
+
+The latest rejected strict diagnostic is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint49_segment_context_formula_current_best_strict_local/example_run.json
+```
+
+The latest teacher-proxy strict diagnostic is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint53_teacher_proxy_current_best_strict_local/example_run.json
+```
+
+The latest query-free teacher guard-coupling smoke is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint54_query_free_teacher_guard_coupling_smoke/example_run.json
+```
+
+The latest query-free teacher guard-coupling strict diagnostic is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint55_query_free_teacher_guard_coupling_current_best_strict_local/example_run.json
+```
+
+The latest learned-controllable retained-removal derived diagnostic is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint56_learned_controllable_retained_removal_diagnosis/learned_controllable_retained_removal_diagnosis.json
+```
+
+The latest train/selection-side marginal-teacher smoke is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint57_selection_marginal_teacher_smoke/example_run.json
+```
+
+The latest train/selection-side marginal-teacher minimum strict diagnostic is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint58_selection_marginal_teacher_min_strict/example_run.json
+```
+
+The latest train/selection-side marginal-teacher standard strict diagnostic is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint59_selection_marginal_teacher_standard_strict/example_run.json
+```
+
+The latest workload/profile health generation diagnostic is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint60_workload_profile_health_generation_diagnostic/workload_profile_health_generation_diagnostic.json
+```
+
+The latest workload-healthy train/selection-side marginal-teacher strict diagnostic is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint61_selection_marginal_teacher_current_best_strict_local/example_run.json
+```
+
+The latest selection-to-eval marginal calibration derived diagnostic is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint62_selection_to_eval_marginal_calibration_diagnosis/selection_to_eval_marginal_calibration_diagnosis.json
+```
+
+The latest selector-shaped loss rejected diagnostic is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint64_learned_segment_budget_loss_current_best_strict_local/example_run.json
+```
+
+The latest selector decision-surface derived diagnostic is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint65_selector_decision_surface_diagnosis/selector_decision_surface_diagnosis.json
+```
+
+The latest checkpoint-side marginal teacher consumer failure diagnosis is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint70_checkpoint_teacher_consumer_failure_diagnosis/checkpoint_teacher_consumer_failure_diagnosis.json
+```
+
+The latest checkpoint-side marginal teacher hybrid smoke is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint71_checkpoint_teacher_hybrid_consumer_smoke/example_run.json
+```
+
+The latest checkpoint-side marginal teacher hybrid strict diagnostic is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint72_checkpoint_teacher_hybrid_current_best_strict_local/example_run.json
+```
+
+The latest hybrid strict failure and profile/scoring diagnosis is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint73_hybrid_strict_failure_profile_scoring_diagnosis/hybrid_strict_failure_profile_scoring_diagnosis.json
+```
+
+The latest workload/scoring compatibility minimum strict diagnostic is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint74_workload_scoring_compatibility_min_strict/example_run.json
+```
+
+The latest workload/scoring compatibility current-best strict diagnostic is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint75_workload_scoring_compatibility_current_best_strict_local/example_run.json
+```
+
+The latest ship-evidence target/scoring strict diagnostic is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint76_ship_evidence_current_best_strict_local/example_run.json
+```
+
+The latest ship-presence segment-budget candidate strict diagnostic is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint77_ship_presence_segment_budget_candidate_current_best_strict_local/example_run.json
+```
+
+The latest rejected blended segment-budget target strict diagnostic is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint78_query_hit_ship_blend_target_current_best_strict_local/example_run.json
+```
+
+The latest rejected final-score/ship segment-budget target strict diagnostic is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint79_final_score_ship_blend_target_current_best_strict_local/example_run.json
+```
+
+The latest derived workload/component compatibility diagnostic is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint80_workload_component_compatibility_diagnosis/workload_component_compatibility_diagnosis.json
+```
+
+The latest derived recalibration candidate diagnostic is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint81_recalibration_candidate_diagnosis/workload_component_recalibration_candidate_diagnosis.json
+```
+
+The latest derived blocker-preserving recalibration diagnostic is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint82_blocker_preserving_recalibration_diagnosis/workload_component_blocker_preserving_recalibration_diagnosis.json
+```
+
+The latest family-conditioned target/head strict diagnostic is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint83_family_trainability_current_best_strict_local/example_run.json
+```
+
+The latest family-local candidate strict diagnostic is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint84_family_local_candidate_current_best_strict_local/example_run.json
+```
+
+The latest segment aggregation strict diagnostic is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint85_segment_aggregation_current_best_strict_local/example_run.json
+```
+
+The latest guarded segment aggregation target strict diagnostic is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint86_query_ship_max_pool_target_current_best_strict_local/example_run.json
+```
+
+The latest derived segment-target transfer diagnostic is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint87_query_ship_max_pool_transfer_diagnosis/query_ship_max_pool_transfer_diagnosis.json
+```
+
+The latest rejected query-ship local-head target strict diagnostic is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint90_query_ship_local_heads_current_best_strict_local/example_run.json
+```
+
+The latest derived query-ship local-head failure diagnostic is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint91_query_ship_local_heads_failure_diagnosis/query_ship_local_heads_failure_diagnosis.json
+```
+
+The latest diffusion-preserving family/head transfer-path diagnostic is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint92_family_transfer_path_diagnosis/family_transfer_path_diagnosis.json
+```
+
+The latest family-conditioned prior predictability strict diagnostic is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint93_family_prior_predictability_max_pool_current_best_strict_local/example_run.json
+```
+
+The latest family-prior transfer-path derived diagnostic is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint94_family_prior_transfer_path_diagnosis/family_prior_transfer_path_diagnosis.json
+```
+
+The latest selector-to-retained-marginal calibration derived diagnostic is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint95_selector_marginal_calibration_diagnosis/selector_marginal_calibration_diagnosis.json
+```
+
+The latest selection-side marginal segment calibration derived diagnostic is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint96_selection_marginal_segment_calibration_diagnosis/selection_marginal_segment_calibration_diagnosis.json
+```
+
+The latest selection-to-eval segment teacher transfer derived diagnostic is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint97_selection_eval_segment_teacher_transfer_diagnosis/selection_eval_segment_teacher_transfer_diagnosis.json
+```
+
+The latest segment transfer-feature admissibility derived diagnostic is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint98_selection_segment_transfer_feature_admissibility_diagnosis/selection_segment_transfer_feature_admissibility_diagnosis.json
+```
+
+The latest guarded segment transfer-calibration strict diagnostic is:
+
+```text
+artifacts/results/query_driven_v2_checkpoint99_segment_transfer_calibration_zblend_current_best_strict_local/example_run.json
 ```
 
 This is still diagnostic evidence, not final acceptance evidence. The final grid has not been run, and final success is not allowed.
@@ -64,6 +310,20 @@ RangeUsefulLegacy:
 Length preservation:
   MLQDS:           0.7915916346
   active minimum:  0.7500000000
+```
+
+Latest guarded target strict-cell result:
+
+```text
+QueryUsefulV1:
+  MLQDS:           0.1673482145
+  uniform:         0.1421296610
+  DouglasPeucker:  0.1671038781
+
+RangeUsefulLegacy:
+  MLQDS:           0.1532247905
+  uniform:         0.1303214771
+  DouglasPeucker:  0.1526760352
 ```
 
 Gate status:
@@ -171,9 +431,113 @@ Current interpretation:
 - Score ordering still has weak retained-set marginal value. The retained
   marginal payload shows overall selector-score Spearman `-0.0077522559` and
   raw-score Spearman `-0.0248828079` against exact QueryUsefulV1 marginals.
+- The segment-context scalar-score candidate was rejected by checkpoint49. It
+  improved fit diagnostics but worsened MLQDS QueryUsefulV1 versus checkpoint42
+  and failed predictability plus all learning-causality child gates. The active
+  scalar formula is reverted to the accepted point-score contract.
 - Prior and head ablations move final masks too little, and removing behavior or
   segment-budget heads does not hurt enough. Do not compensate by weakening
   length repair, adding large temporal scaffolding, or loosening causality gates.
+- Checkpoints58-59 prove the row-free selection-side exact marginal teacher
+  instrumentation runs beyond smoke and finds learned-controllable candidates,
+  but both artifacts fail workload stability, workload signature,
+  predictability, prior-predictive alignment, and learning causality. Do not
+  tune model, loss, or selector from those failed-gate artifacts.
+- Checkpoint59 is especially clear: MLQDS QueryUsefulV1 is `0.1430895194`
+  versus uniform `0.1445766821`, and active scores are anti-aligned with
+  learned-controllable exact marginal value at standard strict scale. Selection
+  raw/selector/segment Spearman are `-0.2474340176`, `-0.2606304985`, and
+  `-0.3911290323`; eval raw/selector/segment Spearman are `-0.3885630499`,
+  `-0.3958944282`, and `-0.2943548387`.
+- Checkpoint60 isolates that failure as scale/profile-health-sensitive.
+  The checkpoint59 96-ship split passed workload stability only `1/3` seeds and
+  workload signature `0/3`; a 192-ship balanced split passed stability `3/3`
+  but signature only `2/3`; the current-best 384-ship balanced split passed
+  workload stability and signature `5/5`. Use the 384 balanced scale for the
+  next strict teacher diagnostic unless a cheaper profile fix is explicitly
+  being tested as workload evidence only.
+- Checkpoint61 reran the selection-side exact marginal teacher at that
+  workload-healthy 384 balanced scale. Workload stability, workload signature,
+  support overlap, target diffusion, prior-predictive alignment, and global
+  sanity pass. Predictability and learning causality still fail. The
+  selection-side learned-controllable teacher has 32 candidates and is viable
+  as a train/checkpoint calibration signal, but active raw/selector scores are
+  anti-aligned with exact selection marginal value: Spearman `-0.1616568915`
+  and `-0.2562316716`.
+- Checkpoint62 derives selection-to-eval marginal calibration from checkpoint61
+  learned-controllable rows. It does not justify a production calibration path:
+  the best fitted transfer candidate has eval Spearman `0.2749266862`, but
+  selection leave-one-out Spearman is `-0.1173020528` and eval
+  top-minus-bottom marginal is `-0.0003171658`. Current row features are not a
+  robust train-side calibration signal.
+- Checkpoint63-64 tested an explicit learned-segment-budget-shaped loss
+  objective, then removed the objective from production paths after strict
+  rejection. Checkpoint64 passed workload/profile gates but worsened MLQDS
+  QueryUsefulV1 to `0.1630146227`, still lost to Douglas-Peucker
+  `0.1671038781`, and made learning causality worse: shuffled-score delta
+  dropped to `0.0017380253`, untrained delta became `-0.0021686561`, and
+  no-segment-budget-head delta was only `0.0021650137`. Do not re-add this
+  loss without new root evidence.
+- Checkpoint65 joins checkpoint61 learned-controllable retained-removal exact
+  marginal rows to selector segment attribution. All 32 selection rows join.
+  The top exact-marginal quartile is under-ranked by both point selector score
+  and point segment score in `6/8` rows, and `6/8` also live in the lower half
+  of selector segment ranks. The bottom exact-marginal quartile has better mean
+  selector segment rank (`332.375`) than the top quartile (`603.0`). This
+  points to a separated segment-level plus within-segment point-level marginal
+  teacher, not another scalar proxy over current labels.
+- Checkpoint 5.122 removes a diagnostic usability trap found by checkpoint65:
+  future retained-marginal rows now carry `selector_segment_context` directly
+  when the learned-segment trace has segment attribution. This does not change
+  model or selector behavior. It prevents future checkpoints from repeating a
+  fragile external join between point rows and segment rows.
+- Checkpoint 5.123 adds a diagnostic-only separated marginal teacher
+  construction over bounded exact retained-removal rows. It produces
+  segment-level targets from positive exact marginal mass by selector segment
+  and within-segment point targets from point exact marginals, while excluding
+  skeleton, fallback, and length-repair-owned rows. It is not yet wired into
+  training, and it must not be treated as production calibration.
+- Checkpoint 5.124 proves the separated marginal teacher payload is emitted
+  end to end in a real Level 1 artifact. Eval trace emits 4
+  learned-controllable rows, 2 segment targets, and 4 point targets; selection
+  trace emits 2 learned-controllable rows, 1 segment target, and 2 point
+  targets. This is schema/runtime evidence only: the smoke fails workload,
+  predictability, prior-alignment, target diffusion, workload signature,
+  causality, and global sanity gates.
+- Checkpoint 5.125 separates target-shape viability from train/checkpoint usage
+  eligibility. Eval-side exact marginal payloads now keep
+  `candidate_for_train_side_teacher=false` even when target shape is viable;
+  checkpoint-selection payloads can mark the candidate true when their target
+  shape is viable. This is still Level 1 implementation evidence only.
+- Checkpoint 5.126 adds a guarded diagnostic consumer for full
+  checkpoint-selection separated teacher rows. It rejects eval payloads and
+  compact row-free summaries before building selector score vectors. In the
+  Level 1 smoke, the checkpoint teacher selector score is `0.1193385015`,
+  `+0.0024014111` over the selection primary, but this remains smoke-scale
+  implementation evidence only.
+- Checkpoint 5.127 runs the guarded consumer at the workload-healthy
+  384-ship strict cell. Workload/profile gates pass and the consumer remains
+  leakage-guarded, but the direct teacher-selector scores `0.1558174990` on
+  checkpoint selection versus the primary `0.1601869377`. Do not promote the
+  direct consumer to training semantics; diagnose its sparse support and
+  ship/boundary/shape component loss first.
+- Checkpoint 5.128 diagnoses that strict failure from checkpoint69. The direct
+  retained-removal-only consumer has only 32 positive point teacher scores for
+  a 1638-point budget and 32 positive segments out of 1008 considered segments.
+  It churns the mask heavily and loses mostly through ship/point recall. The
+  next teacher must be less sparse or hybridized before any loss wiring.
+- Checkpoint 5.129 adds guarded diagnostic-only hybrid checkpoint-teacher
+  selectors that blend dense primary selector scores with exact marginal
+  teacher vectors. Checkpoint71 proves schema/runtime emission only; its small
+  positive smoke deltas are not evidence for training semantics.
+- Checkpoint 5.130 tests that hybrid at the workload-healthy strict cell.
+  Workload/profile gates pass, but the direct teacher and both hybrid blends
+  lose to the checkpoint-selection primary.
+- Checkpoint 5.131 diagnoses the strict failure and incorporates
+  `docs/keep-in-mind.md`: workload profiles, anchor-family weights, and
+  QueryUsefulV1 components are not fixed constants. The next work should
+  diagnose workload/scoring compatibility for a coherent query-local trainable
+  signal before adding training semantics.
 
 Relevant diagnostics before and around the current-best artifact:
 
@@ -235,6 +599,10 @@ checkpoint30 retained-marginal helper unit diagnostic:
 checkpoint31 retained-marginal payload hook:
   payload key:
     selector_trace_diagnostics.eval_primary.retained_decision_marginal_query_useful_alignment
+  rule:
+    retained-decision marginal alignment lives under the selector trace path.
+    Do not use learning_causality_summary.selection_causality_diagnostics as a
+    retained-marginal source.
   emitted after the primary MLQDS mask is frozen
   candidate limits:
     retained per source: 32
@@ -671,35 +1039,919 @@ checkpoint43 derived prior/head/selector marginal diagnosis:
     learning causality: blocking; score/segment ablations move masks but do not
       clear required material-delta gates, and prior ablations barely move masks
 
+checkpoint44 exact marginal under-rank diagnosis and layout fix:
+  artifact:
+    artifacts/results/query_driven_v2_checkpoint44_exact_marginal_under_rank_diagnosis/exact_marginal_under_rank_diagnosis.json
+  evidence level:
+    derived_strict_artifact_diagnostic_no_new_probe
+  strict source:
+    checkpoint42 mode-aware current-best strict local
+  key row-level finding:
+    checkpoint42 bounded rows prove score/marginal under-ranking. The second
+    highest exact marginal candidate was a length-repair retained point with
+    marginal rank 2/160 but selector-score rank 147/160. A learned retained
+    point had marginal rank 3/160 but selector-score rank 112/160.
+  current artifact limitation:
+    checkpoint42 rows contain raw_score, selector_score, and segment_score only.
+    They prove under-ranking but cannot explain head-level score composition.
+  code fix:
+    future retained-marginal rows include diagnostic-only score_components for
+    factorized head probabilities and composed score terms.
+    retained-marginal alignment and full bounded rows remain under
+    selector_trace_diagnostics.eval_primary.
+    learning_causality_summary.selection_causality_diagnostics is not a
+    canonical retained-marginal location.
+  decision:
+    no new success claim
+    final_success_allowed remains false
+    final grid remains blocked
+
+checkpoint45 retained-marginal component payload smoke:
+  artifact:
+    artifacts/results/query_driven_v2_checkpoint45_retained_marginal_component_payload_smoke/example_run.json
+  evidence level:
+    implementation_payload_smoke_only
+  key finding:
+    retained-marginal alignment is available under
+    selector_trace_diagnostics.eval_primary.
+    row score_components include factorized head probabilities and composed
+    score terms.
+  limitation:
+    tiny smoke, zero accepted selection-workload queries, failed gates; no
+    learning or success claim.
+
+checkpoint46 score-formula composition static diagnosis:
+  artifact:
+    artifacts/results/query_driven_v2_checkpoint46_score_formula_composition_static_diagnosis/score_formula_composition_static_diagnosis.json
+  evidence level:
+    static_code_and_strict_artifact_diagnostic_no_new_probe
+  key finding:
+    final raw point score uses query_hit, behavior, replacement, and boundary,
+    but omits segment_budget_target and path_length_support_target.
+    In checkpoint42, segment_budget_target is the strongest head by tau/top-k
+    fit, yet it reaches the selector mainly through segment allocation and only
+    a 0.05 point-score blend. Path-length support is configured out and also
+    fits poorly, so turning its blend on would be a masking fix.
+  decision:
+    no new success claim
+    final_success_allowed remains false
+    final grid remains blocked
+
+checkpoint47 segment-context score formula implementation smoke:
+  artifact:
+    artifacts/results/query_driven_v2_checkpoint47_segment_context_score_formula_smoke/example_run.json
+  evidence level:
+    Level 1 implementation/runtime smoke only
+  code change:
+    QueryUsefulV1 scalar labels and workload_blind_range_v2 final logits now
+    share the same formula. The local point score is blended with
+    segment_budget_target context at weight 0.15. path_length_support_target
+    stays out of the scalar score because the current strict evidence shows it
+    is weak and disabled in allocation.
+  smoke result:
+    MLQDS QueryUsefulV1: 0.1140836937
+    uniform QueryUsefulV1: 0.1135960307
+    Douglas-Peucker QueryUsefulV1: 0.2382488243
+    failed gates: workload stability, predictability, prior-predictive
+      alignment, target diffusion, workload signature, learning causality,
+      global sanity
+    selection workload: 0 accepted queries
+  decision:
+    schema/runtime evidence only
+    no learning or success claim
+    final_success_allowed remains false
+    final grid remains blocked
+
+checkpoint48 segment-context formula minimum strict diagnostic:
+  artifact:
+    artifacts/results/query_driven_v2_checkpoint48_segment_context_score_formula_min_strict/example_run.json
+  evidence level:
+    Level 2 minimum strict diagnostic
+  scale:
+    32 ships, 128 points, 3 route families, 24 accepted queries per workload,
+    4 train workload replicates, 3 epochs, 5% compression
+  key result:
+    MLQDS QueryUsefulV1: 0.0806495175
+    uniform QueryUsefulV1: 0.0527182052
+    Douglas-Peucker QueryUsefulV1: 0.1970008932
+  gate result:
+    passed: support overlap
+    failed: workload stability, workload signature, target diffusion,
+      predictability, prior-predictive alignment, learning causality, global
+      sanity
+  blocker classification:
+    workload stability failed from high rejection rate and coverage-guard
+    pressure across train/eval/selection workloads
+    workload signature failed point/ship-hit KS checks despite equal query
+    counts and matched family distributions
+    target diffusion failed because final label support fraction was 0.6445
+    versus max 0.5
+    global sanity failed length preservation, 0.5979 versus min 0.75
+  decision:
+    do not tune model or selector from checkpoint48
+    the Level 2 scale is not clean enough to judge the formula fix
+    final_success_allowed remains false
+    final grid remains blocked
+
+checkpoint49 segment-context formula current-best strict diagnostic:
+  artifact:
+    artifacts/results/query_driven_v2_checkpoint49_segment_context_formula_current_best_strict_local/example_run.json
+  evidence level:
+    Level 3 current-best strict local diagnostic
+  scale:
+    384 ships, 256 points, 4 route families, 48 accepted queries per workload,
+    4 train workload replicates, 3 epochs, 5% compression
+  key result:
+    MLQDS QueryUsefulV1: 0.1555318121
+    uniform QueryUsefulV1: 0.1421296610
+    Douglas-Peucker QueryUsefulV1: 0.1671038781
+  gate result:
+    passed: workload stability, support overlap, target diffusion, workload
+      signature, prior-predictive alignment, global sanity
+    failed: predictability, learning causality
+  blocker classification:
+    predictability Spearman passed at 0.1546, but PR-AUC lift, lift@1, and
+    lift@5 failed
+    learning causality failed all child gates
+    final-score/head fit improved, but product score worsened versus
+    checkpoint42 and still lost to Douglas-Peucker
+    retained-marginal overall alignment improved, but retained-removal
+    alignment stayed weak/negative and segment context hurt the composed score
+    there
+  decision:
+    reject the segment-context scalar-score formula
+    revert active scalar labels and v2 final logits to the accepted point-score
+      formula
+    keep retained-marginal layout and component diagnostics
+    final_success_allowed remains false
+    final grid remains blocked
+
+checkpoint50 top-marginal-miss payload smoke:
+  artifact:
+    artifacts/results/query_driven_v2_checkpoint50_top_marginal_miss_payload_smoke/example_run.json
+  evidence level:
+    Level 1 schema/runtime smoke only
+  guidance source:
+    docs/Next-Iterations.md now guides the next diagnostic sequence
+  code change:
+    retained-marginal rows now include trajectory index, selector stage state,
+    head probabilities/logits, sampled prior channels, model-facing prior
+    channels, QueryUsefulV1 score components, candidate ranks, component-vs-
+    marginal rank deltas, and heuristic failure buckets
+  smoke result:
+    MLQDS QueryUsefulV1: 0.1165340475
+    uniform QueryUsefulV1: 0.1134645206
+    Douglas-Peucker QueryUsefulV1: 0.1135542137
+    retained-marginal candidate rows: 72
+    failed gates: workload stability, predictability, prior-predictive
+      alignment, workload signature, learning causality, global sanity
+  decision:
+    schema evidence only
+    no learning or success claim
+    final_success_allowed remains false
+    final grid remains blocked
+
+checkpoint51 top-marginal-miss current-best strict diagnostic:
+  artifact:
+    artifacts/results/query_driven_v2_checkpoint51_top_marginal_miss_current_best_strict_local/example_run.json
+  evidence level:
+    Level 3 current-best strict local diagnostic
+  key result:
+    MLQDS QueryUsefulV1: 0.1662115143
+    uniform QueryUsefulV1: 0.1421296610
+    Douglas-Peucker QueryUsefulV1: 0.1671038781
+  gate result:
+    passed: workload stability, support overlap, target diffusion, workload
+      signature, prior-predictive alignment, global sanity
+    failed: predictability, learning causality
+  blocker classification:
+    top-marginal-miss rows show prior/model-prior channels are present, so this
+    is not a missing-prior-support failure
+    retained-removal rows are under-ranked by active raw, selector, segment,
+    query-hit, behavior, replacement, and segment-budget components
+    path-length-support head probability aligns better with retained-removal
+    marginal, but path-head training fit is still weak/negative
+    skeleton and length-repair state explains many high-marginal removal rows
+  decision:
+    do not turn path support on as a scalar blend
+    next code checkpoint should build a train-only retained-removal/path-support
+      marginal teacher or selector calibration diagnostic
+    final_success_allowed remains false
+    final grid remains blocked
+
+checkpoint52 teacher-proxy payload smoke:
+  artifact:
+    artifacts/results/query_driven_v2_checkpoint52_teacher_proxy_payload_smoke/example_run.json
+  evidence level:
+    Level 1 schema/runtime smoke only
+  key result:
+    teacher-proxy fields for endpoint support, path-length support, and
+      endpoint-or-path support are wired into retained-marginal diagnostics
+    smoke gates fail broadly and are not learning evidence
+  decision:
+    schema evidence only
+    no learning or success claim
+    final_success_allowed remains false
+    final grid remains blocked
+
+checkpoint53 teacher-proxy current-best strict diagnostic:
+  artifact:
+    artifacts/results/query_driven_v2_checkpoint53_teacher_proxy_current_best_strict_local/example_run.json
+  evidence level:
+    Level 3 current-best strict local diagnostic
+  key result:
+    MLQDS QueryUsefulV1: 0.1662115143
+    uniform QueryUsefulV1: 0.1421296610
+    Douglas-Peucker QueryUsefulV1: 0.1671038781
+  gate result:
+    passed: workload stability, support overlap, target diffusion, workload
+      signature, prior-predictive alignment, global sanity
+    failed: predictability, learning causality
+  blocker classification:
+    endpoint support is the strongest query-free retained-removal proxy in this
+      strict cell: retained-removal Spearman 0.5557900341, top-minus-bottom
+      marginal 0.0001728310
+    path-length support is anti-aligned here: retained-removal Spearman
+      -0.1745653832, top-minus-bottom marginal -0.0002565908
+    endpoint-or-path support is weaker than endpoint-only and has negative
+      retained-removal top-minus-bottom marginal
+    top-marginal-miss bucket counts still point at skeleton/length-repair and
+      score suppression, not missing prior fields
+  decision:
+    do not turn path support on as a scalar blend
+    do not claim success from endpoint-proxy alignment while causality fails
+    next code checkpoint should build or diagnose a train-side retained-removal
+      teacher/calibration path centered on endpoint support, while separating
+      real marginal value from endpoint/global-sanity guard satisfaction
+    final_success_allowed remains false
+    final grid remains blocked
+
+checkpoint54 query-free teacher guard-coupling payload:
+  artifact:
+    artifacts/results/query_driven_v2_checkpoint54_query_free_teacher_guard_coupling_smoke/example_run.json
+  evidence level:
+    Level 1 schema/runtime smoke only
+  key result:
+    misleading train_only_teacher_* diagnostic field names were replaced with
+      query_free_teacher_* names
+    query_free_teacher_proxy_guard_coupling_summary now separates aggregate
+      retained-removal rows from learned-controllable, non-guard, guard-owned,
+      skeleton, length-repair, and removed-addition rows
+    the compact learning-causality retained-marginal summary carries the
+      guard-coupling summary but still excludes full rows
+  smoke finding:
+    guard_coupling_suspected: true
+    all retained endpoint top-minus-bottom: 0.0604293668
+    learned-controllable endpoint top-minus-bottom: -0.0000582940
+    guard-owned endpoint top-minus-bottom: 0.0117840235
+  decision:
+    schema and misuse-prevention evidence only
+    do not build an endpoint teacher from aggregate endpoint alignment alone
+    rerun the current-best strict cell with guard-coupling diagnostics before
+      accepting endpoint support as a teacher target or selector calibration
+      feature
+    final_success_allowed remains false
+    final grid remains blocked
+
+checkpoint55 query-free teacher guard-coupling current-best strict:
+  artifact:
+    artifacts/results/query_driven_v2_checkpoint55_query_free_teacher_guard_coupling_current_best_strict_local/example_run.json
+  evidence level:
+    Level 3 current-best strict local diagnostic
+  key result:
+    MLQDS QueryUsefulV1: 0.1662115143
+    uniform QueryUsefulV1: 0.1421296610
+    Douglas-Peucker QueryUsefulV1: 0.1671038781
+  gate result:
+    passed: workload stability, support overlap, target diffusion, workload
+      signature, prior-predictive alignment, global sanity
+    failed: predictability, learning causality
+  guard-coupling result:
+    retained-marginal candidates: 160
+    query_free_teacher_proxies present; old train_only_teacher_proxies absent
+    selector trace keeps full rows; learning-causality summary is compact
+    all retained endpoint top-minus-bottom: 0.0001728310
+    learned-controllable endpoint top-minus-bottom: -0.0002858786
+    guard-owned endpoint top-minus-bottom: 0.0001468642
+    guard_coupling_suspected: true
+  decision:
+    aggregate endpoint support is not a valid teacher target
+    do not build an endpoint teacher from checkpoint53 aggregate alignment
+    next checkpoint should target learned-controllable retained-removal
+      alignment directly, excluding skeleton/length-repair guard-owned effects
+    final_success_allowed remains false
+    final grid remains blocked
+
+checkpoint56 learned-controllable retained-removal diagnosis:
+  artifact:
+    artifacts/results/query_driven_v2_checkpoint56_learned_controllable_retained_removal_diagnosis/learned_controllable_retained_removal_diagnosis.json
+  evidence level:
+    derived_strict_artifact_diagnostic_no_new_probe
+  code fix:
+    constant-valued diagnostic fields now report unavailable with
+      reason: no_value_variation, preventing fake top-minus-bottom marginal
+      summaries from stable sorting
+  key result:
+    learned-controllable retained-removal candidates: 32
+    exact marginal positive fraction: 1.0
+    max exact marginal: 0.0016853170
+    raw score top-minus-bottom: -0.0001884099
+    selector score top-minus-bottom: 0.0000460299
+    segment score top-minus-bottom: -0.0001754074
+    endpoint support has no value variation on learned-controllable rows
+    path support Spearman: -0.0163707962
+    the top learned-marginal row is ranked last within learned rows by raw and
+      selector scores, 30/32 by segment score, and has no query-free proxy
+      support
+  decision:
+    endpoint, path, endpoint-or-path, raw score, selector score, and segment
+      score are not valid learned-controllable teacher targets
+    next checkpoint should instrument a train-side exact or bounded marginal
+      teacher for learned-controllable candidates, excluding skeleton and
+      length-repair guard-owned effects
+    final_success_allowed remains false
+    final grid remains blocked
+
+checkpoint57 selection-side marginal teacher smoke:
+  artifact:
+    artifacts/results/query_driven_v2_checkpoint57_selection_marginal_teacher_smoke/example_run.json
+  evidence level:
+    Level 1 schema/runtime smoke only
+  code change:
+    selector_trace_diagnostics now has selection_primary beside eval_primary.
+    Full selection-workload exact retained-decision marginal rows live under
+      selector_trace_diagnostics.selection_primary.retained_decision_marginal_query_useful_alignment.rows.
+    learning_causality_summary.selection_causality_diagnostics exposes compact
+      row-free selection_retained_decision_marginal_teacher.
+    retained marginal diagnostics now include a
+      learned_controllable_marginal_teacher_summary that excludes skeleton,
+      fallback, and length-repair guard-owned retained-removal rows.
+  smoke result:
+    MLQDS QueryUsefulV1: 0.1274302100
+    uniform QueryUsefulV1: 0.1262302903
+    Douglas-Peucker QueryUsefulV1: 0.2389240113
+    selection marginal rows: 72
+    learned-controllable retained-removal teacher rows: 1
+    selection trace matches frozen primary selection mask: true
+    failed gates: workload stability, predictability, prior-predictive
+      alignment, workload signature, learning causality, global sanity
+  decision:
+    schema/runtime evidence only
+    no teacher usefulness, learning, or success claim
+    next evidence should use a strict diagnostic scale before changing loss or
+      selector calibration
+    final_success_allowed remains false
+    final grid remains blocked
+
+checkpoint58 selection-side marginal teacher minimum strict:
+  artifact:
+    artifacts/results/query_driven_v2_checkpoint58_selection_marginal_teacher_min_strict/example_run.json
+  evidence level:
+    Level 2 minimum strict diagnostic
+  key result:
+    MLQDS QueryUsefulV1: 0.1392315675
+    uniform QueryUsefulV1: 0.1055556512
+    Douglas-Peucker QueryUsefulV1: 0.1120862571
+    gates passed: support overlap, target diffusion, global sanity
+    gates failed: workload stability, workload signature, predictability,
+      prior-predictive alignment, learning causality
+    selection marginal rows: 137
+    learned-controllable selection teacher candidates: 25
+    selection teacher candidate_for_train_side_calibration: true
+    selection raw/selector Spearman: 0.3561538462 / 0.3615384615
+    compact teacher summaries are row-free; full rows remain under
+      selector_trace_diagnostics.selection_primary and eval_primary
+  decision:
+    strict-scale teacher support exists, but this is not clean model evidence
+      because workload/signature gates failed
+    do not tune loss or selector from checkpoint58 alone
+    final_success_allowed remains false
+    final grid remains blocked
+
+checkpoint59 selection-side marginal teacher standard strict:
+  artifact:
+    artifacts/results/query_driven_v2_checkpoint59_selection_marginal_teacher_standard_strict/example_run.json
+  evidence level:
+    Level 3 standard strict diagnostic
+  key result:
+    MLQDS QueryUsefulV1: 0.1430895194
+    uniform QueryUsefulV1: 0.1445766821
+    Douglas-Peucker QueryUsefulV1: 0.1385893349
+    gates passed: support overlap, target diffusion, global sanity
+    gates failed: workload stability, workload signature, predictability,
+      prior-predictive alignment, learning causality
+    workload stability failed coverage-guard rejection pressure on train_r2
+      and selection
+    workload signature failed train_r1/train_r2 point-hit and ship-hit KS
+    selection marginal rows: 160
+    learned-controllable selection teacher candidates: 32
+    selection teacher candidate_for_train_side_calibration: true
+    selection raw/selector/segment Spearman: -0.2474340176 / -0.2606304985 /
+      -0.3911290323
+    eval raw/selector/segment Spearman: -0.3885630499 / -0.3958944282 /
+      -0.2943548387
+  decision:
+    selection teacher candidate support survives, but active scores do not rank
+      exact learned-controllable retained-removal marginal value at this scale
+    checkpoint59 is blocked before model conclusions are admissible because
+      workload stability and signature fail
+    next work must restore strict workload/profile health before loss,
+      calibration, or selector changes
+    final_success_allowed remains false
+    final grid remains blocked
+
+checkpoint60 workload/profile health generation diagnostic:
+  artifact:
+    artifacts/results/query_driven_v2_checkpoint60_workload_profile_health_generation_diagnostic/workload_profile_health_generation_diagnostic.json
+  evidence level:
+    targeted_generation_only_diagnostic
+  hypothesis:
+    checkpoint59 workload failures are scale/profile-generation issues that
+      must be cleared before model/loss/selector tuning
+  scenarios:
+    checkpoint59_scale_unbalanced_96:
+      seeds: 2728, 2729, 2730
+      workload stability pass rate: 1/3
+      workload signature pass rate: 0/3
+      failures: coverage-guard rejection pressure, high rejection rate, and
+        point/ship-hit KS drift
+    medium_balanced_192:
+      seeds: 2324, 2325, 2326
+      workload stability pass rate: 3/3
+      workload signature pass rate: 2/3
+      failures: residual point/ship-hit KS drift
+    current_best_balanced_384:
+      seeds: 2324, 2325, 2326, 2327, 2328
+      workload stability pass rate: 5/5
+      workload signature pass rate: 5/5
+  decision:
+    checkpoint59 and 192-ship diagnostics are not clean enough for model tuning
+    current-best 384-ship balanced scale restores workload/profile health in
+      the current worktree
+    next strict teacher diagnostic should use the 384 balanced scale with
+      selection marginal diagnostics retained
+    final_success_allowed remains false
+    final grid remains blocked
+
+checkpoint61 selection-side marginal teacher current-best strict:
+  artifact:
+    artifacts/results/query_driven_v2_checkpoint61_selection_marginal_teacher_current_best_strict_local/example_run.json
+  evidence level:
+    Level 3 current-best strict local diagnostic
+  scale:
+    384 ships, 256 points, 4 route families, balanced 0.34/0.33 split,
+    48 minimum queries, 256 max queries, 4 train workload replicates,
+    range_workload_v1_local, profile_sampled_query_count
+  key result:
+    MLQDS QueryUsefulV1: 0.1662115143
+    uniform QueryUsefulV1: 0.1421296610
+    Douglas-Peucker QueryUsefulV1: 0.1671038781
+    MLQDS RangeUsefulLegacy: 0.1524363397
+    uniform RangeUsefulLegacy: 0.1303214771
+    Douglas-Peucker RangeUsefulLegacy: 0.1526760352
+    gates passed: workload stability, support overlap, target diffusion,
+      workload signature, prior-predictive alignment, global sanity
+    gates failed: predictability, learning causality
+  predictability:
+    Spearman: 0.1109086186 versus min 0.15
+    PR-AUC lift: 1.2304850435 versus min 1.25
+    lift@1, lift@2, lift@5 pass
+    prior-predictive alignment passes
+  learning causality:
+    failed shuffled scores, shuffled priors, no query priors, no behavior head,
+      and no segment-budget head
+    shuffled-score delta: 0.0089580664 versus required 0.0144491119
+    shuffled-prior delta: -0.0001133659 versus required 0.005
+    no-query-prior delta: 0.0000575989 versus required 0.005
+    no-behavior-head delta: 0.0033472765 versus required 0.005
+    no-segment-budget-head delta: 0.0036430341 versus required 0.005
+  selection marginal teacher:
+    full selection rows: 160
+    learned-controllable selection teacher candidates: 32
+    candidate_for_train_side_calibration: true
+    selection raw/selector/segment Spearman: -0.1616568915 / -0.2562316716 /
+      -0.1755865103
+    eval raw/selector/segment Spearman: 0.2085777126 / 0.0909090909 /
+      0.1880498534, but raw and segment top-minus-bottom marginals remain
+      negative
+    compact teacher summaries are row-free; full rows remain under
+      selector_trace_diagnostics.selection_primary and eval_primary
+  runtime:
+    total runtime: 643.12s
+    selection retained-marginal payload: 17.04s
+    eval retained-marginal payload: 18.46s
+    freeze-retained-masks: 353.56s
+  decision:
+    workload/profile health is clean enough to move past workload diagnosis
+    final success remains blocked by predictability and learning causality
+    active scores do not rank learned-controllable exact marginal value on the
+      selection workload
+    next code checkpoint can target train/checkpoint-side retained-removal
+      marginal calibration or loss/selector alignment, but must prove
+      improvement under unchanged strict gates
+    final_success_allowed remains false
+    final grid remains blocked
+
+checkpoint62 selection-to-eval marginal calibration diagnosis:
+  artifact:
+    artifacts/results/query_driven_v2_checkpoint62_selection_to_eval_marginal_calibration_diagnosis/selection_to_eval_marginal_calibration_diagnosis.json
+  evidence level:
+    derived diagnostic only from checkpoint61
+  hypothesis:
+    a workload-blind calibration trained on selection learned-controllable
+      retained-removal exact marginal rows should transfer to eval
+      learned-controllable rows better than current active scores
+  filters:
+    source: learned
+    decision: retained_removal_loss
+    excludes skeleton, fallback, and length-repair guard-owned rows
+  key result:
+    selection candidate count: 32
+    eval candidate count: 32
+    best active eval Spearman: 0.2085777126
+    required transfer Spearman with margin: 0.2585777126
+    best transfer candidate: score-component ridge, eval Spearman 0.2749266862
+    best transfer selection leave-one-out Spearman: -0.1173020528
+    best transfer eval top-minus-bottom marginal: -0.0003171658
+    candidate_for_production_calibration: false
+  decision:
+    do not add production calibration from current retained-marginal row
+      features
+    post-hoc row-feature calibration is not the next root fix
+    next work should target loss/selector alignment or a stronger train-side
+      marginal target, still excluding guard-owned effects
+    final_success_allowed remains false
+    final grid remains blocked
+
+checkpoint63 learned-segment-budget loss smoke:
+  artifact:
+    artifacts/results/query_driven_v2_checkpoint63_learned_segment_budget_loss_smoke/example_run.json
+  evidence level:
+    Level 1 schema/runtime smoke only
+  hypothesis:
+    a selector-shaped loss that separates learned-segment allocation from point
+      choice should provide a cleaner path for changing learned-controlled
+      retained decisions than post-hoc row-feature calibration
+  code change:
+    temporarily added an explicit learned_segment_budget_topk loss objective for
+      the checkpoint
+  smoke result:
+    artifact emitted and retained-marginal layouts stayed valid
+    MLQDS QueryUsefulV1: 0.0300736024
+    uniform QueryUsefulV1: 0.0989417253
+    Douglas-Peucker QueryUsefulV1: 0.1068160240
+    failed gates: workload stability, predictability, prior-predictive
+      alignment, workload signature, learning causality, global sanity
+  decision:
+    schema/runtime evidence only
+    no learning claim
+    strict workload-healthy evidence required before accepting or rejecting the
+      loss direction
+
+checkpoint64 learned-segment-budget loss current-best strict:
+  artifact:
+    artifacts/results/query_driven_v2_checkpoint64_learned_segment_budget_loss_current_best_strict_local/example_run.json
+  evidence level:
+    Level 3 current-best strict local diagnostic
+  key result:
+    MLQDS QueryUsefulV1: 0.1630146227
+    uniform QueryUsefulV1: 0.1421296610
+    Douglas-Peucker QueryUsefulV1: 0.1671038781
+    MLQDS RangeUsefulLegacy: 0.1484470460
+    uniform RangeUsefulLegacy: 0.1303214771
+    Douglas-Peucker RangeUsefulLegacy: 0.1526760352
+    gates passed: workload stability, support overlap, target diffusion,
+      workload signature, prior-predictive alignment, global sanity
+    gates failed: predictability, learning causality
+  predictability:
+    unchanged versus checkpoint61 because this audit is target/prior-side:
+      Spearman 0.1109086186 and PR-AUC lift 1.2304850435 still fail
+  learning causality:
+    worse than checkpoint61
+    failed shuffled scores, untrained model, shuffled priors, no query priors,
+      no behavior head, no segment-budget head, and prior-only checks
+    shuffled-score delta: 0.0017380253
+    untrained delta: -0.0021686561
+    shuffled-prior delta: -0.0000202293
+    no-query-prior delta: -0.0000059541
+    no-behavior-head delta: 0.0036746171
+    no-segment-budget-head delta: 0.0021650137
+  retained marginal teacher:
+    selection learned-controllable raw/selector/segment Spearman:
+      -0.1495601173 / -0.1946480938 / -0.1664222874
+    eval learned-controllable raw/selector/segment Spearman:
+      -0.2514662757 / -0.1070381232 / -0.3145161290
+  decision:
+    reject the learned_segment_budget_topk loss direction
+    remove the temporary objective from production code and CLI
+    improved segment-head target fit is not enough when exact retained-marginal
+      alignment and causality get worse
+    next work should target exact marginal teacher construction or selector
+      decision-surface diagnostics, not another proxy loss over current scalar
+      labels
+    final_success_allowed remains false
+    final grid remains blocked
+
 Current next checkpoint direction:
 
 ```text
 Primary hypothesis:
-  Checkpoint43 classifies the remaining failure as score-composition and
-  selector-marginal alignment, with prior-to-head transfer as a contributing
-  blocker. The next useful move is to explain why high-marginal retained,
-  skeleton, length-repair, and removed candidates are under-ranked by the raw,
-  selector, and segment scores.
+  The segment-context scalar-score formula is not the root fix. Checkpoint53
+  and checkpoint55 show the retained-set blocker is not missing prior support;
+  it is weak learned-controllable retained-removal marginal alignment.
+  Checkpoint56 shows existing endpoint/path proxies are not valid
+  learned-controllable teacher targets. Checkpoints57-59 wire and scale the
+  selection-side exact marginal teacher path. Candidate support exists, but
+  checkpoint58-59 fail workload/signature gates, and checkpoint59 shows active
+  scores anti-align with exact learned-controllable marginal value. Checkpoint60
+  shows the 384-ship balanced current-best scale restores workload/profile
+  health. Checkpoint61 verifies the strict workload-healthy cell and shows
+  selection-side learned-controllable marginal value is still under-ranked.
+  Checkpoint62 rejects post-hoc calibration from current row features because
+  selection-validated alignment does not transfer with positive retained-set
+  marginal ordering.
+  Checkpoint64 rejects a selector-shaped proxy loss over current scalar labels:
+  it improves segment-head fit but worsens retained-mask causality and exact
+  retained-marginal alignment.
+  Checkpoint65 localizes the selection-side failure: top exact-marginal learned
+  rows are usually under-ranked by both point scores and their selector
+  segments.
+  Checkpoint 5.122 wires selector segment context into future marginal rows,
+  so the next teacher construction checkpoint can consume row-local segment
+  ranks/allocation counts directly.
+  Checkpoint 5.123 builds the first bounded exact marginal teacher target
+  payload, split into segment-level and within-segment point-level targets.
+  Checkpoint 5.124 confirms that payload is emitted end to end at Level 1
+  smoke scale, but it is not learning evidence.
+  Checkpoint 5.125 makes separated marginal teacher usage split-aware, so
+  eval exact marginals cannot be mislabeled as train/checkpoint teacher
+  candidates.
+  Checkpoint 5.126 adds a guarded checkpoint-side consumer that converts full
+  separated teacher rows into selector diagnostic score vectors while rejecting
+  eval and compact summaries.
+  Checkpoint 5.127 rejects immediate training promotion of that direct consumer
+  at strict scale: it is guarded, but it loses to the checkpoint-selection
+  primary.
+  Checkpoint 5.128 localizes the loss to sparse retained-removal-only support
+  and ship/point recall loss.
+  Checkpoint 5.129 adds a guarded diagnostic-only hybrid consumer that preserves
+  dense primary support while injecting exact marginal signal. Checkpoint71 is
+  Level 1 smoke evidence only.
+  Checkpoint 5.130 rejects that hybrid at strict scale: primary selection QUV1
+  is 0.1601869377, direct teacher is 0.1558174990, hybrid w10 is 0.1561941598,
+  and hybrid w25 is 0.1563610880.
+  Checkpoint 5.131 says the next checkpoint should stop treating profile
+  weights and QueryUsefulV1 component weights as constants and instead diagnose
+  whether they produce a simple, query-local, trainable signal together.
+  Use docs/Next-Iterations.md to guide the next checkpoint sequence.
+  Keep docs/keep-in-mind.md in view: the profile/scoring design only needs to
+  be sensible for research, not a perfect real-use-case replica, but tiny smokes
+  are not adequate evidence for training coherence.
 
 Expected focus:
-  exact marginal rows by source and decision
-  final selector score composition for high-marginal under-ranked points
-  head output contribution to raw score versus segment allocation
-  whether behavior and segment heads are acting as broad allocation priors
-  instead of point-level marginal value signals
+  target/loss-to-selector alignment
+  train/checkpoint-side retained-removal marginal calibration
+  exact marginal teacher use that remains workload-blind at eval time
+  exact retained-decision marginal alignment by component
+  why retained-removal rows are under-ranked despite reasonable overall fit
+  excluding skeleton/length-repair guard-owned effects from any teacher signal
+  loss/selector alignment that changes learned-controlled retained decisions
+    under unchanged causality gates
+  exact marginal teacher construction rather than another proxy over current
+    scalar labels
+  separated segment-level and within-segment point-level retained-removal
+    marginal targets
+  workload-profile/scoring-component compatibility for a simpler query-local
+    trainable signal
+  validation beyond tiny smokes before any training-coherence claim
 
 Preferred scope:
-  focused artifact diagnostics first. If code changes are needed, prefer
-  instrumentation or root target/prior/selector alignment fixes. Do not run the
-  final grid. Do not loosen predictability or learning-causality gates. Do not
-  compensate with temporal scaffold, raw coverage overrides, or weaker length
-  guardrails.
+  checkpoint75 proves the checkpoint 5.132 workload/scoring compatibility
+  payload at the workload-healthy current-best strict cell. It still fails
+  predictability and learning causality. The clean strict blocker is
+  ship-level evidence: MLQDS beats Douglas-Peucker on query-local
+  interpolation, shape, speed/heading, entry/exit, and length, but loses enough
+  ship-F1 and related ship/point recall to lose QueryUsefulV1 narrowly. Inspect
+  workload_scoring_compatibility_diagnostics first, then per-method
+  matched.<method>.range_audit.range_query_metadata_component_summary if grouped
+  summaries are insufficient. Do not run the final grid. Do not loosen
+  predictability or learning-causality gates. Do not compensate with temporal
+  scaffold, raw coverage overrides, or weaker length guardrails.
+  After checkpoint 5.135, future artifacts should also inspect
+  ship_query_evidence_target_alignment in target diagnostics and
+  ship_evidence_counts in the range query metadata summaries. Those fields are
+  diagnostic only; they are meant to show whether workload profile families,
+  QueryUsefulV1 component weights, and the target/head contract produce a
+  trainable ship-level signal together before any semantics change.
+  Checkpoint76 ran those fields at the workload-healthy current-best strict
+  cell. Query-hit labels carry ship-evidence signal, but behavior is
+  weak/negative and the current segment-budget target is anti-aligned with
+  ship-query evidence. MLQDS also misses more query-hit ships than both uniform
+  and Douglas-Peucker. The next admissible code checkpoint should construct and
+  inspect a simple ship-presence-aware segment-budget/target candidate before
+  changing training semantics or profile weights.
+  Checkpoint 5.137 adds the candidate payload under
+  segment_budget_ship_presence_candidate_alignment while leaving active labels
+  unchanged. The next meaningful evidence should run it at the
+  workload-healthy strict shape and compare target alignment/tradeoffs before
+  any loss or head-target change.
+  Checkpoint77 shows the pure ship-presence segment budget is too blunt: it
+  improves ship-evidence alignment but drops final-score and query-hit top-k
+  mass. The blended segment-budget candidates are the only plausible next
+  training diagnostic. Test them as guarded variants under unchanged gates
+  before any default target change.
+  Checkpoint78 rejects the guarded query-hit/ship-presence segment-budget target
+  variant. It improves target-side segment-budget ship-evidence Spearman from
+  the active `-0.0722770682` to `0.0775842420`, but MLQDS QueryUsefulV1 drops
+  to `0.1588862822`, predictability still fails, and learning causality fails
+  all material ablation checks. Do not tune that blend further. The next
+  checkpoint should diagnose workload-profile and QueryUsefulV1 component
+  compatibility.
+  Checkpoint79 rejects the guarded final-score/ship-presence segment-budget
+  target variant as well. It improves target-side segment-budget ship-evidence
+  Spearman to `0.1583725136`, but MLQDS QueryUsefulV1 is only `0.1592468202`
+  and learning causality regresses. Both ship-blend target modes should stay
+  out of active training options. The next checkpoint should diagnose which
+  workload families and QueryUsefulV1 scoring components create non-trainable
+  retained-set signal, not add another segment-budget proxy target.
+  Checkpoint80 does that from grouped strict artifacts. The active strict
+  blocker is concentrated in `small_local`, `density_route`,
+  `crossing_turn_change`, and `medium_operational`. The largest persistent
+  weighted component losses are `ship_f1`, `ship_balanced_query_point_recall`,
+  `ship_coverage`, `query_balanced_point_recall`, and `query_point_mass_ratio`.
+  Rejected ship-blend target artifacts widen the same density and small-local
+  deficits. The next checkpoint should inspect a profile/scoring recalibration
+  candidate at diagnostic level first, not wire another loss or target mode.
+  Checkpoint81 runs that diagnostic recalibration probe. A query-local-sensible
+  component-weight candidate flips the post-hoc active strict score delta from
+  `-0.0008923639` to `0.0029786298`, but the diagnostic marks masking risk as
+  high. The improvement comes from downweighting the same ship/point-mass
+  blockers and profile-weighting away from density-route/small-local weakness.
+  Do not adopt those weights directly. The next checkpoint should preserve or
+  improve density-route and small-local ship/point evidence instead of hiding
+  it.
+  Checkpoint82 adds that blocker-preserving diagnostic. A smoothed
+  ship/point-preserving component candidate keeps total ship/point evidence
+  weight at `0.55`, and the blocker-preserving profile keeps density-route,
+  crossing, small-local, and medium-operational weights within about 1% of the
+  active strict profile. The post-hoc score delta is positive, but all critical
+  families remain unresolved by ship evidence. Treat this as evidence that
+  scoring/profile reweighting alone is not enough; the next checkpoint should
+  add family-conditioned target/head trainability instrumentation for
+  density-route and small-local before any new loss or scoring default.
+  Checkpoint 5.147 adds that instrumentation. QueryUsefulV1 target diagnostics
+  now expose `family_conditioned_target_trainability`, and factorized head-fit
+  diagnostics expose `family_conditioned_head_trainability`. This is Level 0
+  instrumentation only. The next evidence should run the workload-healthy
+  strict shape and inspect those fields before proposing any target/head/scoring
+  default change.
+  Checkpoint83 provides that strict evidence. Scores and gates reproduce the
+  current-best strict cell, but the family-conditioned rows isolate the blocker:
+  `small_local` is weak on both target construction and fitted heads, while
+  `density_route` is mostly target-side weak in behavior and segment-budget.
+  The next checkpoint should build a diagnostic-only family-local target/head
+  candidate for those families before any loss, selector, scoring, or workload
+  profile default changes.
+  Checkpoint 5.149 adds the Level 0 candidate surface:
+  `family_local_target_candidate_alignment`. It compares family-local query-hit/
+  ship, ship-gated behavior, boundary/replacement/ship, composed-score, and
+  segment-budget candidates while leaving active training semantics unchanged.
+  Treat it as implementation evidence only until a workload-healthy strict
+  diagnostic reads the payload for `small_local` and `density_route`.
+  Checkpoint84 provides that strict diagnostic. The point-level family query-hit/
+  ship candidate strongly ranks ship-query evidence for `small_local` and
+  `density_route`, but the segment-budget candidate is still anti-aligned and
+  covers only about 5% of ship-query pairs at top-k. Do not promote the current
+  candidate. The next checkpoint should diagnose segment aggregation/allocation
+  from family-local point signal, not add another proxy loss.
+  Checkpoint 5.151 adds diagnostic-only segment aggregation variants and a
+  two-stage allocation/point-choice view. Checkpoint85 runs them at strict
+  scale. Max-pooled and fractional ship-query segment candidates preserve much
+  more family-local ship evidence under two-stage diagnostics, but this is still
+  diagnostic evidence. A future guarded training variant must pass unchanged
+  strict retained-mask and causality gates before any default change.
+  Checkpoint 5.153 adds the guarded non-default
+  `query_useful_v1_factorized_segment_budget_query_ship_max_pool` target mode.
+  Checkpoint86 runs it at the current-best strict cell. It slightly beats
+  Douglas-Peucker on QueryUsefulV1 and makes the no-segment-budget-head
+  causality child pass, but predictability and learning causality still fail.
+  Do not promote it. The next checkpoint should diagnose checkpoint85 versus
+  checkpoint86 target/head/causality transfer, especially why `small_local`
+  fitted segment/composed head alignment remains negative after the target-side
+  segment signal turns positive.
+  Checkpoint 5.155 adds that derived comparison. It narrows the transfer
+  blocker: `density_route` has positive target and fitted segment signs, but
+  `small_local` and `crossing_turn_change` show positive target-side segment
+  signs with negative fitted segment/composed signs. The next checkpoint should
+  target family/head transfer for those families under unchanged gates, not add
+  another segment aggregation variant or selector blend.
+  Checkpoints 5.156-5.157 test a broader guarded
+  `query_useful_v1_factorized_query_ship_local_heads` target contract that makes
+  the query-hit and behavior heads ship-evidence aware. Checkpoint90 rejects it:
+  MLQDS QueryUsefulV1 drops to `0.1632708811`, target diffusion fails because
+  the behavior head becomes too broad, and all fitted `small_local` and
+  `crossing_turn_change` heads remain negative against family ship-query
+  evidence despite positive target-side signs. Do not promote this mode or
+  broaden behavior targets further as a transfer workaround.
+  Checkpoint 5.158 adds the derived failure diagnosis for checkpoint90. It
+  confirms the broad local-head target regresses target diffusion and
+  prior-predictive alignment, and the family transfer gap is still large:
+  `small_local` q-hit/behavior/segment target-to-fit gaps are `-0.2686`,
+  `-0.3864`, and `-0.2000`; `crossing_turn_change` gaps are `-0.5243`,
+  `-0.3484`, and `-0.1666`. The next checkpoint should preserve diffusion and
+  diagnose model/loss/prior transfer, or recalibrate workload/scoring to make
+  the family signal trainable without masking those families away.
+  Checkpoint 5.159 runs that diffusion-preserving diagnosis from checkpoint86.
+  It finds 11 focused family/head transfer blockers. `crossing_turn_change`
+  query-hit, segment-budget, and composed heads fit their labels but still
+  misorder ship-query evidence; `small_local` has the same segment-budget
+  failure while its query-hit, behavior, and composed targets remain weak. The
+  selector retained-decision marginal alignment is also negative at the correct
+  layout
+  `selector_trace_diagnostics.eval_primary.retained_decision_marginal_query_useful_alignment`
+  (`selector_score` Spearman `-0.0421`). The artifact lacks
+  family-conditioned prior predictability, so the next code checkpoint should
+  add that diagnostic surface before choosing a model/loss or workload/scoring
+  calibration change.
+  Checkpoint 5.160 adds that family-conditioned prior predictability surface and
+  reruns the guarded max-pool strict cell. Scores and gates reproduce
+  checkpoint86: MLQDS QueryUsefulV1 `0.1673482145`, uniform `0.1421296610`,
+  Douglas-Peucker `0.1671038781`; predictability and learning causality still
+  fail. The new family-prior rows show this is not a simple prior-absence
+  problem: `crossing_turn_change` query-hit and segment-budget priors are useful
+  (`0.3161` and `0.2583` best Spearman), and `small_local` behavior and
+  segment-budget priors are useful (`0.1864` and `0.1357` best Spearman), though
+  `small_local` query-hit top-k lift and behavior-prior rank for crossing remain
+  weak. The derived checkpoint94 decision is
+  `diagnose_score_to_selector_marginal_calibration_before_promotion`; retained
+  marginal selector-score Spearman is still negative (`-0.0408`) at the correct
+  selector-trace layout.
+  Checkpoint 5.161 adds that selector-to-retained-marginal calibration
+  diagnosis from checkpoint93. It separates two failure modes: 28 high-scored
+  low-exact-marginal rows, mostly removed/addition candidates, and 19 top exact
+  marginal rows that active selector and segment scores rank in the lower half
+  of candidates. The separated eval-only marginal teacher has viable shape, but
+  it is not train-side evidence; 4 of its top 10 segment targets are low-ranked
+  by selector segment score and allocation weight. The next admissible branch is
+  train/selection-side marginal segment calibration evidence, not promotion of
+  checkpoint86/93 or another selector blend.
+  Checkpoint 5.162 adds that selection-side marginal segment calibration
+  diagnosis from checkpoint93. Selection-side exact marginals are available and
+  `candidate_for_train_side_teacher=true`, but current scores anti-rank them
+  more sharply than eval (`selector_score` Spearman `-0.1610`). Six of the top
+  10 selection segment targets are low-ranked by selector segment score and by
+  allocation weight. Selection/eval separated teacher segments overlap only
+  `4/32`, with zero overlap among the top 10 segment targets. The next
+  admissible branch is transfer/calibration diagnosis for the selection-side
+  segment teacher, not direct training semantics.
+  Checkpoint 5.163 adds the selection-to-eval segment teacher transfer
+  diagnosis from checkpoint93. It treats non-teacher segments as zero target
+  over all segment candidates. Selection/eval positive teacher segment overlap
+  is `4/32`, top 1%, 5%, and 10% target overlap is zero, and sparse target
+  Spearman is strongly negative (`-0.7663`) over the positive-target union.
+  Simple selector features do have weak consistent positive alignment on both
+  splits (`segment_score` about `0.08`, `learned_count` about `0.20`), so the
+  next admissible branch is a guarded transfer-calibration probe or deeper
+  feature-transfer diagnosis, not raw selection-teacher training.
+  Checkpoint 5.164 separates pre-selection transfer features from
+  post-selection attribution. It rejects `learned_count` as post-selection
+  coupled despite its positive Spearman. Two pre-selection candidates are
+  admissible for a guarded probe: active `segment_score` and a simple
+  `segment_score`/`segment_allocation_weight` z-blend. The guard-counter
+  length-support subtraction candidate is rejected. This only authorizes a
+  guarded non-default probe judged by unchanged strict retained-mask quality
+  and learning causality; it does not authorize final success or direct teacher
+  supervision.
+  Checkpoint 5.165 runs that guarded z-blend probe at the current-best strict
+  cell as
+  `artifacts/results/query_driven_v2_checkpoint99_segment_transfer_calibration_zblend_current_best_strict_local/example_run.json`.
+  The calibration is trace-valid and non-default: no post-selection
+  attribution, no length-support counter-signal, frozen-primary trace match,
+  trace schema `8`, and final effective length-support allocation weight
+  `0.0`. It still fails predictability and learning causality. MLQDS
+  QueryUsefulV1 is `0.1672369132`, slightly above Douglas-Peucker
+  `0.1671038781` but `0.0001113013` below checkpoint93. Shuffled scores,
+  shuffled priors, no query-prior features, and no behavior-head causality
+  children still fail. Reject the simple allocation-weight z-blend as a
+  promotion path; continue with workload/scoring/target compatibility rather
+  than more selector z-blend tuning.
 
 Avoid:
+  building an endpoint teacher from aggregate endpoint alignment
+  treating constant-valued diagnostic fields as ranking signals
+  adding production calibration from checkpoint62 row-feature fits
+  re-adding the checkpoint64 learned_segment_budget_topk proxy loss
+  treating checkpoint65 as a production calibration; it is a derived diagnostic
+  treating the checkpoint 5.123 target payload as accepted training semantics
+    before smoke and strict evidence
+  turning on path support directly without fixing path-head target fit
+  reviving the segment-context scalar-score blend without new root evidence
   re-adding sqrt_probability prior transform
   re-adding dense-head rank pressure
   loosening learning-causality gates
   compensating with large temporal scaffold or weaker length guardrails
+  promoting the query-hit/ship-presence segment-budget target
+  promoting the final-score/ship-presence segment-budget target
 ```
 
 Do not run the full 4x7 grid until learning causality passes on required smaller evidence. Do not claim final success from this strict cell.

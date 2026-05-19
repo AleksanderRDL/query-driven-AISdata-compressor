@@ -108,7 +108,7 @@ def _first_float(row: dict[str, Any], keys: tuple[str, ...]) -> float | None:
             continue
         try:
             return float(value)
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             continue
     return None
 
