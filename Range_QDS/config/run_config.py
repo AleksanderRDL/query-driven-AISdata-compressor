@@ -11,6 +11,7 @@ from selection.learned_segment_budget.constants import (
     SEGMENT_ALLOCATION_WEIGHT_FLOOR,
     SEGMENT_LENGTH_SUPPORT_ALLOCATION_WEIGHT,
     SEGMENT_SCORE_POINT_BLEND_WEIGHT,
+    SEGMENT_TRANSFER_CALIBRATION_MODE_NONE,
 )
 from selection.selector_types import TEMPORAL_HYBRID_SELECTOR_TYPE
 
@@ -23,6 +24,7 @@ DEFAULT_LEARNED_SEGMENT_ALLOCATION_LENGTH_SUPPORT_WEIGHT = (
 )
 DEFAULT_LEARNED_SEGMENT_ALLOCATION_WEIGHT_FLOOR = SEGMENT_ALLOCATION_WEIGHT_FLOOR
 DEFAULT_LEARNED_SEGMENT_SCORE_BLEND_WEIGHT = SEGMENT_SCORE_POINT_BLEND_WEIGHT
+DEFAULT_LEARNED_SEGMENT_TRANSFER_CALIBRATION_MODE = SEGMENT_TRANSFER_CALIBRATION_MODE_NONE
 DEFAULT_VALIDATION_GLOBAL_SANITY_PENALTY_WEIGHT = 0.10
 DEFAULT_VALIDATION_SED_PENALTY_WEIGHT = 0.05
 DEFAULT_VALIDATION_ENDPOINT_PENALTY_WEIGHT = 0.10
@@ -158,12 +160,12 @@ class ModelConfig:
         default_factory=lambda: list(DEFAULT_BUDGET_LOSS_RATIOS)
     )
     budget_loss_temperature: float = DEFAULT_BUDGET_LOSS_TEMPERATURE
-    query_useful_aux_loss_weight: float = 0.50
-    query_useful_segment_budget_head_weight: float = 0.10
-    query_useful_segment_level_loss_weight: float = 0.25
-    query_useful_behavior_rank_loss_weight: float = 0.0
-    query_useful_sparse_head_rank_loss_weight: float = 0.0
-    query_useful_sparse_head_bce_target_mode: str = "raw"
+    query_local_utility_aux_loss_weight: float = 0.50
+    query_local_utility_segment_budget_head_weight: float = 0.10
+    query_local_utility_segment_level_loss_weight: float = 0.25
+    query_local_utility_behavior_rank_loss_weight: float = 0.0
+    query_local_utility_sparse_head_rank_loss_weight: float = 0.0
+    query_local_utility_sparse_head_bce_target_mode: str = "raw"
     temporal_distribution_loss_weight: float = 0.0
     gradient_clip_norm: float = 1.0
     l2_score_weight: float = 1e-4
@@ -199,6 +201,9 @@ class ModelConfig:
         DEFAULT_LEARNED_SEGMENT_ALLOCATION_WEIGHT_FLOOR
     )
     learned_segment_score_blend_weight: float = DEFAULT_LEARNED_SEGMENT_SCORE_BLEND_WEIGHT
+    learned_segment_transfer_calibration_mode: str = (
+        DEFAULT_LEARNED_SEGMENT_TRANSFER_CALIBRATION_MODE
+    )
     learned_segment_fairness_preallocation: bool = True
     learned_segment_length_repair_fraction: float = 0.0
     learned_segment_length_repair_score_protection_fraction: float = 0.0
@@ -357,12 +362,12 @@ def build_run_config(
     loss_objective: str = "budget_topk",
     budget_loss_ratios: list[float] | None = None,
     budget_loss_temperature: float = DEFAULT_BUDGET_LOSS_TEMPERATURE,
-    query_useful_aux_loss_weight: float = 0.50,
-    query_useful_segment_budget_head_weight: float = 0.10,
-    query_useful_segment_level_loss_weight: float = 0.25,
-    query_useful_behavior_rank_loss_weight: float = 0.0,
-    query_useful_sparse_head_rank_loss_weight: float = 0.0,
-    query_useful_sparse_head_bce_target_mode: str = "raw",
+    query_local_utility_aux_loss_weight: float = 0.50,
+    query_local_utility_segment_budget_head_weight: float = 0.10,
+    query_local_utility_segment_level_loss_weight: float = 0.25,
+    query_local_utility_behavior_rank_loss_weight: float = 0.0,
+    query_local_utility_sparse_head_rank_loss_weight: float = 0.0,
+    query_local_utility_sparse_head_bce_target_mode: str = "raw",
     temporal_distribution_loss_weight: float = 0.0,
     gradient_clip_norm: float = 1.0,
     compression_ratio: float = 0.2,
@@ -417,6 +422,9 @@ def build_run_config(
         DEFAULT_LEARNED_SEGMENT_ALLOCATION_WEIGHT_FLOOR
     ),
     learned_segment_score_blend_weight: float = DEFAULT_LEARNED_SEGMENT_SCORE_BLEND_WEIGHT,
+    learned_segment_transfer_calibration_mode: str = (
+        DEFAULT_LEARNED_SEGMENT_TRANSFER_CALIBRATION_MODE
+    ),
     learned_segment_fairness_preallocation: bool = True,
     learned_segment_length_repair_fraction: float = 0.0,
     learned_segment_length_repair_score_protection_fraction: float = 0.0,
@@ -540,12 +548,12 @@ def build_run_config(
             loss_objective=loss_objective,
             budget_loss_ratios=list(budget_loss_ratios or DEFAULT_BUDGET_LOSS_RATIOS),
             budget_loss_temperature=budget_loss_temperature,
-            query_useful_aux_loss_weight=query_useful_aux_loss_weight,
-            query_useful_segment_budget_head_weight=query_useful_segment_budget_head_weight,
-            query_useful_segment_level_loss_weight=query_useful_segment_level_loss_weight,
-            query_useful_behavior_rank_loss_weight=query_useful_behavior_rank_loss_weight,
-            query_useful_sparse_head_rank_loss_weight=query_useful_sparse_head_rank_loss_weight,
-            query_useful_sparse_head_bce_target_mode=query_useful_sparse_head_bce_target_mode,
+            query_local_utility_aux_loss_weight=query_local_utility_aux_loss_weight,
+            query_local_utility_segment_budget_head_weight=query_local_utility_segment_budget_head_weight,
+            query_local_utility_segment_level_loss_weight=query_local_utility_segment_level_loss_weight,
+            query_local_utility_behavior_rank_loss_weight=query_local_utility_behavior_rank_loss_weight,
+            query_local_utility_sparse_head_rank_loss_weight=query_local_utility_sparse_head_rank_loss_weight,
+            query_local_utility_sparse_head_bce_target_mode=query_local_utility_sparse_head_bce_target_mode,
             temporal_distribution_loss_weight=temporal_distribution_loss_weight,
             gradient_clip_norm=gradient_clip_norm,
             compression_ratio=compression_ratio,
@@ -588,6 +596,9 @@ def build_run_config(
             ),
             learned_segment_allocation_weight_floor=learned_segment_allocation_weight_floor,
             learned_segment_score_blend_weight=learned_segment_score_blend_weight,
+            learned_segment_transfer_calibration_mode=(
+                learned_segment_transfer_calibration_mode
+            ),
             learned_segment_fairness_preallocation=learned_segment_fairness_preallocation,
             learned_segment_length_repair_fraction=learned_segment_length_repair_fraction,
             learned_segment_length_repair_score_protection_fraction=(

@@ -9,6 +9,7 @@ from learning.model_features import is_workload_blind_model_type
 
 MIN_MATCHED_LEARNED_SLOT_FRACTION_FOR_BLIND_CLAIM = 0.25
 RANGE_COMPONENT_KEYS = (
+    "query_point_recall",
     "range_point_f1",
     "range_ship_f1",
     "range_ship_coverage",

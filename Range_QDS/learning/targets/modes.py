@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from learning.targets.query_useful_v1 import QUERY_USEFUL_V1_TARGET_MODES
+from learning.targets.query_local_utility import QUERY_LOCAL_UTILITY_TARGET_MODES
 
 SCALAR_RANGE_TARGET_MODES = frozenset(
     {
@@ -35,6 +35,6 @@ RANGE_TRAINING_TARGET_MODES = (
     "set_utility_frequency",
     "local_swap_utility_frequency",
     "local_swap_gain_cost_frequency",
-    *tuple(sorted(QUERY_USEFUL_V1_TARGET_MODES)),
+    *tuple(sorted(QUERY_LOCAL_UTILITY_TARGET_MODES)),
 )
 RANGE_TARGET_BALANCE_MODES = ("none", "trajectory_unit_mass")

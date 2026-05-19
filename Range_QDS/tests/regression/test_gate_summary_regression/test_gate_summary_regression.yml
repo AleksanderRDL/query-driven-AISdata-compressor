@@ -1,12 +1,12 @@
 config:
   model_type: workload_blind_range_v2
   selector_type: learned_segment_budget_v1
-  workload_profile_id: range_workload_v1
+  workload_profile_id: range_query_mix
 final_claim_summary:
   blocking_gates:
   - learning_causality
   final_success_allowed: false
-  primary_metric: QueryUsefulV1
+  primary_metric: QueryLocalUtility
   status: single_cell_blocked
 gates:
   has_global_sanity: true

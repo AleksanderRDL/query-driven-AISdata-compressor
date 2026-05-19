@@ -7,10 +7,11 @@ from typing import Any
 
 import torch
 
-from learning.targets.query_useful_v1 import (
-    QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE,
-    QUERY_USEFUL_V1_HEAD_NAMES,
-    build_query_useful_v1_targets,
+from learning.targets.query_local_utility import (
+    QUERY_LOCAL_UTILITY_FACTORIZED_TARGET_MODE,
+    QUERY_LOCAL_UTILITY_HEAD_NAMES,
+    QUERY_LOCAL_UTILITY_TARGET_MODES,
+    build_query_local_utility_targets,
 )
 from selection.model_score_conversion import workload_type_head
 
@@ -80,13 +81,13 @@ def factorized_head_probability_sources_from_logits(
     if logits.ndim != 2:
         return {}
     point_count = int(logits.shape[0])
-    head_count = min(int(logits.shape[1]), len(QUERY_USEFUL_V1_HEAD_NAMES))
+    head_count = min(int(logits.shape[1]), len(QUERY_LOCAL_UTILITY_HEAD_NAMES))
     if point_count <= 0 or head_count <= 0:
         return {}
     probabilities = torch.sigmoid(logits[:, :head_count])
     return {
         f"head_{head_name!s}_sigmoid_top20_mean": probabilities[:, head_idx].contiguous()
-        for head_idx, head_name in enumerate(QUERY_USEFUL_V1_HEAD_NAMES[:head_count])
+        for head_idx, head_name in enumerate(QUERY_LOCAL_UTILITY_HEAD_NAMES[:head_count])
     }
 
 
@@ -477,25 +478,31 @@ def target_segment_oracle_alignment_audit(
     workload_type: str,
     retained_mask: torch.Tensor | None = None,
     segment_size: int = 32,
+    target_mode: str = QUERY_LOCAL_UTILITY_FACTORIZED_TARGET_MODE,
     paired_row_limit: int = 16,
 ) -> dict[str, Any]:
-    """Compare eval QueryUsefulV1 target heads with eval-only oracle segment mass after mask freeze."""
+    """Compare eval QueryLocalUtility target heads with eval-only oracle segment mass after mask freeze."""
     if eval_labels is None:
         return {"available": False, "reason": "eval_labels_not_available"}
     if not typed_queries:
         return {"available": False, "reason": "typed_queries_not_available"}
     _workload_name, type_id = workload_type_head(workload_type)
-    targets = build_query_useful_v1_targets(
+    targets = build_query_local_utility_targets(
         points=points,
         boundaries=boundaries,
         typed_queries=typed_queries,
         segment_size=segment_size,
+        target_mode=(
+            str(target_mode).lower()
+            if str(target_mode).lower() in QUERY_LOCAL_UTILITY_TARGET_MODES
+            else QUERY_LOCAL_UTILITY_FACTORIZED_TARGET_MODE
+        ),
     )
     final_target = targets.labels[:, int(type_id)].detach().cpu().float()
     head_targets = targets.head_targets.detach().cpu().float()
     head_score_sources = {
         f"target_head_{head_name!s}_top20_mean": head_targets[:, head_idx]
-        for head_idx, head_name in enumerate(QUERY_USEFUL_V1_HEAD_NAMES)
+        for head_idx, head_name in enumerate(QUERY_LOCAL_UTILITY_HEAD_NAMES)
         if int(head_targets.shape[1]) > head_idx
     }
     audit = segment_oracle_allocation_audit(
@@ -515,21 +522,21 @@ def target_segment_oracle_alignment_audit(
         return audit
 
     source_semantics = {
-        "point_score_top20_mean": "eval_query_useful_v1_final_target_top20_mean",
+        "point_score_top20_mean": "eval_query_local_utility_final_target_top20_mean",
     }
     source_semantics.update(
         {
             f"target_head_{head_name!s}_top20_mean": (
-                f"eval_{QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE}_target_head:{head_name!s}"
+                f"eval_{QUERY_LOCAL_UTILITY_FACTORIZED_TARGET_MODE}_target_head:{head_name!s}"
             )
-            for head_name in QUERY_USEFUL_V1_HEAD_NAMES
+            for head_name in QUERY_LOCAL_UTILITY_HEAD_NAMES
         }
     )
     target_diagnostics = targets.diagnostics
     audit.update(
         {
             "description": (
-                "Eval QueryUsefulV1 target-head segment alignment against eval-only oracle label mass."
+                "Eval QueryLocalUtility target-head segment alignment against eval-only oracle label mass."
             ),
             "target_alignment_attempted": True,
             "target_family": target_diagnostics.get("target_family"),

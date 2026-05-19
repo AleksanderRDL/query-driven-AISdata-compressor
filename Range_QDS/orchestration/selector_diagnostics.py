@@ -8,20 +8,132 @@ from typing import Any
 
 import torch
 
+from learning.model_features import transform_workload_blind_range_v2_prior_features
+from learning.query_prior_fields import QUERY_PRIOR_FIELD_NAMES, sample_query_prior_fields
+from learning.targets.query_local_utility import (
+    QUERY_LOCAL_UTILITY_HEAD_NAMES,
+    query_local_utility_path_length_support_targets,
+    query_local_utility_point_score,
+)
+from orchestration import selector_marginal_alignment, selector_trace_payloads
 from orchestration.segment_audits import segment_top_mean
 from scoring.method_scoring import _endpoint_sanity, score_range_usefulness
 from scoring.methods import FrozenMaskMethod
 from scoring.metrics import compute_geometric_distortion, compute_length_preservation
 from scoring.query_cache import ScoringQueryCache
-from scoring.query_useful_v1 import query_useful_v1_from_range_audit
+from scoring.query_local_utility import query_local_utility_from_range_audit
 from selection.learned_segment_budget import (
     GEOMETRY_TIE_BREAKER_WEIGHT,
     SEGMENT_ALLOCATION_WEIGHT_FLOOR,
     SEGMENT_LENGTH_SUPPORT_ALLOCATION_WEIGHT,
     SEGMENT_SCORE_POINT_BLEND_WEIGHT,
+    SEGMENT_TRANSFER_CALIBRATION_MODE_NONE,
     blend_segment_support_scores,
     simplify_with_learned_segment_budget_v1,
 )
+
+
+def factorized_score_component_vectors_from_logits(
+    head_logits: torch.Tensor | None,
+) -> dict[str, torch.Tensor]:
+    """Return point-level diagnostic score components from frozen factorized heads."""
+    if head_logits is None:
+        return {}
+    logits = head_logits.detach().cpu().float()
+    if logits.ndim != 2 or int(logits.shape[1]) < len(QUERY_LOCAL_UTILITY_HEAD_NAMES):
+        return {}
+    probabilities = torch.sigmoid(logits[:, : len(QUERY_LOCAL_UTILITY_HEAD_NAMES)]).contiguous()
+    out = {
+        f"head_probability_{head_name}": probabilities[:, head_idx].contiguous()
+        for head_idx, head_name in enumerate(QUERY_LOCAL_UTILITY_HEAD_NAMES)
+    }
+    out.update(
+        {
+            f"head_logit_{head_name}": logits[:, head_idx].contiguous()
+            for head_idx, head_name in enumerate(QUERY_LOCAL_UTILITY_HEAD_NAMES)
+        }
+    )
+    q_hit = probabilities[:, 0].float().clamp(0.0, 1.0)
+    behavior = probabilities[:, 1].float().clamp(0.0, 1.0)
+    boundary = probabilities[:, 2].float().clamp(0.0, 1.0)
+    replacement = probabilities[:, 3].float().clamp(0.0, 1.0)
+    behavior_multiplier = 0.5 + behavior
+    replacement_multiplier = 0.75 + 0.25 * replacement
+    q_behavior_replacement = q_hit * behavior_multiplier * replacement_multiplier
+    boundary_bonus = 0.25 * boundary
+    composed_score = query_local_utility_point_score(
+        q_hit=q_hit,
+        behavior=behavior,
+        boundary=boundary,
+        replacement=replacement,
+    )
+    out.update(
+        {
+            "factorized_behavior_multiplier": behavior_multiplier.contiguous(),
+            "factorized_replacement_multiplier": replacement_multiplier.contiguous(),
+            "factorized_q_behavior_replacement_term": q_behavior_replacement.contiguous(),
+            "factorized_boundary_bonus": boundary_bonus.contiguous(),
+            "factorized_composed_score": composed_score.contiguous(),
+        }
+    )
+    return out
+
+
+def query_prior_component_vectors_for_points(
+    points: torch.Tensor,
+    query_prior_field: dict[str, Any] | None,
+) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
+    """Return sampled and model-facing query-prior vectors for row diagnostics."""
+    if not isinstance(query_prior_field, dict):
+        return {}, {}
+    sampled = sample_query_prior_fields(points, query_prior_field).detach().cpu().float()
+    model_prior = transform_workload_blind_range_v2_prior_features(sampled).detach().cpu().float()
+    sampled_vectors = {
+        str(name): sampled[:, field_idx].contiguous()
+        for field_idx, name in enumerate(QUERY_PRIOR_FIELD_NAMES)
+        if field_idx < int(sampled.shape[1])
+    }
+    model_vectors = {
+        str(name): model_prior[:, field_idx].contiguous()
+        for field_idx, name in enumerate(QUERY_PRIOR_FIELD_NAMES)
+        if field_idx < int(model_prior.shape[1])
+    }
+    return sampled_vectors, model_vectors
+
+
+def query_free_retained_removal_teacher_proxy_vectors(
+    points: torch.Tensor,
+    boundaries: list[tuple[int, int]],
+    *,
+    segment_size: int = 32,
+) -> dict[str, torch.Tensor]:
+    """Return query-free proxy teachers for retained-removal marginal diagnostics."""
+    point_count = int(points.shape[0])
+    if point_count <= 0:
+        return {}
+    points_cpu = points.detach().cpu().float()
+    endpoint_support = torch.zeros((point_count,), dtype=torch.float32)
+    for start, end in boundaries:
+        if int(end) <= int(start):
+            continue
+        endpoint_support[int(start)] = 1.0
+        endpoint_support[int(end) - 1] = 1.0
+    path_support = (
+        query_local_utility_path_length_support_targets(
+            points_cpu,
+            boundaries,
+            segment_size=max(1, int(segment_size)),
+        )
+        .detach()
+        .cpu()
+        .float()
+    )
+    endpoint_or_path_support = torch.maximum(endpoint_support, path_support)
+    return {
+        "query_free_endpoint_support": endpoint_support.contiguous(),
+        "query_free_path_length_support_target": path_support.contiguous(),
+        "query_free_endpoint_or_path_support": endpoint_or_path_support.contiguous(),
+    }
 
 
 def learned_segment_frozen_method(
@@ -40,6 +152,7 @@ def learned_segment_frozen_method(
     ),
     learned_segment_allocation_weight_floor: float = SEGMENT_ALLOCATION_WEIGHT_FLOOR,
     learned_segment_score_blend_weight: float = SEGMENT_SCORE_POINT_BLEND_WEIGHT,
+    learned_segment_transfer_calibration_mode: str = SEGMENT_TRANSFER_CALIBRATION_MODE_NONE,
     learned_segment_fairness_preallocation: bool = True,
     learned_segment_length_repair_fraction: float = 0.0,
     learned_segment_length_repair_score_protection_fraction: float = 0.0,
@@ -65,6 +178,7 @@ def learned_segment_frozen_method(
         segment_length_support_weight=float(learned_segment_allocation_length_support_weight),
         segment_allocation_weight_floor=float(learned_segment_allocation_weight_floor),
         segment_score_point_blend_weight=float(learned_segment_score_blend_weight),
+        segment_transfer_calibration_mode=str(learned_segment_transfer_calibration_mode),
         fairness_preallocation_enabled=bool(learned_segment_fairness_preallocation),
         length_repair_fraction=float(learned_segment_length_repair_fraction),
         length_repair_score_protection_fraction=float(
@@ -208,62 +322,6 @@ def segment_score_quantile_bands_for_ablation(
     return out.reshape(segment_scores.detach().cpu().shape)
 
 
-def _diagnostic_mask_from_indices(
-    *,
-    indices: Any,
-    point_count: int,
-    source_name: str,
-) -> torch.Tensor:
-    """Build a bool mask from trace-persisted absolute indices."""
-    if not isinstance(indices, list):
-        raise ValueError(f"{source_name}.indices must be a list")
-    mask = torch.zeros((int(point_count),), dtype=torch.bool)
-    seen: set[int] = set()
-    for raw_idx in indices:
-        if isinstance(raw_idx, bool):
-            raise ValueError(f"{source_name}.indices must contain integer indices")
-        idx = int(raw_idx)
-        if idx < 0 or idx >= int(point_count):
-            raise ValueError(f"{source_name}.indices index out of bounds: {idx}")
-        if idx in seen:
-            raise ValueError(f"{source_name}.indices duplicate index: {idx}")
-        seen.add(idx)
-        mask[idx] = True
-    return mask
-
-
-def source_masks_from_selector_trace(
-    selector_trace: dict[str, Any],
-    *,
-    point_count: int,
-) -> dict[str, torch.Tensor]:
-    """Return source-specific retained masks from learned-segment trace schema 7."""
-    payload_names = {
-        "skeleton": "skeleton_retained_mask",
-        "learned": "learned_retained_mask",
-        "fallback": "fallback_retained_mask",
-        "length_repair": "length_repair_retained_mask",
-    }
-    out: dict[str, torch.Tensor] = {}
-    for source, payload_name in payload_names.items():
-        payload = selector_trace.get(payload_name)
-        if not isinstance(payload, dict) or not bool(payload.get("available", False)):
-            continue
-        mask = _diagnostic_mask_from_indices(
-            indices=payload.get("indices"),
-            point_count=point_count,
-            source_name=payload_name,
-        )
-        declared_count = payload.get("retained_count")
-        if declared_count is not None and int(declared_count) != int(mask.sum().item()):
-            raise ValueError(
-                f"{payload_name}.retained_count mismatch: "
-                f"declared={int(declared_count)} actual={int(mask.sum().item())}"
-            )
-        out[source] = mask
-    return out
-
-
 def _score_vector_or_none(values: torch.Tensor | None, point_count: int) -> torch.Tensor | None:
     if values is None:
         return None
@@ -275,6 +333,233 @@ def _score_vector_or_none(values: torch.Tensor | None, point_count: int) -> torc
     if int(vector.numel()) != int(point_count):
         return None
     return vector
+
+
+def _score_component_vectors(
+    score_component_vectors: dict[str, torch.Tensor] | None,
+    point_count: int,
+) -> dict[str, torch.Tensor]:
+    if not score_component_vectors:
+        return {}
+    out: dict[str, torch.Tensor] = {}
+    for name, values in sorted(score_component_vectors.items()):
+        vector = _score_vector_or_none(values, point_count)
+        if vector is not None:
+            out[str(name)] = vector
+    return out
+
+
+def _trajectory_index_for_point(index: int, boundaries: list[tuple[int, int]]) -> int | None:
+    point_index = int(index)
+    for trajectory_idx, (start, end) in enumerate(boundaries):
+        if int(start) <= point_index < int(end):
+            return int(trajectory_idx)
+    return None
+
+
+def _prefixed_row_values(
+    *,
+    vectors: dict[str, torch.Tensor],
+    prefix: str,
+    index: int,
+) -> dict[str, float]:
+    out: dict[str, float] = {}
+    for name, vector in vectors.items():
+        if not name.startswith(prefix):
+            continue
+        out[name.removeprefix(prefix)] = float(vector[int(index)].item())
+    return out
+
+
+def _row_score_component_values(
+    *,
+    vectors: dict[str, torch.Tensor],
+    index: int,
+) -> dict[str, float]:
+    return {
+        name: float(vector[int(index)].item())
+        for name, vector in vectors.items()
+        if not name.startswith("head_probability_") and not name.startswith("head_logit_")
+    }
+
+
+def _rank_rows_desc(
+    rows: list[dict[str, Any]],
+    *,
+    output_name: str,
+    value_getter: Any,
+) -> None:
+    valid: list[tuple[int, float]] = []
+    for row_idx, row in enumerate(rows):
+        value = value_getter(row)
+        if value is None:
+            continue
+        valid.append((row_idx, float(value)))
+    if not valid:
+        return
+    ordered = sorted(valid, key=lambda item: (-item[1], int(rows[item[0]]["point_index"])))
+    count = len(ordered)
+    for rank_idx, (row_idx, _value) in enumerate(ordered, start=1):
+        rows[row_idx][f"{output_name}_candidate_rank"] = int(rank_idx)
+        rows[row_idx][f"{output_name}_candidate_rank_fraction"] = float(rank_idx / count)
+
+
+def _top_marginal_miss_bucket_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    bucket_counts: dict[str, int] = {}
+    for row in rows:
+        for bucket in row.get("failure_buckets", []):
+            bucket_counts[str(bucket)] = bucket_counts.get(str(bucket), 0) + 1
+    top_rows = sorted(
+        rows,
+        key=lambda row: (-float(row["marginal_query_local_utility"]), int(row["point_index"])),
+    )[: min(16, len(rows))]
+    return {
+        "available": bool(rows),
+        "diagnostic_only": True,
+        "bucket_policy": {
+            "top_rank_fraction_max": 0.25,
+            "low_rank_fraction_min": 0.75,
+            "prior_present_threshold": 0.05,
+            "head_positive_threshold": 0.20,
+            "heuristic_only": True,
+        },
+        "bucket_counts": bucket_counts,
+        "top_marginal_row_count": len(top_rows),
+        "top_marginal_rows": top_rows,
+    }
+
+
+def _attach_top_marginal_miss_diagnostics(rows: list[dict[str, Any]]) -> None:
+    if not rows:
+        return
+
+    _rank_rows_desc(
+        rows,
+        output_name="marginal_query_local_utility",
+        value_getter=lambda row: row.get("marginal_query_local_utility"),
+    )
+    for score_name in ("raw_score", "selector_score", "segment_score"):
+        _rank_rows_desc(
+            rows,
+            output_name=score_name,
+            value_getter=lambda row, key=score_name: row.get(key),
+        )
+
+    component_names = sorted(
+        {str(name) for row in rows for name in (row.get("score_components") or {}).keys()}
+    )
+    component_rank_by_row: list[dict[str, int]] = [dict() for _row in rows]
+    for component_name in component_names:
+        valid = [
+            (row_idx, float(row["score_components"][component_name]))
+            for row_idx, row in enumerate(rows)
+            if row.get("score_components") is not None
+            and row["score_components"].get(component_name) is not None
+        ]
+        ordered = sorted(valid, key=lambda item: (-item[1], int(rows[item[0]]["point_index"])))
+        for rank_idx, (row_idx, _value) in enumerate(ordered, start=1):
+            component_rank_by_row[row_idx][component_name] = int(rank_idx)
+
+    for row_idx, row in enumerate(rows):
+        marginal_rank = row.get("marginal_query_local_utility_candidate_rank")
+        if marginal_rank is not None and component_rank_by_row[row_idx]:
+            row["query_local_utility_component_candidate_ranks"] = component_rank_by_row[row_idx]
+            row["query_local_utility_component_minus_marginal_rank"] = {
+                name: int(component_rank) - int(marginal_rank)
+                for name, component_rank in component_rank_by_row[row_idx].items()
+            }
+
+    query_free_proxy_names = sorted(
+        {str(name) for row in rows for name in (row.get("query_free_teacher_proxies") or {}).keys()}
+    )
+    query_free_proxy_rank_by_row: list[dict[str, int]] = [dict() for _row in rows]
+    for proxy_name in query_free_proxy_names:
+        valid = [
+            (row_idx, float(row["query_free_teacher_proxies"][proxy_name]))
+            for row_idx, row in enumerate(rows)
+            if row.get("query_free_teacher_proxies") is not None
+            and row["query_free_teacher_proxies"].get(proxy_name) is not None
+        ]
+        ordered = sorted(valid, key=lambda item: (-item[1], int(rows[item[0]]["point_index"])))
+        for rank_idx, (row_idx, _value) in enumerate(ordered, start=1):
+            query_free_proxy_rank_by_row[row_idx][proxy_name] = int(rank_idx)
+
+    for row_idx, row in enumerate(rows):
+        marginal_rank = row.get("marginal_query_local_utility_candidate_rank")
+        if marginal_rank is not None and query_free_proxy_rank_by_row[row_idx]:
+            row["query_free_teacher_proxy_candidate_ranks"] = query_free_proxy_rank_by_row[row_idx]
+            row["query_free_teacher_proxy_minus_marginal_rank"] = {
+                name: int(proxy_rank) - int(marginal_rank)
+                for name, proxy_rank in query_free_proxy_rank_by_row[row_idx].items()
+            }
+
+    for row_idx, row in enumerate(rows):
+        buckets: list[str] = []
+        marginal_fraction = row.get("marginal_query_local_utility_candidate_rank_fraction")
+        raw_fraction = row.get("raw_score_candidate_rank_fraction")
+        selector_fraction = row.get("selector_score_candidate_rank_fraction")
+        segment_fraction = row.get("segment_score_candidate_rank_fraction")
+        top_marginal = marginal_fraction is not None and float(marginal_fraction) <= 0.25
+        low_any_score = any(
+            value is not None and float(value) >= 0.75
+            for value in (raw_fraction, selector_fraction, segment_fraction)
+        )
+        top_any_score = any(
+            value is not None and float(value) <= 0.25
+            for value in (raw_fraction, selector_fraction, segment_fraction)
+        )
+        low_marginal = marginal_fraction is not None and float(marginal_fraction) >= 0.75
+        sampled_prior_values = list((row.get("sampled_prior_channels") or {}).values())
+        model_prior_values = list((row.get("model_prior_channels") or {}).values())
+        head_probability_values = list((row.get("head_probabilities") or {}).values())
+        max_sampled_prior = max([float(value) for value in sampled_prior_values], default=0.0)
+        max_model_prior = max([float(value) for value in model_prior_values], default=0.0)
+        max_head_probability = max(
+            [float(value) for value in head_probability_values],
+            default=0.0,
+        )
+        if top_marginal and low_any_score:
+            buckets.append("high_marginal_under_ranked_by_scores")
+        if top_any_score and low_marginal:
+            buckets.append("high_score_low_exact_marginal")
+        if sampled_prior_values and max_sampled_prior <= 1e-6:
+            buckets.append("prior_missing_or_out_of_support")
+        if max_sampled_prior >= 0.05 and max_head_probability < 0.20:
+            buckets.append("prior_present_but_head_flat")
+        if (
+            max_head_probability >= 0.20
+            and raw_fraction is not None
+            and float(raw_fraction) >= 0.75
+        ):
+            buckets.append("head_positive_but_final_score_suppresses_it")
+        if (
+            raw_fraction is not None
+            and float(raw_fraction) <= 0.25
+            and any(
+                value is not None and float(value) >= 0.75
+                for value in (selector_fraction, segment_fraction)
+            )
+        ):
+            buckets.append("raw_score_good_but_segment_allocation_loses_it")
+        stage_state = row.get("selector_stage_state") or {}
+        if (
+            row.get("source") in {"skeleton", "length_repair", "fallback"}
+            or bool(stage_state.get("length_repair_retained", False))
+            or (
+                bool(stage_state.get("final_retained", False))
+                and not bool(stage_state.get("pre_repair_retained", True))
+            )
+        ):
+            buckets.append("length_repair_or_skeleton_overrides_learned_decision")
+        if top_marginal and max_model_prior >= 0.05 and max_head_probability < 0.20:
+            buckets.append("model_prior_present_but_head_flat")
+        top_query_free_proxy = any(
+            int(proxy_rank) <= max(1, math.ceil(0.25 * len(rows)))
+            for proxy_rank in query_free_proxy_rank_by_row[row_idx].values()
+        )
+        if top_marginal and top_query_free_proxy and low_any_score:
+            buckets.append("query_free_teacher_proxy_high_but_active_score_under_ranked")
+        row["failure_buckets"] = sorted(set(buckets))
 
 
 def _bounded_candidate_indices(
@@ -307,7 +592,7 @@ def _bounded_candidate_indices(
     return [int(idx) for idx in selected.unique(sorted=True).tolist()]
 
 
-def _query_useful_v1_score_for_mask(
+def _query_local_utility_score_for_mask(
     *,
     points: torch.Tensor,
     boundaries: list[tuple[int, int]],
@@ -325,110 +610,17 @@ def _query_useful_v1_score_for_mask(
     geometric = compute_geometric_distortion(points, boundaries, retained_mask)
     length = compute_length_preservation(points, boundaries, retained_mask)
     endpoint_sanity = _endpoint_sanity(retained_mask.detach().cpu().bool(), boundaries)
-    query_useful = query_useful_v1_from_range_audit(
+    query_local_utility = query_local_utility_from_range_audit(
         range_audit,
         length_preservation=length,
         avg_sed_km=float(geometric.get("avg_sed_km", 0.0)),
         endpoint_sanity=endpoint_sanity,
     )
-    score = query_useful.get("query_useful_v1_score", 0.0)
+    score = query_local_utility.get("query_local_utility_score", 0.0)
     return float(score) if isinstance(score, (int, float)) and not isinstance(score, bool) else 0.0
 
 
-def _pearson(left: list[float], right: list[float]) -> float | None:
-    if len(left) != len(right) or len(left) < 2:
-        return None
-    left_mean = sum(left) / float(len(left))
-    right_mean = sum(right) / float(len(right))
-    left_var = sum((value - left_mean) ** 2 for value in left)
-    right_var = sum((value - right_mean) ** 2 for value in right)
-    if left_var <= 1e-12 or right_var <= 1e-12:
-        return None
-    covariance = sum(
-        (left_value - left_mean) * (right_value - right_mean)
-        for left_value, right_value in zip(left, right, strict=True)
-    )
-    return float(covariance / math.sqrt(left_var * right_var))
-
-
-def _average_ranks(values: list[float]) -> list[float]:
-    order = sorted(range(len(values)), key=lambda idx: float(values[idx]))
-    ranks = [0.0 for _value in values]
-    cursor = 0
-    while cursor < len(order):
-        end = cursor
-        while end + 1 < len(order) and values[order[end + 1]] == values[order[cursor]]:
-            end += 1
-        average_rank = float(cursor + end + 2) / 2.0
-        for rank_index in range(cursor, end + 1):
-            ranks[order[rank_index]] = average_rank
-        cursor = end + 1
-    return ranks
-
-
-def _spearman(left: list[float], right: list[float]) -> float | None:
-    if len(left) != len(right) or len(left) < 2:
-        return None
-    return _pearson(_average_ranks(left), _average_ranks(right))
-
-
-def _mean(values: list[float]) -> float | None:
-    return float(sum(values) / float(len(values))) if values else None
-
-
-def _score_alignment_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    summary: dict[str, Any] = {"candidate_count": len(rows)}
-    if not rows:
-        return summary
-    marginals = [float(row["marginal_query_useful_v1"]) for row in rows]
-    summary.update(
-        {
-            "mean_marginal_query_useful_v1": _mean(marginals),
-            "positive_marginal_fraction": float(
-                sum(1 for value in marginals if value > 0.0) / float(len(marginals))
-            ),
-            "max_marginal_query_useful_v1": max(marginals),
-            "min_marginal_query_useful_v1": min(marginals),
-        }
-    )
-    for score_key in ("raw_score", "selector_score", "segment_score"):
-        valid = [
-            (float(row[score_key]), float(row["marginal_query_useful_v1"]))
-            for row in rows
-            if row.get(score_key) is not None
-        ]
-        if len(valid) < 2:
-            summary[score_key] = {"available": False, "reason": "fewer_than_two_values"}
-            continue
-        scores = [score for score, _marginal in valid]
-        marginal_values = [marginal for _score, marginal in valid]
-        order = sorted(range(len(scores)), key=lambda idx: scores[idx], reverse=True)
-        bucket_count = max(1, len(order) // 4)
-        top = [marginal_values[idx] for idx in order[:bucket_count]]
-        bottom = [marginal_values[idx] for idx in order[-bucket_count:]]
-        top_mean = _mean(top)
-        bottom_mean = _mean(bottom)
-        summary[score_key] = {
-            "available": True,
-            "pearson": _pearson(scores, marginal_values),
-            "spearman": _spearman(scores, marginal_values),
-            "top_quartile_mean_marginal": top_mean,
-            "bottom_quartile_mean_marginal": bottom_mean,
-            "top_minus_bottom_marginal": (
-                None if top_mean is None or bottom_mean is None else float(top_mean - bottom_mean)
-            ),
-        }
-    return summary
-
-
-def _group_rows(rows: list[dict[str, Any]], key: str) -> dict[str, list[dict[str, Any]]]:
-    grouped: dict[str, list[dict[str, Any]]] = {}
-    for row in rows:
-        grouped.setdefault(str(row.get(key, "")), []).append(row)
-    return grouped
-
-
-def retained_decision_marginal_query_useful_diagnostics(
+def retained_decision_marginal_query_local_utility_diagnostics(
     *,
     points: torch.Tensor,
     boundaries: list[tuple[int, int]],
@@ -437,13 +629,18 @@ def retained_decision_marginal_query_useful_diagnostics(
     raw_scores: torch.Tensor | None = None,
     selector_scores: torch.Tensor | None = None,
     segment_scores: torch.Tensor | None = None,
+    score_component_vectors: dict[str, torch.Tensor] | None = None,
+    query_free_teacher_proxy_vectors: dict[str, torch.Tensor] | None = None,
+    sampled_prior_vectors: dict[str, torch.Tensor] | None = None,
+    model_prior_vectors: dict[str, torch.Tensor] | None = None,
     source_masks: dict[str, torch.Tensor] | None = None,
     selector_trace: dict[str, Any] | None = None,
     query_cache: ScoringQueryCache | None = None,
     max_retained_per_source: int = 64,
     max_removed_candidates: int = 128,
+    teacher_usage_split: str = "unknown",
 ) -> dict[str, Any]:
-    """Score bounded point-level QueryUsefulV1 marginals after masks are frozen.
+    """Score bounded point-level QueryLocalUtility marginals after masks are frozen.
 
     Retained candidates use leave-one-out loss. Removed candidates use add-one
     gain. The diagnostic is bounded and diagnostic-only; it is not a training
@@ -474,7 +671,9 @@ def retained_decision_marginal_query_useful_diagnostics(
         )
     if selector_trace is not None:
         source_mask_map.update(
-            source_masks_from_selector_trace(selector_trace, point_count=point_count)
+            selector_trace_payloads.source_masks_from_selector_trace(
+                selector_trace, point_count=point_count
+            )
         )
     attributed = torch.zeros_like(primary_mask)
     for mask in source_mask_map.values():
@@ -488,6 +687,22 @@ def retained_decision_marginal_query_useful_diagnostics(
     raw_vector = _score_vector_or_none(raw_scores, point_count)
     selector_vector = _score_vector_or_none(selector_scores, point_count)
     segment_vector = _score_vector_or_none(segment_scores, point_count)
+    component_vectors = _score_component_vectors(score_component_vectors, point_count)
+    query_free_proxy_vectors = _score_component_vectors(
+        query_free_teacher_proxy_vectors,
+        point_count,
+    )
+    sampled_prior_component_vectors = _score_component_vectors(sampled_prior_vectors, point_count)
+    model_prior_component_vectors = _score_component_vectors(model_prior_vectors, point_count)
+    trace_mask_state = selector_trace_payloads.trace_mask_state_from_selector_trace(
+        selector_trace=selector_trace, point_count=point_count
+    )
+    selector_segment_context_rows = (
+        selector_trace_payloads.selector_segment_context_rows_from_trace(
+            selector_trace=selector_trace,
+            point_count=point_count,
+        )
+    )
     ranking_vector = selector_vector if selector_vector is not None else raw_vector
     if ranking_vector is None:
         ranking_vector = segment_vector
@@ -499,7 +714,7 @@ def retained_decision_marginal_query_useful_diagnostics(
         effective_query_cache = ScoringQueryCache.for_workload(points, boundaries, typed_queries)
         query_cache_created = True
 
-    primary_score = _query_useful_v1_score_for_mask(
+    primary_score = _query_local_utility_score_for_mask(
         points=points,
         boundaries=boundaries,
         typed_queries=typed_queries,
@@ -520,7 +735,7 @@ def retained_decision_marginal_query_useful_diagnostics(
             "point_index": int(index),
             "source": source,
             "decision": decision,
-            "marginal_query_useful_v1": float(marginal),
+            "marginal_query_local_utility": float(marginal),
             "raw_score": None if raw_vector is None else float(raw_vector[int(index)].item()),
             "selector_score": (
                 None if selector_vector is None else float(selector_vector[int(index)].item())
@@ -528,6 +743,43 @@ def retained_decision_marginal_query_useful_diagnostics(
             "segment_score": (
                 None if segment_vector is None else float(segment_vector[int(index)].item())
             ),
+            "trajectory_index": _trajectory_index_for_point(int(index), boundaries),
+            "selector_stage_state": {
+                name: bool(mask[int(index)].item()) for name, mask in trace_mask_state.items()
+            },
+            "selector_segment_context": selector_trace_payloads.selector_segment_context_for_point(
+                index=int(index),
+                segment_rows=selector_segment_context_rows,
+            ),
+            "head_probabilities": _prefixed_row_values(
+                vectors=component_vectors,
+                prefix="head_probability_",
+                index=int(index),
+            ),
+            "head_logits": _prefixed_row_values(
+                vectors=component_vectors,
+                prefix="head_logit_",
+                index=int(index),
+            ),
+            "sampled_prior_channels": {
+                name: float(vector[int(index)].item())
+                for name, vector in sampled_prior_component_vectors.items()
+            },
+            "model_prior_channels": {
+                name: float(vector[int(index)].item())
+                for name, vector in model_prior_component_vectors.items()
+            },
+            "query_local_utility_score_components": _row_score_component_values(
+                vectors=component_vectors,
+                index=int(index),
+            ),
+            "query_free_teacher_proxies": {
+                name: float(vector[int(index)].item())
+                for name, vector in query_free_proxy_vectors.items()
+            },
+            "score_components": {
+                name: float(vector[int(index)].item()) for name, vector in component_vectors.items()
+            },
         }
 
     for source, source_mask in sorted(source_mask_map.items()):
@@ -539,7 +791,7 @@ def retained_decision_marginal_query_useful_diagnostics(
         ):
             candidate = primary_mask.clone()
             candidate[int(index)] = False
-            score = _query_useful_v1_score_for_mask(
+            score = _query_local_utility_score_for_mask(
                 points=points,
                 boundaries=boundaries,
                 typed_queries=typed_queries,
@@ -563,7 +815,7 @@ def retained_decision_marginal_query_useful_diagnostics(
     ):
         candidate = primary_mask.clone()
         candidate[int(index)] = True
-        score = _query_useful_v1_score_for_mask(
+        score = _query_local_utility_score_for_mask(
             points=points,
             boundaries=boundaries,
             typed_queries=typed_queries,
@@ -579,19 +831,39 @@ def retained_decision_marginal_query_useful_diagnostics(
             )
         )
 
+    _attach_top_marginal_miss_diagnostics(rows)
+    top_marginal_miss_diagnostics = _top_marginal_miss_bucket_summary(rows)
+    top_marginal_miss_summary = dict(top_marginal_miss_diagnostics)
+    top_marginal_miss_summary.pop("top_marginal_rows", None)
+    top_marginal_miss_summary["top_marginal_rows_in_selector_trace_only"] = True
+
     by_source = {
-        name: _score_alignment_summary(group_rows)
-        for name, group_rows in sorted(_group_rows(rows, "source").items())
+        name: selector_marginal_alignment.score_alignment_summary(group_rows)
+        for name, group_rows in sorted(
+            selector_marginal_alignment.group_rows_by_field(rows, "source").items()
+        )
     }
     by_decision = {
-        name: _score_alignment_summary(group_rows)
-        for name, group_rows in sorted(_group_rows(rows, "decision").items())
+        name: selector_marginal_alignment.score_alignment_summary(group_rows)
+        for name, group_rows in sorted(
+            selector_marginal_alignment.group_rows_by_field(rows, "decision").items()
+        )
     }
+    guard_coupling_summary = (
+        selector_marginal_alignment.query_free_teacher_proxy_guard_coupling_summary(rows)
+    )
+    learned_teacher_summary = (
+        selector_marginal_alignment.learned_controllable_marginal_teacher_summary(rows)
+    )
+    separated_teacher_summary = selector_marginal_alignment.separated_marginal_teacher_targets(
+        rows,
+        teacher_usage_split=teacher_usage_split,
+    )
     elapsed_seconds = float(time.perf_counter() - started_at)
     return {
         "available": True,
         "diagnostic_only": True,
-        "exact_query_useful_v1_marginals": True,
+        "exact_query_local_utility_marginals": True,
         "performance_mode": "exact_cached_query_support",
         "elapsed_seconds": elapsed_seconds,
         "query_cache_provided": query_cache is not None,
@@ -610,10 +882,10 @@ def retained_decision_marginal_query_useful_diagnostics(
         ),
         "masks_frozen_before_query_scoring_required": True,
         "description": (
-            "Bounded retained-decision marginal QueryUsefulV1 diagnostic. "
+            "Bounded retained-decision marginal QueryLocalUtility diagnostic. "
             "Retained rows are leave-one-out loss; removed rows are add-one gain."
         ),
-        "primary_query_useful_v1": float(primary_score),
+        "primary_query_local_utility": float(primary_score),
         "retained_count": int(primary_mask.sum().item()),
         "point_count": point_count,
         "max_retained_per_source": int(max_retained_per_source),
@@ -623,16 +895,38 @@ def retained_decision_marginal_query_useful_diagnostics(
             "selector_score": selector_vector is not None,
             "segment_score": segment_vector is not None,
         },
+        "score_component_fields_available": {
+            name: True for name in sorted(component_vectors.keys())
+        },
+        "context_fields_available": {
+            "sampled_prior_channels": {
+                name: True for name in sorted(sampled_prior_component_vectors.keys())
+            },
+            "model_prior_channels": {
+                name: True for name in sorted(model_prior_component_vectors.keys())
+            },
+            "query_free_teacher_proxies": {
+                name: True for name in sorted(query_free_proxy_vectors.keys())
+            },
+            "selector_stage_state": {name: True for name in sorted(trace_mask_state.keys())},
+            "selector_segment_context": bool(selector_segment_context_rows),
+            "trajectory_index": True,
+        },
         "candidate_count": len(rows),
-        "overall": _score_alignment_summary(rows),
+        "overall": selector_marginal_alignment.score_alignment_summary(rows),
         "by_source": by_source,
         "by_decision": by_decision,
+        "query_free_teacher_proxy_guard_coupling_summary": guard_coupling_summary,
+        "learned_controllable_marginal_teacher_summary": learned_teacher_summary,
+        "separated_marginal_teacher_summary": separated_teacher_summary,
+        "top_marginal_miss_summary": top_marginal_miss_summary,
+        "top_marginal_miss_diagnostics": top_marginal_miss_diagnostics,
         "rows": sorted(
             rows,
             key=lambda row: (
                 str(row["decision"]),
                 str(row["source"]),
-                -float(row["marginal_query_useful_v1"]),
+                -float(row["marginal_query_local_utility"]),
                 int(row["point_index"]),
             ),
         ),

@@ -65,14 +65,15 @@ from learning.targets.common import (
     _apply_temporal_residual_labels,
     _scaled_training_target_for_type,
 )
-from learning.targets.query_useful_v1 import (
-    QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE,
-    QUERY_USEFUL_V1_HEAD_NAMES,
-    build_query_useful_v1_targets,
+from learning.targets.query_local_utility import (
+    QUERY_LOCAL_UTILITY_FACTORIZED_TARGET_MODE,
+    QUERY_LOCAL_UTILITY_HEAD_NAMES,
+    QUERY_LOCAL_UTILITY_TARGET_MODES,
+    build_query_local_utility_targets,
 )
 from learning.trajectory_batching import batch_windows, build_trajectory_windows
 from runtime.torch_runtime import normalize_amp_mode, torch_autocast_context
-from workloads.generation.workload_profiles import RANGE_WORKLOAD_V1_PROFILE_ID
+from workloads.generation.workload_profiles import RANGE_QUERY_MIX_PROFILE_ID
 from workloads.query_types import (
     ID_TO_QUERY_NAME,
     NUM_QUERY_TYPES,
@@ -172,9 +173,9 @@ def _scalar_training_target_for_mode(
 ) -> tuple[torch.Tensor, str]:
     """Return the scalar target used by the primary loss and its diagnostic basis."""
     mode = str(range_training_target_mode).lower()
-    if mode == QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE:
+    if mode in QUERY_LOCAL_UTILITY_TARGET_MODES:
         return labels[:, int(workload_type_id)].clone().float().clamp(0.0, 1.0), (
-            "raw_query_useful_v1_final_label_for_loss"
+            "raw_query_local_utility_final_label_for_loss"
         )
     return _scaled_training_target_for_type(labels, labelled_mask, int(workload_type_id)), (
         "scaled_training_target_for_loss"
@@ -233,11 +234,12 @@ def train_model(
     range_training_target_mode = str(
         getattr(model_config, "range_training_target_mode", "")
     ).lower()
-    if range_training_target_mode == QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE:
-        factorized_bundle = build_query_useful_v1_targets(
+    if range_training_target_mode in QUERY_LOCAL_UTILITY_TARGET_MODES:
+        factorized_bundle = build_query_local_utility_targets(
             points=all_points,
             boundaries=train_boundaries,
             typed_queries=prior_queries,
+            target_mode=range_training_target_mode,
         )
         labels = factorized_bundle.labels
         labelled_mask = factorized_bundle.labelled_mask
@@ -287,7 +289,7 @@ def train_model(
         behavior_prior_values = None
         if factorized_targets is not None:
             try:
-                behavior_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index(
+                behavior_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index(
                     "conditional_behavior_utility"
                 )
                 behavior_prior_values = factorized_targets[:, behavior_idx]
@@ -304,7 +306,7 @@ def train_model(
                 .get("query_generation", {})
                 .get(
                     "workload_profile_id",
-                    RANGE_WORKLOAD_V1_PROFILE_ID,
+                    RANGE_QUERY_MIX_PROFILE_ID,
                 )
             ),
             train_workload_seed=prior_seed,
@@ -417,23 +419,23 @@ def train_model(
     )
     target_diagnostics["supervised_scalar_target_basis"] = training_target_basis
     if factorized_target_diagnostics:
-        target_diagnostics[QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE] = factorized_target_diagnostics
-        target_diagnostics["query_useful_v1_loss_weights"] = {
-            "aux_loss_weight": float(getattr(model_config, "query_useful_aux_loss_weight", 0.50)),
+        target_diagnostics[QUERY_LOCAL_UTILITY_FACTORIZED_TARGET_MODE] = factorized_target_diagnostics
+        target_diagnostics["query_local_utility_loss_weights"] = {
+            "aux_loss_weight": float(getattr(model_config, "query_local_utility_aux_loss_weight", 0.50)),
             "segment_budget_head_weight": float(
-                getattr(model_config, "query_useful_segment_budget_head_weight", 0.10)
+                getattr(model_config, "query_local_utility_segment_budget_head_weight", 0.10)
             ),
             "segment_level_loss_weight": float(
-                getattr(model_config, "query_useful_segment_level_loss_weight", 0.25)
+                getattr(model_config, "query_local_utility_segment_level_loss_weight", 0.25)
             ),
             "behavior_rank_loss_weight": float(
-                getattr(model_config, "query_useful_behavior_rank_loss_weight", 0.0)
+                getattr(model_config, "query_local_utility_behavior_rank_loss_weight", 0.0)
             ),
             "sparse_head_rank_loss_weight": float(
-                getattr(model_config, "query_useful_sparse_head_rank_loss_weight", 0.0)
+                getattr(model_config, "query_local_utility_sparse_head_rank_loss_weight", 0.0)
             ),
             "sparse_head_bce_target_mode": str(
-                getattr(model_config, "query_useful_sparse_head_bce_target_mode", "raw")
+                getattr(model_config, "query_local_utility_sparse_head_bce_target_mode", "raw")
             ).lower(),
         }
     if query_prior_field is not None:
@@ -1284,6 +1286,9 @@ def train_model(
                 head_logits=train_head_logits,
                 factorized_targets=factorized_targets,
                 factorized_mask=factorized_mask,
+                points=all_points,
+                boundaries=train_boundaries,
+                typed_queries=prior_queries,
                 seed=seed,
             )
         )

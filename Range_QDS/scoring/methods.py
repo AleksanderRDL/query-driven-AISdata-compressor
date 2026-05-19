@@ -19,12 +19,13 @@ from learning.inference import (
 )
 from learning.model_features import build_model_point_features_for_dim
 from learning.outputs import TrainingOutputs
-from learning.targets.query_useful_v1 import QUERY_USEFUL_V1_HEAD_NAMES
+from learning.targets.query_local_utility import QUERY_LOCAL_UTILITY_HEAD_NAMES
 from selection.learned_segment_budget import (
     GEOMETRY_TIE_BREAKER_WEIGHT,
     SEGMENT_ALLOCATION_WEIGHT_FLOOR,
     SEGMENT_LENGTH_SUPPORT_ALLOCATION_WEIGHT,
     SEGMENT_SCORE_POINT_BLEND_WEIGHT,
+    SEGMENT_TRANSFER_CALIBRATION_MODE_NONE,
     blend_segment_support_scores,
     simplify_with_learned_segment_budget_v1,
 )
@@ -104,6 +105,7 @@ class MLQDSMethod:
     )
     learned_segment_allocation_weight_floor: float = SEGMENT_ALLOCATION_WEIGHT_FLOOR
     learned_segment_score_blend_weight: float = SEGMENT_SCORE_POINT_BLEND_WEIGHT
+    learned_segment_transfer_calibration_mode: str = SEGMENT_TRANSFER_CALIBRATION_MODE_NONE
     learned_segment_fairness_preallocation: bool = True
     learned_segment_length_repair_fraction: float = 0.0
     learned_segment_length_repair_score_protection_fraction: float = 0.0
@@ -179,6 +181,7 @@ class MLQDSMethod:
             float(self.learned_segment_allocation_length_support_weight),
             float(self.learned_segment_allocation_weight_floor),
             float(self.learned_segment_score_blend_weight),
+            str(self.learned_segment_transfer_calibration_mode),
             bool(self.learned_segment_fairness_preallocation),
             float(self.learned_segment_length_repair_fraction),
             float(self.learned_segment_length_repair_score_protection_fraction),
@@ -260,7 +263,7 @@ class MLQDSMethod:
                 self._path_length_support_score_cache = None
                 self._selector_segment_score_cache = None
                 try:
-                    segment_head_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index(
+                    segment_head_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index(
                         "segment_budget_target"
                     )
                 except ValueError:
@@ -270,7 +273,7 @@ class MLQDSMethod:
                         head_logits[:, segment_head_idx].detach().cpu().float()
                     )
                 try:
-                    path_length_head_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index(
+                    path_length_head_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index(
                         "path_length_support_target"
                     )
                 except ValueError:
@@ -346,6 +349,9 @@ class MLQDSMethod:
                 ),
                 segment_allocation_weight_floor=float(self.learned_segment_allocation_weight_floor),
                 segment_score_point_blend_weight=float(self.learned_segment_score_blend_weight),
+                segment_transfer_calibration_mode=str(
+                    self.learned_segment_transfer_calibration_mode
+                ),
                 fairness_preallocation_enabled=bool(self.learned_segment_fairness_preallocation),
                 length_repair_fraction=float(self.learned_segment_length_repair_fraction),
                 length_repair_score_protection_fraction=float(

@@ -13,7 +13,7 @@ with baseline and diagnostic methods.
 | `query_cache.py` | Retained-independent query/audit cache. |
 | `method_scoring.py` | Method execution and retained-mask scoring. |
 | `score_tables.py` | Text tables for reports. |
-| `query_useful_v1.py` | Active primary query-driven metric for `range_workload_v1`. |
+| `query_local_utility.py` | Active primary query-driven metric for `range_query_mix`. |
 
 ## Methods
 
@@ -30,12 +30,38 @@ Current range diagnostics:
 
 - `RangeUsefulLegacy`: retained old aggregate range usefulness audit for
   diagnostics and artifact comparability. It is not the primary metric for the
-  query-driven rework and cannot support final acceptance by itself.
+  query-driven system and cannot support final acceptance by itself.
 - `RangePointF1`: retained in-box point-hit F1. Useful, but too narrow for
   final claims.
-- `QueryUsefulV1`: active primary metric for the query-driven rework. It
-  combines retained query-hit support, query-local behavior, replacement
-  usefulness, and guardrails such as length preservation.
+- `QueryLocalUtility`: active primary metric for the query-driven system. It
+  combines direct query-point recall, query-local interpolation/turn/continuity
+  behavior, and light guardrails such as length preservation.
+
+`QueryLocalUtility` schema `5` group weights:
+
+| Group | Weight |
+| --- | --- |
+| `query_point_mass` | `0.50` |
+| `query_local_behavior` | `0.45` |
+| `global_sanity` | `0.05` |
+
+Schema `5` component weights:
+
+| Component | Weight |
+| --- | --- |
+| `query_point_recall` | `0.50` |
+| `query_local_interpolation_fidelity` | `0.20` |
+| `query_local_turn_change_coverage` | `0.15` |
+| `query_local_continuity` | `0.10` |
+| `endpoint_or_skeleton_sanity` | `0.02` |
+| `global_shape_guardrail_score` | `0.02` |
+| `length_preservation_guardrail` | `0.01` |
+
+Schema `5` uses direct audit fields only: `query_point_recall`,
+`range_query_local_interpolation_fidelity`, `range_turn_coverage`, and
+`range_gap_min_coverage`. It must not source point mass from legacy
+`range_point_f1`, and it must not fill missing behavior from older shape,
+temporal, average-gap, ship, boundary, or replacement components.
 
 Range audit components:
 
@@ -63,7 +89,7 @@ diagnostic ablations. Current benchmark work is range-only.
 ## Reporting Rules
 
 - Final benchmark audits should use exact retained-mask scoring.
-- `final_claim_summary` is allowed only for the QueryUsefulV1 protocol and must
+- `final_claim_summary` is allowed only for the QueryLocalUtility protocol and must
   block if required single-run gates or final-grid gates fail. Old RangeUseful
   results belong under `legacy_range_useful_summary`.
 - Checkpoint diagnostics may use cheaper sampling where explicitly configured.

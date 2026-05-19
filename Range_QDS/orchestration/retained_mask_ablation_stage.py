@@ -159,6 +159,9 @@ def freeze_retained_mask_ablations(
                     learned_segment_score_blend_weight=float(
                         config.model.learned_segment_score_blend_weight
                     ),
+                    learned_segment_transfer_calibration_mode=str(
+                        config.model.learned_segment_transfer_calibration_mode
+                    ),
                     learned_segment_fairness_preallocation=bool(
                         config.model.learned_segment_fairness_preallocation
                     ),
@@ -193,6 +196,9 @@ def freeze_retained_mask_ablations(
                     learned_segment_allocation_weight_floor=allocation_weight_floor,
                     learned_segment_score_blend_weight=float(
                         config.model.learned_segment_score_blend_weight
+                    ),
+                    learned_segment_transfer_calibration_mode=str(
+                        config.model.learned_segment_transfer_calibration_mode
                     ),
                     learned_segment_fairness_preallocation=bool(
                         config.model.learned_segment_fairness_preallocation
@@ -240,6 +246,9 @@ def freeze_retained_mask_ablations(
             learned_segment_score_blend_weight=float(
                 config.model.learned_segment_score_blend_weight
             ),
+            learned_segment_transfer_calibration_mode=str(
+                config.model.learned_segment_transfer_calibration_mode
+            ),
             learned_segment_fairness_preallocation=bool(
                 config.model.learned_segment_fairness_preallocation
             ),
@@ -278,6 +287,9 @@ def freeze_retained_mask_ablations(
             learned_segment_allocation_weight_floor=allocation_weight_floor,
             learned_segment_score_blend_weight=float(
                 config.model.learned_segment_score_blend_weight
+            ),
+            learned_segment_transfer_calibration_mode=str(
+                config.model.learned_segment_transfer_calibration_mode
             ),
             learned_segment_fairness_preallocation=bool(
                 config.model.learned_segment_fairness_preallocation
@@ -321,6 +333,9 @@ def freeze_retained_mask_ablations(
                 learned_segment_allocation_weight_floor=allocation_weight_floor,
                 learned_segment_score_blend_weight=float(
                     config.model.learned_segment_score_blend_weight
+                ),
+                learned_segment_transfer_calibration_mode=str(
+                    config.model.learned_segment_transfer_calibration_mode
                 ),
                 learned_segment_fairness_preallocation=bool(
                     config.model.learned_segment_fairness_preallocation
@@ -367,6 +382,9 @@ def freeze_retained_mask_ablations(
                 learned_segment_allocation_weight_floor=allocation_weight_floor,
                 learned_segment_score_blend_weight=float(
                     config.model.learned_segment_score_blend_weight
+                ),
+                learned_segment_transfer_calibration_mode=str(
+                    config.model.learned_segment_transfer_calibration_mode
                 ),
                 learned_segment_fairness_preallocation=bool(
                     config.model.learned_segment_fairness_preallocation
@@ -451,6 +469,9 @@ def freeze_retained_mask_ablations(
                     learned_segment_score_blend_weight=float(
                         config.model.learned_segment_score_blend_weight
                     ),
+                    learned_segment_transfer_calibration_mode=str(
+                        config.model.learned_segment_transfer_calibration_mode
+                    ),
                     learned_segment_fairness_preallocation=bool(
                         config.model.learned_segment_fairness_preallocation
                     ),
@@ -493,6 +514,9 @@ def freeze_retained_mask_ablations(
                 learned_segment_allocation_length_support_weight=allocation_length_support_weight,
                 learned_segment_allocation_weight_floor=allocation_weight_floor,
                 learned_segment_score_blend_weight=0.0,
+                learned_segment_transfer_calibration_mode=str(
+                    config.model.learned_segment_transfer_calibration_mode
+                ),
                 learned_segment_fairness_preallocation=bool(
                     config.model.learned_segment_fairness_preallocation
                 ),
@@ -542,6 +566,9 @@ def freeze_retained_mask_ablations(
                     learned_segment_score_blend_weight=float(
                         config.model.learned_segment_score_blend_weight
                     ),
+                    learned_segment_transfer_calibration_mode=str(
+                        config.model.learned_segment_transfer_calibration_mode
+                    ),
                     learned_segment_fairness_preallocation=False,
                     learned_segment_length_repair_fraction=float(
                         config.model.learned_segment_length_repair_fraction
@@ -570,6 +597,9 @@ def freeze_retained_mask_ablations(
                 learned_segment_allocation_weight_floor=allocation_weight_floor,
                 learned_segment_score_blend_weight=float(
                     config.model.learned_segment_score_blend_weight
+                ),
+                learned_segment_transfer_calibration_mode=str(
+                    config.model.learned_segment_transfer_calibration_mode
                 ),
                 learned_segment_fairness_preallocation=bool(
                     config.model.learned_segment_fairness_preallocation
@@ -614,6 +644,9 @@ def freeze_retained_mask_ablations(
                 learned_segment_allocation_weight_floor=allocation_weight_floor,
                 learned_segment_score_blend_weight=float(
                     config.model.learned_segment_score_blend_weight
+                ),
+                learned_segment_transfer_calibration_mode=str(
+                    config.model.learned_segment_transfer_calibration_mode
                 ),
                 learned_segment_fairness_preallocation=bool(
                     config.model.learned_segment_fairness_preallocation
@@ -688,6 +721,9 @@ def freeze_retained_mask_ablations(
                 learned_segment_allocation_weight_floor=allocation_weight_floor,
                 learned_segment_score_blend_weight=float(
                     config.model.learned_segment_score_blend_weight
+                ),
+                learned_segment_transfer_calibration_mode=str(
+                    config.model.learned_segment_transfer_calibration_mode
                 ),
                 learned_segment_fairness_preallocation=bool(
                     config.model.learned_segment_fairness_preallocation
@@ -777,6 +813,9 @@ def freeze_retained_mask_ablations(
                 learned_segment_allocation_weight_floor=allocation_weight_floor,
                 learned_segment_score_blend_weight=float(
                     config.model.learned_segment_score_blend_weight
+                ),
+                learned_segment_transfer_calibration_mode=str(
+                    config.model.learned_segment_transfer_calibration_mode
                 ),
                 learned_segment_fairness_preallocation=bool(
                     config.model.learned_segment_fairness_preallocation

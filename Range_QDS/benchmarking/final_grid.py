@@ -9,9 +9,9 @@ from benchmarking.common import (
     as_float,
     audit_ratio_prefix,
 )
-from workloads.generation.workload_profiles import RANGE_WORKLOAD_V1_FINAL_PROFILE_IDS
+from workloads.generation.workload_profiles import RANGE_QUERY_MIX_FINAL_PROFILE_IDS
 
-QUERY_DRIVEN_FINAL_WORKLOAD_PROFILE_IDS = RANGE_WORKLOAD_V1_FINAL_PROFILE_IDS
+QUERY_DRIVEN_FINAL_WORKLOAD_PROFILE_IDS = RANGE_QUERY_MIX_FINAL_PROFILE_IDS
 QUERY_DRIVEN_FINAL_COMPRESSION_RATIOS = (0.01, 0.02, 0.05, 0.10, 0.15, 0.20, 0.30)
 QUERY_DRIVEN_MIN_UNIFORM_WINS = 19
 QUERY_DRIVEN_MIN_DP_WINS = 24
@@ -38,7 +38,7 @@ def query_driven_final_grid_summary(
     rows: list[dict[str, Any]],
     run_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Return benchmark-level QueryUsefulV1 final-grid acceptance evidence."""
+    """Return benchmark-level QueryLocalUtility final-grid acceptance evidence."""
     run_config = run_config or {}
     profile_settings = run_config.get("profile_settings") or {}
     required_workload_profile_ids = tuple(
@@ -56,7 +56,7 @@ def query_driven_final_grid_summary(
         )
     )
     final_candidate = bool(profile_settings.get("final_product_candidate")) or any(
-        row.get("mlqds_primary_metric") == "query_useful_v1" for row in rows
+        row.get("mlqds_primary_metric") == "query_local_utility" for row in rows
     )
     profile_rows: dict[str, dict[str, Any]] = {}
     duplicate_workload_profile_ids: list[str] = []
@@ -91,22 +91,22 @@ def query_driven_final_grid_summary(
                 )
                 continue
             prefix = audit_ratio_prefix(ratio)
-            mlqds = as_float(row.get(f"{prefix}_mlqds_query_useful_v1"))
-            uniform = as_float(row.get(f"{prefix}_uniform_query_useful_v1"))
-            dp = as_float(row.get(f"{prefix}_douglas_peucker_query_useful_v1"))
+            mlqds = as_float(row.get(f"{prefix}_mlqds_query_local_utility"))
+            uniform = as_float(row.get(f"{prefix}_uniform_query_local_utility"))
+            dp = as_float(row.get(f"{prefix}_douglas_peucker_query_local_utility"))
             if mlqds is None or uniform is None or dp is None:
                 if _ratio_close(
                     _normalized_grid_float(row.get("compression_ratio")), ratio, tol=1e-6
                 ):
-                    mlqds = as_float(row.get("mlqds_query_useful_v1_score"))
-                    uniform = as_float(row.get("uniform_query_useful_v1_score"))
-                    dp = as_float(row.get("douglas_peucker_query_useful_v1_score"))
+                    mlqds = as_float(row.get("mlqds_query_local_utility_score"))
+                    uniform = as_float(row.get("uniform_query_local_utility_score"))
+                    dp = as_float(row.get("douglas_peucker_query_local_utility_score"))
             if mlqds is None or uniform is None or dp is None:
                 missing_cells.append(
                     {
                         "workload_profile_id": workload_profile_id,
                         "compression_ratio": float(ratio),
-                        "reason": "missing_query_useful_v1_scores",
+                        "reason": "missing_query_local_utility_scores",
                     }
                 )
                 continue
@@ -114,11 +114,11 @@ def query_driven_final_grid_summary(
                 {
                     "workload_profile_id": workload_profile_id,
                     "compression_ratio": float(ratio),
-                    "mlqds_query_useful_v1": float(mlqds),
-                    "uniform_query_useful_v1": float(uniform),
-                    "douglas_peucker_query_useful_v1": float(dp),
-                    "mlqds_vs_uniform_query_useful_v1": float(mlqds - uniform),
-                    "mlqds_vs_douglas_peucker_query_useful_v1": float(mlqds - dp),
+                    "mlqds_query_local_utility": float(mlqds),
+                    "uniform_query_local_utility": float(uniform),
+                    "douglas_peucker_query_local_utility": float(dp),
+                    "mlqds_vs_uniform_query_local_utility": float(mlqds - uniform),
+                    "mlqds_vs_douglas_peucker_query_local_utility": float(mlqds - dp),
                     "beats_uniform": bool(mlqds > uniform),
                     "beats_douglas_peucker": bool(mlqds > dp),
                     "low_budget": bool(ratio <= LOW_COMPRESSION_THRESHOLD),
@@ -201,7 +201,7 @@ def query_driven_final_grid_summary(
     )
     return {
         "schema_version": 1,
-        "primary_metric": "QueryUsefulV1",
+        "primary_metric": "QueryLocalUtility",
         "status": "final_grid_pass" if final_success_allowed else "final_grid_blocked",
         "final_success_allowed": final_success_allowed,
         "failed_checks": failed_checks,

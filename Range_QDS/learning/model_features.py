@@ -143,7 +143,7 @@ MODEL_TYPE_METADATA: dict[str, dict[str, object]] = {
     WORKLOAD_BLIND_RANGE_V2_MODEL_TYPE: {
         "model_family": "query_driven_factorized_workload_blind",
         "trainable_final_candidate": True,
-        "requires_query_useful_v1": True,
+        "requires_query_local_utility": True,
         "requires_prior_field_ablation": True,
         "requires_shuffled_score_ablation": True,
         "final_success_allowed": True,

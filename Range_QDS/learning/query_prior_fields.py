@@ -1,4 +1,4 @@
-"""Train-derived query prior fields for QueryUsefulV1 models."""
+"""Train-derived query prior fields for QueryLocalUtility models."""
 
 from __future__ import annotations
 
@@ -9,14 +9,14 @@ from typing import Any
 import torch
 import torch.nn.functional as F
 
-from workloads.generation.workload_profiles import RANGE_WORKLOAD_V1_PROFILE_ID
+from workloads.generation.workload_profiles import RANGE_QUERY_MIX_PROFILE_ID
 from workloads.range_geometry import points_in_range_box, segment_box_bracket_indices
 
 QUERY_PRIOR_FIELD_SCHEMA_VERSION = 3
 QUERY_PRIOR_FIELD_NAMES = (
     "spatial_query_hit_probability",
     "spatiotemporal_query_hit_probability",
-    "boundary_entry_exit_likelihood",
+    "endpoint_likelihood",
     "crossing_likelihood",
     "behavior_utility_prior",
     "route_density_prior",
@@ -305,7 +305,7 @@ def build_train_query_prior_fields(
     typed_queries: list[dict[str, Any]],
     labels: torch.Tensor | None = None,
     behavior_values: torch.Tensor | None = None,
-    workload_profile_id: str = RANGE_WORKLOAD_V1_PROFILE_ID,
+    workload_profile_id: str = RANGE_QUERY_MIX_PROFILE_ID,
     train_workload_seed: int | None = None,
     grid_bins: int = 64,
     time_bins: int = 24,
@@ -418,7 +418,7 @@ def build_train_query_prior_fields(
         "extent": extent,
         "spatial_query_hit_probability": spatial_query_grid,
         "spatiotemporal_query_hit_probability": spatiotemporal_query_grid,
-        "boundary_entry_exit_likelihood": boundary_grid,
+        "endpoint_likelihood": boundary_grid,
         "crossing_likelihood": crossing_grid,
         "behavior_utility_prior": behavior_grid,
         "route_density_prior": route_density_grid,
@@ -501,7 +501,7 @@ def sample_query_prior_fields(
         [
             spatial("spatial_query_hit_probability"),
             st_values,
-            spatial("boundary_entry_exit_likelihood"),
+            spatial("endpoint_likelihood"),
             spatial("crossing_likelihood"),
             spatial("behavior_utility_prior"),
             spatial("route_density_prior"),

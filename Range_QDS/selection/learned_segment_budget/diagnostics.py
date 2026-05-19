@@ -172,6 +172,19 @@ def _segment_source_attribution(
                 "segment_score": float(score_values[allocation_order_index]),
                 "segment_score_rank": int(score_ranks[allocation_order_index]),
                 "segment_score_source": str(row.get("score_source", "")),
+                "segment_transfer_calibration_mode": str(
+                    row.get("transfer_calibration_mode", "none")
+                ),
+                "segment_pre_transfer_calibration_score": (
+                    None
+                    if row.get("pre_transfer_calibration_score") is None
+                    else float(row.get("pre_transfer_calibration_score", 0.0))
+                ),
+                "segment_transfer_calibration_preliminary_allocation_weight": (
+                    None
+                    if row.get("transfer_calibration_preliminary_allocation_weight") is None
+                    else float(row.get("transfer_calibration_preliminary_allocation_weight", 0.0))
+                ),
                 "segment_length_support_score": float(
                     length_support_values[allocation_order_index]
                 ),
@@ -220,7 +233,7 @@ def _segment_source_attribution(
 def _safe_finite_float(value: Any, default: float = 0.0) -> float:
     try:
         number = float(value)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return float(default)
     return number if math.isfinite(number) else float(default)
 

@@ -24,7 +24,7 @@ BENCHMARK_CHILD_EXTRA_ARGS ?=
 BENCHMARK_PLAN_FILE ?=
 BENCHMARK_CONTINUE_ON_FAILURE ?= 0
 ATTACH ?=
-BENCHMARK_PROFILE ?= range_workload_v1_workload_blind_v2
+BENCHMARK_PROFILE ?= range_query_mix_workload_blind_v2
 BENCHMARK_FAMILY ?= Range_QDS/artifacts/benchmarks/query_driven_workload_blind_v2
 BENCHMARK_CACHE ?= Range_QDS/artifacts/cache/query_driven_workload_blind_v2
 QDS_BENCHMARK_FAMILY := $(patsubst Range_QDS/%,%,$(BENCHMARK_FAMILY))
@@ -54,7 +54,7 @@ help:
 	@echo "  range-benchmark-queue-tmux  Launch a sequential multi-seed range benchmark queue in tmux"
 	@echo "  inspect-run  Print compact jq run summary from RUN"
 	@echo "  inspect-gates  Print jq gate diagnostics from RUN"
-	@echo "  inspect-scores  Print jq QueryUsefulV1 scores from RUN"
+	@echo "  inspect-scores  Print jq QueryLocalUtility scores from RUN"
 	@echo "  inspect-causality  Print jq causality diagnostics from RUN"
 	@echo "  inspect-generator  Print jq generator diagnostics from RUN"
 	@echo "  inspect-predictability  Print jq predictability diagnostics from RUN"

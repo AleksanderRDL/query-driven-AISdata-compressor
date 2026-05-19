@@ -2,7 +2,7 @@
 
 This is the active operational reference for local developer tooling. The
 scientific protocol and acceptance gates remain in
-[`query-driven-rework-guide.md`](query-driven-rework-guide.md).
+[`query-driven-implementation-research-guide.md`](query-driven-implementation-research-guide.md).
 
 ## Tooling Principles
 
@@ -112,7 +112,7 @@ Good targets:
 - `selection/learned_segment_budget/length_repair.py`
 - `selection/learned_segment_budget/diagnostics.py`
 - `selection/learned_segment_budget/trace.py`
-- `scoring/query_useful_v1.py`
+- `scoring/query_local_utility.py`
 - `scoring/method_scoring.py`
 - `orchestration/range_diagnostics.py`
 
@@ -121,7 +121,7 @@ Good properties:
 - profile query plans sum exactly to requested count
 - prefix-balanced plans do not create avoidable family drift
 - coverage guards keep generated workloads near requested targets
-- `range_workload_v1` does not silently fall back to uncovered-anchor chasing
+- `range_query_mix` does not silently fall back to uncovered-anchor chasing
 - zeroed prior fields preserve extent, bins, metadata, and tensor shape
 - out-of-extent zero mode returns zero sampled prior features
 - selector masks never exceed retained budget
@@ -238,13 +238,13 @@ uv lock --check
 git diff --check
 uv run --group dev -- yamllint .
 uv run --group dev -- pytest Range_QDS/tests/property Range_QDS/tests/regression -q
-uv run --group dev -- pytest Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/unit/benchmarking/test_runner.py -q
+uv run --group dev -- pytest Range_QDS/tests/unit/orchestration/test_query_driven_*.py Range_QDS/tests/unit/learning/test_query_local_utility_*.py Range_QDS/tests/unit/selection/test_query_driven_learned_segment_budget.py Range_QDS/tests/unit/workloads/test_query_driven_profiles.py Range_QDS/tests/unit/benchmarking/test_runner.py -q
 ```
 
 For code checkpoints touching model, selector, query generation, metrics, or
 benchmark reporting, also run the focused tests named in
-`query-driven-rework-guide.md` and the full `Range_QDS/tests` suite when the
-blast radius justifies it.
+`query-driven-implementation-research-guide.md` and the full `Range_QDS/tests`
+suite when the blast radius justifies it.
 
 ## Policy
 
@@ -252,4 +252,4 @@ blast radius justifies it.
 - Keep acceptance logic in Python code/tests, not jq or shell wrappers.
 - Update regression snapshots only after reviewing an intentional schema change.
 - Keep one-off run or benchmark hacks out of production paths.
-- Record extra discoveries in `query-driven-rework-progress.md`.
+- Record extra discoveries in `query-driven-implementation-progress.md`.

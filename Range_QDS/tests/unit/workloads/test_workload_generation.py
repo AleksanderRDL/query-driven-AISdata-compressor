@@ -43,12 +43,12 @@ def _near_dense_region(lat: float, lon: float) -> bool:
 def test_missing_range_family_metadata_is_reported_as_unspecified() -> None:
     queries = [
         {"type": "range", "params": {}},
-        {"type": "range", "params": {}, "_metadata": {"anchor_family": "density_route"}},
+        {"type": "range", "params": {}, "_metadata": {"anchor_family": "density"}},
     ]
 
     assert _counts_from_metadata(queries, "anchor_family") == {
         "unspecified": 1,
-        "density_route": 1,
+        "density": 1,
     }
 
 
@@ -114,7 +114,7 @@ def test_coverage_generation_profile_calibrated_mode_keeps_requested_query_floor
         seed=1818,
         target_coverage=0.05,
         max_queries=300,
-        workload_profile_id="range_workload_v1",
+        workload_profile_id="range_query_mix",
         range_max_coverage_overshoot=0.0075,
         range_acceptance_max_attempts=6000,
     )

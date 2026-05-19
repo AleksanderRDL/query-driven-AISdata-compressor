@@ -14,15 +14,15 @@ from config.run_config import (
 )
 from learning.model_features import WORKLOAD_BLIND_RANGE_V2_MODEL_TYPE
 from learning.outputs import TrainingOutputs
-from learning.targets.query_useful_v1 import QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE
+from learning.targets.query_local_utility import QUERY_LOCAL_UTILITY_FACTORIZED_TARGET_MODE
 from orchestration.causality import (
     LEARNING_CAUSALITY_MIN_MATERIAL_DELTA,
     build_learned_slot_summary,
     causality_ablation_tradeoff_summary,
     learning_causality_delta_gate_config,
     prior_sample_gate_failures,
-    query_useful_component_delta_summary,
-    query_useful_delta,
+    query_local_utility_component_delta_summary,
+    query_local_utility_delta,
 )
 from orchestration.gates import (
     evaluate_global_sanity_gate,
@@ -35,7 +35,7 @@ from selection.selector_types import (
     LEARNED_SEGMENT_BUDGET_SELECTOR_TYPE,
     TEMPORAL_HYBRID_SELECTOR_TYPE,
 )
-from workloads.generation.workload_profiles import RANGE_WORKLOAD_V1_FINAL_PROFILE_IDS
+from workloads.generation.workload_profiles import RANGE_QUERY_MIX_FINAL_PROFILE_IDS
 
 
 @dataclass(frozen=True)
@@ -111,10 +111,10 @@ def build_final_run_summaries(
     target_diffusion_gate = evaluate_target_diffusion_gate(trained.target_diagnostics)
     target_diffusion_gate_pass = bool(target_diffusion_gate.get("gate_pass", False))
     final_candidate = (
-        str(config.query.workload_profile_id or "").lower() in RANGE_WORKLOAD_V1_FINAL_PROFILE_IDS
+        str(config.query.workload_profile_id or "").lower() in RANGE_QUERY_MIX_FINAL_PROFILE_IDS
         and str(config.model.model_type).lower() == WORKLOAD_BLIND_RANGE_V2_MODEL_TYPE
         and str(config.model.range_training_target_mode).lower()
-        == QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE
+        == QUERY_LOCAL_UTILITY_FACTORIZED_TARGET_MODE
         and str(getattr(config.model, "selector_type", "")).lower()
         == LEARNED_SEGMENT_BUDGET_SELECTOR_TYPE
     )
@@ -138,43 +138,43 @@ def build_final_run_summaries(
         primary_selector_trace,
     )
     primary_score = matched["MLQDS"]
-    shuffled_delta = query_useful_delta(
+    shuffled_delta = query_local_utility_delta(
         primary_score, causality_ablation_scores, "MLQDS_shuffled_scores"
     )
-    prior_only_delta = query_useful_delta(
+    prior_only_delta = query_local_utility_delta(
         primary_score,
         causality_ablation_scores,
         "MLQDS_prior_field_only_score",
     )
-    untrained_delta = query_useful_delta(
+    untrained_delta = query_local_utility_delta(
         primary_score, causality_ablation_scores, "MLQDS_untrained_model"
     )
-    shuffled_prior_delta = query_useful_delta(
+    shuffled_prior_delta = query_local_utility_delta(
         primary_score,
         causality_ablation_scores,
         "MLQDS_shuffled_prior_fields",
     )
-    no_query_prior_delta = query_useful_delta(
+    no_query_prior_delta = query_local_utility_delta(
         primary_score,
         causality_ablation_scores,
         "MLQDS_without_query_prior_features",
     )
-    no_behavior_head_delta = query_useful_delta(
+    no_behavior_head_delta = query_local_utility_delta(
         primary_score,
         causality_ablation_scores,
         "MLQDS_without_behavior_utility_head",
     )
-    no_segment_budget_head_delta = query_useful_delta(
+    no_segment_budget_head_delta = query_local_utility_delta(
         primary_score,
         causality_ablation_scores,
         "MLQDS_without_segment_budget_head",
     )
-    no_fairness_preallocation_delta = query_useful_delta(
+    no_fairness_preallocation_delta = query_local_utility_delta(
         primary_score,
         causality_ablation_scores,
         "MLQDS_without_trajectory_fairness_preallocation",
     )
-    no_geometry_tie_breaker_delta = query_useful_delta(
+    no_geometry_tie_breaker_delta = query_local_utility_delta(
         primary_score,
         causality_ablation_scores,
         "MLQDS_without_geometry_tie_breaker",
@@ -193,12 +193,12 @@ def build_final_run_summaries(
             DEFAULT_LEARNED_SEGMENT_ALLOCATION_WEIGHT_FLOOR,
         )
     )
-    no_segment_length_support_allocation_delta = query_useful_delta(
+    no_segment_length_support_allocation_delta = query_local_utility_delta(
         primary_score,
         causality_ablation_scores,
         "MLQDS_without_segment_length_support_allocation",
     )
-    causality_ablation_component_deltas = query_useful_component_delta_summary(
+    causality_ablation_component_deltas = query_local_utility_component_delta_summary(
         primary=primary_score,
         ablations=causality_ablation_scores,
     )
@@ -208,7 +208,7 @@ def build_final_run_summaries(
     )
     for name, tradeoff_diagnostics in causality_ablation_tradeoff_diagnostics.items():
         if name in head_ablation_sensitivity_diagnostics:
-            head_ablation_sensitivity_diagnostics[name]["query_useful_component_tradeoff"] = (
+            head_ablation_sensitivity_diagnostics[name]["query_local_utility_component_tradeoff"] = (
                 tradeoff_diagnostics
             )
     for _prior_channel_name, channel_diagnostics in prior_channel_ablation_diagnostics.items():
@@ -219,10 +219,10 @@ def build_final_run_summaries(
         method_name = str(channel_diagnostics.get("method_name", ""))
         channel_score = causality_ablation_scores.get(method_name)
         if channel_score is not None:
-            channel_diagnostics["query_useful_v1_score"] = float(
-                channel_score.query_useful_v1_score
+            channel_diagnostics["query_local_utility_score"] = float(
+                channel_score.query_local_utility_score
             )
-            channel_diagnostics["query_useful_v1_delta"] = query_useful_delta(
+            channel_diagnostics["query_local_utility_delta"] = query_local_utility_delta(
                 primary_score,
                 causality_ablation_scores,
                 method_name,
@@ -230,11 +230,11 @@ def build_final_run_summaries(
         if method_name in causality_ablation_mask_diagnostics:
             channel_diagnostics["retained_mask"] = causality_ablation_mask_diagnostics[method_name]
         if method_name in causality_ablation_component_deltas:
-            channel_diagnostics["query_useful_component_deltas"] = (
+            channel_diagnostics["query_local_utility_component_deltas"] = (
                 causality_ablation_component_deltas[method_name]
             )
         if method_name in causality_ablation_tradeoff_diagnostics:
-            channel_diagnostics["query_useful_component_tradeoff"] = (
+            channel_diagnostics["query_local_utility_component_tradeoff"] = (
                 causality_ablation_tradeoff_diagnostics[method_name]
             )
     required_causality_ablation_names = (
@@ -320,6 +320,9 @@ def build_final_run_summaries(
             "allocation_length_support_weight": allocation_length_support_weight,
             "allocation_weight_floor": allocation_weight_floor,
             "segment_score_blend_weight": float(config.model.learned_segment_score_blend_weight),
+            "segment_transfer_calibration_mode": str(
+                getattr(config.model, "learned_segment_transfer_calibration_mode", "none")
+            ),
             "fairness_preallocation_enabled": bool(
                 config.model.learned_segment_fairness_preallocation
             ),
@@ -337,7 +340,7 @@ def build_final_run_summaries(
         "prior_sensitivity_diagnostics": prior_sensitivity_diagnostics,
         "prior_channel_ablation_diagnostics": prior_channel_ablation_diagnostics,
         "head_ablation_sensitivity_diagnostics": head_ablation_sensitivity_diagnostics,
-        "selection_causality_diagnostics": selection_causality_diagnostics,
+        "selection_causality_diagnostics": dict(selection_causality_diagnostics),
         "segment_oracle_allocation_audit": segment_oracle_allocation_audit,
         "target_segment_oracle_alignment_audit": target_segment_oracle_alignment_audit,
         "score_protected_length_feasibility": (
@@ -353,7 +356,7 @@ def build_final_run_summaries(
         "prior_sample_gate_pass": not prior_sample_failures,
         "prior_sample_gate_failures": prior_sample_failures,
         "causality_ablation_scores": {
-            name: metrics.query_useful_v1_score
+            name: metrics.query_local_utility_score
             for name, metrics in causality_ablation_scores.items()
         },
         "causality_ablation_component_deltas": causality_ablation_component_deltas,
@@ -408,7 +411,7 @@ def build_final_run_summaries(
                 "full workload-profile/compression grid."
             )
         final_claim_summary = {
-            "primary_metric": "QueryUsefulV1",
+            "primary_metric": "QueryLocalUtility",
             "status": "candidate_blocked_by_required_gates"
             if blocking_gates
             else "candidate_ready_for_final_claim",
@@ -422,12 +425,12 @@ def build_final_run_summaries(
             "workload_signature_gate_pass": signature_gate_pass,
             "learning_causality_gate_pass": learning_causality_gate_pass,
             "global_sanity_gate_pass": global_sanity_gate_pass,
-            "mlqds_score": matched["MLQDS"].query_useful_v1_score,
-            "uniform_score": uniform_score.query_useful_v1_score
+            "mlqds_score": matched["MLQDS"].query_local_utility_score,
+            "uniform_score": uniform_score.query_local_utility_score
             if uniform_score is not None
             else None,
             "douglas_peucker_score": (
-                douglas_peucker_score.query_useful_v1_score
+                douglas_peucker_score.query_local_utility_score
                 if douglas_peucker_score is not None
                 else None
             ),
@@ -438,14 +441,14 @@ def build_final_run_summaries(
             "primary_metric": None,
             "status": "not_final_query_driven_candidate",
             "final_success_allowed": False,
-            "reason": "Requires range_workload_v1, QueryUsefulV1 factorized target, workload_blind_range_v2, and learned_segment_budget_v1.",
+            "reason": "Requires range_query_mix, QueryLocalUtility factorized target, workload_blind_range_v2, and learned_segment_budget_v1.",
         }
     learning_causality_summary["final_success_allowed"] = bool(
         final_candidate and not blocking_gates
     )
     diagnostic_summary = {
         "legacy_range_useful_available": True,
-        "query_useful_v1_available": True,
+        "query_local_utility_available": True,
         "range_component_diagnostics_available": True,
         "workload_blind_protocol_available": True,
         "predictability_audit_available": bool(predictability_audit.get("available", False)),

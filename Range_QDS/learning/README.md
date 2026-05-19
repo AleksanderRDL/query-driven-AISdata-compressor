@@ -8,7 +8,7 @@ inference helpers. Retained-mask construction belongs in `../selection/`.
 
 | File | Purpose |
 | --- | --- |
-| `targets/query_useful_v1.py` | Factorized QueryUsefulV1 label construction. |
+| `targets/query_local_utility.py` | Factorized QueryLocalUtility label construction. |
 | `targets/modes.py` | Public range target mode registries for CLI/config choices. |
 | `targets/common.py` | Shared scalar target scaling, budgeting, balancing, and temporal-base helpers. |
 | `targets/retained_frequency.py` | Retained-frequency, global-budget, and historical-prior scalar diagnostics. |
@@ -27,7 +27,7 @@ inference helpers. Retained-mask construction belongs in `../selection/`.
 | `checkpoint_selection.py` | Checkpoint candidate scoring and validation-stat bookkeeping. |
 | `model_training.py` | Main fitting loop, validation cadence, and checkpoint-selection orchestration. |
 | `factorized_target_diagnostics.py` | Factorized target support, entropy, top-k mass, and segment-position diagnostics. |
-| `factorized_head_diagnostics.py` | Factorized QueryUsefulV1 head bias initialization and training-fit diagnostics. |
+| `factorized_head_diagnostics.py` | Factorized QueryLocalUtility head bias initialization and training-fit diagnostics. |
 | `checkpoints.py` / `inference.py` | Save/load and deterministic prediction. |
 | `trajectory_batching.py` / `supervised_windows.py` | Window construction without crossing trajectory boundaries. |
 | `optimization_epoch.py` / `model_setup.py` | Epoch optimizer mechanics and model setup helpers. |
@@ -37,33 +37,41 @@ inference helpers. Retained-mask construction belongs in `../selection/`.
 
 The current candidate path is workload-blind at compression time:
 
-1. Generate train-only `range_workload_v1` workloads.
-2. Build factorized `QueryUsefulV1` labels.
+1. Generate train-only `range_query_mix` workloads.
+2. Build factorized `QueryLocalUtility` labels.
 3. Build train-derived query-prior fields.
 4. Train `workload_blind_range_v2` from query-free point/context/prior features.
 5. Select checkpoints without final eval-query scoring.
 6. Freeze retained masks before held-out eval queries are scored.
 
 The acceptance contract is in
-[`../docs/query-driven-rework-guide.md`](../docs/query-driven-rework-guide.md).
+[`../docs/query-driven-implementation-research-guide.md`](../docs/query-driven-implementation-research-guide.md).
 
 ## Final-Candidate Settings
 
 | Setting | Active value |
 | --- | --- |
-| `workload_profile_id` | `range_workload_v1` |
+| `workload_profile_id` | `range_query_mix` |
 | `model_type` | `workload_blind_range_v2` |
-| `range_training_target_mode` | `query_useful_v1_factorized` |
+| `range_training_target_mode` | `query_local_utility_factorized` |
 | `selector_type` | `learned_segment_budget_v1` |
-| `checkpoint_score_variant` | `query_useful_v1` |
+| `checkpoint_score_variant` | `query_local_utility` |
 | `checkpoint_selection_metric` | `uniform_gap` |
 
 These settings are necessary but not sufficient. Final claims still require the
 guide's single-cell and final-grid gates.
 
+The active supervision stack is calibrated to `QueryLocalUtility` schema `5`:
+direct `query_point_recall` carries `0.50`, query-local interpolation/turn/
+continuity carries `0.45`, and global sanity guardrails carry `0.05`. The
+matching workload prior is the two-footprint `range_query_mix` profile:
+`density=0.80`, `sparse_background_control=0.20`,
+`medium_operational=0.6923076923076923`, and
+`large_context=0.3076923076923077`.
+
 ## Targets
 
-`query_useful_v1_factorized` is the active target family. It keeps query-hit,
+`query_local_utility_factorized` is the active target family. It keeps query-hit,
 behavior, replacement, segment-budget, and prior-related signals separate
 instead of collapsing them into one RangeUseful scalar.
 
@@ -90,7 +98,7 @@ when the checkpoint hypothesis explicitly needs that diagnostic path.
 diagnostic or teacher-only paths. Final blind candidates must score without
 future eval query features.
 
-`workload_blind_range_v2` is the active trainable QueryUsefulV1 candidate.
+`workload_blind_range_v2` is the active trainable QueryLocalUtility candidate.
 Other workload-blind and historical-prior feature families remain diagnostic or
 compatibility paths; they must beat or explain their non-learned controls before
 claiming learned value.

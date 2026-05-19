@@ -1,4 +1,4 @@
-"""Guardrails for active Range_QDS rework cleanup decisions."""
+"""Guardrails for active Range_QDS implementation cleanup decisions."""
 
 from __future__ import annotations
 
@@ -8,14 +8,14 @@ from pathlib import Path
 
 import pytest
 
-import learning.targets.query_useful_v1 as query_useful_targets
+import learning.targets.query_local_utility as query_local_utility_targets
 from benchmarking.profiles import (
     BLIND_EXPECTED_USEFULNESS_PROFILE,
     BLIND_RETAINED_FREQUENCY_PROFILE,
     BLIND_TEACHER_DISTILL_PROFILE,
     DEFAULT_PROFILE,
     PROFILE_CHOICES,
-    RANGE_WORKLOAD_V1_WORKLOAD_BLIND_V2_PROFILE,
+    RANGE_QUERY_MIX_WORKLOAD_BLIND_V2_PROFILE,
     benchmark_profile,
     benchmark_profile_args,
     benchmark_profile_settings,
@@ -23,7 +23,11 @@ from benchmarking.profiles import (
 from benchmarking.reporting.row_fields import _row_from_run
 from learning.model_features import model_type_metadata
 from learning.targets.modes import SCALAR_RANGE_TARGET_MODES
-from learning.targets.query_useful_v1 import QUERY_USEFUL_V1_TARGET_MODES
+from learning.targets.query_local_utility import (
+    QUERY_LOCAL_UTILITY_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE,
+    QUERY_LOCAL_UTILITY_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE,
+    QUERY_LOCAL_UTILITY_TARGET_MODES,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -43,8 +47,8 @@ def test_removed_compatibility_shims_stay_removed(module_name: str) -> None:
     assert importlib.util.find_spec(module_name) is None
 
 
-def test_removed_query_useful_target_build_alias_stays_removed() -> None:
-    assert not hasattr(query_useful_targets, "build")
+def test_removed_query_local_utility_target_build_alias_stays_removed() -> None:
+    assert not hasattr(query_local_utility_targets, "build")
 
 
 def test_orchestration_production_modules_do_not_cross_import_private_helpers() -> None:
@@ -120,13 +124,13 @@ def test_advertised_benchmark_profiles_are_implemented() -> None:
 
 
 def test_query_driven_v2_profile_is_final_candidate() -> None:
-    profile = benchmark_profile(RANGE_WORKLOAD_V1_WORKLOAD_BLIND_V2_PROFILE)
-    settings = benchmark_profile_settings(RANGE_WORKLOAD_V1_WORKLOAD_BLIND_V2_PROFILE)
-    args = benchmark_profile_args(RANGE_WORKLOAD_V1_WORKLOAD_BLIND_V2_PROFILE)
+    profile = benchmark_profile(RANGE_QUERY_MIX_WORKLOAD_BLIND_V2_PROFILE)
+    settings = benchmark_profile_settings(RANGE_QUERY_MIX_WORKLOAD_BLIND_V2_PROFILE)
+    args = benchmark_profile_args(RANGE_QUERY_MIX_WORKLOAD_BLIND_V2_PROFILE)
 
     assert profile.model_type == "workload_blind_range_v2"
-    assert profile.range_training_target_mode == "query_useful_v1_factorized"
-    assert profile.workload_profile_id == "range_workload_v1"
+    assert profile.range_training_target_mode == "query_local_utility_factorized"
+    assert profile.workload_profile_id == "range_query_mix"
     assert profile.selector_type == "learned_segment_budget_v1"
     assert profile.range_train_workload_replicates == 4
     assert profile.query_coverage is None
@@ -134,12 +138,12 @@ def test_query_driven_v2_profile_is_final_candidate() -> None:
     assert settings["workload_profile_default_target_coverage"] == 0.30
     assert settings["workload_profile_default_max_coverage_overshoot"] == 0.020
     assert settings["range_workload_profile_sweep_ids"] == [
-        "range_workload_v1_focused",
-        "range_workload_v1_local",
-        "range_workload_v1_operational",
-        "range_workload_v1",
+        "range_query_mix_focused",
+        "range_query_mix_local",
+        "range_query_mix_operational",
+        "range_query_mix",
     ]
-    assert settings["primary_metric_family"] == "QueryUsefulV1"
+    assert settings["primary_metric_family"] == "QueryLocalUtility"
     assert settings["final_success_allowed"] is True
     assert settings["range_train_workload_replicates"] == 4
     assert settings["profile_diagnostic_only"] is False
@@ -148,11 +152,22 @@ def test_query_driven_v2_profile_is_final_candidate() -> None:
     assert args[args.index("--range_train_workload_replicates") + 1] == "4"
 
 
-def test_scalar_and_query_useful_target_modes_are_separated() -> None:
+def test_scalar_and_query_local_utility_target_modes_are_separated() -> None:
     assert "retained_frequency" in SCALAR_RANGE_TARGET_MODES
     assert "historical_prior_retained_frequency" in SCALAR_RANGE_TARGET_MODES
-    assert "query_useful_v1_factorized" not in SCALAR_RANGE_TARGET_MODES
-    assert QUERY_USEFUL_V1_TARGET_MODES == frozenset({"query_useful_v1_factorized"})
+    assert "query_local_utility_factorized" not in SCALAR_RANGE_TARGET_MODES
+    assert (
+        QUERY_LOCAL_UTILITY_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE
+        not in SCALAR_RANGE_TARGET_MODES
+    )
+    assert QUERY_LOCAL_UTILITY_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE not in SCALAR_RANGE_TARGET_MODES
+    assert QUERY_LOCAL_UTILITY_TARGET_MODES == frozenset(
+        {
+            "query_local_utility_factorized",
+            QUERY_LOCAL_UTILITY_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE,
+            QUERY_LOCAL_UTILITY_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE,
+        }
+    )
 
 
 def test_historical_prior_metadata_blocks_success() -> None:
@@ -169,7 +184,7 @@ def test_historical_prior_metadata_blocks_success() -> None:
 def test_benchmark_row_separates_final_claim_from_legacy_range_useful(tmp_path: Path) -> None:
     row = _row_from_run(
         workload="range",
-        run_label="legacy",
+        run_label="range_useful_diagnostic",
         command=["python", "-m", "orchestration.train_and_score"],
         returncode=0,
         elapsed_seconds=1.0,
@@ -180,7 +195,7 @@ def test_benchmark_row_separates_final_claim_from_legacy_range_useful(tmp_path: 
         run_json={
             "final_claim_summary": {
                 "primary_metric": None,
-                "status": "not_available_until_query_useful_v1",
+                "status": "not_available_until_query_local_utility",
                 "final_success_allowed": False,
             },
             "legacy_range_useful_summary": {
@@ -210,7 +225,7 @@ def test_benchmark_row_separates_final_claim_from_legacy_range_useful(tmp_path: 
         },
     )
 
-    assert row["final_claim_status"] == "not_available_until_query_useful_v1"
+    assert row["final_claim_status"] == "not_available_until_query_local_utility"
     assert row["final_success_allowed"] is False
     assert row["legacy_range_useful_diagnostic_only"] is True
     assert row["model_metadata_model_family"] == "historical_prior_knn"

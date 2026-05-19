@@ -26,7 +26,7 @@ from orchestration.segment_audits import (
     segment_oracle_allocation_audit,
     target_segment_oracle_alignment_audit,
 )
-from scoring.method_scoring import score_method
+from scoring.method_scoring import RANGE_QUERY_COMPONENT_KEYS, score_method
 from scoring.methods import FrozenMaskMethod, Method, OracleMethod
 from scoring.metrics import MethodScore
 from scoring.score_tables import (
@@ -40,6 +40,182 @@ from workloads.query_types import single_workload_type
 from workloads.typed_workload import TypedQueryWorkload
 
 PhaseLogger = Callable[[str], AbstractContextManager[None]]
+
+
+def _range_query_metadata_summary(metrics: MethodScore) -> dict[str, Any] | None:
+    payload = metrics.range_audit.get("range_query_metadata_component_summary")
+    if isinstance(payload, dict) and bool(payload.get("available", False)):
+        return payload
+    return None
+
+
+def _top_component_deltas(
+    component_deltas: dict[str, float],
+    *,
+    reverse: bool,
+) -> list[dict[str, float | str]]:
+    signed_deltas = {
+        component: delta
+        for component, delta in component_deltas.items()
+        if (delta > 0.0 if reverse else delta < 0.0)
+    }
+    return [
+        {"component": component, "delta": float(delta)}
+        for component, delta in sorted(
+            signed_deltas.items(),
+            key=lambda item: item[1],
+            reverse=reverse,
+        )[:5]
+    ]
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return float(default)
+    if result != result:
+        return float(default)
+    return float(result)
+
+
+def _family_group_comparison(
+    *,
+    primary_group: dict[str, Any],
+    baseline_group: dict[str, Any],
+) -> dict[str, Any]:
+    primary_components = primary_group.get("range_components")
+    baseline_components = baseline_group.get("range_components")
+    if not isinstance(primary_components, dict) or not isinstance(baseline_components, dict):
+        return {"available": False, "reason": "missing_range_components"}
+
+    component_deltas: dict[str, float] = {}
+    for key in RANGE_QUERY_COMPONENT_KEYS:
+        component_deltas[key] = float(primary_components.get(key, 0.0)) - float(
+            baseline_components.get(key, 0.0)
+        )
+    primary_query_local = float(
+        primary_group.get("query_local_utility_query_local_weighted_score_normalized", 0.0)
+    )
+    baseline_query_local = float(
+        baseline_group.get("query_local_utility_query_local_weighted_score_normalized", 0.0)
+    )
+    primary_ship_evidence = primary_group.get("ship_evidence_counts")
+    baseline_ship_evidence = baseline_group.get("ship_evidence_counts")
+    ship_evidence_deltas: dict[str, float] = {}
+    if isinstance(primary_ship_evidence, dict) and isinstance(baseline_ship_evidence, dict):
+        for key in sorted(set(primary_ship_evidence) | set(baseline_ship_evidence)):
+            ship_evidence_deltas[str(key)] = _safe_float(
+                primary_ship_evidence.get(key)
+            ) - _safe_float(
+                baseline_ship_evidence.get(key)
+            )
+    return {
+        "available": True,
+        "query_count": int(primary_group.get("query_count", 0) or 0),
+        "baseline_query_count": int(baseline_group.get("query_count", 0) or 0),
+        "primary_query_local_score_normalized": primary_query_local,
+        "baseline_query_local_score_normalized": baseline_query_local,
+        "query_local_score_delta": float(primary_query_local - baseline_query_local),
+        "primary_range_usefulness_score": float(primary_group.get("range_usefulness_score", 0.0)),
+        "baseline_range_usefulness_score": float(
+            baseline_group.get("range_usefulness_score", 0.0)
+        ),
+        "range_usefulness_delta": float(
+            float(primary_group.get("range_usefulness_score", 0.0))
+            - float(baseline_group.get("range_usefulness_score", 0.0))
+        ),
+        "range_component_deltas": component_deltas,
+        "top_primary_better_component_deltas": _top_component_deltas(
+            component_deltas,
+            reverse=True,
+        ),
+        "top_baseline_better_component_deltas": _top_component_deltas(
+            component_deltas,
+            reverse=False,
+        ),
+        "primary_ship_evidence_counts": (
+            primary_ship_evidence if isinstance(primary_ship_evidence, dict) else {}
+        ),
+        "baseline_ship_evidence_counts": (
+            baseline_ship_evidence if isinstance(baseline_ship_evidence, dict) else {}
+        ),
+        "ship_evidence_count_deltas": ship_evidence_deltas,
+    }
+
+
+def build_workload_scoring_compatibility_diagnostics(
+    matched: dict[str, MethodScore],
+) -> dict[str, Any]:
+    """Compare query-family score components for MLQDS and matched baselines."""
+    primary = matched.get("MLQDS")
+    if primary is None:
+        return {
+            "available": False,
+            "diagnostic_only": True,
+            "schema_version": 1,
+            "reason": "missing_primary_method",
+        }
+    primary_summary = _range_query_metadata_summary(primary)
+    if primary_summary is None:
+        return {
+            "available": False,
+            "diagnostic_only": True,
+            "schema_version": 1,
+            "reason": "missing_primary_range_query_metadata_component_summary",
+        }
+
+    baseline_names: list[str] = []
+    for name in ("uniform", "DouglasPeucker"):
+        metrics = matched.get(name)
+        if metrics is not None and _range_query_metadata_summary(metrics) is not None:
+            baseline_names.append(name)
+    if not baseline_names:
+        return {
+            "available": False,
+            "diagnostic_only": True,
+            "schema_version": 1,
+            "reason": "missing_baseline_range_query_metadata_component_summary",
+            "primary_method": "MLQDS",
+        }
+
+    comparisons: dict[str, Any] = {}
+    primary_group_by = primary_summary.get("group_by", {})
+    for baseline_name in baseline_names:
+        baseline = matched[baseline_name]
+        baseline_summary = _range_query_metadata_summary(baseline)
+        if baseline_summary is None:
+            continue
+        baseline_group_by = baseline_summary.get("group_by", {})
+        baseline_comparisons: dict[str, Any] = {}
+        if isinstance(primary_group_by, dict) and isinstance(baseline_group_by, dict):
+            for group_type, primary_groups in primary_group_by.items():
+                baseline_groups = baseline_group_by.get(group_type)
+                if not isinstance(primary_groups, dict) or not isinstance(baseline_groups, dict):
+                    continue
+                group_payload: dict[str, Any] = {}
+                for group_key, primary_group in primary_groups.items():
+                    baseline_group = baseline_groups.get(group_key)
+                    if isinstance(primary_group, dict) and isinstance(baseline_group, dict):
+                        group_payload[str(group_key)] = _family_group_comparison(
+                            primary_group=primary_group,
+                            baseline_group=baseline_group,
+                        )
+                baseline_comparisons[str(group_type)] = group_payload
+        comparisons[baseline_name] = baseline_comparisons
+
+    return {
+        "available": True,
+        "diagnostic_only": True,
+        "schema_version": 1,
+        "purpose": "workload_profile_scoring_component_compatibility",
+        "primary_method": "MLQDS",
+        "baseline_methods": baseline_names,
+        "component_keys": list(RANGE_QUERY_COMPONENT_KEYS),
+        "source": "matched.method.range_audit.range_query_metadata_component_summary",
+        "query_rows_in_matched_range_audit_only": True,
+        "comparisons_vs_baseline": comparisons,
+    }
 
 
 @dataclass
@@ -56,6 +232,7 @@ class ScoringStageOutputs:
     causality_ablation_mask_diagnostics: dict[str, dict[str, Any]]
     range_compression_audit: dict[str, dict[str, Any]]
     range_compression_audit_table: str
+    workload_scoring_compatibility_diagnostics: dict[str, Any]
     shift_pairs: dict[str, dict[str, float]]
     shift_table: str
     segment_oracle_allocation_audit: dict[str, Any]
@@ -166,6 +343,7 @@ def run_scoring_stage(
                 eval_labels=eval_labels,
                 workload_type=single_workload_type(eval_workload_map),
                 retained_mask=frozen_primary_masks.get("MLQDS"),
+                target_mode=str(getattr(config.model, "range_training_target_mode", "")),
             )
         except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
             target_segment_alignment_payload = {
@@ -265,6 +443,9 @@ def run_scoring_stage(
     matched_table = print_method_comparison_table(matched)
     geometric_table = print_geometric_distortion_table(matched)
     range_usefulness_table = print_range_usefulness_table(matched)
+    workload_scoring_compatibility_diagnostics = (
+        build_workload_scoring_compatibility_diagnostics(matched)
+    )
     range_compression_audit: dict[str, dict[str, Any]] = {}
     range_compression_audit_table = ""
     if audit_ratios:
@@ -343,6 +524,9 @@ def run_scoring_stage(
         causality_ablation_mask_diagnostics=causality_ablation_mask_diagnostics,
         range_compression_audit=range_compression_audit,
         range_compression_audit_table=range_compression_audit_table,
+        workload_scoring_compatibility_diagnostics=(
+            workload_scoring_compatibility_diagnostics
+        ),
         shift_pairs=shift_pairs,
         shift_table=shift_table,
         segment_oracle_allocation_audit=segment_oracle_audit_payload,

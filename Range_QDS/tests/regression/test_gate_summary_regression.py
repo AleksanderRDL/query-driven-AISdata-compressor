@@ -35,20 +35,20 @@ def _normalize_run_for_regression(run: dict[str, Any]) -> dict[str, Any]:
 def test_gate_summary_regression(data_regression: Any) -> None:
     run = {
         "matched": {
-            "MLQDS": {"query_useful_v1_score": 0.7},
-            "uniform": {"query_useful_v1_score": 0.6},
-            "DouglasPeucker": {"query_useful_v1_score": 0.5},
+            "MLQDS": {"query_local_utility_score": 0.7},
+            "uniform": {"query_local_utility_score": 0.6},
+            "DouglasPeucker": {"query_local_utility_score": 0.5},
         },
         "config": {
             "model": {
                 "model_type": "workload_blind_range_v2",
                 "selector_type": "learned_segment_budget_v1",
             },
-            "query": {"workload_profile_id": "range_workload_v1"},
+            "query": {"workload_profile_id": "range_query_mix"},
         },
         "final_claim_summary": {
             "status": "single_cell_blocked",
-            "primary_metric": "QueryUsefulV1",
+            "primary_metric": "QueryLocalUtility",
             "final_success_allowed": False,
             "blocking_gates": ["learning_causality"],
         },

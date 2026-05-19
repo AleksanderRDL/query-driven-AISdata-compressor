@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 import torch
 
@@ -15,6 +17,12 @@ from scoring.method_scoring import (
 from scoring.methods import OracleMethod, ScoreGlobalBudgetMethod, UniformTemporalMethod
 from scoring.metrics import MethodScore, compute_length_preservation, f1_score
 from scoring.query_cache import ScoringQueryCache
+from scoring.query_local_utility import (
+    QUERY_LOCAL_UTILITY_COMPONENT_WEIGHTS,
+    QUERY_LOCAL_UTILITY_SCHEMA_VERSION,
+    QUERY_LOCAL_UTILITY_WEIGHTS,
+    query_local_utility_from_range_audit,
+)
 from scoring.range_usefulness import range_usefulness_weight_summary
 from scoring.score_tables import print_method_comparison_table, print_range_usefulness_table
 from selection.model_score_conversion import pure_workload_scores, simplify_mlqds_predictions
@@ -664,6 +672,7 @@ def test_range_usefulness_ship_f1_requires_each_hit_ship_present() -> None:
 
     audit = score_range_usefulness(points, boundaries, retained, queries)
 
+    assert audit["query_point_recall"] == pytest.approx(0.25)
     assert audit["range_point_f1"] == pytest.approx(0.4)
     assert audit["range_ship_f1"] == pytest.approx(2.0 / 3.0)
 
@@ -703,6 +712,117 @@ def test_range_usefulness_ship_coverage_penalizes_sparse_hit_ship_representation
     assert audit["range_ship_f1"] == pytest.approx(1.0)
     assert audit["range_ship_coverage"] == pytest.approx((1.0 + 0.4) / 2.0)
     assert audit["range_ship_coverage"] < audit["range_ship_f1"]
+
+
+def test_range_usefulness_reports_query_family_component_summary() -> None:
+    points = torch.tensor(
+        [
+            [0.0, 0.0, 0.0, 1.0],
+            [1.0, 0.0, 0.1, 1.0],
+            [2.0, 0.0, 0.2, 1.0],
+            [3.0, 0.0, 0.3, 1.0],
+        ],
+        dtype=torch.float32,
+    )
+    boundaries = [(0, 4)]
+    params = {
+        "lat_min": -1.0,
+        "lat_max": 1.0,
+        "lon_min": -1.0,
+        "lon_max": 1.0,
+        "t_start": -1.0,
+        "t_end": 4.0,
+    }
+    queries = [
+        {
+            "type": "range",
+            "params": params,
+            "_metadata": {
+                "anchor_family": "density",
+                "footprint_family": "medium_operational",
+            },
+        },
+        {
+            "type": "range",
+            "params": params,
+            "_metadata": {
+                "anchor_family": "sparse_background_control",
+                "footprint_family": "large_context",
+            },
+        },
+    ]
+    retained = torch.tensor([True, True, True, True])
+
+    audit = score_range_usefulness(points, boundaries, retained, queries)
+
+    summary = audit["range_query_metadata_component_summary"]
+    assert summary["available"] is True
+    assert summary["diagnostic_only"] is True
+    assert summary["query_count"] == 2
+    assert len(summary["query_rows"]) == 2
+    assert "length_preservation_guardrail" in summary["excluded_query_local_utility_components"]
+    anchor_groups = summary["group_by"]["anchor_family"]
+    assert set(anchor_groups) == {"density", "sparse_background_control"}
+    density = anchor_groups["density"]
+    assert density["query_count"] == 1
+    assert density["range_components"]["query_point_recall"] == pytest.approx(1.0)
+    assert density["range_components"]["range_point_f1"] == pytest.approx(1.0)
+    assert density["query_local_utility_query_local_weighted_score_normalized"] == pytest.approx(
+        1.0
+    )
+
+
+def test_range_usefulness_reports_ship_evidence_counts_by_query_family() -> None:
+    points = torch.tensor(
+        [
+            [0.0, 0.0, 0.0, 1.0],
+            [1.0, 0.0, 0.1, 1.0],
+            [0.0, 0.2, 0.0, 1.0],
+            [1.0, 0.2, 0.1, 1.0],
+        ],
+        dtype=torch.float32,
+    )
+    boundaries = [(0, 2), (2, 4)]
+    queries = [
+        {
+            "type": "range",
+            "params": {
+                "lat_min": -1.0,
+                "lat_max": 1.0,
+                "lon_min": -1.0,
+                "lon_max": 1.0,
+                "t_start": -1.0,
+                "t_end": 2.0,
+            },
+            "_metadata": {
+                "anchor_family": "density",
+                "footprint_family": "medium_operational",
+            },
+        }
+    ]
+    retained = torch.tensor([True, False, False, False])
+
+    audit = score_range_usefulness(points, boundaries, retained, queries)
+
+    row = audit["range_query_metadata_component_summary"]["query_rows"][0]
+    ship_counts = row["ship_evidence_counts"]
+    assert ship_counts["full_trajectory_hit_count"] == 2
+    assert ship_counts["retained_trajectory_hit_count"] == 1
+    assert ship_counts["missed_trajectory_hit_count"] == 1
+    assert ship_counts["missed_trajectory_hit_fraction"] == pytest.approx(0.5)
+    assert ship_counts["multi_point_full_trajectory_hit_count"] == 2
+    assert ship_counts["multi_point_retained_trajectory_hit_count"] == 1
+    assert ship_counts["multi_point_ship_presence_recall"] == pytest.approx(0.5)
+
+    density = audit["range_query_metadata_component_summary"]["group_by"]["anchor_family"][
+        "density"
+    ]
+    group_counts = density["ship_evidence_counts"]
+    assert group_counts["full_trajectory_hit_count_total"] == 2
+    assert group_counts["retained_trajectory_hit_count_total"] == 1
+    assert group_counts["missed_trajectory_hit_count_total"] == 1
+    assert group_counts["ship_presence_recall"] == pytest.approx(0.5)
+    assert group_counts["multi_point_ship_presence_recall"] == pytest.approx(0.5)
 
 
 def test_range_usefulness_gap_coverage_penalizes_interior_gap() -> None:
@@ -1091,6 +1211,89 @@ def test_range_usefulness_weight_summary_groups_current_schema() -> None:
     assert group_weights["boundary_context"] == pytest.approx(0.20)
     assert group_weights["temporal_continuity"] == pytest.approx(0.19)
     assert group_weights["route_fidelity"] == pytest.approx(0.13)
+
+
+def test_query_local_utility_schema5_uses_direct_query_local_components() -> None:
+    removed_components = {
+        "ship_balanced_query_point_recall",
+        "ship_f1",
+        "ship_coverage",
+        "multi_point_ship_evidence",
+        "entry_exit_f1",
+        "crossing_f1",
+        "query_boundary_evidence",
+    }
+    base_audit = {
+        "query_point_recall": 0.55,
+        "range_point_f1": 0.55,
+        "range_ship_coverage": 0.05,
+        "range_ship_f1": 0.10,
+        "range_temporal_coverage": 0.35,
+        "range_gap_time_coverage": 0.40,
+        "range_gap_distance_coverage": 0.30,
+        "range_gap_min_coverage": 0.30,
+        "range_turn_coverage": 0.65,
+        "range_shape_score": 0.70,
+        "range_query_local_interpolation_fidelity": 0.75,
+        "range_entry_exit_f1": 0.05,
+        "range_crossing_f1": 0.95,
+    }
+    changed_removed_only = {
+        **base_audit,
+        "range_point_f1": 0.0,
+        "range_ship_coverage": 1.0,
+        "range_ship_f1": 1.0,
+        "range_entry_exit_f1": 1.0,
+        "range_crossing_f1": 0.0,
+    }
+
+    base = query_local_utility_from_range_audit(
+        base_audit,
+        length_preservation=0.80,
+        avg_sed_km=0.25,
+    )
+    changed = query_local_utility_from_range_audit(
+        changed_removed_only,
+        length_preservation=0.80,
+        avg_sed_km=0.25,
+    )
+
+    assert QUERY_LOCAL_UTILITY_SCHEMA_VERSION == 5
+    assert base["query_local_utility_schema_version"] == 5
+    assert sum(QUERY_LOCAL_UTILITY_WEIGHTS.values()) == pytest.approx(1.0)
+    assert sum(QUERY_LOCAL_UTILITY_COMPONENT_WEIGHTS.values()) == pytest.approx(1.0)
+    assert QUERY_LOCAL_UTILITY_WEIGHTS["query_point_mass"] == pytest.approx(0.50)
+    assert QUERY_LOCAL_UTILITY_WEIGHTS["query_local_behavior"] == pytest.approx(0.45)
+    assert QUERY_LOCAL_UTILITY_WEIGHTS["global_sanity"] == pytest.approx(0.05)
+    assert "ship_presence_and_coverage" not in QUERY_LOCAL_UTILITY_WEIGHTS
+    assert "boundary_and_event_evidence" not in QUERY_LOCAL_UTILITY_WEIGHTS
+    assert removed_components.isdisjoint(QUERY_LOCAL_UTILITY_COMPONENT_WEIGHTS)
+    components = cast(dict[str, float], base["query_local_utility_components"])
+    component_weights = cast(dict[str, float], base["query_local_utility_component_weights"])
+    assert removed_components.isdisjoint(components)
+    assert removed_components.isdisjoint(component_weights)
+    assert base["query_local_utility_score"] == pytest.approx(changed["query_local_utility_score"])
+
+    legacy_range_point_only_audit = {
+        "range_point_f1": 1.0,
+        "range_shape_score": 1.0,
+        "range_gap_time_coverage": 1.0,
+        "range_gap_distance_coverage": 1.0,
+    }
+    legacy_range_point_only = query_local_utility_from_range_audit(
+        legacy_range_point_only_audit
+    )
+    legacy_range_point_components = cast(
+        dict[str, float], legacy_range_point_only["query_local_utility_components"]
+    )
+    assert legacy_range_point_components["query_point_recall"] == pytest.approx(0.0)
+    assert legacy_range_point_components["query_local_interpolation_fidelity"] == pytest.approx(
+        0.0
+    )
+    assert legacy_range_point_components["query_local_turn_change_coverage"] == pytest.approx(
+        0.0
+    )
+    assert legacy_range_point_components["query_local_continuity"] == pytest.approx(0.0)
 
 
 def test_method_comparison_table_shows_close_f1_values() -> None:

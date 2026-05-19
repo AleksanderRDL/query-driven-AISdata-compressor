@@ -6,9 +6,35 @@ eval queries are known, then score the frozen retained set.
 
 Current source of truth:
 
-- redesign protocol and gates: [`docs/query-driven-rework-guide.md`](docs/query-driven-rework-guide.md)
-- checkpoint log: [`docs/query-driven-rework-progress.md`](docs/query-driven-rework-progress.md)
+- implementation/research protocol and gates: [`docs/query-driven-implementation-research-guide.md`](docs/query-driven-implementation-research-guide.md)
+- checkpoint log: [`docs/query-driven-implementation-progress.md`](docs/query-driven-implementation-progress.md)
 - tooling commands: [`docs/dev-tooling-guide.md`](docs/dev-tooling-guide.md)
+
+## Current Defaults
+
+New query-driven checkpoints should use this stack unless a diagnostic
+explicitly overrides it:
+
+| Surface | Default |
+| --- | --- |
+| Primary metric | `QueryLocalUtility` schema `5` |
+| Workload profile | `range_query_mix` |
+| Target mode | `query_local_utility_factorized` |
+| Model | `workload_blind_range_v2` |
+| Selector | `learned_segment_budget_v1` |
+| Checkpoint score variant | `query_local_utility` |
+
+`QueryLocalUtility` schema `5` weights direct query-point mass at `0.50`,
+query-local behavior at `0.45`, and global sanity guardrails at `0.05`.
+The active `range_query_mix` profile uses anchor weights `density=0.80` and
+`sparse_background_control=0.20`; footprint weights are
+`medium_operational=0.6923076923076923` and
+`large_context=0.3076923076923077`.
+
+Historical names and families such as `QueryUsefulV1`, `query_useful_v1`,
+`range_workload_v1`, `density_route`, `small_local`,
+`boundary_entry_exit`, `crossing_turn_change`, `port_or_approach_zone`, and
+`route_corridor_like` are not current defaults.
 
 ## Setup
 
@@ -47,12 +73,12 @@ uv run --group dev -- python -m orchestration.train_and_score \
   --csv_path AISDATA/cleaned/<cleaned-ais-file.csv> \
   --cache_dir Range_QDS/artifacts/cache/manual_csv \
   --workload range \
-  --workload_profile_id range_workload_v1 \
+  --workload_profile_id range_query_mix \
   --coverage_calibration_mode profile_sampled_query_count \
   --model_type workload_blind_range_v2 \
-  --range_training_target_mode query_useful_v1_factorized \
+  --range_training_target_mode query_local_utility_factorized \
   --selector_type learned_segment_budget_v1 \
-  --checkpoint_score_variant query_useful_v1 \
+  --checkpoint_score_variant query_local_utility \
   --checkpoint_selection_metric uniform_gap \
   --n_queries 128 \
   --epochs 6 \
@@ -66,7 +92,7 @@ uv run --group dev -- python -m orchestration.train_and_score \
 
 | Need | File |
 | --- | --- |
-| Redesign objective and acceptance criteria | [`docs/query-driven-rework-guide.md`](docs/query-driven-rework-guide.md) |
+| Implementation objective and acceptance criteria | [`docs/query-driven-implementation-research-guide.md`](docs/query-driven-implementation-research-guide.md) |
 | Code layout | [`CODE_LAYOUT.md`](CODE_LAYOUT.md) |
 | Single-run orchestration | [`orchestration/README.md`](orchestration/README.md) |
 | Benchmark profiles, queues, reports, artifact names | [`benchmarking/README.md`](benchmarking/README.md) |

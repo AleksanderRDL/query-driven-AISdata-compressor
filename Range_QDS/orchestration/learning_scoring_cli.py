@@ -12,6 +12,7 @@ from config.run_config import (
     DEFAULT_LEARNED_SEGMENT_ALLOCATION_WEIGHT_FLOOR,
     DEFAULT_LEARNED_SEGMENT_GEOMETRY_GAIN_WEIGHT,
     DEFAULT_LEARNED_SEGMENT_SCORE_BLEND_WEIGHT,
+    DEFAULT_LEARNED_SEGMENT_TRANSFER_CALIBRATION_MODE,
     DEFAULT_VALIDATION_ENDPOINT_PENALTY_WEIGHT,
     DEFAULT_VALIDATION_GLOBAL_SANITY_PENALTY_WEIGHT,
     DEFAULT_VALIDATION_LENGTH_PRESERVATION_MIN,
@@ -23,6 +24,7 @@ from learning.model_features import SUPPORTED_MODEL_TYPES
 from learning.targets.modes import RANGE_TARGET_BALANCE_MODES, RANGE_TRAINING_TARGET_MODES
 from learning.teacher_distillation import RANGE_TEACHER_DISTILLATION_MODES
 from runtime.torch_runtime import AMP_MODE_CHOICES, FLOAT32_MATMUL_PRECISION_CHOICES
+from selection.learned_segment_budget import SEGMENT_TRANSFER_CALIBRATION_MODE_CHOICES
 from selection.model_score_conversion import MLQDS_SCORE_MODES
 from selection.selector_types import SELECTOR_TYPE_CHOICES, TEMPORAL_HYBRID_SELECTOR_TYPE
 from workloads.generation.anchors import RANGE_ANCHOR_MODES
@@ -394,7 +396,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         choices=WORKLOAD_PROFILE_CHOICES,
         help=(
-            "Versioned range workload profile. range_workload_v1 is the default final "
+            "Versioned range workload profile. range_query_mix is the default final "
             "candidate profile and owns a 30%% target coverage. The default legacy_generator "
             "keeps old benchmark behavior."
         ),
@@ -405,7 +407,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         choices=["profile_sampled_query_count", "uncovered_anchor_chasing"],
         help=(
-            "Target-coverage calibration behavior. range_workload_v1 defaults to "
+            "Target-coverage calibration behavior. range_query_mix defaults to "
             "profile_sampled_query_count; uncovered_anchor_chasing is legacy/diagnostic only."
         ),
     )
@@ -457,7 +459,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--loss_objective",
         type=str,
         default="budget_topk",
-        choices=["ranking_bce", "budget_topk", "stratified_budget_topk", "pointwise_bce"],
+        choices=[
+            "ranking_bce",
+            "budget_topk",
+            "stratified_budget_topk",
+            "pointwise_bce",
+        ],
         help=(
             "Training objective. 'ranking_bce' is the pairwise ranking plus BCE ablation; "
             "'budget_topk' optimizes soft retained-budget target mass across budget ratios; "
@@ -479,50 +486,50 @@ def build_parser() -> argparse.ArgumentParser:
         help="Soft top-k temperature for --loss_objective budget_topk.",
     )
     parser.add_argument(
-        "--query_useful_aux_loss_weight",
+        "--query_local_utility_aux_loss_weight",
         type=float,
         default=0.50,
-        help="Overall auxiliary loss weight for QueryUsefulV1 factorized heads.",
+        help="Overall auxiliary loss weight for QueryLocalUtility factorized heads.",
     )
     parser.add_argument(
-        "--query_useful_segment_budget_head_weight",
+        "--query_local_utility_segment_budget_head_weight",
         type=float,
         default=0.10,
-        help="BCE head weight for the QueryUsefulV1 segment-budget factorized head.",
+        help="BCE head weight for the QueryLocalUtility segment-budget factorized head.",
     )
     parser.add_argument(
-        "--query_useful_segment_level_loss_weight",
+        "--query_local_utility_segment_level_loss_weight",
         type=float,
         default=0.25,
-        help="Listwise segment-level loss weight inside the QueryUsefulV1 auxiliary loss.",
+        help="Listwise segment-level loss weight inside the QueryLocalUtility auxiliary loss.",
     )
     parser.add_argument(
-        "--query_useful_behavior_rank_loss_weight",
+        "--query_local_utility_behavior_rank_loss_weight",
         type=float,
         default=0.0,
         help=(
-            "Optional listwise behavior-head ranking loss weight inside the QueryUsefulV1 "
+            "Optional listwise behavior-head ranking loss weight inside the QueryLocalUtility "
             "auxiliary loss. Default 0.0 keeps the rejected Checkpoint 5.28 behavior-rank "
             "candidate disabled unless explicitly requested."
         ),
     )
     parser.add_argument(
-        "--query_useful_sparse_head_rank_loss_weight",
+        "--query_local_utility_sparse_head_rank_loss_weight",
         type=float,
         default=0.0,
         help=(
-            "Optional sparse-head ranking loss weight for query-hit and boundary QueryUsefulV1 "
+            "Optional sparse-head ranking loss weight for query-hit and boundary QueryLocalUtility "
             "heads. Default 0.0 keeps the Checkpoint 5.37 head-calibration diagnostic disabled "
             "unless explicitly requested."
         ),
     )
     parser.add_argument(
-        "--query_useful_sparse_head_bce_target_mode",
+        "--query_local_utility_sparse_head_bce_target_mode",
         type=str,
         default="raw",
         choices=["raw", "window_max_normalized"],
         help=(
-            "Optional BCE target calibration for sparse QueryUsefulV1 query-hit and boundary "
+            "Optional BCE target calibration for sparse QueryLocalUtility query-hit and boundary "
             "heads. 'raw' preserves current targets; 'window_max_normalized' trains those "
             "heads on per-window relative target scale as a diagnostic."
         ),
@@ -707,10 +714,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--checkpoint_score_variant",
         type=str,
         default="range_usefulness",
-        choices=["answer", "combined", "range_usefulness", "query_useful_v1"],
+        choices=["answer", "combined", "range_usefulness", "query_local_utility"],
         help=(
             "Which validation score to use for checkpoint selection. "
-            "'query_useful_v1' = query-driven primary score for range_workload_v1, "
+            "'query_local_utility' = query-driven primary score for range_query_mix, "
             "'range_usefulness' = legacy range-local audit score for range workloads (default), "
             "'answer' = point/query F1, 'combined' = answer_f1 * point_subset_f1."
         ),
@@ -719,7 +726,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--validation_global_sanity_penalty",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="Apply a light validation-only penalty to query_useful_v1 checkpoint selection when global sanity fails.",
+        help="Apply a light validation-only penalty to query_local_utility checkpoint selection when global sanity fails.",
     )
     parser.add_argument(
         "--validation_global_sanity_penalty_weight",
@@ -743,7 +750,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--validation_length_preservation_min",
         type=float,
         default=DEFAULT_VALIDATION_LENGTH_PRESERVATION_MIN,
-        help="Minimum validation length preservation used by query_useful_v1 checkpoint penalties.",
+        help="Minimum validation length preservation used by query_local_utility checkpoint penalties.",
     )
     parser.add_argument(
         "--mlqds_temporal_fraction",
@@ -831,6 +838,18 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Within-segment blend weight for the segment-budget head in "
             "learned_segment_budget_v1. Exposed so it cannot silently mask weak heads."
+        ),
+    )
+    parser.add_argument(
+        "--learned_segment_transfer_calibration_mode",
+        type=str,
+        default=DEFAULT_LEARNED_SEGMENT_TRANSFER_CALIBRATION_MODE,
+        choices=SEGMENT_TRANSFER_CALIBRATION_MODE_CHOICES,
+        help=(
+            "Guarded non-default pre-selection segment transfer calibration for "
+            "learned_segment_budget_v1. 'none' preserves current behavior; "
+            "segment_score_allocation_weight_zblend is diagnostic until unchanged "
+            "strict gates justify it."
         ),
     )
     parser.add_argument(

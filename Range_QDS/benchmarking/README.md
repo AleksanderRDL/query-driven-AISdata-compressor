@@ -21,7 +21,7 @@ uv run --group dev -- python -m benchmarking.runner --help
 uv run --group dev -- python -m benchmarking.runtime_benchmark --help
 ```
 
-Default Make targets use the active `range_workload_v1_workload_blind_v2`
+Default Make targets use the active `range_query_mix_workload_blind_v2`
 profile and write under `Range_QDS/artifacts/benchmarks/query_driven_workload_blind_v2`
 and `Range_QDS/artifacts/cache/query_driven_workload_blind_v2`. Set
 `BENCHMARK_PROFILE`, `BENCHMARK_FAMILY`, and `BENCHMARK_CACHE` only for a
@@ -41,17 +41,21 @@ diagnostic profile or a separate artifact family.
 | `reporting/` | Child-run row fields, metric helpers, audit extractors, and report paths. |
 | `row_runtime.py` | Runtime, phase, epoch, and collapse-warning row helpers. |
 | `table.py` | Markdown table formatting for benchmark summaries. |
-| `final_grid.py` | Final-grid QueryUsefulV1 acceptance evidence. |
+| `final_grid.py` | Final-grid QueryLocalUtility acceptance evidence. |
 | `common.py` | Shared benchmark numeric/report helpers. |
 
 ## Profiles
 
 Current query-driven candidate profile:
 
-- `range_workload_v1_workload_blind_v2`
+- `range_query_mix_workload_blind_v2`
 
-This is the active QueryUsefulV1 workload-blind path. It is not accepted unless
-the guide-required workload stability, support, predictability, causality,
+This is the active workload-blind path. It uses `QueryLocalUtility` schema `5`,
+`query_local_utility_factorized`, and the active `range_query_mix` workload
+family weights: `density=0.80`, `sparse_background_control=0.20`,
+`medium_operational=0.6923076923076923`, and
+`large_context=0.3076923076923077`. It is not accepted unless the
+guide-required workload stability, support, predictability, causality,
 global-sanity, and final-grid gates pass.
 
 Diagnostic profiles still exist in `profiles.py` for regression,
@@ -64,9 +68,9 @@ For workload-profile grid checks, use:
 
 ```bash
 uv run --group dev -- python -m benchmarking.runner \
-  --profile range_workload_v1_workload_blind_v2 \
+  --profile range_query_mix_workload_blind_v2 \
   --workloads range \
-  --workload_profile_ids range_workload_v1_focused,range_workload_v1_local,range_workload_v1_operational,range_workload_v1
+  --workload_profile_ids range_query_mix_focused,range_query_mix_local,range_query_mix_operational,range_query_mix
 ```
 
 Do not also pass conflicting `--workload_profile_id`, `--query_coverage`,

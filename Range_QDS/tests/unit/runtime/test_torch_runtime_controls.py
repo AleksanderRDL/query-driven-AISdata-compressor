@@ -99,12 +99,12 @@ def test_run_config_roundtrips_precision_controls() -> None:
         loss_objective="ranking_bce",
         budget_loss_ratios=[0.02, 0.05],
         budget_loss_temperature=0.2,
-        query_useful_aux_loss_weight=0.75,
-        query_useful_segment_budget_head_weight=0.35,
-        query_useful_segment_level_loss_weight=0.90,
-        query_useful_behavior_rank_loss_weight=0.40,
-        query_useful_sparse_head_rank_loss_weight=0.25,
-        query_useful_sparse_head_bce_target_mode="window_max_normalized",
+        query_local_utility_aux_loss_weight=0.75,
+        query_local_utility_segment_budget_head_weight=0.35,
+        query_local_utility_segment_level_loss_weight=0.90,
+        query_local_utility_behavior_rank_loss_weight=0.40,
+        query_local_utility_sparse_head_rank_loss_weight=0.25,
+        query_local_utility_sparse_head_bce_target_mode="window_max_normalized",
         temporal_distribution_loss_weight=0.07,
         ranking_pairs_per_type=192,
         ranking_top_quantile=0.9,
@@ -180,12 +180,12 @@ def test_run_config_roundtrips_precision_controls() -> None:
     assert restored.model.loss_objective == "ranking_bce"
     assert restored.model.budget_loss_ratios == [0.02, 0.05]
     assert restored.model.budget_loss_temperature == 0.2
-    assert restored.model.query_useful_aux_loss_weight == 0.75
-    assert restored.model.query_useful_segment_budget_head_weight == 0.35
-    assert restored.model.query_useful_segment_level_loss_weight == 0.90
-    assert restored.model.query_useful_behavior_rank_loss_weight == 0.40
-    assert restored.model.query_useful_sparse_head_rank_loss_weight == 0.25
-    assert restored.model.query_useful_sparse_head_bce_target_mode == "window_max_normalized"
+    assert restored.model.query_local_utility_aux_loss_weight == 0.75
+    assert restored.model.query_local_utility_segment_budget_head_weight == 0.35
+    assert restored.model.query_local_utility_segment_level_loss_weight == 0.90
+    assert restored.model.query_local_utility_behavior_rank_loss_weight == 0.40
+    assert restored.model.query_local_utility_sparse_head_rank_loss_weight == 0.25
+    assert restored.model.query_local_utility_sparse_head_bce_target_mode == "window_max_normalized"
     assert restored.model.temporal_distribution_loss_weight == 0.07
     assert restored.model.ranking_pairs_per_type == 192
     assert restored.model.ranking_top_quantile == 0.9
@@ -301,17 +301,17 @@ def test_cli_exposes_training_and_scoring_tuning_controls() -> None:
             "0.01,0.05",
             "--budget_loss_temperature",
             "0.20",
-            "--query_useful_aux_loss_weight",
+            "--query_local_utility_aux_loss_weight",
             "0.75",
-            "--query_useful_segment_budget_head_weight",
+            "--query_local_utility_segment_budget_head_weight",
             "0.35",
-            "--query_useful_segment_level_loss_weight",
+            "--query_local_utility_segment_level_loss_weight",
             "0.90",
-            "--query_useful_behavior_rank_loss_weight",
+            "--query_local_utility_behavior_rank_loss_weight",
             "0.40",
-            "--query_useful_sparse_head_rank_loss_weight",
+            "--query_local_utility_sparse_head_rank_loss_weight",
             "0.25",
-            "--query_useful_sparse_head_bce_target_mode",
+            "--query_local_utility_sparse_head_bce_target_mode",
             "window_max_normalized",
             "--temporal_distribution_loss_weight",
             "0.20",
@@ -392,12 +392,12 @@ def test_cli_exposes_training_and_scoring_tuning_controls() -> None:
         loss_objective=args.loss_objective,
         budget_loss_ratios=args.budget_loss_ratios,
         budget_loss_temperature=args.budget_loss_temperature,
-        query_useful_aux_loss_weight=args.query_useful_aux_loss_weight,
-        query_useful_segment_budget_head_weight=args.query_useful_segment_budget_head_weight,
-        query_useful_segment_level_loss_weight=args.query_useful_segment_level_loss_weight,
-        query_useful_behavior_rank_loss_weight=args.query_useful_behavior_rank_loss_weight,
-        query_useful_sparse_head_rank_loss_weight=args.query_useful_sparse_head_rank_loss_weight,
-        query_useful_sparse_head_bce_target_mode=args.query_useful_sparse_head_bce_target_mode,
+        query_local_utility_aux_loss_weight=args.query_local_utility_aux_loss_weight,
+        query_local_utility_segment_budget_head_weight=args.query_local_utility_segment_budget_head_weight,
+        query_local_utility_segment_level_loss_weight=args.query_local_utility_segment_level_loss_weight,
+        query_local_utility_behavior_rank_loss_weight=args.query_local_utility_behavior_rank_loss_weight,
+        query_local_utility_sparse_head_rank_loss_weight=args.query_local_utility_sparse_head_rank_loss_weight,
+        query_local_utility_sparse_head_bce_target_mode=args.query_local_utility_sparse_head_bce_target_mode,
         temporal_distribution_loss_weight=args.temporal_distribution_loss_weight,
         checkpoint_full_score_every=args.checkpoint_full_score_every,
         checkpoint_candidate_pool_size=args.checkpoint_candidate_pool_size,
@@ -461,12 +461,12 @@ def test_cli_exposes_training_and_scoring_tuning_controls() -> None:
     assert args.loss_objective == "budget_topk"
     assert args.budget_loss_ratios == [0.01, 0.05]
     assert args.budget_loss_temperature == 0.20
-    assert args.query_useful_aux_loss_weight == 0.75
-    assert args.query_useful_segment_budget_head_weight == 0.35
-    assert args.query_useful_segment_level_loss_weight == 0.90
-    assert args.query_useful_behavior_rank_loss_weight == 0.40
-    assert args.query_useful_sparse_head_rank_loss_weight == 0.25
-    assert args.query_useful_sparse_head_bce_target_mode == "window_max_normalized"
+    assert args.query_local_utility_aux_loss_weight == 0.75
+    assert args.query_local_utility_segment_budget_head_weight == 0.35
+    assert args.query_local_utility_segment_level_loss_weight == 0.90
+    assert args.query_local_utility_behavior_rank_loss_weight == 0.40
+    assert args.query_local_utility_sparse_head_rank_loss_weight == 0.25
+    assert args.query_local_utility_sparse_head_bce_target_mode == "window_max_normalized"
     assert args.temporal_distribution_loss_weight == 0.20
     assert args.checkpoint_full_score_every == 3
     assert args.checkpoint_candidate_pool_size == 2
@@ -525,12 +525,12 @@ def test_cli_exposes_training_and_scoring_tuning_controls() -> None:
     assert cfg.model.loss_objective == "budget_topk"
     assert cfg.model.budget_loss_ratios == [0.01, 0.05]
     assert cfg.model.budget_loss_temperature == 0.20
-    assert cfg.model.query_useful_aux_loss_weight == 0.75
-    assert cfg.model.query_useful_segment_budget_head_weight == 0.35
-    assert cfg.model.query_useful_segment_level_loss_weight == 0.90
-    assert cfg.model.query_useful_behavior_rank_loss_weight == 0.40
-    assert cfg.model.query_useful_sparse_head_rank_loss_weight == 0.25
-    assert cfg.model.query_useful_sparse_head_bce_target_mode == "window_max_normalized"
+    assert cfg.model.query_local_utility_aux_loss_weight == 0.75
+    assert cfg.model.query_local_utility_segment_budget_head_weight == 0.35
+    assert cfg.model.query_local_utility_segment_level_loss_weight == 0.90
+    assert cfg.model.query_local_utility_behavior_rank_loss_weight == 0.40
+    assert cfg.model.query_local_utility_sparse_head_rank_loss_weight == 0.25
+    assert cfg.model.query_local_utility_sparse_head_bce_target_mode == "window_max_normalized"
     assert cfg.model.temporal_distribution_loss_weight == 0.20
     assert cfg.model.checkpoint_full_score_every == 3
     assert cfg.model.checkpoint_candidate_pool_size == 2
@@ -582,9 +582,9 @@ def test_run_config_loads_missing_runtime_and_mlqds_defaults() -> None:
     payload["model"].pop("loss_objective")
     payload["model"].pop("budget_loss_ratios")
     payload["model"].pop("budget_loss_temperature")
-    payload["model"].pop("query_useful_behavior_rank_loss_weight")
-    payload["model"].pop("query_useful_sparse_head_rank_loss_weight")
-    payload["model"].pop("query_useful_sparse_head_bce_target_mode")
+    payload["model"].pop("query_local_utility_behavior_rank_loss_weight")
+    payload["model"].pop("query_local_utility_sparse_head_rank_loss_weight")
+    payload["model"].pop("query_local_utility_sparse_head_bce_target_mode")
     payload["model"].pop("temporal_distribution_loss_weight")
     payload["model"].pop("range_audit_compression_ratios")
     payload["model"].pop("mlqds_score_mode")
@@ -734,9 +734,9 @@ def test_validation_score_config_uses_current_names() -> None:
     assert restored.model.learned_segment_length_support_blend_weight == pytest.approx(0.75)
     assert restored.model.query_prior_grid_bins == 128
     assert restored.model.query_prior_smoothing_passes == 0
-    assert restored.model.query_useful_behavior_rank_loss_weight == 0.0
-    assert restored.model.query_useful_sparse_head_rank_loss_weight == 0.0
-    assert restored.model.query_useful_sparse_head_bce_target_mode == "raw"
+    assert restored.model.query_local_utility_behavior_rank_loss_weight == 0.0
+    assert restored.model.query_local_utility_sparse_head_rank_loss_weight == 0.0
+    assert restored.model.query_local_utility_sparse_head_bce_target_mode == "raw"
     assert restored.model.temporal_residual_label_mode == "none"
     assert not hasattr(restored.model, "f1_diagnostic_every")
     assert not hasattr(restored.model, "residual_label_mode")
@@ -758,9 +758,9 @@ def test_direct_config_and_cli_default_to_non_residual_training() -> None:
     args = build_parser().parse_args([])
 
     assert cfg.model.temporal_residual_label_mode == "none"
-    assert cfg.model.query_useful_behavior_rank_loss_weight == 0.0
-    assert cfg.model.query_useful_sparse_head_rank_loss_weight == 0.0
-    assert cfg.model.query_useful_sparse_head_bce_target_mode == "raw"
+    assert cfg.model.query_local_utility_behavior_rank_loss_weight == 0.0
+    assert cfg.model.query_local_utility_sparse_head_rank_loss_weight == 0.0
+    assert cfg.model.query_local_utility_sparse_head_bce_target_mode == "raw"
     assert cfg.model.learned_segment_geometry_gain_weight == pytest.approx(
         DEFAULT_LEARNED_SEGMENT_GEOMETRY_GAIN_WEIGHT
     )
@@ -787,9 +787,9 @@ def test_direct_config_and_cli_default_to_non_residual_training() -> None:
         DEFAULT_VALIDATION_LENGTH_PRESERVATION_MIN
     )
     assert args.temporal_residual_label_mode == "none"
-    assert args.query_useful_behavior_rank_loss_weight == 0.0
-    assert args.query_useful_sparse_head_rank_loss_weight == 0.0
-    assert args.query_useful_sparse_head_bce_target_mode == "raw"
+    assert args.query_local_utility_behavior_rank_loss_weight == 0.0
+    assert args.query_local_utility_sparse_head_rank_loss_weight == 0.0
+    assert args.query_local_utility_sparse_head_bce_target_mode == "raw"
     assert args.learned_segment_geometry_gain_weight == pytest.approx(
         DEFAULT_LEARNED_SEGMENT_GEOMETRY_GAIN_WEIGHT
     )

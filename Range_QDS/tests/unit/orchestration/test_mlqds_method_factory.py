@@ -61,6 +61,7 @@ def test_build_mlqds_method_carries_selector_scoring_and_runtime_config() -> Non
         learned_segment_allocation_length_support_weight=0.23,
         learned_segment_allocation_weight_floor=0.41,
         learned_segment_score_blend_weight=0.29,
+        learned_segment_transfer_calibration_mode="segment_score_allocation_weight_zblend",
         learned_segment_fairness_preallocation=False,
         learned_segment_length_repair_fraction=0.17,
         learned_segment_length_repair_score_protection_fraction=0.11,
@@ -101,6 +102,9 @@ def test_build_mlqds_method_carries_selector_scoring_and_runtime_config() -> Non
     assert method.learned_segment_allocation_length_support_weight == 0.23
     assert method.learned_segment_allocation_weight_floor == 0.41
     assert method.learned_segment_score_blend_weight == 0.29
+    assert method.learned_segment_transfer_calibration_mode == (
+        "segment_score_allocation_weight_zblend"
+    )
     assert method.learned_segment_fairness_preallocation is False
     assert method.learned_segment_length_repair_fraction == 0.17
     assert method.learned_segment_length_repair_score_protection_fraction == 0.11

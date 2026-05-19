@@ -38,6 +38,7 @@ implementation checks.
 | `gates.py` | Single-run final-candidate gate helpers. |
 | `causality.py` / `model_ablations.py` / `selection_causality_diagnostics.py` | Learning-causality and ablation diagnostics. |
 | `segment_audits.py` / `length_diagnostics.py` / `selector_diagnostics.py` | Selector and geometry diagnostic helpers. |
+| `diagnostics/` | Derived analyzers over completed run artifacts, separate from pipeline stages. |
 | `train_and_score.py` | Main learning/scoring entry point. |
 | `score_checkpoint.py` | Score a saved checkpoint without retraining. |
 
@@ -61,6 +62,14 @@ before held-out eval queries are scored. Treat a run as invalid if
 `workload_blind_protocol.audit_masks_frozen_before_eval_query_scoring` is
 false.
 
-QueryUsefulV1 is the active primary metric for the rework. RangeUseful outputs
+QueryLocalUtility schema `5` is the active primary metric for the project. It
+uses direct `query_point_recall` for point mass and direct query-local
+interpolation, turn coverage, and continuity for behavior. RangeUseful outputs
 must remain under `legacy_range_useful_summary` or diagnostic fields, not
 `final_claim_summary`.
+
+Default workload-blind runs should pair that metric with the active
+`range_query_mix` profile: anchors `density=0.80` and
+`sparse_background_control=0.20`; footprints
+`medium_operational=0.6923076923076923` and
+`large_context=0.3076923076923077`.
