@@ -1,10 +1,10 @@
 # Query-Driven Checkpoint Progress
 
-This is the short checkpoint log required by `docs/query-driven-rework-guide.md`.
-The guide is the source of truth. Raw metrics and stdout belong in
-`artifacts/results/`.
+This is the short checkpoint log required by
+`docs/query-driven-implementation-research-guide.md`. The guide is the source
+of truth. Raw metrics and stdout belong in `artifacts/results/`.
 
-## Current State - 2026-05-19
+## Current State - 2026-05-20
 
 Status: active, not complete.
 
@@ -304,7 +304,7 @@ Status: completed / docs only.
 Goal:
 
 - Make maintained docs point at the current implementation contract without
-  carrying stale rework/changelog noise in the source-of-truth guide.
+  carrying stale legacy/changelog noise in the source-of-truth guide.
 
 Changes:
 
@@ -312,11 +312,17 @@ Changes:
 - Retitled the guide as an implementation/research guide, removed duplicated
   checkpoint chronology from it, and moved history back to this progress log.
 - Condensed this progress log into logical checkpoint groups.
+- Updated stale links from removed legacy filenames to the current
+  `query-driven-implementation-*` docs.
+- Replaced the obsolete `Next-Iterations.md` chronology with a concise current
+  next-action plan.
+- Rewrote `keep-in-mind.md` as concise project guidance instead of raw notes.
 
 Tests:
 
 - `git diff --check`
 - Stale-guide and stale-default `rg` scans over maintained docs.
+- Broken old-doc-link `rg` scan for removed legacy filenames.
 
 Experiment artifact:
 
@@ -329,6 +335,7 @@ Key results:
   learning-coherence rerun was performed.
 - The progress log now summarizes old work by logical phase instead of
   maintaining dozens of checkpoint entries.
+- Maintained docs no longer link to removed legacy filenames.
 
 Decision:
 
@@ -340,11 +347,12 @@ Decision:
 Current docs validation:
 
 - `git diff --check`
-- Stale-guide `rg` scan for rework/redesign wording, old metric/profile names,
-  old schemas, and stale strict-reference prose. Remaining guide hits are
+- Stale-guide `rg` scan for legacy naming, old metric/profile names, old
+  schemas, and stale strict-reference prose. Remaining guide hits are
   explicit historical exclusions or the `range_point_f1` no-fallback caveat.
 - Stale-default `rg` scan over maintained docs. Remaining hits are explicit
   historical-name or legacy-diagnostic references.
+- Broken old-doc-link `rg` scan for removed legacy filenames.
 
 Current focused implementation validation before docs-only condensation:
 

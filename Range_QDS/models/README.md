@@ -26,7 +26,8 @@ path such as `workload_blind_range_v2`.
 - Query-conditioned attention is diagnostic only for final workload-blind
   claims.
 - `workload_blind_range_v2` is the active trainable candidate, but acceptance
-  still depends on the gates in `../docs/query-driven-rework-guide.md`.
+  still depends on the gates in
+  `../docs/query-driven-implementation-research-guide.md`.
 - Historical-prior models are KNN diagnostics or prior-assisted students. They
   cannot claim learned value unless ablations beat or explain the standalone
   KNN prior.

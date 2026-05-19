@@ -1,5 +1,0 @@
-Have you considered that the workload profiles needs improvement/calibration together with the scoring components so that there is a more consistent signal? These items are not set in stone as they are.
-
-Also remember that often it requires more than just tiny smoke tests to actually validate training coherence. Dont do endless small smokes to validate important items.
-
-You have to remember that anchor-family weights from the guide are only recommended. It also warns that QueryLocalUtility could partly be a bridge over old range-audit components and future improvements should continue making it more query-local and have a sensible and not to complex architecture for its scoring. The scoring and the workload profiles of course also need to be compatible in producing trainable signals. These does not have to be 100% real use case focused for our research they should just be sensible

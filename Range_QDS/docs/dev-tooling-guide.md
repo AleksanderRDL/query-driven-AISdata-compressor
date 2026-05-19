@@ -2,7 +2,7 @@
 
 This is the active operational reference for local developer tooling. The
 scientific protocol and acceptance gates remain in
-[`query-driven-rework-guide.md`](query-driven-rework-guide.md).
+[`query-driven-implementation-research-guide.md`](query-driven-implementation-research-guide.md).
 
 ## Tooling Principles
 
@@ -243,8 +243,8 @@ uv run --group dev -- pytest Range_QDS/tests/unit/orchestration/test_query_drive
 
 For code checkpoints touching model, selector, query generation, metrics, or
 benchmark reporting, also run the focused tests named in
-`query-driven-rework-guide.md` and the full `Range_QDS/tests` suite when the
-blast radius justifies it.
+`query-driven-implementation-research-guide.md` and the full `Range_QDS/tests`
+suite when the blast radius justifies it.
 
 ## Policy
 
@@ -252,4 +252,4 @@ blast radius justifies it.
 - Keep acceptance logic in Python code/tests, not jq or shell wrappers.
 - Update regression snapshots only after reviewing an intentional schema change.
 - Keep one-off run or benchmark hacks out of production paths.
-- Record extra discoveries in `query-driven-rework-progress.md`.
+- Record extra discoveries in `query-driven-implementation-progress.md`.

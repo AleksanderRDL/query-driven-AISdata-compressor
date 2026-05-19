@@ -45,7 +45,7 @@ The current candidate path is workload-blind at compression time:
 6. Freeze retained masks before held-out eval queries are scored.
 
 The acceptance contract is in
-[`../docs/query-driven-rework-guide.md`](../docs/query-driven-rework-guide.md).
+[`../docs/query-driven-implementation-research-guide.md`](../docs/query-driven-implementation-research-guide.md).
 
 ## Final-Candidate Settings
 

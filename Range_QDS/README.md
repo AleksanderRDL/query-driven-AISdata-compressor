@@ -6,8 +6,8 @@ eval queries are known, then score the frozen retained set.
 
 Current source of truth:
 
-- implementation/research protocol and gates: [`docs/query-driven-rework-guide.md`](docs/query-driven-rework-guide.md)
-- checkpoint log: [`docs/query-driven-rework-progress.md`](docs/query-driven-rework-progress.md)
+- implementation/research protocol and gates: [`docs/query-driven-implementation-research-guide.md`](docs/query-driven-implementation-research-guide.md)
+- checkpoint log: [`docs/query-driven-implementation-progress.md`](docs/query-driven-implementation-progress.md)
 - tooling commands: [`docs/dev-tooling-guide.md`](docs/dev-tooling-guide.md)
 
 ## Current Defaults
@@ -92,7 +92,7 @@ uv run --group dev -- python -m orchestration.train_and_score \
 
 | Need | File |
 | --- | --- |
-| Implementation objective and acceptance criteria | [`docs/query-driven-rework-guide.md`](docs/query-driven-rework-guide.md) |
+| Implementation objective and acceptance criteria | [`docs/query-driven-implementation-research-guide.md`](docs/query-driven-implementation-research-guide.md) |
 | Code layout | [`CODE_LAYOUT.md`](CODE_LAYOUT.md) |
 | Single-run orchestration | [`orchestration/README.md`](orchestration/README.md) |
 | Benchmark profiles, queues, reports, artifact names | [`benchmarking/README.md`](benchmarking/README.md) |
