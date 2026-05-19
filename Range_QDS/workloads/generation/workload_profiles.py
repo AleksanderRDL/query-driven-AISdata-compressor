@@ -1,9 +1,9 @@
 """Versioned range workload profiles.
 
-The query-driven rework treats the future range-query distribution as a product
-object, not as loose benchmark knobs.  ``range_query_mix`` is the first
-concrete in-distribution profile for final candidates.  Runs without an explicit
-profile remain legacy diagnostics.
+The query-driven implementation treats the range-query distribution as a
+versioned product object, not as loose benchmark knobs.  ``range_query_mix`` is
+the default in-distribution profile for final candidates.  Runs without an
+explicit profile remain legacy diagnostics.
 """
 
 from __future__ import annotations

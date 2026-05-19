@@ -27,7 +27,7 @@ def _range_workload_signature(
     coverage_fraction: float,
     profile_metadata: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    """Return the range-query-mix workload signature artifact described by the rework guide."""
+    """Return the range-query-mix workload signature artifact from the implementation guide."""
     diagnostics = compute_range_workload_diagnostics(
         points=points,
         boundaries=boundaries,

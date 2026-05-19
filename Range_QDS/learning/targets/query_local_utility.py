@@ -50,9 +50,11 @@ QUERY_LOCAL_UTILITY_FINAL_LABEL_FORMULA = (
     "query_hit_times_behavior_with_conditional_replacement_modulation_plus_boundary"
 )
 FAMILY_TRAINABILITY_GROUP_KEYS = ("anchor_family", "footprint_family")
-FAMILY_TRAINABILITY_FOCUS = {
+# Diagnostic focus for current blocker localization; this is not a workload
+# profile definition.
+DIAGNOSTIC_TRAINABILITY_FOCUS_FAMILIES = {
     "anchor_family": frozenset({"density"}),
-    "footprint_family": frozenset({"small_local", "medium_operational"}),
+    "footprint_family": frozenset({"medium_operational"}),
 }
 
 
@@ -817,7 +819,8 @@ def _family_conditioned_target_trainability_diagnostics(
         "diagnostic_only": True,
         "group_by": {},
         "focus_families": {
-            group_key: sorted(values) for group_key, values in FAMILY_TRAINABILITY_FOCUS.items()
+            group_key: sorted(values)
+            for group_key, values in DIAGNOSTIC_TRAINABILITY_FOCUS_FAMILIES.items()
         },
         "interpretation": (
             "Target-side diagnostic only. It identifies whether current heads and "
@@ -850,7 +853,9 @@ def _family_conditioned_target_trainability_diagnostics(
                 spearman = row.get("spearman_with_ship_query_evidence")
                 if spearman is None or float(spearman) < 0.0:
                     weak_rankers.append(str(name))
-            focus_family = family in FAMILY_TRAINABILITY_FOCUS.get(group_key, frozenset())
+            focus_family = family in DIAGNOSTIC_TRAINABILITY_FOCUS_FAMILIES.get(
+                group_key, frozenset()
+            )
             group_out[family] = {
                 "available": alignment["available"],
                 "focus_family": focus_family,
@@ -1059,7 +1064,8 @@ def _family_local_target_candidate_alignment(
         "topk_ratio": float(ratio),
         "reference": "family_ship_query_evidence",
         "focus_families": {
-            group_key: sorted(values) for group_key, values in FAMILY_TRAINABILITY_FOCUS.items()
+            group_key: sorted(values)
+            for group_key, values in DIAGNOSTIC_TRAINABILITY_FOCUS_FAMILIES.items()
         },
         "group_by": {},
     }
@@ -1082,7 +1088,9 @@ def _family_local_target_candidate_alignment(
             family_q_hit = evidence["query_hit_probability"].float().clamp(0.0, 1.0)
             family_ship = evidence["ship_query_evidence"].float().clamp(0.0, 1.0)
             family_valid = family_q_hit > 0.0
-            focus_family = family in FAMILY_TRAINABILITY_FOCUS.get(group_key, frozenset())
+            focus_family = family in DIAGNOSTIC_TRAINABILITY_FOCUS_FAMILIES.get(
+                group_key, frozenset()
+            )
             if not bool(family_valid.any().item()):
                 group_out[str(family)] = {
                     "available": False,

@@ -75,7 +75,7 @@ def _training_target_diagnostics(
                 "final_success_allowed": False,
                 "legacy_reason": (
                     "Old RangeUseful/scalar-target diagnostic path. "
-                    "Not valid for query-driven rework acceptance."
+                    "Not valid for QueryLocalUtility final acceptance."
                 ),
             }
         )

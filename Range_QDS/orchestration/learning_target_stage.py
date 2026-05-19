@@ -648,7 +648,7 @@ def prepare_training_targets(
         range_training_target_transform.setdefault(
             "legacy_reason",
             "Old RangeUseful/scalar-target diagnostic path. "
-            "Not valid for query-driven rework acceptance.",
+            "Not valid for QueryLocalUtility final acceptance.",
         )
     return TargetPreparationOutputs(
         train_labels=train_labels,

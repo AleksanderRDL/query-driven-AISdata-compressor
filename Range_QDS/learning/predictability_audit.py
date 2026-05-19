@@ -9,7 +9,7 @@ import torch
 
 from learning.query_prior_fields import QUERY_PRIOR_FIELD_NAMES, sample_query_prior_fields
 from learning.targets.query_local_utility import (
-    FAMILY_TRAINABILITY_FOCUS,
+    DIAGNOSTIC_TRAINABILITY_FOCUS_FAMILIES,
     FAMILY_TRAINABILITY_GROUP_KEYS,
     QUERY_LOCAL_UTILITY_HEAD_NAMES,
     QUERY_LOCAL_UTILITY_TARGET_MODES,
@@ -485,7 +485,8 @@ def _family_conditioned_prior_predictability(
         "used_for_checkpoint_selection": False,
         "used_for_retained_mask_decision": False,
         "focus_families": {
-            group_key: sorted(values) for group_key, values in FAMILY_TRAINABILITY_FOCUS.items()
+            group_key: sorted(values)
+            for group_key, values in DIAGNOSTIC_TRAINABILITY_FOCUS_FAMILIES.items()
         },
         "group_by": {},
         "interpretation": (
@@ -502,7 +503,9 @@ def _family_conditioned_prior_predictability(
     for group_key, family_rows in family_evidence.items():
         group_out: dict[str, Any] = {}
         for family, evidence in family_rows.items():
-            focus_family = family in FAMILY_TRAINABILITY_FOCUS.get(group_key, frozenset())
+            focus_family = family in DIAGNOSTIC_TRAINABILITY_FOCUS_FAMILIES.get(
+                group_key, frozenset()
+            )
             if not focus_family:
                 continue
             family_valid = evidence["query_hit_probability"].detach().cpu().float() > 0.0

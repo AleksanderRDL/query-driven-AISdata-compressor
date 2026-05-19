@@ -238,7 +238,7 @@ uv lock --check
 git diff --check
 uv run --group dev -- yamllint .
 uv run --group dev -- pytest Range_QDS/tests/property Range_QDS/tests/regression -q
-uv run --group dev -- pytest Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/unit/benchmarking/test_runner.py -q
+uv run --group dev -- pytest Range_QDS/tests/unit/orchestration/test_query_driven_implementation.py Range_QDS/tests/unit/benchmarking/test_runner.py -q
 ```
 
 For code checkpoints touching model, selector, query generation, metrics, or

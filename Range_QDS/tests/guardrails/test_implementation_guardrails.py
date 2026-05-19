@@ -1,4 +1,4 @@
-"""Guardrails for active Range_QDS rework cleanup decisions."""
+"""Guardrails for active Range_QDS implementation cleanup decisions."""
 
 from __future__ import annotations
 

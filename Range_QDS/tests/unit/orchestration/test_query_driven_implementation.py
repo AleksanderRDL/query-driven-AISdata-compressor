@@ -1,4 +1,4 @@
-"""Focused tests for the query-driven Range-QDS rework path."""
+"""Focused tests for the query-driven Range-QDS implementation path."""
 
 from __future__ import annotations
 
@@ -212,7 +212,7 @@ def test_profile_query_plan_prefixes_preserve_family_mix_when_workloads_expand()
     }
 
 
-def test_range_query_mix_footprints_match_rework_guide_defaults() -> None:
+def test_range_query_mix_footprints_match_implementation_guide_defaults() -> None:
     profile = range_workload_profile("range_query_mix")
 
     assert profile.footprint_families == {
@@ -578,7 +578,7 @@ def test_conditional_behavior_target_is_masked_to_query_hits() -> None:
         },
         "_metadata": {
             "anchor_family": "density",
-            "footprint_family": "small_local",
+            "footprint_family": "medium_operational",
         },
     }
 
@@ -627,7 +627,7 @@ def test_path_length_support_target_is_query_free_segment_geometry() -> None:
         },
         "_metadata": {
             "anchor_family": "density",
-            "footprint_family": "small_local",
+            "footprint_family": "medium_operational",
         },
     }
 
@@ -677,7 +677,7 @@ def test_conditional_behavior_target_alignment_diagnostics_report_final_mass_rec
         },
         "_metadata": {
             "anchor_family": "density",
-            "footprint_family": "small_local",
+            "footprint_family": "medium_operational",
         },
     }
 
@@ -751,17 +751,19 @@ def test_conditional_behavior_target_alignment_diagnostics_report_final_mass_rec
     assert family_trainability["available"] is True
     assert family_trainability["diagnostic_only"] is True
     density_row = family_trainability["group_by"]["anchor_family"]["density"]
-    small_local_row = family_trainability["group_by"]["footprint_family"]["small_local"]
+    medium_operational_row = family_trainability["group_by"]["footprint_family"][
+        "medium_operational"
+    ]
     assert density_row["focus_family"] is True
     assert density_row["query_count"] == 1
     assert density_row["valid_hit_point_count"] == 10
     assert "segment_budget_target" in density_row["ranker_alignment"]
-    assert small_local_row["focus_family"] is True
+    assert medium_operational_row["focus_family"] is True
     family_candidates = targets.diagnostics["family_local_target_candidate_alignment"]
     assert family_candidates["available"] is True
     assert family_candidates["diagnostic_only"] is True
     assert family_candidates["active_training_target_unchanged"] is True
-    candidate_row = family_candidates["group_by"]["footprint_family"]["small_local"]
+    candidate_row = family_candidates["group_by"]["footprint_family"]["medium_operational"]
     assert candidate_row["focus_family"] is True
     assert set(candidate_row["candidate_alignment"]) == {
         "family_query_hit_ship_blend_candidate",
@@ -825,7 +827,7 @@ def test_ship_presence_segment_budget_candidate_improves_ship_evidence_alignment
     ]
 
 
-def test_family_local_target_candidate_improves_small_local_ship_evidence_signal() -> None:
+def test_family_local_target_candidate_improves_medium_operational_ship_evidence_signal() -> None:
     points = torch.zeros((8, 8), dtype=torch.float32)
     points[:, 0] = torch.arange(8, dtype=torch.float32)
     points[:, 1] = torch.arange(8, dtype=torch.float32) * 0.01
@@ -844,7 +846,7 @@ def test_family_local_target_candidate_improves_small_local_ship_evidence_signal
         },
         "_metadata": {
             "anchor_family": "density",
-            "footprint_family": "small_local",
+            "footprint_family": "medium_operational",
         },
     }
 
@@ -856,21 +858,23 @@ def test_family_local_target_candidate_improves_small_local_ship_evidence_signal
     )
 
     family_candidates = targets.diagnostics["family_local_target_candidate_alignment"]
-    small_local = family_candidates["group_by"]["footprint_family"]["small_local"]
-    active_final = small_local["active_baseline_alignment"]["active_final_score"]
-    query_hit_candidate = small_local["candidate_alignment"][
+    medium_operational = family_candidates["group_by"]["footprint_family"]["medium_operational"]
+    active_final = medium_operational["active_baseline_alignment"]["active_final_score"]
+    query_hit_candidate = medium_operational["candidate_alignment"][
         "family_query_hit_ship_blend_candidate"
     ]
-    composed_candidate = small_local["candidate_alignment"]["family_local_composed_score_candidate"]
-    segment_top20 = small_local["candidate_alignment"][
+    composed_candidate = medium_operational["candidate_alignment"][
+        "family_local_composed_score_candidate"
+    ]
+    segment_top20 = medium_operational["candidate_alignment"][
         "family_query_hit_ship_segment_top20_mean_candidate"
     ]
-    segment_sum = small_local["candidate_alignment"]["family_local_segment_budget_candidate"]
+    segment_sum = medium_operational["candidate_alignment"]["family_local_segment_budget_candidate"]
 
     assert family_candidates["candidate_usage"] == (
         "diagnostic_only_family_local_not_training_semantics"
     )
-    assert small_local["candidate_signal_status"] == (
+    assert medium_operational["candidate_signal_status"] == (
         "diagnostic_candidate_improves_family_ship_signal"
     )
     assert query_hit_candidate["spearman_with_ship_query_evidence"] > active_final[
@@ -906,7 +910,7 @@ def test_query_ship_max_pool_target_mode_only_changes_segment_budget_head() -> N
         },
         "_metadata": {
             "anchor_family": "density",
-            "footprint_family": "small_local",
+            "footprint_family": "medium_operational",
         },
     }
 
@@ -964,7 +968,7 @@ def test_query_ship_local_heads_target_mode_changes_composed_head_contract() -> 
         },
         "_metadata": {
             "anchor_family": "density",
-            "footprint_family": "small_local",
+            "footprint_family": "medium_operational",
         },
     }
 
@@ -1117,11 +1121,11 @@ def test_workload_component_compatibility_diagnostic_finds_blocking_families() -
     candidate_deltas = diagnostic["summary"]["recalibration_candidate_score_deltas"]
     assert candidate_deltas["active_component_weights"] < 0.0
     assert (
-        candidate_deltas["query_local_sensible_component_weights_v0"]
+        candidate_deltas["query_local_behavior_heavy_component_weights_v0"]
         > candidate_deltas["active_component_weights"]
     )
     assert (
-        candidate_deltas["point_mass_preserving_smooth_component_weights_v0"]
+        candidate_deltas["query_point_mass_heavy_component_weights_v0"]
         > candidate_deltas["active_component_weights"]
     )
     assert (
@@ -1712,7 +1716,7 @@ def test_family_transfer_path_diagnostic_flags_missing_family_prior_surface() ->
     assert blocked[0]["head"] == "segment_budget_target"
     assert blocked[0]["transfer_status"] == "fits_target_but_misorders_ship_evidence"
     retained = diagnostic["artifacts"][0]["retained_marginal_alignment"]
-    assert retained["misleading_learning_causality_layout_present"] is False
+    assert retained["deprecated_learning_causality_layout_present"] is False
     prior = diagnostic["artifacts"][0]["predictability"][
         "aggregate_best_prior_channel_by_head"
     ]
@@ -4776,7 +4780,7 @@ def test_factorized_head_fit_diagnostics_reports_each_head() -> None:
             },
             "_metadata": {
                 "anchor_family": "density",
-                "footprint_family": "small_local",
+                "footprint_family": "medium_operational",
             },
         }
     ]

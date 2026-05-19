@@ -10,7 +10,7 @@ import torch
 from learning.fit_diagnostics import _discriminative_sample, _kendall_tau
 from learning.losses import _safe_quantile
 from learning.targets.query_local_utility import (
-    FAMILY_TRAINABILITY_FOCUS,
+    DIAGNOSTIC_TRAINABILITY_FOCUS_FAMILIES,
     FAMILY_TRAINABILITY_GROUP_KEYS,
     QUERY_LOCAL_UTILITY_FINAL_LABEL_FORMULA,
     QUERY_LOCAL_UTILITY_HEAD_NAMES,
@@ -406,7 +406,8 @@ def _family_conditioned_head_trainability_diagnostics(
         "topk_ratio": float(ratio),
         "group_by": {},
         "focus_families": {
-            group_key: sorted(values) for group_key, values in FAMILY_TRAINABILITY_FOCUS.items()
+            group_key: sorted(values)
+            for group_key, values in DIAGNOSTIC_TRAINABILITY_FOCUS_FAMILIES.items()
         },
     }
     for group_key, family_rows in family_evidence.items():
@@ -440,7 +441,9 @@ def _family_conditioned_head_trainability_diagnostics(
                 spearman is None or float(spearman) < 0.0
             ):
                 weak_heads.append("factorized_composed_score")
-            focus_family = family in FAMILY_TRAINABILITY_FOCUS.get(group_key, frozenset())
+            focus_family = family in DIAGNOSTIC_TRAINABILITY_FOCUS_FAMILIES.get(
+                group_key, frozenset()
+            )
             group_out[str(family)] = {
                 "available": bool(family_valid.any().item()),
                 "focus_family": focus_family,

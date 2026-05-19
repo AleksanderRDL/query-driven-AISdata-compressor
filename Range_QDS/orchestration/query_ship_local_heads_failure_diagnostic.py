@@ -9,7 +9,9 @@ from typing import Any
 
 PRIMARY_METHOD = "MLQDS"
 BASELINE_METHOD = "DouglasPeucker"
-FOCUS_FAMILIES = {
+# Historical diagnostic focus from pre-simplification artifacts; not active
+# workload-profile requirements.
+HISTORICAL_DIAGNOSTIC_FOCUS_FAMILIES = {
     "anchor_family": ("density",),
     "footprint_family": ("small_local", "medium_operational"),
 }
@@ -316,7 +318,7 @@ def _comparison(reference: dict[str, Any], candidate: dict[str, Any]) -> dict[st
     candidate_summary = _artifact_summary("candidate", candidate)
     family_rows = [
         _family_failure_row(reference, candidate, group_key=group_key, family=family)
-        for group_key, families in FOCUS_FAMILIES.items()
+        for group_key, families in HISTORICAL_DIAGNOSTIC_FOCUS_FAMILIES.items()
         for family in families
     ]
     return {

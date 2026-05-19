@@ -342,6 +342,60 @@ Decision:
 - Keep this progress log compact. Add new entries only when they change the
   current state, evidence boundary, accepted defaults, or next action.
 
+## Checkpoint Group 7 - Stale-Code And Naming Cleanup
+
+Status: completed / code hygiene only.
+
+Goal:
+
+- Remove or update clearly stale implementation wording and misleading names
+  after the scoring/profile simplification, without deleting historical
+  diagnostics that are still useful for comparing old blockers.
+
+Changes:
+
+- Replaced remaining production/test prose that used old redesign wording with
+  implementation/current-acceptance wording.
+- Renamed ambiguous diagnostic focus constants so historical blocker families
+  are not confused with active workload-profile requirements.
+- Removed `small_local` from active target-trainability focus families; it now
+  remains only in explicitly historical transfer diagnostics and tests.
+- Renamed vague workload/scoring recalibration probe names from "sensible" and
+  "point-mass-preserving" to behavior-heavy and point-mass-heavy names.
+- Renamed the deprecated retained-marginal alignment layout flag so it points
+  callers at the current
+  `selector_trace_diagnostics.eval_primary.retained_decision_marginal_query_local_utility_alignment`
+  path.
+
+Tests:
+
+- `git diff --check`
+- `python3 -m py_compile` on touched production and test files.
+- `uv run --group dev -- ruff check` on touched production and test files.
+- `uv run --group dev -- pyright` on touched production files.
+- `uv run --group dev -- pytest Range_QDS/tests/unit/orchestration/test_query_driven_implementation.py Range_QDS/tests/unit/scoring/test_metrics.py Range_QDS/tests/guardrails/test_implementation_guardrails.py -q`
+  (`197 passed`)
+
+Experiment artifact:
+
+- path: none
+- command: none
+
+Key results:
+
+- Code hygiene only. No strict retraining, workload-health, or
+  learning-coherence rerun was performed.
+- Active diagnostic focus now matches the current workload defaults:
+  `density` and `medium_operational`.
+- Historical `small_local` transfer diagnostics remain isolated and explicitly
+  marked as historical.
+
+Decision:
+
+- Keep compatibility/legacy paths only when they still serve diagnostics,
+  artifact comparability, or checkpoint loading. Do not present them as active
+  defaults.
+
 ## Validation
 
 Current docs validation:

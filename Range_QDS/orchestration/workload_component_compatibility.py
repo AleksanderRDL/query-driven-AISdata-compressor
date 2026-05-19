@@ -33,7 +33,7 @@ BLOCKER_FAMILIES = {
     "anchor_family": frozenset({"density"}),
     "footprint_family": frozenset({"medium_operational"}),
 }
-QUERY_LOCAL_SENSIBLE_COMPONENT_WEIGHTS_V0 = {
+QUERY_LOCAL_BEHAVIOR_HEAVY_COMPONENT_WEIGHTS_V0 = {
     "query_point_recall": 0.45,
     "query_local_interpolation_fidelity": 0.25,
     "query_local_turn_change_coverage": 0.12,
@@ -42,7 +42,7 @@ QUERY_LOCAL_SENSIBLE_COMPONENT_WEIGHTS_V0 = {
     "global_shape_guardrail_score": 0.02,
     "length_preservation_guardrail": 0.01,
 }
-POINT_MASS_PRESERVING_SMOOTH_COMPONENT_WEIGHTS_V0 = {
+QUERY_POINT_MASS_HEAVY_COMPONENT_WEIGHTS_V0 = {
     "query_point_recall": 0.50,
     "query_local_interpolation_fidelity": 0.20,
     "query_local_turn_change_coverage": 0.15,
@@ -405,9 +405,7 @@ def _blocker_preserving_outcome(group_rows: dict[str, Any]) -> dict[str, Any]:
     weighted_deltas: dict[str, float] = {}
     pressure_preserved = True
     for group_key, group in group_rows.items():
-        candidate = _as_dict(group).get(
-            "point_mass_preserving_component_blocker_preserving_profile"
-        )
+        candidate = _as_dict(group).get("point_mass_heavy_component_blocker_preserving_profile")
         candidate = _as_dict(candidate)
         weighted_deltas[group_key] = _as_float(candidate.get("weighted_query_local_delta"))
         pressure = _as_dict(candidate.get("critical_family_pressure"))
@@ -434,7 +432,7 @@ def _blocker_preserving_outcome(group_rows: dict[str, Any]) -> dict[str, Any]:
                     }
                 )
     return {
-        "candidate": "point_mass_preserving_component_blocker_preserving_profile",
+        "candidate": "point_mass_heavy_component_blocker_preserving_profile",
         "critical_family_pressure_preserved": pressure_preserved,
         "weighted_query_local_deltas": weighted_deltas,
         "unresolved_blocker_family_count": len(unresolved_rows),
@@ -464,10 +462,10 @@ def _recalibration_candidates(
     active_weights = _component_weights(artifact, method=primary_method)
     candidates = {
         "active_component_weights": active_weights,
-        "query_local_sensible_component_weights_v0": QUERY_LOCAL_SENSIBLE_COMPONENT_WEIGHTS_V0,
-        "point_mass_preserving_smooth_component_weights_v0": (
-            POINT_MASS_PRESERVING_SMOOTH_COMPONENT_WEIGHTS_V0
+        "query_local_behavior_heavy_component_weights_v0": (
+            QUERY_LOCAL_BEHAVIOR_HEAVY_COMPONENT_WEIGHTS_V0
         ),
+        "query_point_mass_heavy_component_weights_v0": QUERY_POINT_MASS_HEAVY_COMPONENT_WEIGHTS_V0,
     }
     primary_components = _method_components(artifact, method=primary_method)
     baseline_components = _method_components(artifact, method=baseline_method)
@@ -498,28 +496,28 @@ def _recalibration_candidates(
                 profile_weights=None,
                 critical_families=BLOCKER_FAMILIES.get(group_key, frozenset()),
             ),
-            "candidate_component_active_profile": _group_delta_with_weights(
+            "behavior_heavy_component_active_profile": _group_delta_with_weights(
                 rows,
-                component_weights=QUERY_LOCAL_SENSIBLE_COMPONENT_WEIGHTS_V0,
+                component_weights=QUERY_LOCAL_BEHAVIOR_HEAVY_COMPONENT_WEIGHTS_V0,
                 profile_weights=None,
                 critical_families=BLOCKER_FAMILIES.get(group_key, frozenset()),
             ),
-            "candidate_component_rebalanced_profile": _group_delta_with_weights(
+            "behavior_heavy_component_rebalanced_profile": _group_delta_with_weights(
                 rows,
-                component_weights=QUERY_LOCAL_SENSIBLE_COMPONENT_WEIGHTS_V0,
+                component_weights=QUERY_LOCAL_BEHAVIOR_HEAVY_COMPONENT_WEIGHTS_V0,
                 profile_weights=REBALANCED_QUERY_MIX_V0.get(group_key, {}),
                 critical_families=BLOCKER_FAMILIES.get(group_key, frozenset()),
             ),
-            "point_mass_preserving_component_active_profile": _group_delta_with_weights(
+            "point_mass_heavy_component_active_profile": _group_delta_with_weights(
                 rows,
-                component_weights=POINT_MASS_PRESERVING_SMOOTH_COMPONENT_WEIGHTS_V0,
+                component_weights=QUERY_POINT_MASS_HEAVY_COMPONENT_WEIGHTS_V0,
                 profile_weights=None,
                 critical_families=BLOCKER_FAMILIES.get(group_key, frozenset()),
             ),
-            "point_mass_preserving_component_blocker_preserving_profile": (
+            "point_mass_heavy_component_blocker_preserving_profile": (
                 _group_delta_with_weights(
                     rows,
-                    component_weights=POINT_MASS_PRESERVING_SMOOTH_COMPONENT_WEIGHTS_V0,
+                    component_weights=QUERY_POINT_MASS_HEAVY_COMPONENT_WEIGHTS_V0,
                     profile_weights=BLOCKER_PRESERVING_QUERY_MIX_V0.get(group_key, {}),
                     critical_families=BLOCKER_FAMILIES.get(group_key, frozenset()),
                 )
@@ -533,7 +531,7 @@ def _recalibration_candidates(
     candidate_delta = next(
         row["primary_minus_baseline"]
         for row in scoring_rows
-        if row["candidate"] == "query_local_sensible_component_weights_v0"
+        if row["candidate"] == "query_local_behavior_heavy_component_weights_v0"
     )
     return {
         "diagnostic_only": True,

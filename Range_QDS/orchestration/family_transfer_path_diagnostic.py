@@ -9,7 +9,9 @@ from typing import Any
 
 PRIMARY_METHOD = "MLQDS"
 BASELINE_METHOD = "DouglasPeucker"
-FOCUS_FAMILIES = {
+# Historical diagnostic focus from pre-simplification artifacts; not active
+# workload-profile requirements.
+HISTORICAL_DIAGNOSTIC_FOCUS_FAMILIES = {
     "anchor_family": ("density",),
     "footprint_family": ("small_local", "medium_operational"),
 }
@@ -334,7 +336,7 @@ def _transfer_status(target: dict[str, Any], fitted: dict[str, Any]) -> str:
 def _focus_family_rows(artifact: dict[str, Any]) -> list[dict[str, Any]]:
     return [
         _family_row(artifact, group_key=group_key, family=family)
-        for group_key, families in FOCUS_FAMILIES.items()
+        for group_key, families in HISTORICAL_DIAGNOSTIC_FOCUS_FAMILIES.items()
         for family in families
     ]
 
@@ -346,7 +348,7 @@ def _retained_marginal_alignment(artifact: dict[str, Any]) -> dict[str, Any]:
             "retained_decision_marginal_query_local_utility_alignment"
         )
     )
-    misleading_layout = _as_dict(
+    deprecated_learning_causality_alignment = _as_dict(
         _as_dict(
             _as_dict(artifact.get("learning_causality_summary")).get(
                 "selection_causality_diagnostics"
@@ -359,7 +361,9 @@ def _retained_marginal_alignment(artifact: dict[str, Any]) -> dict[str, Any]:
         "available": _as_bool(alignment.get("available")),
         "candidate_count": alignment.get("candidate_count"),
         "source_layout": RETAINED_MARGINAL_ALIGNMENT_PATH,
-        "misleading_learning_causality_layout_present": bool(misleading_layout),
+        "deprecated_learning_causality_layout_present": bool(
+            deprecated_learning_causality_alignment
+        ),
         "overall": _score_alignment_subset(overall),
         "retained_removal_loss": _score_alignment_subset(retained_removal),
         "selector_score_overall_spearman": _as_float(
@@ -388,19 +392,19 @@ def _workload_family_pressure(artifact: dict[str, Any]) -> dict[str, Any]:
     return {
         "anchor_family_weights": {
             family: _as_float(_as_dict(profile.get("anchor_family_weights")).get(family))
-            for family in FOCUS_FAMILIES["anchor_family"]
+            for family in HISTORICAL_DIAGNOSTIC_FOCUS_FAMILIES["anchor_family"]
         },
         "footprint_family_weights": {
             family: _as_float(_as_dict(profile.get("footprint_family_weights")).get(family))
-            for family in FOCUS_FAMILIES["footprint_family"]
+            for family in HISTORICAL_DIAGNOSTIC_FOCUS_FAMILIES["footprint_family"]
         },
         "anchor_family_counts": {
             family: _as_float(_as_dict(signature.get("anchor_family_counts")).get(family))
-            for family in FOCUS_FAMILIES["anchor_family"]
+            for family in HISTORICAL_DIAGNOSTIC_FOCUS_FAMILIES["anchor_family"]
         },
         "footprint_family_counts": {
             family: _as_float(_as_dict(signature.get("footprint_family_counts")).get(family))
-            for family in FOCUS_FAMILIES["footprint_family"]
+            for family in HISTORICAL_DIAGNOSTIC_FOCUS_FAMILIES["footprint_family"]
         },
     }
 

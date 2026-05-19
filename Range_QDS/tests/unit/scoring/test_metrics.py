@@ -796,7 +796,7 @@ def test_range_usefulness_reports_ship_evidence_counts_by_query_family() -> None
             },
             "_metadata": {
                 "anchor_family": "density",
-                "footprint_family": "small_local",
+                "footprint_family": "medium_operational",
             },
         }
     ]
