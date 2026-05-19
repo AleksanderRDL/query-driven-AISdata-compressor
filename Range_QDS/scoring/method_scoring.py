@@ -27,10 +27,10 @@ from scoring.query_cache import (
     RangeTrajectoryAuditSupport,
     ScoringQueryCache,
 )
-from scoring.query_useful_v1 import (
-    QUERY_USEFUL_V1_COMPONENT_WEIGHTS,
-    query_useful_v1_components_from_range_audit,
-    query_useful_v1_from_range_audit,
+from scoring.query_local_utility import (
+    QUERY_LOCAL_UTILITY_COMPONENT_WEIGHTS,
+    query_local_utility_components_from_range_audit,
+    query_local_utility_from_range_audit,
 )
 from scoring.range_usefulness import (
     RANGE_USEFULNESS_SCHEMA_VERSION,
@@ -50,6 +50,7 @@ from workloads.range_geometry import (
 RANGE_QUERY_METADATA_COMPONENT_SUMMARY_SCHEMA_VERSION = 2
 
 RANGE_QUERY_COMPONENT_KEYS: tuple[str, ...] = (
+    "query_point_recall",
     "range_point_f1",
     "range_ship_f1",
     "range_ship_coverage",
@@ -65,7 +66,7 @@ RANGE_QUERY_COMPONENT_KEYS: tuple[str, ...] = (
     "range_query_local_interpolation_fidelity",
 )
 
-QUERY_USEFUL_V1_QUERY_LOCAL_EXCLUDED_COMPONENTS: frozenset[str] = frozenset(
+QUERY_LOCAL_UTILITY_QUERY_LOCAL_EXCLUDED_COMPONENTS: frozenset[str] = frozenset(
     {
         "endpoint_or_skeleton_sanity",
         "global_shape_guardrail_score",
@@ -79,6 +80,19 @@ def _range_point_f1(retained_mask: torch.Tensor, range_mask: torch.Tensor) -> fl
     return _point_subset_f1(
         retained_mask.to(device=range_mask.device, dtype=torch.bool), range_mask
     )
+
+
+def _range_query_point_recall(retained_mask: torch.Tensor, range_mask: torch.Tensor) -> float:
+    """Return direct retained query-point recall for one range query."""
+    full_hits = int(range_mask.sum().item())
+    if full_hits <= 0:
+        return 1.0
+    retained_hits = int(
+        (
+            retained_mask.to(device=range_mask.device, dtype=torch.bool) & range_mask
+        ).sum().item()
+    )
+    return float(max(0.0, min(1.0, retained_hits / full_hits)))
 
 
 def score_range_boundary_preservation(
@@ -153,8 +167,8 @@ def _range_query_family_labels(query: dict[str, Any]) -> tuple[str, str]:
     return label("anchor_family"), label("footprint_family")
 
 
-def _query_local_query_useful_summary(range_components: dict[str, float]) -> dict[str, Any]:
-    query_components = query_useful_v1_components_from_range_audit(
+def _query_local_query_local_utility_summary(range_components: dict[str, float]) -> dict[str, Any]:
+    query_components = query_local_utility_components_from_range_audit(
         range_components,
         length_preservation=1.0,
         avg_sed_km=0.0,
@@ -163,20 +177,20 @@ def _query_local_query_useful_summary(range_components: dict[str, float]) -> dic
     included = {
         key: float(value)
         for key, value in query_components.items()
-        if key not in QUERY_USEFUL_V1_QUERY_LOCAL_EXCLUDED_COMPONENTS
+        if key not in QUERY_LOCAL_UTILITY_QUERY_LOCAL_EXCLUDED_COMPONENTS
     }
     weighted_score = 0.0
     weight_sum = 0.0
     for key, value in included.items():
-        weight = float(QUERY_USEFUL_V1_COMPONENT_WEIGHTS.get(key, 0.0))
+        weight = float(QUERY_LOCAL_UTILITY_COMPONENT_WEIGHTS.get(key, 0.0))
         weighted_score += weight * float(value)
         weight_sum += weight
     normalized = weighted_score / weight_sum if weight_sum > 0.0 else 0.0
     return {
-        "query_useful_v1_query_local_components": included,
-        "query_useful_v1_query_local_weighted_score": float(weighted_score),
-        "query_useful_v1_query_local_weighted_score_normalized": float(normalized),
-        "query_useful_v1_query_local_weight_sum": float(weight_sum),
+        "query_local_utility_query_local_components": included,
+        "query_local_utility_query_local_weighted_score": float(weighted_score),
+        "query_local_utility_query_local_weighted_score_normalized": float(normalized),
+        "query_local_utility_query_local_weight_sum": float(weight_sum),
     }
 
 
@@ -279,7 +293,7 @@ def _range_query_component_summary_for_rows(rows: list[dict[str, Any]]) -> dict[
         },
         "range_components": range_components,
         "range_usefulness_score": float(range_usefulness_score_from_components(range_components)),
-        **_query_local_query_useful_summary(range_components),
+        **_query_local_query_local_utility_summary(range_components),
     }
 
 
@@ -307,8 +321,8 @@ def _range_query_metadata_component_summary(
 
     query_local_components = [
         key
-        for key in QUERY_USEFUL_V1_COMPONENT_WEIGHTS
-        if key not in QUERY_USEFUL_V1_QUERY_LOCAL_EXCLUDED_COMPONENTS
+        for key in QUERY_LOCAL_UTILITY_COMPONENT_WEIGHTS
+        if key not in QUERY_LOCAL_UTILITY_QUERY_LOCAL_EXCLUDED_COMPONENTS
     ]
     return {
         "available": True,
@@ -317,9 +331,9 @@ def _range_query_metadata_component_summary(
         "source": "range_query_metadata_and_range_audit_component_rows",
         "query_count": len(query_rows),
         "component_keys": list(RANGE_QUERY_COMPONENT_KEYS),
-        "query_useful_v1_query_local_component_keys": query_local_components,
-        "excluded_query_useful_v1_components": sorted(
-            QUERY_USEFUL_V1_QUERY_LOCAL_EXCLUDED_COMPONENTS
+        "query_local_utility_query_local_component_keys": query_local_components,
+        "excluded_query_local_utility_components": sorted(
+            QUERY_LOCAL_UTILITY_QUERY_LOCAL_EXCLUDED_COMPONENTS
         ),
         "query_rows": query_rows,
         "group_by": {
@@ -847,6 +861,7 @@ def score_range_usefulness(
     points_cpu = points.detach().cpu()
     retained_cpu = retained_bool.detach().cpu()
 
+    point_recall_scores: list[float] = []
     point_scores: list[float] = []
     ship_scores: list[float] = []
     ship_coverage_scores: list[float] = []
@@ -875,7 +890,9 @@ def score_range_usefulness(
         )
         range_mask = support.range_mask.to(device=points.device, dtype=torch.bool)
         retained_in_range = retained_bool & range_mask
+        point_recall = _range_query_point_recall(retained_bool, range_mask)
         point_score = _range_point_f1(retained_bool, range_mask)
+        point_recall_scores.append(point_recall)
         point_scores.append(point_score)
 
         retained_ids = trajectory_ids_from_mask(retained_in_range, point_trajectory_ids)
@@ -917,6 +934,7 @@ def score_range_usefulness(
         interpolation_scores.append(interpolation_score)
         range_gap_min_coverage = min(float(gap_time_score), float(gap_distance_score))
         row_components = {
+            "query_point_recall": float(point_recall),
             "range_point_f1": float(point_score),
             "range_ship_f1": float(ship_score),
             "range_ship_coverage": float(ship_coverage),
@@ -946,11 +964,12 @@ def score_range_usefulness(
                 "range_usefulness_score": float(
                     range_usefulness_score_from_components(row_components)
                 ),
-                **_query_local_query_useful_summary(row_components),
+                **_query_local_query_local_utility_summary(row_components),
             }
         )
 
     query_count = len(point_scores)
+    query_point_recall = _mean(point_recall_scores)
     range_point_f1 = _mean(point_scores)
     range_ship_f1 = _mean(ship_scores)
     range_ship_coverage = _mean(ship_coverage_scores)
@@ -964,6 +983,7 @@ def score_range_usefulness(
     range_shape_score = _mean(shape_scores)
     range_query_local_interpolation_fidelity = _mean(interpolation_scores)
     components = {
+        "query_point_recall": query_point_recall,
         "range_point_f1": range_point_f1,
         "range_ship_f1": range_ship_f1,
         "range_ship_coverage": range_ship_coverage,
@@ -982,6 +1002,7 @@ def score_range_usefulness(
     return {
         "range_usefulness_schema_version": int(RANGE_USEFULNESS_SCHEMA_VERSION),
         "range_query_count": int(query_count),
+        "query_point_recall": float(query_point_recall),
         "range_point_f1": float(range_point_f1),
         "range_ship_f1": float(range_ship_f1),
         "range_ship_coverage": float(range_ship_coverage),
@@ -1161,22 +1182,22 @@ def score_method(
     endpoint_sanity = _endpoint_sanity(retained_mask, boundaries)
     range_audit["endpoint_sanity"] = endpoint_sanity
     boundary_f1 = float(range_audit.get("range_entry_exit_f1", 0.0))
-    query_useful_v1 = query_useful_v1_from_range_audit(
+    query_local_utility = query_local_utility_from_range_audit(
         range_audit,
         length_preservation=avg_length_preserved,
         avg_sed_km=float(geometric.get("avg_sed_km", 0.0)),
         endpoint_sanity=endpoint_sanity,
     )
-    range_audit.update(query_useful_v1)
-    query_useful_components_raw = query_useful_v1.get("query_useful_v1_components", {})
-    query_useful_components = (
-        {str(key): float(value) for key, value in query_useful_components_raw.items()}
-        if isinstance(query_useful_components_raw, dict)
+    range_audit.update(query_local_utility)
+    query_local_utility_components_raw = query_local_utility.get("query_local_utility_components", {})
+    query_local_utility_components = (
+        {str(key): float(value) for key, value in query_local_utility_components_raw.items()}
+        if isinstance(query_local_utility_components_raw, dict)
         else {}
     )
-    query_useful_score = float(cast(Any, query_useful_v1.get("query_useful_v1_score", 0.0)) or 0.0)
-    query_useful_schema = int(
-        cast(Any, query_useful_v1.get("query_useful_v1_schema_version", 0)) or 0
+    query_local_utility_score = float(cast(Any, query_local_utility.get("query_local_utility_score", 0.0)) or 0.0)
+    query_local_utility_schema = int(
+        cast(Any, query_local_utility.get("query_local_utility_schema_version", 0)) or 0
     )
 
     return MethodScore(
@@ -1192,6 +1213,7 @@ def score_method(
         geometric_distortion=geometric,
         avg_length_preserved=avg_length_preserved,
         combined_query_shape_score=combined,
+        query_point_recall=float(range_audit.get("query_point_recall", 0.0)),
         range_point_f1=float(range_audit.get("range_point_f1", per_type.get("range", 0.0))),
         range_ship_f1=float(range_audit.get("range_ship_f1", 0.0)),
         range_ship_coverage=float(range_audit.get("range_ship_coverage", 0.0)),
@@ -1223,9 +1245,9 @@ def score_method(
         range_usefulness_gap_ablation_version=int(
             range_audit.get("range_usefulness_gap_ablation_version", 0) or 0
         ),
-        query_useful_v1_score=query_useful_score,
-        query_useful_v1_schema_version=query_useful_schema,
-        query_useful_v1_components=query_useful_components,
+        query_local_utility_score=query_local_utility_score,
+        query_local_utility_schema_version=query_local_utility_schema,
+        query_local_utility_components=query_local_utility_components,
         range_audit=range_audit,
         retained_mask=retained_mask if return_mask else None,
     )

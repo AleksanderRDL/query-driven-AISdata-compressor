@@ -177,16 +177,16 @@ def test_benchmark_name_list_rejects_mixed_workloads() -> None:
 
 def test_benchmark_workload_profile_parser_accepts_known_profiles() -> None:
     assert _parse_workload_profile_ids(
-        "range_workload_v1_focused,range_workload_v1"
-    ) == ["range_workload_v1_focused", "range_workload_v1"]
-    assert _workload_profile_label_suffix("range_workload_v1_focused") == (
-        "range_workload_v1_focused"
+        "range_query_mix_focused,range_query_mix"
+    ) == ["range_query_mix_focused", "range_query_mix"]
+    assert _workload_profile_label_suffix("range_query_mix_focused") == (
+        "range_query_mix_focused"
     )
 
     with pytest.raises(ValueError, match="Unknown workload_profile_id"):
         _parse_workload_profile_ids("not_a_profile")
     with pytest.raises(ValueError, match="duplicate"):
-        _parse_workload_profile_ids("range_workload_v1,range_workload_v1")
+        _parse_workload_profile_ids("range_query_mix,range_query_mix")
 
 
 def test_run_workload_resolution_is_pure_only() -> None:
@@ -225,7 +225,7 @@ def test_run_config_records_profile_checkpoint_selection_metric(tmp_path) -> Non
         max_trajectories=None,
         validation_score_every=1,
         extra_args=None,
-        workload_profile_ids="range_workload_v1_focused,range_workload_v1",
+        workload_profile_ids="range_query_mix_focused,range_query_mix",
         continue_on_failure=False,
     )
     data_sources = BenchmarkDataSources(
@@ -247,18 +247,18 @@ def test_run_config_records_profile_checkpoint_selection_metric(tmp_path) -> Non
 
     assert payload["checkpoint_selection_metric"] == "uniform_gap"
     assert payload["workload_profile_ids"] == [
-        "range_workload_v1_focused",
-        "range_workload_v1",
+        "range_query_mix_focused",
+        "range_query_mix",
     ]
     assert payload["profile_settings"]["profile_role"] == "workload_aware_diagnostic"
     assert payload["profile_settings"]["final_product_claim"] is False
     assert payload["profile_settings"]["workload_blind"] is False
     assert payload["profile_settings"]["mlqds_effective_diversity_bonus"] == 0.0
     assert payload["profile_settings"]["range_workload_profile_sweep_ids"] == [
-        "range_workload_v1_focused",
-        "range_workload_v1_local",
-        "range_workload_v1_operational",
-        "range_workload_v1",
+        "range_query_mix_focused",
+        "range_query_mix_local",
+        "range_query_mix_operational",
+        "range_query_mix",
     ]
     assert payload["profile_settings"]["range_compression_sweep_ratios"] == [
         0.01,
@@ -288,7 +288,7 @@ def test_blind_profiles_use_small_query_floor_for_coverage_control() -> None:
         assert settings["final_success_allowed"] is False
         assert settings["final_product_candidate"] is False
         assert settings["final_product_claim"] is False
-        assert "QueryUsefulV1" in str(settings["final_product_claim_gate"])
+        assert "QueryLocalUtility" in str(settings["final_product_claim_gate"])
 
 
 def test_benchmark_row_records_effective_child_torch_runtime(tmp_path) -> None:
@@ -360,7 +360,7 @@ def test_benchmark_row_records_effective_child_torch_runtime(tmp_path) -> None:
             "eval_geometry_blend_allowed": True,
         },
         "final_claim_summary": {
-            "primary_metric": "QueryUsefulV1",
+            "primary_metric": "QueryLocalUtility",
             "status": "candidate_blocked_by_required_gates",
             "final_success_allowed": False,
             "blocking_gates": ["predictability_gate"],
@@ -480,9 +480,9 @@ def test_benchmark_row_records_effective_child_torch_runtime(tmp_path) -> None:
                 "length_support_blend_weight": 1.0,
             },
             "learning_causality_delta_gate": {
-                "min_material_query_useful_delta": 0.005,
+                "min_material_query_local_utility_delta": 0.005,
                 "shuffled_score_delta_fraction_of_uniform_gap_min": 0.60,
-                "mlqds_uniform_query_useful_gap": 0.05,
+                "mlqds_uniform_query_local_utility_gap": 0.05,
                 "thresholds": {
                     "shuffled_scores_should_lose": 0.03,
                     "untrained_model_should_lose": 0.005,
@@ -737,9 +737,10 @@ def test_benchmark_row_records_effective_child_torch_runtime(tmp_path) -> None:
         "matched": {
             "MLQDS": {
                 "aggregate_f1": 0.40,
+                "query_point_recall": 0.31,
                 "range_point_f1": 0.40,
                 "range_usefulness_score": 0.42,
-                "query_useful_v1_score": 0.46,
+                "query_local_utility_score": 0.46,
                 "range_ship_f1": 0.60,
                 "range_ship_coverage": 0.64,
                 "range_entry_exit_f1": 0.25,
@@ -768,9 +769,10 @@ def test_benchmark_row_records_effective_child_torch_runtime(tmp_path) -> None:
             },
             "uniform": {
                 "aggregate_f1": 0.35,
+                "query_point_recall": 0.26,
                 "range_point_f1": 0.35,
                 "range_usefulness_score": 0.37,
-                "query_useful_v1_score": 0.39,
+                "query_local_utility_score": 0.39,
                 "range_ship_f1": 0.50,
                 "range_ship_coverage": 0.60,
                 "range_entry_exit_f1": 0.30,
@@ -797,9 +799,10 @@ def test_benchmark_row_records_effective_child_torch_runtime(tmp_path) -> None:
             },
             "DouglasPeucker": {
                 "aggregate_f1": 0.36,
+                "query_point_recall": 0.29,
                 "range_point_f1": 0.36,
                 "range_usefulness_score": 0.39,
-                "query_useful_v1_score": 0.41,
+                "query_local_utility_score": 0.41,
                 "range_ship_f1": 0.48,
                 "range_ship_coverage": 0.55,
                 "range_entry_exit_f1": 0.28,
@@ -829,35 +832,35 @@ def test_benchmark_row_records_effective_child_torch_runtime(tmp_path) -> None:
             "0.0100": {
                 "MLQDS": {
                     "range_usefulness_score": 0.10,
-                    "query_useful_v1_score": 0.11,
+                    "query_local_utility_score": 0.11,
                     "range_usefulness_gap_time_score": 0.11,
                 },
                 "uniform": {
                     "range_usefulness_score": 0.12,
-                    "query_useful_v1_score": 0.13,
+                    "query_local_utility_score": 0.13,
                     "range_usefulness_gap_time_score": 0.10,
                 },
-                "DouglasPeucker": {"range_usefulness_score": 0.09, "query_useful_v1_score": 0.10},
+                "DouglasPeucker": {"range_usefulness_score": 0.09, "query_local_utility_score": 0.10},
                 "TemporalRandomFill": {"range_usefulness_score": 0.11},
             },
             "0.0500": {
                 "MLQDS": {
                     "range_usefulness_score": 0.42,
-                    "query_useful_v1_score": 0.46,
+                    "query_local_utility_score": 0.46,
                     "range_usefulness_gap_time_score": 0.43,
                 },
                 "uniform": {
                     "range_usefulness_score": 0.37,
-                    "query_useful_v1_score": 0.39,
+                    "query_local_utility_score": 0.39,
                     "range_usefulness_gap_time_score": 0.38,
                 },
-                "DouglasPeucker": {"range_usefulness_score": 0.39, "query_useful_v1_score": 0.41},
+                "DouglasPeucker": {"range_usefulness_score": 0.39, "query_local_utility_score": 0.41},
                 "TemporalRandomFill": {"range_usefulness_score": 0.41},
             },
             "0.1000": {
-                "MLQDS": {"range_usefulness_score": 0.50, "query_useful_v1_score": 0.52},
-                "uniform": {"range_usefulness_score": 0.48, "query_useful_v1_score": 0.49},
-                "DouglasPeucker": {"range_usefulness_score": 0.47, "query_useful_v1_score": 0.48},
+                "MLQDS": {"range_usefulness_score": 0.50, "query_local_utility_score": 0.52},
+                "uniform": {"range_usefulness_score": 0.48, "query_local_utility_score": 0.49},
+                "DouglasPeucker": {"range_usefulness_score": 0.47, "query_local_utility_score": 0.48},
                 "TemporalRandomFill": {"range_usefulness_score": 0.52},
             },
         },
@@ -1167,22 +1170,22 @@ def test_benchmark_row_records_effective_child_torch_runtime(tmp_path) -> None:
     assert row["audit_low_beats_uniform_range_usefulness_count"] == 1
     assert row["audit_low_beats_temporal_random_fill_range_usefulness_count"] == 1
     assert row["audit_low_beats_both_range_usefulness_count"] == 1
-    assert row["audit_beats_uniform_query_useful_v1_count"] == 2
-    assert row["audit_beats_douglas_peucker_query_useful_v1_count"] == 3
-    assert row["audit_low_beats_uniform_query_useful_v1_count"] == 1
+    assert row["audit_beats_uniform_query_local_utility_count"] == 2
+    assert row["audit_beats_douglas_peucker_query_local_utility_count"] == 3
+    assert row["audit_low_beats_uniform_query_local_utility_count"] == 1
     assert row["audit_min_low_vs_uniform_range_usefulness"] == pytest.approx(-0.02)
-    assert row["audit_min_low_vs_uniform_query_useful_v1"] == pytest.approx(-0.02)
+    assert row["audit_min_low_vs_uniform_query_local_utility"] == pytest.approx(-0.02)
     assert row["audit_mean_low_vs_uniform_range_usefulness"] == pytest.approx(0.015)
-    assert row["audit_mean_low_vs_uniform_query_useful_v1"] == pytest.approx(0.025)
+    assert row["audit_mean_low_vs_uniform_query_local_utility"] == pytest.approx(0.025)
     assert row["audit_min_low_vs_temporal_random_fill_range_usefulness"] == pytest.approx(-0.01)
     assert row["audit_mean_vs_temporal_random_fill_range_usefulness"] == pytest.approx(-0.02 / 3.0)
     assert row["audit_mean_low_vs_temporal_random_fill_range_usefulness"] == pytest.approx(0.0)
     assert row["audit_ratio_0p0100_compression_ratio"] == pytest.approx(0.01)
     assert row["audit_ratio_0p0100_mlqds_range_usefulness"] == pytest.approx(0.10)
     assert row["audit_ratio_0p0100_uniform_range_usefulness"] == pytest.approx(0.12)
-    assert row["audit_ratio_0p0100_mlqds_query_useful_v1"] == pytest.approx(0.11)
-    assert row["audit_ratio_0p0100_uniform_query_useful_v1"] == pytest.approx(0.13)
-    assert row["audit_ratio_0p0100_mlqds_vs_uniform_query_useful_v1"] == pytest.approx(-0.02)
+    assert row["audit_ratio_0p0100_mlqds_query_local_utility"] == pytest.approx(0.11)
+    assert row["audit_ratio_0p0100_uniform_query_local_utility"] == pytest.approx(0.13)
+    assert row["audit_ratio_0p0100_mlqds_vs_uniform_query_local_utility"] == pytest.approx(-0.02)
     assert row["audit_ratio_0p0100_douglas_peucker_range_usefulness"] == pytest.approx(0.09)
     assert row["audit_ratio_0p0100_temporal_random_fill_range_usefulness"] == pytest.approx(0.11)
     assert row["audit_ratio_0p0100_mlqds_vs_uniform_range_usefulness"] == pytest.approx(-0.02)
@@ -1240,23 +1243,26 @@ def test_benchmark_row_records_effective_child_torch_runtime(tmp_path) -> None:
     assert row["local_swap_gain_cost_selected_candidate_value_mass"] == 1.50
     assert row["local_swap_gain_cost_selected_removal_cost_mass"] == 0.40
     assert row["local_swap_gain_cost_source_positive_mass"] == 3.75
-    assert row["mlqds_primary_metric"] == "query_useful_v1"
+    assert row["mlqds_primary_metric"] == "query_local_utility"
     assert row["mlqds_primary_score"] == 0.46
     assert row["mlqds_aggregate_f1"] == 0.40
+    assert row["mlqds_query_point_recall"] == 0.31
     assert row["mlqds_range_point_f1"] == 0.40
     assert row["mlqds_range_usefulness"] == 0.42
     assert row["mlqds_range_usefulness_score"] == 0.42
-    assert row["mlqds_query_useful_v1_score"] == 0.46
+    assert row["mlqds_query_local_utility_score"] == 0.46
     assert row["mlqds_range_usefulness_gap_time_score"] == 0.429
     assert row["mlqds_range_usefulness_gap_distance_score"] == 0.4245
     assert row["mlqds_range_usefulness_gap_min_score"] == 0.4245
     assert row["uniform_range_point_f1"] == 0.35
+    assert row["uniform_query_point_recall"] == 0.26
     assert row["uniform_range_usefulness"] == 0.37
-    assert row["uniform_query_useful_v1_score"] == 0.39
+    assert row["uniform_query_local_utility_score"] == 0.39
     assert row["uniform_range_usefulness_gap_time_score"] == 0.379
     assert row["douglas_peucker_range_point_f1"] == 0.36
+    assert row["douglas_peucker_query_point_recall"] == 0.29
     assert row["douglas_peucker_range_usefulness"] == 0.39
-    assert row["douglas_peucker_query_useful_v1_score"] == 0.41
+    assert row["douglas_peucker_query_local_utility_score"] == 0.41
     assert row["douglas_peucker_range_usefulness_gap_min_score"] == 0.3936
     assert row["mlqds_avg_sed_km"] == 0.60
     assert row["uniform_avg_sed_km"] == 0.55
@@ -1297,11 +1303,13 @@ def test_benchmark_row_records_effective_child_torch_runtime(tmp_path) -> None:
     assert row["oracle_kind"] == "additive_label_greedy"
     assert row["oracle_exact_optimum"] is False
     assert row["mlqds_vs_uniform_range_point_f1"] == pytest.approx(0.05)
+    assert row["mlqds_vs_uniform_query_point_recall"] == pytest.approx(0.05)
     assert row["mlqds_vs_douglas_peucker_range_point_f1"] == pytest.approx(0.04)
+    assert row["mlqds_vs_douglas_peucker_query_point_recall"] == pytest.approx(0.02)
     assert row["mlqds_vs_uniform_range_usefulness"] == pytest.approx(0.05)
-    assert row["mlqds_vs_uniform_query_useful_v1"] == pytest.approx(0.07)
+    assert row["mlqds_vs_uniform_query_local_utility"] == pytest.approx(0.07)
     assert row["mlqds_vs_douglas_peucker_range_usefulness"] == pytest.approx(0.03)
-    assert row["mlqds_vs_douglas_peucker_query_useful_v1"] == pytest.approx(0.05)
+    assert row["mlqds_vs_douglas_peucker_query_local_utility"] == pytest.approx(0.05)
     assert row["mlqds_vs_uniform_range_usefulness_gap_time"] == pytest.approx(0.05)
     assert row["mlqds_vs_uniform_range_usefulness_gap_distance"] == pytest.approx(0.0473)
     assert row["mlqds_vs_uniform_range_usefulness_gap_min"] == pytest.approx(0.0473)
@@ -1319,9 +1327,9 @@ def _final_grid_row(workload_profile_id: str, *, mlqds_delta: float = 0.05) -> d
         "returncode": 0,
         "workload_profile_id": workload_profile_id,
         "compression_ratio": 0.05,
-        "mlqds_query_useful_v1_score": 0.55,
-        "uniform_query_useful_v1_score": 0.50,
-        "douglas_peucker_query_useful_v1_score": 0.49,
+        "mlqds_query_local_utility_score": 0.55,
+        "uniform_query_local_utility_score": 0.50,
+        "douglas_peucker_query_local_utility_score": 0.49,
         "workload_stability_gate_pass": True,
         "predictability_gate_pass": True,
         "prior_predictive_alignment_gate_pass": True,
@@ -1331,22 +1339,22 @@ def _final_grid_row(workload_profile_id: str, *, mlqds_delta: float = 0.05) -> d
         "prior_sample_gate_pass": True,
         "global_sanity_gate_pass": True,
         "support_overlap_gate_pass": True,
-        "mlqds_primary_metric": "query_useful_v1",
+        "mlqds_primary_metric": "query_local_utility",
     }
     for ratio in (0.01, 0.02, 0.05, 0.10, 0.15, 0.20, 0.30):
         prefix = f"audit_ratio_{ratio:.4f}".replace(".", "p")
-        row[f"{prefix}_mlqds_query_useful_v1"] = 0.50 + mlqds_delta
-        row[f"{prefix}_uniform_query_useful_v1"] = 0.50
-        row[f"{prefix}_douglas_peucker_query_useful_v1"] = 0.49
+        row[f"{prefix}_mlqds_query_local_utility"] = 0.50 + mlqds_delta
+        row[f"{prefix}_uniform_query_local_utility"] = 0.50
+        row[f"{prefix}_douglas_peucker_query_local_utility"] = 0.49
     return row
 
 
 def test_query_driven_final_grid_summary_accepts_complete_passing_grid() -> None:
     profile_ids = (
-        "range_workload_v1_focused",
-        "range_workload_v1_local",
-        "range_workload_v1_operational",
-        "range_workload_v1",
+        "range_query_mix_focused",
+        "range_query_mix_local",
+        "range_query_mix_operational",
+        "range_query_mix",
     )
     rows = [_final_grid_row(profile_id) for profile_id in profile_ids]
     run_config = {
@@ -1372,8 +1380,8 @@ def test_query_driven_final_grid_summary_accepts_complete_passing_grid() -> None
 
 def test_query_driven_final_grid_summary_blocks_missing_or_failed_evidence() -> None:
     rows = [
-        _final_grid_row("range_workload_v1_focused"),
-        _final_grid_row("range_workload_v1_local", mlqds_delta=-0.02),
+        _final_grid_row("range_query_mix_focused"),
+        _final_grid_row("range_query_mix_local", mlqds_delta=-0.02),
     ]
     rows[0]["predictability_gate_pass"] = False
 
@@ -1395,10 +1403,10 @@ def test_query_driven_final_grid_summary_blocks_prior_alignment_failure() -> Non
     rows = [
         _final_grid_row(profile_id)
         for profile_id in (
-            "range_workload_v1_focused",
-            "range_workload_v1_local",
-            "range_workload_v1_operational",
-            "range_workload_v1",
+            "range_query_mix_focused",
+            "range_query_mix_local",
+            "range_query_mix_operational",
+            "range_query_mix",
         )
     ]
     rows[0]["prior_predictive_alignment_gate_pass"] = False
@@ -1986,7 +1994,7 @@ def test_benchmark_report_records_concrete_family_root(
             "--run_label",
             "unit",
             "--workload_profile_ids",
-            "range_workload_v1_focused,range_workload_v1_local",
+            "range_query_mix_focused,range_query_mix_local",
             "--workloads",
             "range",
             "--train_csv_path",
@@ -2005,20 +2013,20 @@ def test_benchmark_report_records_concrete_family_root(
     assert artifact["family_root"] == str(family)
     assert "<function" not in artifact["family_root"]
     assert artifact["run_config"]["workload_profile_ids"] == [
-        "range_workload_v1_focused",
-        "range_workload_v1_local",
+        "range_query_mix_focused",
+        "range_query_mix_local",
     ]
     assert [row["run_label"] for row in artifact["rows"]] == [
-        "unit_range_workload_v1_focused",
-        "unit_range_workload_v1_local",
+        "unit_range_query_mix_focused",
+        "unit_range_query_mix_local",
     ]
     assert artifact["rows"][0]["command"][-2:] == [
         "--workload_profile_id",
-        "range_workload_v1_focused",
+        "range_query_mix_focused",
     ]
     assert artifact["rows"][1]["command"][-2:] == [
         "--workload_profile_id",
-        "range_workload_v1_local",
+        "range_query_mix_local",
     ]
     assert artifact["rows"][0]["train_csv_path"] == str(train_csv)
     assert artifact["rows"][0]["validation_csv_path"] == str(validation_csv)

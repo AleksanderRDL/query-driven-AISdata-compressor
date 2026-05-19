@@ -21,7 +21,7 @@ from orchestration.selector_diagnostics import (
     factorized_score_component_vectors_from_logits,
     query_free_retained_removal_teacher_proxy_vectors,
     query_prior_component_vectors_for_points,
-    retained_decision_marginal_query_useful_diagnostics,
+    retained_decision_marginal_query_local_utility_diagnostics,
     selector_segment_score_source_label,
 )
 from scoring.methods import FrozenMaskMethod, Method
@@ -226,8 +226,8 @@ def freeze_workload_blind_retained_masks(
                         test_points.detach().cpu().float(),
                         test_boundaries,
                     )
-                    trace["retained_decision_marginal_query_useful_alignment"] = (
-                        retained_decision_marginal_query_useful_diagnostics(
+                    trace["retained_decision_marginal_query_local_utility_alignment"] = (
+                        retained_decision_marginal_query_local_utility_diagnostics(
                             points=test_points.detach().cpu().float(),
                             boundaries=test_boundaries,
                             typed_queries=eval_workload.typed_queries,
@@ -250,7 +250,7 @@ def freeze_workload_blind_retained_masks(
                         )
                     )
                 except Exception as exc:  # pragma: no cover - diagnostic must not break freezing.
-                    trace["retained_decision_marginal_query_useful_alignment"] = {
+                    trace["retained_decision_marginal_query_local_utility_alignment"] = {
                         "available": False,
                         "diagnostic_only": True,
                         "reason": "diagnostic_failed",

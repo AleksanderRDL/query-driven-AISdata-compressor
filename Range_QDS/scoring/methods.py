@@ -19,7 +19,7 @@ from learning.inference import (
 )
 from learning.model_features import build_model_point_features_for_dim
 from learning.outputs import TrainingOutputs
-from learning.targets.query_useful_v1 import QUERY_USEFUL_V1_HEAD_NAMES
+from learning.targets.query_local_utility import QUERY_LOCAL_UTILITY_HEAD_NAMES
 from selection.learned_segment_budget import (
     GEOMETRY_TIE_BREAKER_WEIGHT,
     SEGMENT_ALLOCATION_WEIGHT_FLOOR,
@@ -263,7 +263,7 @@ class MLQDSMethod:
                 self._path_length_support_score_cache = None
                 self._selector_segment_score_cache = None
                 try:
-                    segment_head_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index(
+                    segment_head_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index(
                         "segment_budget_target"
                     )
                 except ValueError:
@@ -273,7 +273,7 @@ class MLQDSMethod:
                         head_logits[:, segment_head_idx].detach().cpu().float()
                     )
                 try:
-                    path_length_head_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index(
+                    path_length_head_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index(
                         "path_length_support_target"
                     )
                 except ValueError:

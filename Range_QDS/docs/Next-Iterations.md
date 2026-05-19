@@ -50,12 +50,19 @@ Update after checkpoints 61-73:
 Going forward, use this document to choose the next checkpoint, but use
 `query-driven-rework-guide.md` as the source of truth for gates, evidence
 levels, and protocol. Also keep `docs/keep-in-mind.md` in view: workload
-profiles, anchor-family weights, and QueryUsefulV1 component weights are not
+profiles, anchor-family weights, and QueryLocalUtility component weights are not
 fixed constants. Do not run the final grid yet and do not add another scalar
 proxy loss over current labels. The next admissible evidence should diagnose
 whether the workload profile and scoring components produce a simple,
 query-local, trainable signal together. Do not wire a training loss until that
 signal has strict-scale evidence under unchanged gates.
+
+Update after checkpoint 5.171: the active workload profile is now
+`range_query_mix`, with only `density` and `sparse_background_control` anchor
+families and only `medium_operational` and `large_context` footprints.
+Older references below to `small_local` or removed families describe
+pre-simplified artifacts and must not be treated as active workload-family
+requirements.
 
 ## Current Blockers
 
@@ -89,7 +96,7 @@ diagnostic**, not another model tweak or selector-blend sweep. Use at least
 Level 2 scale, and prefer the workload-healthy strict shape when runtime allows.
 Tiny smokes are only for schema/runtime checks.
 
-Compare workload families and QueryUsefulV1 components together:
+Compare workload families and QueryLocalUtility components together:
 
 - anchor-family and footprint-family contributions;
 - query-hit, ship, entry/exit, crossing, temporal span, turn, shape, speed/heading, and global guardrail component mass;
@@ -124,7 +131,7 @@ because of ship-level evidence, especially `ship_f1`, while it is better on
 query-local interpolation, shape, speed/heading, entry/exit, and length.
 
 Use checkpoint75 over checkpoint74 for family signs. Against Douglas-Peucker,
-MLQDS is negative on `density_route`, `crossing_turn_change`,
+MLQDS is negative on `density`, `crossing_turn_change`,
 `medium_operational`, and `small_local`, but positive on
 `boundary_entry_exit`, `port_or_approach_zone`, `sparse_background_control`,
 `large_context`, and `route_corridor_like`.
@@ -140,7 +147,7 @@ Checkpoint 5.135 adds the missing diagnostic surface for that question. Future
 artifacts should inspect `ship_query_evidence_target_alignment` in target
 diagnostics and `ship_evidence_counts` under
 `matched.<method>.range_audit.range_query_metadata_component_summary`. Use these
-fields to decide whether the workload profile, QueryUsefulV1 component weights,
+fields to decide whether the workload profile, QueryLocalUtility component weights,
 or target/head contract is miscalibrated. Do not treat this instrumentation as
 evidence of learning; it needs meaningful strict-scale runs, not more tiny smoke
 validation.
@@ -176,31 +183,31 @@ the target diagnostic alone looks cleaner.
 
 Checkpoint78 rejects the guarded query-hit/ship-presence segment-budget target.
 It improves the target-side segment-budget ship-evidence diagnostic, but MLQDS
-QueryUsefulV1 falls to `0.1588862822`, below both the current-best active target
+QueryLocalUtility falls to `0.1588862822`, below both the current-best active target
 and Douglas-Peucker, and learning causality gets worse. Do not keep tuning that
 blend. The next admissible checkpoint should diagnose workload-profile and
-QueryUsefulV1 component compatibility together, or test a cleaner
+QueryLocalUtility component compatibility together, or test a cleaner
 final-score/ship-presence/query-local target design under unchanged gates. The
 point is a trainable retained-set signal, not matching one target-alignment
 diagnostic.
 
 Checkpoint79 rejects the guarded final-score/ship-presence segment-budget target
 too. It improves target-side segment-budget ship-evidence Spearman to
-`0.1583725136`, but MLQDS QueryUsefulV1 is only `0.1592468202`, still well below
+`0.1583725136`, but MLQDS QueryLocalUtility is only `0.1592468202`, still well below
 the active target and Douglas-Peucker. Causality is worse, with negative
 shuffled-score and no-segment-budget-head deltas. Both ship-blend target modes
 should stay out of active training options. The next checkpoint should stop
 testing segment-budget ship blends and instead diagnose which workload families
-and QueryUsefulV1 scoring components make the retained-set signal non-trainable.
+and QueryLocalUtility scoring components make the retained-set signal non-trainable.
 
 Checkpoint80 provides that derived diagnosis from checkpoint77/78/79 grouped
 payloads. The active strict blocker is not a generic ship-presence miss. It is
-concentrated in `small_local`, `density_route`, `crossing_turn_change`, and
-`medium_operational`, with losses dominated by `ship_f1`,
+concentrated in `small_local`, `density`, `crossing_turn_change`, and
+`medium_operational`, with schema `2` losses dominated by `ship_f1`,
 `ship_balanced_query_point_recall`, `ship_coverage`, and point-mass recall
 terms. The rejected ship-blend target artifacts worsen the same density and
 small-local deficits. The next admissible checkpoint should propose and inspect
-a workload-profile/QueryUsefulV1 component recalibration candidate at diagnostic
+a workload-profile/QueryLocalUtility component recalibration candidate at diagnostic
 level first. Do not wire a new loss or target mode until that candidate shows a
 coherent strict-scale signal under the existing gates.
 
@@ -218,7 +225,7 @@ until this compatibility problem is understood at strict scale.
 
 Checkpoint82 runs that blocker-preserving version. It keeps ship/point evidence
 weight at the active total (`0.55`) and preserves critical-family profile
-pressure for `density_route`, `crossing_turn_change`, `small_local`, and
+pressure for `density`, `crossing_turn_change`, `small_local`, and
 `medium_operational`. The post-hoc score delta is still positive
 (`0.0015104602`), but the status is `still_blocked`: all critical families keep
 negative or missed ship-evidence signs. This means a plain scoring/profile
@@ -227,12 +234,12 @@ target/head trainability diagnostics for density-route and small-local, then
 use meaningful strict-scale evidence before changing any target, head, or
 scoring default.
 
-Checkpoint 5.147 adds that instrumentation. Future QueryUsefulV1 target
+Checkpoint 5.147 adds that instrumentation. Future QueryLocalUtility target
 diagnostics now expose `family_conditioned_target_trainability`, and training
 fit diagnostics expose `family_conditioned_head_trainability`. These are schema
 and runtime surfaces only until strict evidence exists. The next admissible
 evidence is a workload-healthy strict diagnostic that reads those fields for
-`density_route` and `small_local`. Do not infer training coherence from the
+`density` and `small_local`. Do not infer training coherence from the
 unit tests, and do not change target/head/scoring defaults until the strict
 artifact shows which family/head combination is actually weak.
 
@@ -241,27 +248,27 @@ strict scores and failed gates, so the added instrumentation did not change the
 semantics. `small_local` is the severe blocker: target-side final score,
 query-hit, behavior, and segment-budget all rank against family ship-query
 evidence, and the trained heads plus composed score remain negative against
-that evidence. `density_route` is mainly target-side weak in behavior and
+that evidence. `density` is mainly target-side weak in behavior and
 segment-budget; trained heads recover only weak positive ship-evidence signs.
 The next admissible code checkpoint should be diagnostic-only family-local
-target/head construction for `small_local` and `density_route`. Do not spend the
+target/head construction for `small_local` and `density`. Do not spend the
 next iteration on another generic scalar proxy, selector blend, or scoring/
 profile default unless the diagnostic shows a coherent strict-scale trainable
 signal under unchanged gates.
 
 Checkpoint 5.149 adds that Level 0 family-local candidate surface. Future
-QueryUsefulV1 target diagnostics now expose
+QueryLocalUtility target diagnostics now expose
 `family_local_target_candidate_alignment`, including family query-hit/ship,
 ship-gated behavior, boundary/replacement/ship, composed-score, and
 segment-budget candidates. This is not training semantics and not learning
 evidence. The next meaningful checkpoint should run the workload-healthy strict
-shape and inspect this payload for `small_local` and `density_route`; only then
+shape and inspect this payload for `small_local` and `density`; only then
 decide whether any family-local target/head candidate deserves a guarded
 training variant.
 
 Checkpoint84 runs that strict diagnostic. The point-level family query-hit/ship
 candidate is strong for the blocker families (`small_local` Spearman `0.9740`,
-`density_route` Spearman `0.9191` against ship-query evidence), but the derived
+`density` Spearman `0.9191` against ship-query evidence), but the derived
 family-local segment-budget candidate is still anti-aligned (`-0.5754` and
 `-0.3675`) and only covers about `5%` of ship-query pairs at top-k. Do not
 promote the current candidate. The next checkpoint should diagnose segment
@@ -274,7 +281,7 @@ the workload-healthy strict cell. The old point-top-k view of segment candidates
 was too pessimistic: two-stage allocation plus family-local point choice
 recovers much more ship evidence. For `small_local`, the max-pooled segment
 candidate reaches two-stage ship-evidence mass recall `0.8829`, and best pair
-coverage is `0.4000`. For `density_route`, the fractional ship-query segment
+coverage is `0.4000`. For `density`, the fractional ship-query segment
 candidate reaches best pair coverage `0.6075`, while the max-pooled candidate
 gets best mass recall `0.7214`. This still does not pass gates because it is
 diagnostic-only. The next admissible code checkpoint may isolate a guarded
@@ -283,9 +290,9 @@ unchanged strict retained-mask quality and causality gates, not by these
 diagnostic rows alone.
 
 Checkpoint 5.153 adds the guarded non-default target mode
-`query_useful_v1_factorized_segment_budget_query_ship_max_pool`. Checkpoint86
+`query_local_utility_factorized_segment_budget_query_ship_max_pool`. Checkpoint86
 runs it at the current-best strict cell. This is the first segment aggregation
-variant with a useful partial signal: MLQDS QueryUsefulV1 reaches
+variant with a useful partial signal: MLQDS QueryLocalUtility reaches
 `0.1673482145`, slightly above Douglas-Peucker `0.1671038781`, and the
 no-segment-budget-head causality child passes (`0.0061773534` loss). It still
 fails predictability and learning causality overall, so do not promote it. The
@@ -299,7 +306,7 @@ Checkpoint 5.155 adds that derived comparison as
 `query_ship_max_pool_transfer_diagnosis.json`. It confirms the max-pool target
 is not a promotion candidate yet. The no-segment-budget-head causality child now
 passes, but shuffled scores, prior ablations, and behavior-head ablation still
-fail. `density_route` has positive target and fitted segment signs, while
+fail. `density` has positive target and fitted segment signs, while
 `small_local` and `crossing_turn_change` have positive target-side segment
 signs but negative fitted segment/composed signs. The next checkpoint should
 target family/head transfer for `small_local` and `crossing_turn_change`, not
@@ -309,11 +316,11 @@ components or workload family profile may need calibration with the target
 contract, but do not mask these blocker families away.
 
 Checkpoint 5.157 rejects the broader guarded
-`query_useful_v1_factorized_query_ship_local_heads` target contract. It makes
+`query_local_utility_factorized_query_ship_local_heads` target contract. It makes
 target-side `small_local` and `crossing_turn_change` q-hit/behavior/final signs
 positive, but the fitted heads stay negative for every composed head in both
 families. It also fails target diffusion because the behavior target becomes too
-broad, and MLQDS QueryUsefulV1 drops to `0.1632708811`, below Douglas-Peucker
+broad, and MLQDS QueryLocalUtility drops to `0.1632708811`, below Douglas-Peucker
 `0.1671038781`. Do not promote this mode, do not broaden behavior targets
 again, and do not count this as learning coherence. The next checkpoint should
 diagnose the model/loss/prior transfer failure under a diffusion-preserving
@@ -323,7 +330,7 @@ the signal trainable without reducing pressure on `small_local` and
 
 Checkpoint 5.158 adds that derived failure diagnosis. It confirms checkpoint90
 regresses target diffusion and prior-predictive alignment while lowering MLQDS
-QueryUsefulV1 by `0.0040773333` versus checkpoint86. The diffusion failure is
+QueryLocalUtility by `0.0040773333` versus checkpoint86. The diffusion failure is
 specific: `conditional_behavior_utility` support is `0.9396`, above the `0.5`
 maximum. The transfer failure is also explicit: `small_local` q-hit/behavior/
 segment target-to-fit gaps are `-0.2686`, `-0.3864`, and `-0.2000`;
@@ -348,7 +355,7 @@ Checkpoint 5.160 adds that diagnostic surface and reruns the guarded max-pool
 strict cell as
 `artifacts/results/query_driven_v2_checkpoint93_family_prior_predictability_max_pool_current_best_strict_local/example_run.json`.
 Scores and gates reproduce checkpoint86: the candidate still slightly beats
-Douglas-Peucker on QueryUsefulV1 but still fails predictability and learning
+Douglas-Peucker on QueryLocalUtility but still fails predictability and learning
 causality. The new family-prior rows reject the lazy explanation that the
 blocker families have no usable prior signal. `crossing_turn_change` query-hit
 and segment-budget prior rank are useful; `small_local` behavior and
@@ -416,22 +423,71 @@ The trace is clean: mode `segment_score_allocation_weight_zblend`,
 `applied=true`, no post-selection attribution, no length-support
 counter-signal, retained-mask reconstruction matches the frozen primary, and
 final effective length-support allocation weight is `0.0`. The probe still
-fails predictability and learning causality. MLQDS QueryUsefulV1 is
+fails predictability and learning causality. MLQDS QueryLocalUtility is
 `0.1672369132`, slightly above Douglas-Peucker but below checkpoint93 by
 `0.0001113013`; shuffled scores, prior ablations, and behavior-head causality
 still fail. Treat this as a rejection of the simple allocation-weight z-blend,
 not as selector progress. The next checkpoint should return to coherent
-workload/scoring/target signal construction, especially whether QueryUsefulV1
+workload/scoring/target signal construction, especially whether QueryLocalUtility
 component weights and workload family pressure can produce trainable local
-signals without masking `small_local`, `density_route`, or
-`crossing_turn_change`.
+signals without masking active `density` or `medium_operational` pressure.
+`small_local` and `crossing_turn_change` are now historical blockers unless a
+future checkpoint deliberately reintroduces them.
+
+Checkpoint 5.166 implements the first scoring simplification: the primary
+metric is schema `3`, with `ship_presence_and_coverage`,
+`boundary_and_event_evidence`, and the ship-coverage part of
+`ship_balanced_query_point_recall` removed from the primary aggregate. Remaining
+query-point-mass, query-local-behavior, and global-sanity weights are
+renormalized. Treat this as implementation only. Do not compare schema `3`
+scores against checkpoint99 schema `2` scores as if they were the same metric;
+the next useful checkpoint is a focused strict rerun under schema `3`, followed
+by gate-by-gate diagnosis if learning causality still fails.
+
+Checkpoint 5.167 rebalances the simplified metric as schema `4`: point mass
+`0.50`, query-local behavior `0.45`, and global sanity `0.05`, preserving the
+schema `3` component set and within-group proportions. Do not compare schema
+`4` scores against schema `2` or `3` scores as if they were the same metric.
+The next useful checkpoint is now a focused strict rerun under schema `4`,
+followed by gate-by-gate diagnosis if learning causality still fails.
+
+Checkpoint 5.168 renames the active metric to `QueryLocalUtility` and the
+production/reporting keys to `query_local_utility`. Old `query_useful_v1`
+target modes and output fields are intentionally not kept as production aliases.
+New checkpoint artifacts should use the new names; historical checkpoint
+numbers remain historical evidence and are not a compatibility contract.
+
+Checkpoint 5.169 simplifies the active workload profile to `range_query_mix`.
+Active anchors are now `density=0.80` and `sparse_background_control=0.20`;
+active footprints are `small_local=0.2777777777777778`,
+`medium_operational=0.50`, and `large_context=0.2222222222222222`.
+Removed profile IDs and families are historical only, not production aliases.
+
+Checkpoint 5.170 simplifies `QueryLocalUtility` as schema `5`. Point mass is
+now direct `query_point_recall` with weight `0.50`; query-local behavior is
+direct interpolation fidelity (`0.20`), turn-change coverage (`0.15`), and
+continuity from `range_gap_min_coverage` (`0.10`); global sanity remains
+`0.05`. The active score must not source point mass from legacy
+`range_point_f1` or fill missing behavior components from fallback audit fields.
+The next useful evidence checkpoint is a focused strict rerun under schema `5`
+and `range_query_mix`, followed by gate-by-gate diagnosis if predictability or
+learning causality still fails. Do not compare schema `5` scores against schema
+`2`, `3`, or `4` scores as if they were the same metric.
+
+Checkpoint 5.171 removes `small_local` from the active footprint family set.
+The active footprints are now `medium_operational=0.6923076923076923` and
+`large_context=0.3076923076923077`. This is a plausible simplification after
+schema `5`, because tiny windows are a bad fit for stable interpolation/turn/
+continuity behavior scoring. It is not learning-coherence evidence; rerun the
+required smaller strict probes before claiming the simplified profile improved
+anything.
 
 Checkpoint72 already compared:
 
 - checkpoint-selection primary;
 - direct exact marginal teacher selector;
 - hybrid exact-teacher/primary blends;
-- component deltas for ship, point, entry/exit, crossing, temporal span, turn, shape, and length/global sanity.
+- schema `2` component deltas for ship, point, entry/exit, crossing, temporal span, turn, shape, and length/global sanity.
 
 The hybrid still loses at strict scale. Do not keep tuning hybrid weights unless
 new workload/scoring evidence says the exact marginal signal is coherent but
@@ -441,7 +497,7 @@ If another under-ranking artifact is needed after that strict probe, build it ar
 
 For each high-marginal retained/removable/addable point, dump:
 
-`point_index`, trajectory id, source stage, decision type, exact marginal QueryUsefulV1, raw score, selector score, segment score, segment rank, pre/post length-repair state, each factorized head probability/logit, sampled prior channels, normalized model-prior channels, and QueryUsefulV1 component deltas.
+`point_index`, trajectory id, source stage, decision type, exact marginal QueryLocalUtility, raw score, selector score, segment score, segment rank, pre/post length-repair state, each factorized head probability/logit, sampled prior channels, normalized model-prior channels, and QueryLocalUtility component deltas.
 
 Then bucket the failures:
 
@@ -460,4 +516,4 @@ If the failure is selector marginal alignment, the fix is probably target/select
 
 If the failure is segment allocation, split allocation and point choice more aggressively. The tests already cover plumbing for separate segment allocation scores and segment point scores. Use that separation: one head can decide where budget goes, another can decide which point inside the segment is marginally useful.
 
-For runtime, reduce ablation cost before running more heavy probes. Cache frozen masks where semantics allow it, run only hypothesis-relevant ablations per checkpoint, and keep exact cached QueryUsefulV1 marginal diagnostics. Do not optimize by weakening diagnostics; optimize by cutting irrelevant ablations.
+For runtime, reduce ablation cost before running more heavy probes. Cache frozen masks where semantics allow it, run only hypothesis-relevant ablations per checkpoint, and keep exact cached QueryLocalUtility marginal diagnostics. Do not optimize by weakening diagnostics; optimize by cutting irrelevant ablations.

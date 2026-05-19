@@ -17,7 +17,7 @@ from config.run_config import (
 from data_preparation.ais_loader import generate_synthetic_ais_data
 from learning.checkpoint_validation import (
     _validation_factorized_target_fit_metrics,
-    _validation_query_useful_selection_score,
+    _validation_query_local_utility_selection_score,
 )
 from learning.factorized_head_diagnostics import (
     _factorized_final_score_composition_diagnostics,
@@ -38,7 +38,7 @@ from learning.model_training import (
 from learning.optimization_epoch import (
     _behavior_head_rank_loss,
     _calibrated_sparse_head_bce_targets,
-    _factorized_query_useful_loss,
+    _factorized_query_local_utility_loss,
     _segment_budget_head_segment_level_loss,
     _sparse_head_rank_loss,
 )
@@ -57,13 +57,13 @@ from learning.query_prior_fields import (
     zero_query_prior_field_channels,
     zero_query_prior_field_like,
 )
-from learning.targets.query_useful_v1 import (
-    QUERY_USEFUL_V1_FINAL_LABEL_FORMULA,
-    QUERY_USEFUL_V1_HEAD_NAMES,
-    QUERY_USEFUL_V1_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE,
-    QUERY_USEFUL_V1_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE,
-    build_query_useful_v1_targets,
-    query_useful_v1_point_score,
+from learning.targets.query_local_utility import (
+    QUERY_LOCAL_UTILITY_FINAL_LABEL_FORMULA,
+    QUERY_LOCAL_UTILITY_HEAD_NAMES,
+    QUERY_LOCAL_UTILITY_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE,
+    QUERY_LOCAL_UTILITY_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE,
+    build_query_local_utility_targets,
+    query_local_utility_point_score,
 )
 from models.workload_blind_range_v2 import WorkloadBlindRangeV2Model
 from orchestration.causality import (
@@ -80,7 +80,7 @@ from orchestration.causality import (
     prior_ablation_sensitivity_payload,
     prior_feature_sample_sensitivity,
     prior_sample_gate_failures,
-    query_useful_component_delta_summary,
+    query_local_utility_component_delta_summary,
     retained_mask_comparison,
     score_ablation_sensitivity,
     training_outputs_with_query_prior_field,
@@ -129,7 +129,7 @@ from orchestration.selector_diagnostics import (
     learned_segment_frozen_method,
     neutral_segment_scores_for_ablation,
     pre_repair_frozen_method_from_trace,
-    retained_decision_marginal_query_useful_diagnostics,
+    retained_decision_marginal_query_local_utility_diagnostics,
     segment_score_quantile_bands_for_ablation,
     segment_score_top_band_for_ablation,
     separated_marginal_teacher_selector_score_vectors,
@@ -148,7 +148,7 @@ from scoring.geometry_thresholds import (
 from scoring.method_scoring import score_range_usefulness
 from scoring.metrics import MethodScore, compute_length_preservation
 from scoring.query_cache import ScoringQueryCache
-from scoring.query_useful_v1 import query_useful_v1_from_range_audit
+from scoring.query_local_utility import query_local_utility_from_range_audit
 from selection.learned_segment_budget import (
     blend_segment_support_scores,
     learned_segment_budget_diagnostics,
@@ -157,10 +157,7 @@ from selection.learned_segment_budget import (
 )
 from selection.model_score_conversion import simplify_mlqds_predictions
 from workloads.generation.anchors import _anchor_weights_for_family
-from workloads.generation.generator import (
-    _make_range_query,
-    generate_typed_query_workload,
-)
+from workloads.generation.generator import generate_typed_query_workload
 from workloads.generation.profile_query_plan import (
     _profile_query_plan,
     _profile_query_settings,
@@ -181,7 +178,7 @@ def _boundaries(trajectories: list[torch.Tensor]) -> list[tuple[int, int]]:
 
 
 def test_profile_query_plan_preserves_weighted_family_quotas() -> None:
-    profile = range_workload_profile("range_workload_v1")
+    profile = range_workload_profile("range_query_mix")
 
     plan = _profile_query_plan(profile, requested_queries=20, workload_seed=123)
 
@@ -189,51 +186,36 @@ def test_profile_query_plan_preserves_weighted_family_quotas() -> None:
     assert len(plan["anchor_family_sequence"]) == 20
     assert len(plan["footprint_family_sequence"]) == 20
     assert plan["anchor_family_planned_counts"] == {
-        "density_route": 8,
-        "boundary_entry_exit": 4,
-        "crossing_turn_change": 3,
-        "port_or_approach_zone": 3,
-        "sparse_background_control": 2,
+        "density": 16,
+        "sparse_background_control": 4,
     }
     assert plan["footprint_family_planned_counts"] == {
-        "small_local": 5,
-        "medium_operational": 9,
-        "large_context": 4,
-        "route_corridor_like": 2,
+        "medium_operational": 14,
+        "large_context": 6,
     }
 
 
 def test_profile_query_plan_prefixes_preserve_family_mix_when_workloads_expand() -> None:
-    profile = range_workload_profile("range_workload_v1")
+    profile = range_workload_profile("range_query_mix")
 
     plan = _profile_query_plan(profile, requested_queries=256, workload_seed=123)
     anchor_prefix = plan["anchor_family_sequence"][:48]
     footprint_prefix = plan["footprint_family_sequence"][:48]
 
     assert {family: anchor_prefix.count(family) for family in set(anchor_prefix)} == {
-        "density_route": 19,
-        "boundary_entry_exit": 10,
-        "crossing_turn_change": 7,
-        "port_or_approach_zone": 7,
-        "sparse_background_control": 5,
+        "density": 38,
+        "sparse_background_control": 10,
     }
     assert {family: footprint_prefix.count(family) for family in set(footprint_prefix)} == {
-        "small_local": 12,
-        "medium_operational": 22,
-        "large_context": 9,
-        "route_corridor_like": 5,
+        "medium_operational": 33,
+        "large_context": 15,
     }
 
 
-def test_range_workload_v1_footprints_match_rework_guide_defaults() -> None:
-    profile = range_workload_profile("range_workload_v1")
+def test_range_query_mix_footprints_match_rework_guide_defaults() -> None:
+    profile = range_workload_profile("range_query_mix")
 
     assert profile.footprint_families == {
-        "small_local": {
-            "spatial_radius_km": 1.1,
-            "time_half_window_hours": 2.5,
-            "elongation_allowed": False,
-        },
         "medium_operational": {
             "spatial_radius_km": 2.2,
             "time_half_window_hours": 5.0,
@@ -244,15 +226,10 @@ def test_range_workload_v1_footprints_match_rework_guide_defaults() -> None:
             "time_half_window_hours": 8.0,
             "elongation_allowed": False,
         },
-        "route_corridor_like": {
-            "spatial_radius_km": 2.2,
-            "time_half_window_hours": 5.0,
-            "elongation_allowed": True,
-        },
     }
 
 
-def test_range_workload_v1_target_coverage_keeps_requested_query_count() -> None:
+def test_range_query_mix_target_coverage_keeps_requested_query_count() -> None:
     trajectories = generate_synthetic_ais_data(
         n_ships=5, n_points_per_ship=48, seed=87, route_families=1
     )
@@ -263,7 +240,7 @@ def test_range_workload_v1_target_coverage_keeps_requested_query_count() -> None
         seed=14,
         target_coverage=0.05,
         max_queries=64,
-        workload_profile_id="range_workload_v1",
+        workload_profile_id="range_query_mix",
         coverage_calibration_mode="profile_sampled_query_count",
         range_max_point_hit_fraction=1.0,
         range_duplicate_iou_threshold=1.0,
@@ -276,14 +253,14 @@ def test_range_workload_v1_target_coverage_keeps_requested_query_count() -> None
     assert generation["final_query_count"] >= 8
 
 
-def test_range_workload_v1_records_profile_signature() -> None:
+def test_range_query_mix_records_profile_signature() -> None:
     trajectories = generate_synthetic_ais_data(n_ships=5, n_points_per_ship=48, seed=81)
     workload = generate_typed_query_workload(
         trajectories=trajectories,
         n_queries=6,
         workload_map={"range": 1.0},
         seed=9,
-        workload_profile_id="range_workload_v1",
+        workload_profile_id="range_query_mix",
         range_max_point_hit_fraction=1.0,
         range_duplicate_iou_threshold=1.0,
     )
@@ -293,9 +270,9 @@ def test_range_workload_v1_records_profile_signature() -> None:
     profile = diagnostics["workload_profile"]
     generation = diagnostics["query_generation"]
 
-    assert profile["profile_id"] == "range_workload_v1"
+    assert profile["profile_id"] == "range_query_mix"
     assert generation["range_time_domain_mode"] == "anchor_day"
-    assert signature["profile_id"] == "range_workload_v1"
+    assert signature["profile_id"] == "range_query_mix"
     assert signature["workload_profile_version"] == profile["version"]
     assert signature["target_coverage"] == profile["target_coverage"]
     assert signature["query_count_mode"] == profile["query_count_mode"]
@@ -312,14 +289,14 @@ def test_range_workload_v1_records_profile_signature() -> None:
 
 
 def test_deterministic_profile_sampling_does_not_advance_generator() -> None:
-    profile = range_workload_profile("range_workload_v1")
+    profile = range_workload_profile("range_query_mix")
     gen = torch.Generator().manual_seed(12345)
     before = gen.get_state()
 
     chosen_anchor = _weighted_choice_with_deterministic_key(
         profile.anchor_family_weights,
         gen,
-        fallback="density_route",
+        fallback="density",
         deterministic_value=0.33,
     )
     chosen_footprint = _weighted_choice_with_deterministic_key(
@@ -358,34 +335,38 @@ def test_synthetic_route_families_create_same_support_trajectories() -> None:
     assert float(points[:, 2].max().item() - points[:, 2].min().item()) < 0.50
 
 
-def test_query_useful_v1_prioritizes_query_local_components() -> None:
+def test_query_local_utility_prioritizes_query_local_components() -> None:
     weak = {
-        "range_point_f1": 0.1,
+        "query_point_recall": 0.1,
         "range_ship_coverage": 0.1,
         "range_ship_f1": 0.1,
         "range_turn_coverage": 0.1,
+        "range_gap_min_coverage": 0.1,
         "range_shape_score": 0.1,
+        "range_query_local_interpolation_fidelity": 0.1,
         "range_entry_exit_f1": 0.1,
         "range_crossing_f1": 0.1,
     }
     strong = dict(weak)
     strong.update(
         {
-            "range_point_f1": 0.7,
+            "query_point_recall": 0.7,
+            "range_query_local_interpolation_fidelity": 0.7,
             "range_ship_coverage": 0.6,
             "range_turn_coverage": 0.8,
+            "range_gap_min_coverage": 0.6,
             "range_shape_score": 0.7,
         }
     )
 
     strong_score = float(
-        cast(Any, query_useful_v1_from_range_audit(strong)["query_useful_v1_score"])
+        cast(Any, query_local_utility_from_range_audit(strong)["query_local_utility_score"])
     )
-    weak_score = float(cast(Any, query_useful_v1_from_range_audit(weak)["query_useful_v1_score"]))
+    weak_score = float(cast(Any, query_local_utility_from_range_audit(weak)["query_local_utility_score"]))
     assert strong_score > weak_score
 
 
-def test_query_useful_v1_has_true_query_local_interpolation_component() -> None:
+def test_query_local_utility_has_true_query_local_interpolation_component() -> None:
     points = torch.tensor(
         [
             [0.0, 0.0, 0.0],
@@ -415,19 +396,19 @@ def test_query_useful_v1_has_true_query_local_interpolation_component() -> None:
         retained_mask=retained,
         typed_queries=[query],
     )
-    useful = query_useful_v1_from_range_audit(audit)
-    components = cast(dict[str, float], useful["query_useful_v1_components"])
+    useful = query_local_utility_from_range_audit(audit)
+    components = cast(dict[str, float], useful["query_local_utility_components"])
 
     assert audit["range_shape_score"] == 0.0
     assert audit["range_query_local_interpolation_fidelity"] == 0.0
     assert components["query_local_interpolation_fidelity"] == 0.0
     assert (
-        useful["query_useful_v1_metric_maturity"]
-        == "bridge_with_true_query_local_interpolation_component"
+        useful["query_local_utility_metric_maturity"]
+        == "query_local_direct_point_mass_behavior_without_legacy_fallbacks"
     )
 
 
-def test_validation_query_useful_penalizes_bad_global_sanity() -> None:
+def test_validation_query_local_utility_penalizes_bad_global_sanity() -> None:
     cfg = SimpleNamespace(
         validation_global_sanity_penalty_enabled=True,
         validation_global_sanity_penalty_weight=DEFAULT_VALIDATION_GLOBAL_SANITY_PENALTY_WEIGHT,
@@ -448,8 +429,8 @@ def test_validation_query_useful_penalizes_bad_global_sanity() -> None:
         "endpoint_sanity": 0.00,
     }
 
-    assert _validation_query_useful_selection_score(0.50, bad, cast(Any, cfg)) < (
-        _validation_query_useful_selection_score(0.50, good, cast(Any, cfg)) - 0.10
+    assert _validation_query_local_utility_selection_score(0.50, bad, cast(Any, cfg)) < (
+        _validation_query_local_utility_selection_score(0.50, good, cast(Any, cfg)) - 0.10
     )
 
 
@@ -471,7 +452,7 @@ def test_validation_factorized_target_fit_metrics_are_diagnostic_only() -> None:
         },
     }
     workload = SimpleNamespace(typed_queries=[query])
-    targets = build_query_useful_v1_targets(
+    targets = build_query_local_utility_targets(
         points=points,
         boundaries=[(0, 8)],
         typed_queries=[query],
@@ -504,12 +485,12 @@ def test_factorized_targets_and_prior_fields_are_train_query_derived() -> None:
         n_queries=5,
         workload_map={"range": 1.0},
         seed=12,
-        workload_profile_id="range_workload_v1",
+        workload_profile_id="range_query_mix",
         range_max_point_hit_fraction=1.0,
         range_duplicate_iou_threshold=1.0,
     )
 
-    targets = build_query_useful_v1_targets(
+    targets = build_query_local_utility_targets(
         points=points,
         boundaries=boundaries,
         typed_queries=workload.typed_queries,
@@ -519,13 +500,13 @@ def test_factorized_targets_and_prior_fields_are_train_query_derived() -> None:
         boundaries=boundaries,
         typed_queries=workload.typed_queries,
         labels=targets.labels,
-        workload_profile_id="range_workload_v1",
+        workload_profile_id="range_query_mix",
         train_workload_seed=12,
     )
 
-    assert targets.head_targets.shape == (points.shape[0], len(QUERY_USEFUL_V1_HEAD_NAMES))
+    assert targets.head_targets.shape == (points.shape[0], len(QUERY_LOCAL_UTILITY_HEAD_NAMES))
     assert targets.labels.shape[0] == points.shape[0]
-    assert targets.diagnostics["target_family"] == "QueryUsefulV1Factorized"
+    assert targets.diagnostics["target_family"] == "QueryLocalUtilityFactorized"
     assert "support_fraction_by_threshold_by_head" in targets.diagnostics
     assert "final_label_support_fraction_by_threshold" in targets.diagnostics
     assert prior["built_from_split"] == "train_only"
@@ -555,14 +536,14 @@ def test_factorized_replacement_target_is_query_local_and_final_label_keeps_quer
         },
     }
 
-    targets = build_query_useful_v1_targets(
+    targets = build_query_local_utility_targets(
         points=points,
         boundaries=[(0, 10)],
         typed_queries=[query],
     )
 
     replacement = targets.head_targets[
-        :, tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("replacement_representative_value")
+        :, tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("replacement_representative_value")
     ]
     final_score = targets.labels[:, QUERY_TYPE_ID_RANGE]
     assert int((replacement > 0.0).sum().item()) == 5
@@ -573,7 +554,7 @@ def test_factorized_replacement_target_is_query_local_and_final_label_keeps_quer
     )
     assert (
         targets.diagnostics["final_label_formula"]
-        == QUERY_USEFUL_V1_FINAL_LABEL_FORMULA
+        == QUERY_LOCAL_UTILITY_FINAL_LABEL_FORMULA
     )
 
 
@@ -596,18 +577,18 @@ def test_conditional_behavior_target_is_masked_to_query_hits() -> None:
             "lon_max": 1.0,
         },
         "_metadata": {
-            "anchor_family": "density_route",
+            "anchor_family": "density",
             "footprint_family": "small_local",
         },
     }
 
-    targets = build_query_useful_v1_targets(
+    targets = build_query_local_utility_targets(
         points=points,
         boundaries=[(0, 6)],
         typed_queries=[query],
     )
-    query_hit_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("query_hit_probability")
-    behavior_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("conditional_behavior_utility")
+    query_hit_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("query_hit_probability")
+    behavior_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("conditional_behavior_utility")
 
     hit_mask = targets.head_targets[:, query_hit_idx] > 0.0
 
@@ -645,24 +626,24 @@ def test_path_length_support_target_is_query_free_segment_geometry() -> None:
             "lon_max": 1.0,
         },
         "_metadata": {
-            "anchor_family": "density_route",
+            "anchor_family": "density",
             "footprint_family": "small_local",
         },
     }
 
-    first_targets = build_query_useful_v1_targets(
+    first_targets = build_query_local_utility_targets(
         points=points,
         boundaries=[(0, 8)],
         typed_queries=[first_query],
         segment_size=2,
     )
-    second_targets = build_query_useful_v1_targets(
+    second_targets = build_query_local_utility_targets(
         points=points,
         boundaries=[(0, 8)],
         typed_queries=[second_query],
         segment_size=2,
     )
-    path_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("path_length_support_target")
+    path_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("path_length_support_target")
     first_path = first_targets.head_targets[:, path_idx]
     second_path = second_targets.head_targets[:, path_idx]
 
@@ -695,12 +676,12 @@ def test_conditional_behavior_target_alignment_diagnostics_report_final_mass_rec
             "lon_max": 1.0,
         },
         "_metadata": {
-            "anchor_family": "density_route",
+            "anchor_family": "density",
             "footprint_family": "small_local",
         },
     }
 
-    targets = build_query_useful_v1_targets(
+    targets = build_query_local_utility_targets(
         points=points,
         boundaries=[(0, 5), (5, 10)],
         typed_queries=[query],
@@ -769,7 +750,7 @@ def test_conditional_behavior_target_alignment_diagnostics_report_final_mass_rec
     family_trainability = targets.diagnostics["family_conditioned_target_trainability"]
     assert family_trainability["available"] is True
     assert family_trainability["diagnostic_only"] is True
-    density_row = family_trainability["group_by"]["anchor_family"]["density_route"]
+    density_row = family_trainability["group_by"]["anchor_family"]["density"]
     small_local_row = family_trainability["group_by"]["footprint_family"]["small_local"]
     assert density_row["focus_family"] is True
     assert density_row["query_count"] == 1
@@ -820,7 +801,7 @@ def test_ship_presence_segment_budget_candidate_improves_ship_evidence_alignment
         },
     }
 
-    targets = build_query_useful_v1_targets(
+    targets = build_query_local_utility_targets(
         points=points,
         boundaries=[(0, 6), (6, 8)],
         typed_queries=[query],
@@ -862,12 +843,12 @@ def test_family_local_target_candidate_improves_small_local_ship_evidence_signal
             "lon_max": 1.0,
         },
         "_metadata": {
-            "anchor_family": "density_route",
+            "anchor_family": "density",
             "footprint_family": "small_local",
         },
     }
 
-    targets = build_query_useful_v1_targets(
+    targets = build_query_local_utility_targets(
         points=points,
         boundaries=[(0, 6), (6, 8)],
         typed_queries=[query],
@@ -924,29 +905,29 @@ def test_query_ship_max_pool_target_mode_only_changes_segment_budget_head() -> N
             "lon_max": 1.0,
         },
         "_metadata": {
-            "anchor_family": "density_route",
+            "anchor_family": "density",
             "footprint_family": "small_local",
         },
     }
 
-    active = build_query_useful_v1_targets(
+    active = build_query_local_utility_targets(
         points=points,
         boundaries=[(0, 6), (6, 8)],
         typed_queries=[query],
         segment_size=2,
     )
-    variant = build_query_useful_v1_targets(
+    variant = build_query_local_utility_targets(
         points=points,
         boundaries=[(0, 6), (6, 8)],
         typed_queries=[query],
         segment_size=2,
-        target_mode=QUERY_USEFUL_V1_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE,
+        target_mode=QUERY_LOCAL_UTILITY_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE,
     )
 
     assert torch.allclose(active.labels, variant.labels)
     assert torch.equal(active.labelled_mask, variant.labelled_mask)
     assert torch.equal(active.head_mask, variant.head_mask)
-    for head_idx, head_name in enumerate(QUERY_USEFUL_V1_HEAD_NAMES):
+    for head_idx, head_name in enumerate(QUERY_LOCAL_UTILITY_HEAD_NAMES):
         active_head = active.head_targets[:, head_idx]
         variant_head = variant.head_targets[:, head_idx]
         if head_name == "segment_budget_target":
@@ -957,7 +938,7 @@ def test_query_ship_max_pool_target_mode_only_changes_segment_budget_head() -> N
     assert active.diagnostics["segment_budget_target_aggregation"] == "sum"
     assert active.diagnostics["final_success_allowed"] is True
     assert variant.diagnostics["target_mode"] == (
-        QUERY_USEFUL_V1_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE
+        QUERY_LOCAL_UTILITY_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE
     )
     assert variant.diagnostics["segment_budget_target_variant"] == "query_ship_blend_max_pool"
     assert variant.diagnostics["segment_budget_target_aggregation"] == "max_pool"
@@ -982,30 +963,30 @@ def test_query_ship_local_heads_target_mode_changes_composed_head_contract() -> 
             "lon_max": 1.0,
         },
         "_metadata": {
-            "anchor_family": "crossing_turn_change",
+            "anchor_family": "density",
             "footprint_family": "small_local",
         },
     }
 
-    active = build_query_useful_v1_targets(
+    active = build_query_local_utility_targets(
         points=points,
         boundaries=[(0, 6), (6, 8)],
         typed_queries=[query],
         segment_size=2,
     )
-    variant = build_query_useful_v1_targets(
+    variant = build_query_local_utility_targets(
         points=points,
         boundaries=[(0, 6), (6, 8)],
         typed_queries=[query],
         segment_size=2,
-        target_mode=QUERY_USEFUL_V1_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE,
+        target_mode=QUERY_LOCAL_UTILITY_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE,
     )
 
     assert torch.equal(active.labelled_mask, variant.labelled_mask)
     assert torch.equal(active.head_mask, variant.head_mask)
     changed_heads = {
         head_name
-        for head_idx, head_name in enumerate(QUERY_USEFUL_V1_HEAD_NAMES)
+        for head_idx, head_name in enumerate(QUERY_LOCAL_UTILITY_HEAD_NAMES)
         if not torch.allclose(active.head_targets[:, head_idx], variant.head_targets[:, head_idx])
     }
     assert changed_heads == {
@@ -1014,7 +995,7 @@ def test_query_ship_local_heads_target_mode_changes_composed_head_contract() -> 
         "segment_budget_target",
     }
     assert not torch.allclose(active.labels, variant.labels)
-    assert variant.diagnostics["target_mode"] == QUERY_USEFUL_V1_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE
+    assert variant.diagnostics["target_mode"] == QUERY_LOCAL_UTILITY_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE
     assert variant.diagnostics["query_hit_target_variant"] == (
         "query_ship_local_presence_utility"
     )
@@ -1034,28 +1015,28 @@ def test_workload_component_compatibility_diagnostic_finds_blocking_families() -
     artifact = {
         "matched": {
             "MLQDS": {
-                "query_useful_v1_score": 0.16,
-                "range_audit": {
-                    "query_useful_v1_component_weights": {
-                        "ship_balanced_query_point_recall": 0.18,
-                        "query_local_interpolation_fidelity": 0.10,
-                    },
-                    "query_useful_v1_components": {
-                        "ship_balanced_query_point_recall": 0.20,
+                "query_local_utility_score": 0.16,
+                    "range_audit": {
+                        "query_local_utility_component_weights": {
+                            "query_point_recall": 0.50,
+                            "query_local_interpolation_fidelity": 0.10,
+                        },
+                        "query_local_utility_components": {
+                        "query_point_recall": 0.20,
                         "query_local_interpolation_fidelity": 0.70,
                     },
                     "range_query_metadata_component_summary": {
                         "group_by": {
                             "anchor_family": {
-                                "density_route": {
-                                    "query_useful_v1_query_local_components": {
-                                        "ship_balanced_query_point_recall": 0.20,
+                                "density": {
+                                    "query_local_utility_query_local_components": {
+                                        "query_point_recall": 0.20,
                                         "query_local_interpolation_fidelity": 0.70,
                                     }
                                 },
-                                "crossing_turn_change": {
-                                    "query_useful_v1_query_local_components": {
-                                        "ship_balanced_query_point_recall": 0.30,
+                                "sparse_background_control": {
+                                    "query_local_utility_query_local_components": {
+                                        "query_point_recall": 0.30,
                                         "query_local_interpolation_fidelity": 0.60,
                                     }
                                 },
@@ -1065,24 +1046,24 @@ def test_workload_component_compatibility_diagnostic_finds_blocking_families() -
                 },
             },
             "DouglasPeucker": {
-                "query_useful_v1_score": 0.18,
+                "query_local_utility_score": 0.18,
                 "range_audit": {
-                    "query_useful_v1_components": {
-                        "ship_balanced_query_point_recall": 0.50,
+                    "query_local_utility_components": {
+                        "query_point_recall": 0.50,
                         "query_local_interpolation_fidelity": 0.60,
                     },
                     "range_query_metadata_component_summary": {
                         "group_by": {
                             "anchor_family": {
-                                "density_route": {
-                                    "query_useful_v1_query_local_components": {
-                                        "ship_balanced_query_point_recall": 0.50,
+                                "density": {
+                                    "query_local_utility_query_local_components": {
+                                        "query_point_recall": 0.50,
                                         "query_local_interpolation_fidelity": 0.60,
                                     }
                                 },
-                                "crossing_turn_change": {
-                                    "query_useful_v1_query_local_components": {
-                                        "ship_balanced_query_point_recall": 0.40,
+                                "sparse_background_control": {
+                                    "query_local_utility_query_local_components": {
+                                        "query_point_recall": 0.40,
                                         "query_local_interpolation_fidelity": 0.50,
                                     }
                                 },
@@ -1096,7 +1077,7 @@ def test_workload_component_compatibility_diagnostic_finds_blocking_families() -
             "comparisons_vs_baseline": {
                 "DouglasPeucker": {
                     "anchor_family": {
-                        "density_route": {
+                        "density": {
                             "query_count": 10,
                             "query_local_score_delta": -0.02,
                             "range_usefulness_delta": -0.03,
@@ -1106,7 +1087,7 @@ def test_workload_component_compatibility_diagnostic_finds_blocking_families() -
                                 "ship_presence_recall": -0.10,
                             },
                         },
-                        "crossing_turn_change": {
+                        "sparse_background_control": {
                             "query_count": 5,
                             "query_local_score_delta": -0.01,
                             "range_usefulness_delta": -0.01,
@@ -1124,14 +1105,14 @@ def test_workload_component_compatibility_diagnostic_finds_blocking_families() -
 
     diagnostic = build_workload_component_compatibility_diagnostic([("strict", artifact)])
 
-    assert diagnostic["summary"]["primary_minus_baseline_query_useful_v1"] == pytest.approx(
+    assert diagnostic["summary"]["primary_minus_baseline_query_local_utility"] == pytest.approx(
         -0.02
     )
     blocking = diagnostic["summary"]["blocking_families"]
-    assert blocking[0]["family"] == "density_route"
+    assert blocking[0]["family"] == "density"
     assert blocking[0]["missed_trajectory_hit_count_delta"] == 3
     components = diagnostic["summary"]["persistent_negative_query_local_components"]
-    assert components[0]["component"] == "ship_balanced_query_point_recall"
+    assert components[0]["component"] == "query_point_recall"
     assert components[0]["negative_family_count"] == 2
     candidate_deltas = diagnostic["summary"]["recalibration_candidate_score_deltas"]
     assert candidate_deltas["active_component_weights"] < 0.0
@@ -1140,7 +1121,7 @@ def test_workload_component_compatibility_diagnostic_finds_blocking_families() -
         > candidate_deltas["active_component_weights"]
     )
     assert (
-        candidate_deltas["ship_point_preserving_smooth_component_weights_v0"]
+        candidate_deltas["point_mass_preserving_smooth_component_weights_v0"]
         > candidate_deltas["active_component_weights"]
     )
     assert (
@@ -1148,13 +1129,13 @@ def test_workload_component_compatibility_diagnostic_finds_blocking_families() -
         == "still_blocked"
     )
     unresolved = diagnostic["summary"]["blocker_preserving_candidate_unresolved_families"]
-    assert unresolved[0]["family"] == "density_route"
+    assert unresolved[0]["family"] == "density"
     recalibration = diagnostic["artifacts"][0]["recalibration_diagnostics"]
     assert recalibration["diagnostic_only"] is True
     assert recalibration["masking_risk"] == "high"
     blocker_outcome = recalibration["blocker_preserving_outcome"]
     assert blocker_outcome["critical_family_pressure_preserved"] is False
-    assert blocker_outcome["unresolved_blocker_family_count"] == 2
+    assert blocker_outcome["unresolved_blocker_family_count"] == 1
 
 
 def test_query_ship_max_pool_transfer_diagnostic_flags_small_local_transfer_gap() -> None:
@@ -1170,12 +1151,12 @@ def test_query_ship_max_pool_transfer_diagnostic_flags_small_local_transfer_gap(
         return {
             "matched": {
                 "MLQDS": {
-                    "query_useful_v1_score": mlqds_score,
+                    "query_local_utility_score": mlqds_score,
                     "range_usefulness_score": 0.15,
                 },
-                "uniform": {"query_useful_v1_score": 0.14},
+                "uniform": {"query_local_utility_score": 0.14},
                 "DouglasPeucker": {
-                    "query_useful_v1_score": 0.167,
+                    "query_local_utility_score": 0.167,
                     "range_usefulness_score": 0.151,
                 },
             },
@@ -1210,7 +1191,7 @@ def test_query_ship_max_pool_transfer_diagnostic_flags_small_local_transfer_gap(
                 "no_behavior_head_ablation_delta": 0.003,
             },
             "training_target_diagnostics": {
-                "query_useful_v1_factorized": {
+                "query_local_utility_factorized": {
                     "target_mode": mode,
                     "segment_budget_target_variant": "query_ship_blend_max_pool",
                     "segment_budget_target_aggregation": "max_pool",
@@ -1288,7 +1269,7 @@ def test_query_ship_max_pool_transfer_diagnostic_flags_small_local_transfer_gap(
             },
             "selector_trace_diagnostics": {
                 "eval_primary": {
-                    "retained_decision_marginal_query_useful_alignment": {
+                    "retained_decision_marginal_query_local_utility_alignment": {
                         "available": True,
                         "candidate_count": 2,
                         "overall": {
@@ -1307,7 +1288,7 @@ def test_query_ship_max_pool_transfer_diagnostic_flags_small_local_transfer_gap(
             (
                 "checkpoint85",
                 artifact(
-                    mode="query_useful_v1_factorized",
+                    mode="query_local_utility_factorized",
                     mlqds_score=0.166,
                     segment_target_ship=-0.34,
                     segment_fit_ship=-0.09,
@@ -1321,7 +1302,7 @@ def test_query_ship_max_pool_transfer_diagnostic_flags_small_local_transfer_gap(
             (
                 "checkpoint86",
                 artifact(
-                    mode="query_useful_v1_factorized_segment_budget_query_ship_max_pool",
+                    mode="query_local_utility_factorized_segment_budget_query_ship_max_pool",
                     mlqds_score=0.1673,
                     segment_target_ship=0.12,
                     segment_fit_ship=-0.08,
@@ -1360,9 +1341,9 @@ def test_query_ship_local_heads_failure_diagnostic_rejects_broad_head_target() -
     ) -> dict[str, Any]:
         return {
             "matched": {
-                "MLQDS": {"query_useful_v1_score": mlqds_score},
-                "uniform": {"query_useful_v1_score": 0.14},
-                "DouglasPeucker": {"query_useful_v1_score": 0.167},
+                "MLQDS": {"query_local_utility_score": mlqds_score},
+                "uniform": {"query_local_utility_score": 0.14},
+                "DouglasPeucker": {"query_local_utility_score": 0.167},
             },
             "final_claim_summary": {"final_success_allowed": False},
             "workload_stability_gate": {"gate_pass": True},
@@ -1426,8 +1407,8 @@ def test_query_ship_local_heads_failure_diagnostic_rejects_broad_head_target() -
                 "no_segment_budget_head_ablation_delta": 0.0005,
             },
             "training_target_diagnostics": {
-                "query_useful_v1_factorized": {
-                    "target_mode": "query_useful_v1_factorized_query_ship_local_heads",
+                "query_local_utility_factorized": {
+                    "target_mode": "query_local_utility_factorized_query_ship_local_heads",
                     "query_hit_target_variant": "query_ship_local_presence_utility",
                     "conditional_behavior_target_variant": (
                         "query_ship_local_behavior_utility"
@@ -1542,12 +1523,14 @@ def test_query_ship_local_heads_failure_diagnostic_rejects_broad_head_target() -
     assert comparison["decision"] == (
         "reject_broad_local_heads_preserve_diffusion_before_next_transfer_probe"
     )
-    assert comparison["score_delta"]["primary_query_useful_v1"] == pytest.approx(-0.0041)
+    assert comparison["score_delta"]["primary_query_local_utility"] == pytest.approx(-0.0041)
     assert "target_diffusion" in comparison["gate_regressions"]
     assert comparison["target_diffusion_failure"]["failed_checks"] == [
         "conditional_behavior_utility:support_fraction_above_max"
     ]
-    small_local = comparison["family_failure_rows"][2]
+    small_local = next(
+        row for row in comparison["family_failure_rows"] if row["family"] == "small_local"
+    )
     assert small_local["family"] == "small_local"
     assert small_local["candidate_positive_target_negative_fit_heads"] == [
         "query_hit_probability",
@@ -1560,9 +1543,9 @@ def test_query_ship_local_heads_failure_diagnostic_rejects_broad_head_target() -
 def test_family_transfer_path_diagnostic_flags_missing_family_prior_surface() -> None:
     artifact = {
         "matched": {
-            "MLQDS": {"query_useful_v1_score": 0.1673},
-            "uniform": {"query_useful_v1_score": 0.142},
-            "DouglasPeucker": {"query_useful_v1_score": 0.1671},
+            "MLQDS": {"query_local_utility_score": 0.1673},
+            "uniform": {"query_local_utility_score": 0.142},
+            "DouglasPeucker": {"query_local_utility_score": 0.1671},
         },
         "final_claim_summary": {"final_success_allowed": False},
         "workload_stability_gate": {"gate_pass": True},
@@ -1573,11 +1556,11 @@ def test_family_transfer_path_diagnostic_flags_missing_family_prior_surface() ->
         "query_generation_diagnostics": {
             "train": {
                 "workload_profile": {
-                    "anchor_family_weights": {"crossing_turn_change": 0.15},
+                    "anchor_family_weights": {"density": 0.80},
                     "footprint_family_weights": {"small_local": 0.25},
                 },
                 "workload_signature": {
-                    "anchor_family_counts": {"crossing_turn_change": 7},
+                    "anchor_family_counts": {"density": 7},
                     "footprint_family_counts": {"small_local": 12},
                 },
             }
@@ -1597,7 +1580,7 @@ def test_family_transfer_path_diagnostic_flags_missing_family_prior_surface() ->
             "best_prior_channel_by_head": {
                 "segment_budget_target": {
                     "best_spearman": {
-                        "channel": "boundary_entry_exit_likelihood",
+                        "channel": "endpoint_likelihood",
                         "value": 0.149,
                     },
                     "best_lift_at_5_percent": {
@@ -1608,7 +1591,7 @@ def test_family_transfer_path_diagnostic_flags_missing_family_prior_surface() ->
             },
             "prior_channel_by_head_predictability": {
                 "segment_budget_target": {
-                    "boundary_entry_exit_likelihood": {
+                    "endpoint_likelihood": {
                         "available": True,
                         "spearman": 0.149,
                         "positive_target_spearman": -0.10,
@@ -1634,9 +1617,9 @@ def test_family_transfer_path_diagnostic_flags_missing_family_prior_surface() ->
             "selection_causality_diagnostics": {"available": True},
         },
         "training_target_diagnostics": {
-            "query_useful_v1_factorized": {
+            "query_local_utility_factorized": {
                 "target_mode": (
-                    "query_useful_v1_factorized_segment_budget_query_ship_max_pool"
+                    "query_local_utility_factorized_segment_budget_query_ship_max_pool"
                 ),
                 "segment_budget_target_variant": "query_ship_blend_max_pool",
                 "segment_budget_target_aggregation": "max_pool",
@@ -1688,7 +1671,7 @@ def test_family_transfer_path_diagnostic_flags_missing_family_prior_surface() ->
         },
         "selector_trace_diagnostics": {
             "eval_primary": {
-                "retained_decision_marginal_query_useful_alignment": {
+                "retained_decision_marginal_query_local_utility_alignment": {
                     "available": True,
                     "candidate_count": 160,
                     "overall": {
@@ -1722,7 +1705,7 @@ def test_family_transfer_path_diagnostic_flags_missing_family_prior_surface() ->
     )
     assert summary["retained_marginal_alignment_layout"] == (
         "selector_trace_diagnostics.eval_primary."
-        "retained_decision_marginal_query_useful_alignment"
+        "retained_decision_marginal_query_local_utility_alignment"
     )
     blocked = summary["blocked_family_head_rows"]
     assert blocked[0]["family"] == "small_local"
@@ -1739,9 +1722,9 @@ def test_family_transfer_path_diagnostic_flags_missing_family_prior_surface() ->
 def test_selector_marginal_calibration_diagnostic_separates_score_and_segment_failures() -> None:
     artifact = {
         "matched": {
-            "MLQDS": {"query_useful_v1_score": 0.1673},
-            "uniform": {"query_useful_v1_score": 0.142},
-            "DouglasPeucker": {"query_useful_v1_score": 0.1671},
+            "MLQDS": {"query_local_utility_score": 0.1673},
+            "uniform": {"query_local_utility_score": 0.142},
+            "DouglasPeucker": {"query_local_utility_score": 0.1671},
         },
         "final_claim_summary": {"final_success_allowed": False},
         "target_diffusion_gate": {"gate_pass": True},
@@ -1791,7 +1774,7 @@ def test_selector_marginal_calibration_diagnostic_separates_score_and_segment_fa
                         "length_support_allocation_counterfactual_can_clear_length"
                     ),
                 },
-                "retained_decision_marginal_query_useful_alignment": {
+                "retained_decision_marginal_query_local_utility_alignment": {
                     "available": True,
                     "candidate_count": 4,
                     "overall": {
@@ -1884,9 +1867,9 @@ def test_selector_marginal_calibration_diagnostic_separates_score_and_segment_fa
                             "trajectory_index": 3,
                             "source": "learned",
                             "decision": "retained_removal_loss",
-                            "marginal_query_useful_v1": 0.003,
-                            "marginal_query_useful_v1_candidate_rank": 1,
-                            "marginal_query_useful_v1_candidate_rank_fraction": 0.05,
+                            "marginal_query_local_utility": 0.003,
+                            "marginal_query_local_utility_candidate_rank": 1,
+                            "marginal_query_local_utility_candidate_rank_fraction": 0.05,
                             "raw_score_candidate_rank": 75,
                             "raw_score_candidate_rank_fraction": 0.75,
                             "selector_score_candidate_rank": 80,
@@ -1912,9 +1895,9 @@ def test_selector_marginal_calibration_diagnostic_separates_score_and_segment_fa
                             "trajectory_index": 0,
                             "source": "removed",
                             "decision": "removed_addition_gain",
-                            "marginal_query_useful_v1": 0.00001,
-                            "marginal_query_useful_v1_candidate_rank": 4,
-                            "marginal_query_useful_v1_candidate_rank_fraction": 0.90,
+                            "marginal_query_local_utility": 0.00001,
+                            "marginal_query_local_utility_candidate_rank": 4,
+                            "marginal_query_local_utility_candidate_rank_fraction": 0.90,
                             "raw_score_candidate_rank": 1,
                             "raw_score_candidate_rank_fraction": 0.02,
                             "selector_score_candidate_rank": 2,
@@ -1947,7 +1930,7 @@ def test_selector_marginal_calibration_diagnostic_separates_score_and_segment_fa
     )
     assert summary["retained_marginal_alignment_layout"] == (
         "selector_trace_diagnostics.eval_primary."
-        "retained_decision_marginal_query_useful_alignment"
+        "retained_decision_marginal_query_local_utility_alignment"
     )
     alignment = diagnostic["artifacts"][0]["retained_marginal_alignment"]
     assert alignment["failure_mode_summary"]["selector_spearman"] == pytest.approx(-0.04)
@@ -1995,7 +1978,7 @@ def test_selection_marginal_segment_calibration_diagnostic_flags_split_transfer_
                     "point_selection_can_clear_length_with_current_allocation"
                 ),
             },
-            "retained_decision_marginal_query_useful_alignment": {
+            "retained_decision_marginal_query_local_utility_alignment": {
                 "available": True,
                 "candidate_count": 160,
                 "overall": {
@@ -2059,9 +2042,9 @@ def test_selection_marginal_segment_calibration_diagnostic_flags_split_transfer_
 
     artifact = {
         "matched": {
-            "MLQDS": {"query_useful_v1_score": 0.1673},
-            "uniform": {"query_useful_v1_score": 0.142},
-            "DouglasPeucker": {"query_useful_v1_score": 0.1671},
+            "MLQDS": {"query_local_utility_score": 0.1673},
+            "uniform": {"query_local_utility_score": 0.142},
+            "DouglasPeucker": {"query_local_utility_score": 0.1671},
         },
         "workload_stability_gate": {"gate_pass": True},
         "support_overlap_gate": {"gate_pass": True},
@@ -2099,7 +2082,7 @@ def test_selection_marginal_segment_calibration_diagnostic_flags_split_transfer_
     )
     assert summary["selection_layout"] == (
         "selector_trace_diagnostics.selection_primary."
-        "retained_decision_marginal_query_useful_alignment"
+        "retained_decision_marginal_query_local_utility_alignment"
     )
     result = diagnostic["artifacts"][0]
     selection = result["selection_teacher"]
@@ -2161,7 +2144,7 @@ def test_selection_eval_segment_teacher_transfer_diagnostic_blocks_direct_probe_
                     },
                 ],
             },
-            "retained_decision_marginal_query_useful_alignment": {
+            "retained_decision_marginal_query_local_utility_alignment": {
                 "available": True,
                 "separated_marginal_teacher_summary": {
                     "available": True,
@@ -2191,9 +2174,9 @@ def test_selection_eval_segment_teacher_transfer_diagnostic_blocks_direct_probe_
 
     artifact = {
         "matched": {
-            "MLQDS": {"query_useful_v1_score": 0.1673},
-            "uniform": {"query_useful_v1_score": 0.142},
-            "DouglasPeucker": {"query_useful_v1_score": 0.1671},
+            "MLQDS": {"query_local_utility_score": 0.1673},
+            "uniform": {"query_local_utility_score": 0.142},
+            "DouglasPeucker": {"query_local_utility_score": 0.1671},
         },
         "workload_stability_gate": {"gate_pass": True},
         "support_overlap_gate": {"gate_pass": True},
@@ -2294,7 +2277,7 @@ def test_selection_segment_transfer_feature_admissibility_rejects_post_selection
                     },
                 ],
             },
-            "retained_decision_marginal_query_useful_alignment": {
+            "retained_decision_marginal_query_local_utility_alignment": {
                 "separated_marginal_teacher_summary": {
                     "available": True,
                     "candidate_for_train_side_teacher": True,
@@ -2309,9 +2292,9 @@ def test_selection_segment_transfer_feature_admissibility_rejects_post_selection
 
     artifact = {
         "matched": {
-            "MLQDS": {"query_useful_v1_score": 0.1673},
-            "uniform": {"query_useful_v1_score": 0.142},
-            "DouglasPeucker": {"query_useful_v1_score": 0.1671},
+            "MLQDS": {"query_local_utility_score": 0.1673},
+            "uniform": {"query_local_utility_score": 0.142},
+            "DouglasPeucker": {"query_local_utility_score": 0.1671},
         },
         "workload_stability_gate": {"gate_pass": True},
         "support_overlap_gate": {"gate_pass": True},
@@ -2352,7 +2335,7 @@ def test_selection_segment_transfer_feature_admissibility_rejects_post_selection
 
 def test_target_diffusion_gate_blocks_broad_low_budget_labels() -> None:
     diagnostics = {
-        "query_useful_v1_factorized": {
+        "query_local_utility_factorized": {
             "final_label_support_fraction_by_threshold": {"gt_0.01": 0.80},
             "support_fraction_by_threshold_by_head": {
                 "query_hit_probability": {"gt_0.01": 0.70},
@@ -2378,7 +2361,7 @@ def test_target_diffusion_gate_blocks_broad_low_budget_labels() -> None:
 
 def test_target_diffusion_gate_accepts_concentrated_factorized_labels() -> None:
     diagnostics = {
-        "query_useful_v1_factorized": {
+        "query_local_utility_factorized": {
             "final_label_support_fraction_by_threshold": {"gt_0.01": 0.30},
             "support_fraction_by_threshold_by_head": {
                 "query_hit_probability": {"gt_0.01": 0.35},
@@ -2429,7 +2412,7 @@ def test_prior_behavior_field_uses_behavior_values_not_hit_probability() -> None
         typed_queries=[query],
         labels=labels,
         behavior_values=behavior_values,
-        workload_profile_id="range_workload_v1",
+        workload_profile_id="range_query_mix",
         grid_bins=4,
         smoothing_passes=0,
     )
@@ -2485,7 +2468,7 @@ def test_query_prior_field_rasterizes_query_boxes_not_only_hit_points() -> None:
         points=train_points,
         boundaries=[(0, 1)],
         typed_queries=[query],
-        workload_profile_id="range_workload_v1",
+        workload_profile_id="range_query_mix",
         grid_bins=8,
         time_bins=4,
         smoothing_passes=0,
@@ -2522,7 +2505,7 @@ def test_sample_query_prior_fields_nearest_mode_clamps_out_of_extent_points() ->
         points=train_points,
         boundaries=[(0, 2)],
         typed_queries=[query],
-        workload_profile_id="range_workload_v1",
+        workload_profile_id="range_query_mix",
         grid_bins=8,
         time_bins=2,
         smoothing_passes=0,
@@ -2556,7 +2539,7 @@ def test_zero_prior_field_like_preserves_metadata_and_shape() -> None:
         points=points,
         boundaries=[(0, 2)],
         typed_queries=[query],
-        workload_profile_id="range_workload_v1",
+        workload_profile_id="range_query_mix",
         grid_bins=4,
         time_bins=2,
         smoothing_passes=0,
@@ -2591,7 +2574,7 @@ def test_zero_query_prior_field_channels_only_zeros_requested_channels() -> None
         points=points,
         boundaries=[(0, 2)],
         typed_queries=[query],
-        workload_profile_id="range_workload_v1",
+        workload_profile_id="range_query_mix",
         grid_bins=4,
         time_bins=2,
         smoothing_passes=0,
@@ -2628,7 +2611,7 @@ def test_no_query_prior_ablation_preserves_train_extent() -> None:
         points=train_points,
         boundaries=[(0, 2)],
         typed_queries=[query],
-        workload_profile_id="range_workload_v1",
+        workload_profile_id="range_query_mix",
         grid_bins=4,
         time_bins=2,
         smoothing_passes=0,
@@ -2663,7 +2646,7 @@ def test_workload_blind_range_v2_excludes_route_density_from_model_features() ->
         points=train_points,
         boundaries=[(0, 2)],
         typed_queries=[query],
-        workload_profile_id="range_workload_v1",
+        workload_profile_id="range_query_mix",
         grid_bins=4,
         time_bins=2,
         smoothing_passes=0,
@@ -2708,7 +2691,7 @@ def test_support_overlap_gate_passes_same_support_eval_points() -> None:
         points=points,
         boundaries=[(0, 4)],
         typed_queries=[query],
-        workload_profile_id="range_workload_v1",
+        workload_profile_id="range_query_mix",
         grid_bins=4,
         time_bins=2,
         smoothing_passes=0,
@@ -2742,7 +2725,7 @@ def test_support_overlap_gate_blocks_out_of_extent_eval_points() -> None:
         points=train_points,
         boundaries=[(0, 2)],
         typed_queries=[query],
-        workload_profile_id="range_workload_v1",
+        workload_profile_id="range_query_mix",
         grid_bins=4,
         time_bins=2,
         smoothing_passes=0,
@@ -2766,7 +2749,7 @@ def test_workload_signature_gate_rejects_profile_mismatch_and_tiny_query_counts(
                 "workload_signature": {
                     "profile_id": "legacy_generator",
                     "query_count": 4,
-                    "anchor_family_counts": {"density_route": 4},
+                    "anchor_family_counts": {"density": 4},
                     "footprint_family_counts": {"medium_operational": 4},
                     "point_hit_counts_per_query": [1, 2, 3, 4],
                     "ship_hit_counts_per_query": [1, 1, 2, 2],
@@ -2780,9 +2763,9 @@ def test_workload_signature_gate_rejects_profile_mismatch_and_tiny_query_counts(
             "range_signal": {},
             "generation": {
                 "workload_signature": {
-                    "profile_id": "range_workload_v1",
+                    "profile_id": "range_query_mix",
                     "query_count": 4,
-                    "anchor_family_counts": {"density_route": 4},
+                    "anchor_family_counts": {"density": 4},
                     "footprint_family_counts": {"medium_operational": 4},
                     "point_hit_counts_per_query": [1, 2, 3, 4],
                     "ship_hit_counts_per_query": [1, 1, 2, 2],
@@ -2806,9 +2789,9 @@ def test_workload_signature_gate_rejects_profile_mismatch_and_tiny_query_counts(
 def test_workload_signature_gate_rejects_query_count_mismatch() -> None:
     def signature(query_count: int) -> dict[str, Any]:
         return {
-            "profile_id": "range_workload_v1",
+            "profile_id": "range_query_mix",
             "query_count": query_count,
-            "anchor_family_counts": {"density_route": query_count},
+            "anchor_family_counts": {"density": query_count},
             "footprint_family_counts": {"medium_operational": query_count},
             "point_hit_counts_per_query": [3 for _ in range(query_count)],
             "ship_hit_counts_per_query": [1 for _ in range(query_count)],
@@ -2843,13 +2826,13 @@ def test_workload_signature_gate_rejects_query_count_mismatch() -> None:
 def test_workload_signature_gate_treats_calibrated_query_count_as_diagnostic() -> None:
     def signature(query_count: int) -> dict[str, Any]:
         return {
-            "profile_id": "range_workload_v1_local",
+            "profile_id": "range_query_mix_local",
             "target_coverage": 0.10,
             "coverage_actual": 0.10,
             "query_count_mode": "calibrated_to_coverage",
             "coverage_calibration_mode": "profile_sampled_query_count",
             "query_count": query_count,
-            "anchor_family_counts": {"density_route": query_count},
+            "anchor_family_counts": {"density": query_count},
             "footprint_family_counts": {"medium_operational": query_count},
             "point_hit_counts_per_query": [3 for _ in range(query_count)],
             "ship_hit_counts_per_query": [1 for _ in range(query_count)],
@@ -2886,9 +2869,9 @@ def test_workload_signature_gate_treats_calibrated_query_count_as_diagnostic() -
 def test_workload_signature_gate_allows_small_calibrated_query_count_drift() -> None:
     def signature(query_count: int) -> dict[str, Any]:
         return {
-            "profile_id": "range_workload_v1",
+            "profile_id": "range_query_mix",
             "query_count": query_count,
-            "anchor_family_counts": {"density_route": query_count},
+            "anchor_family_counts": {"density": query_count},
             "footprint_family_counts": {"medium_operational": query_count},
             "point_hit_counts_per_query": [3 for _ in range(query_count)],
             "ship_hit_counts_per_query": [1 for _ in range(query_count)],
@@ -2921,11 +2904,11 @@ def test_workload_signature_gate_allows_small_calibrated_query_count_drift() -> 
 def test_workload_signature_gate_reports_normalized_hit_distribution_diagnostics() -> None:
     def signature(total_points: int, total_trajectories: int) -> dict[str, Any]:
         return {
-            "profile_id": "range_workload_v1",
+            "profile_id": "range_query_mix",
             "query_count": 8,
             "total_points": total_points,
             "total_trajectories": total_trajectories,
-            "anchor_family_counts": {"density_route": 8},
+            "anchor_family_counts": {"density": 8},
             "footprint_family_counts": {"medium_operational": 8},
             "point_hit_counts_per_query": [10, 20, 10, 20, 10, 20, 10, 20],
             "point_hit_fractions_per_query": [0.10, 0.20, 0.10, 0.20, 0.10, 0.20, 0.10, 0.20],
@@ -2995,7 +2978,7 @@ def test_workload_blind_range_v2_features_and_selector_are_query_free() -> None:
     diagnostics = learned_segment_budget_diagnostics(boundaries, (0.05, 0.10))
 
     assert pred.shape == (1, points.shape[0])
-    assert head_logits.shape == (1, points.shape[0], len(QUERY_USEFUL_V1_HEAD_NAMES))
+    assert head_logits.shape == (1, points.shape[0], len(QUERY_LOCAL_UTILITY_HEAD_NAMES))
     assert no_behavior_pred.shape == pred.shape
     assert torch.isfinite(pred).all()
     assert retained.dtype == torch.bool
@@ -3069,7 +3052,7 @@ def test_factorized_head_ablation_uses_neutral_multiplicative_heads() -> None:
         num_layers=0,
         dropout=0.0,
     )
-    head_logits = torch.zeros((1, 1, len(QUERY_USEFUL_V1_HEAD_NAMES)), dtype=torch.float32)
+    head_logits = torch.zeros((1, 1, len(QUERY_LOCAL_UTILITY_HEAD_NAMES)), dtype=torch.float32)
     head_logits[..., 1] = -10.0
 
     disabled = model.final_logit_from_head_logits(
@@ -3082,8 +3065,8 @@ def test_factorized_head_ablation_uses_neutral_multiplicative_heads() -> None:
         head_logits,
         disabled_head_names=("conditional_behavior_utility",),
     )
-    path_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("path_length_support_target")
-    segment_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("segment_budget_target")
+    path_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("path_length_support_target")
+    segment_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("segment_budget_target")
     low_path = head_logits.clone()
     high_path = head_logits.clone()
     low_path[..., path_idx] = -10.0
@@ -3106,7 +3089,7 @@ def test_factorized_head_ablation_uses_neutral_multiplicative_heads() -> None:
     assert all(not parameter.requires_grad for parameter in model.calibration_head.parameters())
 
 
-def test_range_v2_final_score_composition_matches_query_useful_target_formula() -> None:
+def test_range_v2_final_score_composition_matches_query_local_utility_target_formula() -> None:
     model = WorkloadBlindRangeV2Model(
         point_dim=WORKLOAD_BLIND_RANGE_V2_POINT_DIM,
         query_dim=12,
@@ -3123,7 +3106,7 @@ def test_range_v2_final_score_composition_matches_query_useful_target_formula() 
 
     final_probabilities = torch.sigmoid(model.final_logit_from_head_logits(head_logits))
 
-    expected = query_useful_v1_point_score(
+    expected = query_local_utility_point_score(
         q_hit=head_probabilities[..., 0],
         behavior=head_probabilities[..., 1],
         boundary=head_probabilities[..., 2],
@@ -3737,8 +3720,8 @@ def test_segment_oracle_allocation_audit_reports_ranking_alignment_after_freeze(
     point_scores = torch.tensor([0.9, 0.8, 0.1, 0.0, 0.1, 0.0, 0.7, 0.6], dtype=torch.float32)
     segment_scores = torch.tensor([0.9, 0.8, 0.1, 0.0, 0.95, 0.9, 0.2, 0.1], dtype=torch.float32)
     selector_scores = torch.tensor([0.9, 0.8, 0.1, 0.0, 0.95, 0.9, 0.2, 0.1], dtype=torch.float32)
-    head_logits = torch.zeros((8, len(QUERY_USEFUL_V1_HEAD_NAMES)), dtype=torch.float32)
-    query_hit_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("query_hit_probability")
+    head_logits = torch.zeros((8, len(QUERY_LOCAL_UTILITY_HEAD_NAMES)), dtype=torch.float32)
+    query_hit_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("query_hit_probability")
     clamped_point_scores = point_scores.clamp(1e-4, 1.0 - 1e-4)
     head_logits[:, query_hit_idx] = torch.logit(clamped_point_scores)
     labels = torch.zeros((8, 4), dtype=torch.float32)
@@ -3849,11 +3832,11 @@ def test_target_segment_oracle_alignment_audit_reports_eval_target_sources_after
     assert audit["target_alignment_attempted"] is True
     assert (
         audit["source_semantics"]["point_score_top20_mean"]
-        == "eval_query_useful_v1_final_target_top20_mean"
+        == "eval_query_local_utility_final_target_top20_mean"
     )
     assert (
         audit["source_semantics"]["target_head_segment_budget_target_top20_mean"]
-        == "eval_query_useful_v1_factorized_target_head:segment_budget_target"
+        == "eval_query_local_utility_factorized_target_head:segment_budget_target"
     )
     assert "target_head_query_hit_probability_top20_mean" in audit["score_source_names"]
     assert "target_head_segment_budget_target_top20_mean" in audit["source_alignment"]
@@ -3862,7 +3845,7 @@ def test_target_segment_oracle_alignment_audit_reports_eval_target_sources_after
     assert "target_head_query_hit_probability_top20_mean_rank" in rows[0]
     assert (
         audit["target_diagnostics_summary"]["segment_budget_target_base_source"]
-        == "query_useful_v1_final_score"
+        == "query_local_utility_final_score"
     )
 
 
@@ -4046,7 +4029,7 @@ def test_source_masks_from_selector_trace_reads_schema7_source_payloads() -> Non
     assert torch.equal(masks["length_repair"], torch.tensor([False, False, False, True, False]))
 
 
-def test_retained_decision_marginal_query_useful_diagnostic_scores_true_marginals() -> None:
+def test_retained_decision_marginal_query_local_utility_diagnostic_scores_true_marginals() -> None:
     points = torch.zeros((5, 5), dtype=torch.float32)
     points[:, 0] = torch.arange(5, dtype=torch.float32)
     points[:, 1] = torch.linspace(0.0, 4.0, steps=5)
@@ -4073,7 +4056,7 @@ def test_retained_decision_marginal_query_useful_diagnostic_scores_true_marginal
         "learned": torch.tensor([False, False, True, False, False]),
     }
 
-    diagnostics = retained_decision_marginal_query_useful_diagnostics(
+    diagnostics = retained_decision_marginal_query_local_utility_diagnostics(
         points=points,
         boundaries=[(0, 5)],
         typed_queries=[query],
@@ -4152,7 +4135,7 @@ def test_retained_decision_marginal_query_useful_diagnostic_scores_true_marginal
     )
     assert diagnostics["available"] is True
     assert diagnostics["diagnostic_only"] is True
-    assert diagnostics["exact_query_useful_v1_marginals"] is True
+    assert diagnostics["exact_query_local_utility_marginals"] is True
     assert diagnostics["performance_mode"] == "exact_cached_query_support"
     assert diagnostics["query_cache_created"] is True
     assert diagnostics["query_cache_provided"] is False
@@ -4205,7 +4188,7 @@ def test_retained_decision_marginal_query_useful_diagnostic_scores_true_marginal
     assert learned_removal["query_free_teacher_proxies"][
         "query_free_path_length_support_target"
     ] == pytest.approx(0.8)
-    assert learned_removal["query_useful_v1_score_components"]["factorized_composed_score"] == (
+    assert learned_removal["query_local_utility_score_components"]["factorized_composed_score"] == (
         pytest.approx(0.85)
     )
     assert learned_removal["selector_stage_state"]["pre_repair_retained"] is True
@@ -4237,8 +4220,8 @@ def test_retained_decision_marginal_query_useful_diagnostic_scores_true_marginal
         "unattributed_count": 0,
     }
     assert learned_removal["trajectory_index"] == 0
-    assert "marginal_query_useful_v1_candidate_rank" in learned_removal
-    assert "query_useful_v1_component_minus_marginal_rank" in learned_removal
+    assert "marginal_query_local_utility_candidate_rank" in learned_removal
+    assert "query_local_utility_component_minus_marginal_rank" in learned_removal
     assert "query_free_teacher_proxy_minus_marginal_rank" in learned_removal
     assert "failure_buckets" in learned_removal
     guard_summary = diagnostics["query_free_teacher_proxy_guard_coupling_summary"]
@@ -4255,7 +4238,7 @@ def test_retained_decision_marginal_query_useful_diagnostic_scores_true_marginal
     )
     teacher_summary = diagnostics["learned_controllable_marginal_teacher_summary"]
     assert teacher_summary["available"] is True
-    assert teacher_summary["teacher_signal"] == "exact_retained_removal_marginal_query_useful_v1"
+    assert teacher_summary["teacher_signal"] == "exact_retained_removal_marginal_query_local_utility"
     assert teacher_summary["teacher_scope"] == "learned_controllable_retained_removal"
     assert teacher_summary["learned_controllable_retained_removal_count"] == 1
     assert teacher_summary["candidate_for_train_side_calibration"] is False
@@ -4284,9 +4267,9 @@ def test_retained_decision_marginal_query_useful_diagnostic_scores_true_marginal
     assert separated_teacher["point_target_rows"][0]["point_target_within_segment"] == (
         pytest.approx(1.0)
     )
-    assert learned_removal["marginal_query_useful_v1"] > 0.0
-    assert removed_addition["marginal_query_useful_v1"] > 0.0
-    assert diagnostics["by_source"]["learned"]["mean_marginal_query_useful_v1"] > 0.0
+    assert learned_removal["marginal_query_local_utility"] > 0.0
+    assert removed_addition["marginal_query_local_utility"] > 0.0
+    assert diagnostics["by_source"]["learned"]["mean_marginal_query_local_utility"] > 0.0
     assert diagnostics["by_decision"]["removed_addition_gain"]["selector_score"]["available"] is True
     assert (
         diagnostics["overall"]["score_component_alignment"][
@@ -4317,7 +4300,7 @@ def test_separated_marginal_teacher_targets_separate_shape_from_split_eligibilit
             "trajectory_index": 0,
             "decision": "retained_removal_loss",
             "source": "learned",
-            "marginal_query_useful_v1": marginal,
+            "marginal_query_local_utility": marginal,
             "selector_segment_context": {
                 "trajectory_index": 0,
                 "segment_index": segment_index,
@@ -4447,7 +4430,7 @@ def test_separated_marginal_teacher_targets_separate_shape_from_split_eligibilit
     assert mismatch_diag["reason"] == "score_shape_mismatch"
 
 
-def test_retained_decision_marginal_query_useful_diagnostic_uses_provided_cache() -> None:
+def test_retained_decision_marginal_query_local_utility_diagnostic_uses_provided_cache() -> None:
     points = torch.zeros((5, 5), dtype=torch.float32)
     points[:, 0] = torch.arange(5, dtype=torch.float32)
     points[:, 1] = torch.linspace(0.0, 4.0, steps=5)
@@ -4466,7 +4449,7 @@ def test_retained_decision_marginal_query_useful_diagnostic_uses_provided_cache(
     }
     query_cache = ScoringQueryCache.for_workload(points, [(0, 5)], [query])
 
-    diagnostics = retained_decision_marginal_query_useful_diagnostics(
+    diagnostics = retained_decision_marginal_query_local_utility_diagnostics(
         points=points,
         boundaries=[(0, 5)],
         typed_queries=[query],
@@ -4514,9 +4497,9 @@ def test_segment_source_attribution_uses_canonical_segment_index_after_score_sor
 
 
 def test_segment_budget_head_has_segment_level_loss() -> None:
-    head_targets = torch.zeros((1, 8, len(QUERY_USEFUL_V1_HEAD_NAMES)), dtype=torch.float32)
+    head_targets = torch.zeros((1, 8, len(QUERY_LOCAL_UTILITY_HEAD_NAMES)), dtype=torch.float32)
     head_mask = torch.ones_like(head_targets, dtype=torch.bool)
-    segment_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("segment_budget_target")
+    segment_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("segment_budget_target")
     head_targets[:, :4, segment_idx] = 1.0
     aligned = torch.zeros_like(head_targets)
     reversed_logits = torch.zeros_like(head_targets)
@@ -4541,23 +4524,23 @@ def test_segment_budget_head_has_segment_level_loss() -> None:
     assert float(aligned_loss.item()) < float(reversed_loss.item())
 
 
-def test_factorized_query_useful_loss_exposes_segment_budget_weights() -> None:
-    head_targets = torch.zeros((1, 8, len(QUERY_USEFUL_V1_HEAD_NAMES)), dtype=torch.float32)
+def test_factorized_query_local_utility_loss_exposes_segment_budget_weights() -> None:
+    head_targets = torch.zeros((1, 8, len(QUERY_LOCAL_UTILITY_HEAD_NAMES)), dtype=torch.float32)
     head_mask = torch.zeros_like(head_targets, dtype=torch.bool)
-    segment_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("segment_budget_target")
+    segment_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("segment_budget_target")
     head_targets[:, :4, segment_idx] = 1.0
     head_mask[:, :, segment_idx] = True
     reversed_logits = torch.zeros_like(head_targets)
     reversed_logits[:, :4, segment_idx] = -4.0
     reversed_logits[:, 4:, segment_idx] = 4.0
 
-    implicit_default = _factorized_query_useful_loss(
+    implicit_default = _factorized_query_local_utility_loss(
         head_logits=reversed_logits,
         head_targets=head_targets,
         head_mask=head_mask,
         segment_size=4,
     )
-    explicit_default = _factorized_query_useful_loss(
+    explicit_default = _factorized_query_local_utility_loss(
         head_logits=reversed_logits,
         head_targets=head_targets,
         head_mask=head_mask,
@@ -4565,7 +4548,7 @@ def test_factorized_query_useful_loss_exposes_segment_budget_weights() -> None:
         segment_budget_head_weight=0.10,
         segment_level_loss_weight=0.25,
     )
-    stronger_segment_pressure = _factorized_query_useful_loss(
+    stronger_segment_pressure = _factorized_query_local_utility_loss(
         head_logits=reversed_logits,
         head_targets=head_targets,
         head_mask=head_mask,
@@ -4573,7 +4556,7 @@ def test_factorized_query_useful_loss_exposes_segment_budget_weights() -> None:
         segment_budget_head_weight=0.40,
         segment_level_loss_weight=1.0,
     )
-    point_only = _factorized_query_useful_loss(
+    point_only = _factorized_query_local_utility_loss(
         head_logits=reversed_logits,
         head_targets=head_targets,
         head_mask=head_mask,
@@ -4588,9 +4571,9 @@ def test_factorized_query_useful_loss_exposes_segment_budget_weights() -> None:
 
 
 def test_behavior_head_rank_loss_penalizes_reversed_behavior_order() -> None:
-    head_targets = torch.zeros((1, 8, len(QUERY_USEFUL_V1_HEAD_NAMES)), dtype=torch.float32)
+    head_targets = torch.zeros((1, 8, len(QUERY_LOCAL_UTILITY_HEAD_NAMES)), dtype=torch.float32)
     head_mask = torch.zeros_like(head_targets, dtype=torch.bool)
-    behavior_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("conditional_behavior_utility")
+    behavior_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("conditional_behavior_utility")
     head_targets[0, :, behavior_idx] = torch.tensor(
         [1.0, 0.9, 0.8, 0.7, 0.1, 0.0, 0.0, 0.0],
         dtype=torch.float32,
@@ -4611,13 +4594,13 @@ def test_behavior_head_rank_loss_penalizes_reversed_behavior_order() -> None:
         head_targets=head_targets,
         head_mask=head_mask,
     )
-    without_behavior_rank = _factorized_query_useful_loss(
+    without_behavior_rank = _factorized_query_local_utility_loss(
         head_logits=reversed_logits,
         head_targets=head_targets,
         head_mask=head_mask,
         behavior_rank_loss_weight=0.0,
     )
-    with_behavior_rank = _factorized_query_useful_loss(
+    with_behavior_rank = _factorized_query_local_utility_loss(
         head_logits=reversed_logits,
         head_targets=head_targets,
         head_mask=head_mask,
@@ -4629,10 +4612,10 @@ def test_behavior_head_rank_loss_penalizes_reversed_behavior_order() -> None:
 
 
 def test_sparse_head_rank_loss_penalizes_reversed_tiny_query_and_boundary_targets() -> None:
-    head_targets = torch.zeros((1, 8, len(QUERY_USEFUL_V1_HEAD_NAMES)), dtype=torch.float32)
+    head_targets = torch.zeros((1, 8, len(QUERY_LOCAL_UTILITY_HEAD_NAMES)), dtype=torch.float32)
     head_mask = torch.zeros_like(head_targets, dtype=torch.bool)
-    query_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("query_hit_probability")
-    boundary_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("boundary_event_utility")
+    query_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("query_hit_probability")
+    boundary_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("boundary_event_utility")
     tiny_order = torch.tensor(
         [0.0010, 0.0008, 0.0006, 0.0004, 0.0001, 0.0, 0.0, 0.0],
         dtype=torch.float32,
@@ -4658,13 +4641,13 @@ def test_sparse_head_rank_loss_penalizes_reversed_tiny_query_and_boundary_target
         head_targets=head_targets,
         head_mask=head_mask,
     )
-    without_sparse_rank = _factorized_query_useful_loss(
+    without_sparse_rank = _factorized_query_local_utility_loss(
         head_logits=reversed_logits,
         head_targets=head_targets,
         head_mask=head_mask,
         sparse_head_rank_loss_weight=0.0,
     )
-    with_sparse_rank = _factorized_query_useful_loss(
+    with_sparse_rank = _factorized_query_local_utility_loss(
         head_logits=reversed_logits,
         head_targets=head_targets,
         head_mask=head_mask,
@@ -4676,11 +4659,11 @@ def test_sparse_head_rank_loss_penalizes_reversed_tiny_query_and_boundary_target
 
 
 def test_sparse_head_bce_target_calibration_rescales_tiny_query_and_boundary_heads() -> None:
-    head_targets = torch.zeros((1, 4, len(QUERY_USEFUL_V1_HEAD_NAMES)), dtype=torch.float32)
+    head_targets = torch.zeros((1, 4, len(QUERY_LOCAL_UTILITY_HEAD_NAMES)), dtype=torch.float32)
     head_mask = torch.zeros_like(head_targets, dtype=torch.bool)
-    query_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("query_hit_probability")
-    boundary_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("boundary_event_utility")
-    behavior_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("conditional_behavior_utility")
+    query_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("query_hit_probability")
+    boundary_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("boundary_event_utility")
+    behavior_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("conditional_behavior_utility")
     head_targets[0, :, query_idx] = torch.tensor([0.0010, 0.0005, 0.0, 0.0])
     head_targets[0, :, boundary_idx] = torch.tensor([0.000010, 0.000005, 0.0, 0.0])
     head_targets[0, :, behavior_idx] = torch.tensor([0.20, 0.40, 0.60, 0.80])
@@ -4706,10 +4689,10 @@ def test_sparse_head_bce_target_calibration_rescales_tiny_query_and_boundary_hea
 
 
 def test_sparse_head_bce_target_calibration_makes_aligned_tiny_heads_cheaper() -> None:
-    head_targets = torch.zeros((1, 8, len(QUERY_USEFUL_V1_HEAD_NAMES)), dtype=torch.float32)
+    head_targets = torch.zeros((1, 8, len(QUERY_LOCAL_UTILITY_HEAD_NAMES)), dtype=torch.float32)
     head_mask = torch.zeros_like(head_targets, dtype=torch.bool)
-    query_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("query_hit_probability")
-    boundary_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("boundary_event_utility")
+    query_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("query_hit_probability")
+    boundary_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("boundary_event_utility")
     tiny_order = torch.tensor(
         [0.0010, 0.0008, 0.0006, 0.0004, 0.0001, 0.0, 0.0, 0.0],
         dtype=torch.float32,
@@ -4725,23 +4708,23 @@ def test_sparse_head_bce_target_calibration_makes_aligned_tiny_heads_cheaper() -
     reversed_logits[0, :, query_idx] = torch.linspace(-4.0, 4.0, 8)
     reversed_logits[0, :, boundary_idx] = torch.linspace(-4.0, 4.0, 8)
 
-    raw_aligned = _factorized_query_useful_loss(
+    raw_aligned = _factorized_query_local_utility_loss(
         head_logits=aligned_logits,
         head_targets=head_targets,
         head_mask=head_mask,
     )
-    raw_reversed = _factorized_query_useful_loss(
+    raw_reversed = _factorized_query_local_utility_loss(
         head_logits=reversed_logits,
         head_targets=head_targets,
         head_mask=head_mask,
     )
-    calibrated_aligned = _factorized_query_useful_loss(
+    calibrated_aligned = _factorized_query_local_utility_loss(
         head_logits=aligned_logits,
         head_targets=head_targets,
         head_mask=head_mask,
         sparse_head_bce_target_mode="window_max_normalized",
     )
-    calibrated_reversed = _factorized_query_useful_loss(
+    calibrated_reversed = _factorized_query_local_utility_loss(
         head_logits=reversed_logits,
         head_targets=head_targets,
         head_mask=head_mask,
@@ -4792,7 +4775,7 @@ def test_factorized_head_fit_diagnostics_reports_each_head() -> None:
                 "lon_max": 1.0,
             },
             "_metadata": {
-                "anchor_family": "density_route",
+                "anchor_family": "density",
                 "footprint_family": "small_local",
             },
         }
@@ -4810,7 +4793,7 @@ def test_factorized_head_fit_diagnostics_reports_each_head() -> None:
     behavior = diagnostics["factorized_head_fit"]["conditional_behavior_utility"]
 
     assert diagnostics["factorized_head_fit_diagnostics_available"] is True
-    assert set(diagnostics["factorized_head_fit"]) == set(QUERY_USEFUL_V1_HEAD_NAMES)
+    assert set(diagnostics["factorized_head_fit"]) == set(QUERY_LOCAL_UTILITY_HEAD_NAMES)
     assert behavior["available"] is True
     assert behavior["valid_point_count"] == 6
     assert behavior["positive_target_count"] == 5
@@ -4820,7 +4803,7 @@ def test_factorized_head_fit_diagnostics_reports_each_head() -> None:
     family_fit = diagnostics["family_conditioned_head_trainability"]
     assert family_fit["available"] is True
     assert family_fit["diagnostic_only"] is True
-    density = family_fit["group_by"]["anchor_family"]["density_route"]
+    density = family_fit["group_by"]["anchor_family"]["density"]
     assert density["focus_family"] is True
     assert density["query_count"] == 1
     assert density["valid_hit_point_count"] == 4
@@ -4830,14 +4813,14 @@ def test_factorized_head_fit_diagnostics_reports_each_head() -> None:
 
 def test_factorized_final_score_composition_diagnostics_match_scalar_target() -> None:
     point_count = 8
-    head_targets = torch.zeros((point_count, len(QUERY_USEFUL_V1_HEAD_NAMES)), dtype=torch.float32)
+    head_targets = torch.zeros((point_count, len(QUERY_LOCAL_UTILITY_HEAD_NAMES)), dtype=torch.float32)
     head_targets[:, 0] = torch.linspace(0.20, 0.90, steps=point_count)
     head_targets[:, 1] = torch.linspace(0.10, 0.80, steps=point_count)
     head_targets[:, 2] = torch.linspace(0.00, 0.35, steps=point_count)
     head_targets[:, 3] = torch.linspace(0.10, 0.90, steps=point_count)
     head_targets[:, 4] = torch.linspace(0.00, 1.00, steps=point_count)
     head_targets[:, 5] = torch.linspace(1.00, 0.00, steps=point_count)
-    scalar_target = query_useful_v1_point_score(
+    scalar_target = query_local_utility_point_score(
         q_hit=head_targets[:, 0],
         behavior=head_targets[:, 1],
         boundary=head_targets[:, 2],
@@ -4854,7 +4837,7 @@ def test_factorized_final_score_composition_diagnostics_match_scalar_target() ->
     )
 
     assert diagnostics["factorized_final_score_composition_available"] is True
-    assert diagnostics["factorized_final_score_formula"] == QUERY_USEFUL_V1_FINAL_LABEL_FORMULA
+    assert diagnostics["factorized_final_score_formula"] == QUERY_LOCAL_UTILITY_FINAL_LABEL_FORMULA
     assert diagnostics["factorized_final_score_tau"] > 0.99
     assert diagnostics["factorized_final_score_topk_mass_recall_at_5_percent"] == pytest.approx(1.0)
     assert diagnostics["factorized_final_score_prediction_std_to_target_std"] == pytest.approx(
@@ -4867,7 +4850,7 @@ def test_factorized_final_score_composition_diagnostics_match_scalar_target() ->
     assert diagnostics["factorized_replacement_multiplier_mean"] > 0.75
 
 
-def test_factorized_scalar_training_target_keeps_raw_query_useful_scale() -> None:
+def test_factorized_scalar_training_target_keeps_raw_query_local_utility_scale() -> None:
     labels = torch.tensor([[0.0], [0.01], [0.02], [0.10]], dtype=torch.float32)
     labelled_mask = torch.ones_like(labels, dtype=torch.bool)
 
@@ -4875,7 +4858,7 @@ def test_factorized_scalar_training_target_keeps_raw_query_useful_scale() -> Non
         labels=labels,
         labelled_mask=labelled_mask,
         workload_type_id=0,
-        range_training_target_mode="query_useful_v1_factorized",
+        range_training_target_mode="query_local_utility_factorized",
     )
     legacy_target, legacy_basis = _scalar_training_target_for_mode(
         labels=labels,
@@ -4884,7 +4867,7 @@ def test_factorized_scalar_training_target_keeps_raw_query_useful_scale() -> Non
         range_training_target_mode="point_value",
     )
 
-    assert factorized_basis == "raw_query_useful_v1_final_label_for_loss"
+    assert factorized_basis == "raw_query_local_utility_final_label_for_loss"
     assert legacy_basis == "scaled_training_target_for_loss"
     assert torch.allclose(factorized_target, labels[:, 0])
     assert float(legacy_target[-1].item()) == pytest.approx(1.0)
@@ -4910,7 +4893,7 @@ def test_factorized_head_bias_initialization_uses_training_base_rates() -> None:
         dtype=torch.float32,
     )
     head_mask = torch.ones_like(head_targets, dtype=torch.bool)
-    behavior_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("conditional_behavior_utility")
+    behavior_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("conditional_behavior_utility")
     head_mask[2, behavior_idx] = False
 
     diagnostics = _initialize_factorized_head_output_biases_from_targets(
@@ -4920,7 +4903,7 @@ def test_factorized_head_bias_initialization_uses_training_base_rates() -> None:
     )
 
     assert diagnostics["available"] is True
-    for head_idx, head_name in enumerate(QUERY_USEFUL_V1_HEAD_NAMES):
+    for head_idx, head_name in enumerate(QUERY_LOCAL_UTILITY_HEAD_NAMES):
         valid = head_mask[:, head_idx]
         target_mean = float(head_targets[:, head_idx][valid].mean().item())
         probability = max(1e-4, min(1.0 - 1e-4, target_mean))
@@ -4948,10 +4931,10 @@ def test_factorized_training_diagnostics_do_not_claim_legacy_scalar_target() -> 
         temporal_residual_label_mode="none",
         loss_objective="budget_topk",
         temporal_fraction=0.0,
-        range_training_target_mode="query_useful_v1_factorized",
+        range_training_target_mode="query_local_utility_factorized",
     )
 
-    assert diagnostics["target_family"] == "QueryUsefulV1Factorized"
+    assert diagnostics["target_family"] == "QueryLocalUtilityFactorized"
     assert diagnostics["final_success_allowed"] is True
     assert "legacy_reason" not in diagnostics
 
@@ -5052,12 +5035,12 @@ def test_selection_causality_diagnostics_reports_unavailable_preconditions() -> 
 def _final_summary_config(
     *,
     final_candidate: bool = True,
-    range_training_target_mode: str = "query_useful_v1_factorized",
+    range_training_target_mode: str = "query_local_utility_factorized",
 ) -> SimpleNamespace:
     return SimpleNamespace(
         query=SimpleNamespace(
             workload_profile_id=(
-                "range_workload_v1_local" if final_candidate else "legacy_generator"
+                "range_query_mix_local" if final_candidate else "legacy_generator"
             ),
             target_coverage=0.10,
             range_max_coverage_overshoot=0.0075,
@@ -5084,7 +5067,7 @@ def _final_summary_workload() -> SimpleNamespace:
         coverage_fraction=0.10,
         generation_diagnostics={
             "query_generation": {
-                "workload_profile_id": "range_workload_v1_local",
+                "workload_profile_id": "range_query_mix_local",
                 "mode": "target_coverage",
                 "coverage_calibration_mode": "profile_sampled_query_count",
                 "query_count_mode": "calibrated_to_coverage",
@@ -5107,7 +5090,7 @@ def _final_summary_metrics(score: float, *, range_score: float = 0.2) -> MethodS
     return MethodScore(
         aggregate_f1=0.0,
         per_type_f1={},
-        query_useful_v1_score=score,
+        query_local_utility_score=score,
         range_usefulness_score=range_score,
         avg_length_preserved=0.9,
         geometric_distortion={"avg_sed_km": 1.0},
@@ -5162,7 +5145,7 @@ def test_final_run_summaries_block_final_grid_until_benchmark_evidence() -> None
     )
 
     assert summaries.final_candidate is True
-    assert summaries.final_claim_summary["primary_metric"] == "QueryUsefulV1"
+    assert summaries.final_claim_summary["primary_metric"] == "QueryLocalUtility"
     assert summaries.final_claim_summary["final_success_allowed"] is False
     assert (
         "full_workload_profile_compression_grid" in summaries.final_claim_summary["blocking_gates"]
@@ -5174,10 +5157,10 @@ def test_final_run_summaries_block_final_grid_until_benchmark_evidence() -> None
 def test_learning_causality_summary_does_not_duplicate_retained_marginal_trace() -> None:
     workloads = [_final_summary_workload() for _idx in range(4)]
     trace = {
-        "retained_decision_marginal_query_useful_alignment": {
+        "retained_decision_marginal_query_local_utility_alignment": {
             "available": True,
             "diagnostic_only": True,
-            "exact_query_useful_v1_marginals": True,
+            "exact_query_local_utility_marginals": True,
             "performance_mode": "exact_cached_query_support",
             "candidate_count": 2,
             "score_fields_available": {"selector_score": True},
@@ -5260,7 +5243,7 @@ def test_learning_causality_summary_does_not_duplicate_retained_marginal_trace()
     )
 
     selection = summaries.learning_causality_summary["selection_causality_diagnostics"]
-    retained = trace["retained_decision_marginal_query_useful_alignment"]
+    retained = trace["retained_decision_marginal_query_local_utility_alignment"]
     assert selection == {"available": True}
     assert "retained_decision_marginal_alignment" not in selection
     assert retained["available"] is True
@@ -5315,7 +5298,7 @@ def test_final_run_summaries_reject_non_final_candidate_profile() -> None:
         "status": "not_final_query_driven_candidate",
         "final_success_allowed": False,
         "reason": (
-            "Requires range_workload_v1, QueryUsefulV1 factorized target, "
+            "Requires range_query_mix, QueryLocalUtility factorized target, "
             "workload_blind_range_v2, and learned_segment_budget_v1."
         ),
     }
@@ -5325,47 +5308,47 @@ def test_learning_causality_delta_gate_requires_material_ablation_loss() -> None
     primary = MethodScore(
         aggregate_f1=0.0,
         per_type_f1={},
-        query_useful_v1_score=0.30,
+        query_local_utility_score=0.30,
     )
     uniform = MethodScore(
         aggregate_f1=0.0,
         per_type_f1={},
-        query_useful_v1_score=0.25,
+        query_local_utility_score=0.25,
     )
 
     gate = learning_causality_delta_gate_config(primary=primary, uniform=uniform)
     thresholds = gate["thresholds"]
 
-    assert gate["min_material_query_useful_delta"] == 0.005
-    assert abs(gate["mlqds_uniform_query_useful_gap"] - 0.05) < 1e-12
+    assert gate["min_material_query_local_utility_delta"] == 0.005
+    assert abs(gate["mlqds_uniform_query_local_utility_gap"] - 0.05) < 1e-12
     assert abs(thresholds["shuffled_scores_should_lose"] - 0.03) < 1e-12
     assert thresholds["without_segment_budget_head_should_lose"] == 0.005
     assert thresholds["prior_field_only_should_not_match_trained"] == 0.005
 
 
-def test_query_useful_component_delta_summary_reports_weighted_tradeoffs() -> None:
+def test_query_local_utility_component_delta_summary_reports_weighted_tradeoffs() -> None:
     primary = MethodScore(
         aggregate_f1=0.0,
         per_type_f1={},
-        query_useful_v1_score=0.108,
-        query_useful_v1_components={
-            "query_balanced_point_recall": 0.60,
-            "ship_f1": 0.40,
+        query_local_utility_score=0.368,
+        query_local_utility_components={
+            "query_point_recall": 0.60,
+            "query_local_turn_change_coverage": 0.40,
             "length_preservation_guardrail": 0.80,
         },
     )
     ablation = MethodScore(
         aggregate_f1=0.0,
         per_type_f1={},
-        query_useful_v1_score=0.092,
-        query_useful_v1_components={
-            "query_balanced_point_recall": 0.50,
-            "ship_f1": 0.50,
+        query_local_utility_score=0.332,
+        query_local_utility_components={
+            "query_point_recall": 0.50,
+            "query_local_turn_change_coverage": 0.50,
             "length_preservation_guardrail": 0.70,
         },
     )
 
-    summary = query_useful_component_delta_summary(
+    summary = query_local_utility_component_delta_summary(
         primary=primary,
         ablations={"MLQDS_without_behavior_utility_head": ablation},
         top_k=2,
@@ -5373,44 +5356,51 @@ def test_query_useful_component_delta_summary_reports_weighted_tradeoffs() -> No
     row = summary["MLQDS_without_behavior_utility_head"]
 
     assert row["available"] is True
-    assert row["query_useful_v1_delta"] == pytest.approx(0.016)
-    assert row["component_deltas"]["query_balanced_point_recall"] == pytest.approx(0.10)
-    assert row["weighted_component_deltas"]["query_balanced_point_recall"] == pytest.approx(0.010)
-    assert row["weighted_component_deltas"]["ship_f1"] == pytest.approx(-0.008)
-    assert row["component_weighted_delta_sum"] == pytest.approx(0.003)
-    assert row["component_delta_residual"] == pytest.approx(0.013)
+    assert row["query_local_utility_delta"] == pytest.approx(0.036)
+    assert row["component_deltas"]["query_point_recall"] == pytest.approx(0.10)
+    assert row["weighted_component_deltas"]["query_point_recall"] == pytest.approx(
+        0.05
+    )
+    assert row["weighted_component_deltas"]["query_local_turn_change_coverage"] == pytest.approx(
+        -0.015
+    )
+    assert row["component_weighted_delta_sum"] == pytest.approx(0.036)
+    assert row["component_delta_residual"] == pytest.approx(0.0)
     assert (
         row["top_positive_weighted_component_deltas"][0]["component"]
-        == "query_balanced_point_recall"
+        == "query_point_recall"
     )
-    assert row["top_negative_weighted_component_deltas"][0]["component"] == "ship_f1"
+    assert (
+        row["top_negative_weighted_component_deltas"][0]["component"]
+        == "query_local_turn_change_coverage"
+    )
 
 
 def test_causality_ablation_tradeoff_summary_connects_mask_and_component_changes() -> None:
     primary = MethodScore(
         aggregate_f1=0.0,
         per_type_f1={},
-        query_useful_v1_score=0.108,
-        query_useful_v1_components={
-            "query_balanced_point_recall": 0.60,
-            "ship_f1": 0.40,
+        query_local_utility_score=0.368,
+        query_local_utility_components={
+            "query_point_recall": 0.60,
+            "query_local_turn_change_coverage": 0.40,
             "length_preservation_guardrail": 0.80,
         },
     )
     ablation = MethodScore(
         aggregate_f1=0.0,
         per_type_f1={},
-        query_useful_v1_score=0.092,
-        query_useful_v1_components={
-            "query_balanced_point_recall": 0.50,
-            "ship_f1": 0.50,
+        query_local_utility_score=0.332,
+        query_local_utility_components={
+            "query_point_recall": 0.50,
+            "query_local_turn_change_coverage": 0.50,
             "length_preservation_guardrail": 0.70,
         },
     )
     primary_mask = torch.tensor([True, True, False, False])
     ablation_mask = torch.tensor([False, True, True, False])
 
-    component_deltas = query_useful_component_delta_summary(
+    component_deltas = query_local_utility_component_delta_summary(
         primary=primary,
         ablations={"MLQDS_without_behavior_utility_head": ablation},
         top_k=2,
@@ -5432,33 +5422,35 @@ def test_causality_ablation_tradeoff_summary_connects_mask_and_component_changes
     assert row["available"] is True
     assert row["tradeoff_status"] == "mask_change_helped_primary_metric"
     assert row["retained_symmetric_difference_count"] == 2.0
-    assert row["query_useful_v1_delta_per_changed_retained_decision"] == pytest.approx(0.008)
-    assert row["positive_weighted_component_delta_sum"] == pytest.approx(0.011)
-    assert row["negative_weighted_component_delta_sum"] == pytest.approx(-0.008)
+    assert row["query_local_utility_delta_per_changed_retained_decision"] == pytest.approx(0.018)
+    assert row["positive_weighted_component_delta_sum"] == pytest.approx(0.051)
+    assert row["negative_weighted_component_delta_sum"] == pytest.approx(-0.015)
     assert (
         row["dominant_positive_weighted_component_delta"]["component"]
-        == "query_balanced_point_recall"
+        == "query_point_recall"
     )
-    assert row["dominant_negative_weighted_component_delta"]["component"] == "ship_f1"
+    assert row["dominant_negative_weighted_component_delta"]["component"] == (
+        "query_local_turn_change_coverage"
+    )
 
 
 def test_causality_ablation_diagnostics_payload_reuses_component_and_mask_tradeoffs() -> None:
     primary = MethodScore(
         aggregate_f1=0.0,
         per_type_f1={},
-        query_useful_v1_score=0.108,
-        query_useful_v1_components={
-            "query_balanced_point_recall": 0.60,
-            "ship_f1": 0.40,
+        query_local_utility_score=0.368,
+        query_local_utility_components={
+            "query_point_recall": 0.60,
+            "query_local_turn_change_coverage": 0.40,
         },
     )
     ablation = MethodScore(
         aggregate_f1=0.0,
         per_type_f1={},
-        query_useful_v1_score=0.092,
-        query_useful_v1_components={
-            "query_balanced_point_recall": 0.50,
-            "ship_f1": 0.50,
+        query_local_utility_score=0.332,
+        query_local_utility_components={
+            "query_point_recall": 0.50,
+            "query_local_turn_change_coverage": 0.50,
         },
     )
     mask_diagnostics = {
@@ -5479,13 +5471,15 @@ def test_causality_ablation_diagnostics_payload_reuses_component_and_mask_tradeo
     row = payload["tradeoff_diagnostics"]["MLQDS_without_behavior_utility_head"]
 
     assert payload["available"] is True
-    assert payload["primary_query_useful_v1_score"] == pytest.approx(0.108)
-    assert payload["ablation_scores"]["MLQDS_without_behavior_utility_head"] == pytest.approx(0.092)
-    assert payload["ablation_query_useful_deltas"][
+    assert payload["primary_query_local_utility_score"] == pytest.approx(0.368)
+    assert payload["ablation_scores"]["MLQDS_without_behavior_utility_head"] == pytest.approx(0.332)
+    assert payload["ablation_query_local_utility_deltas"][
         "MLQDS_without_behavior_utility_head"
-    ] == pytest.approx(0.016)
+    ] == pytest.approx(0.036)
     assert row["retained_symmetric_difference_count"] == 4.0
-    assert row["dominant_negative_weighted_component_delta"]["component"] == "ship_f1"
+    assert row["dominant_negative_weighted_component_delta"]["component"] == (
+        "query_local_turn_change_coverage"
+    )
 
 
 def test_score_ablation_sensitivity_reports_score_and_mask_changes() -> None:
@@ -5703,7 +5697,7 @@ def test_prior_feature_sample_sensitivity_reports_input_level_changes() -> None:
         points=points,
         boundaries=[(0, 3)],
         typed_queries=[query],
-        workload_profile_id="range_workload_v1",
+        workload_profile_id="range_query_mix",
         grid_bins=4,
         time_bins=2,
         smoothing_passes=0,
@@ -5748,7 +5742,7 @@ def test_model_prior_feature_sensitivity_reports_post_builder_and_scaler_changes
         points=points,
         boundaries=[(0, 3)],
         typed_queries=[query],
-        workload_profile_id="range_workload_v1",
+        workload_profile_id="range_query_mix",
         grid_bins=4,
         time_bins=2,
         smoothing_passes=0,
@@ -5823,9 +5817,9 @@ def test_prior_sample_gate_failures_explain_empty_or_out_of_extent_priors() -> N
 
 def test_workload_signature_gate_reports_pass_for_matching_profiles() -> None:
     signature = {
-        "profile_id": "range_workload_v1",
+        "profile_id": "range_query_mix",
         "query_count": 8,
-        "anchor_family_counts": {"density_route": 6, "boundary_entry_exit": 2},
+        "anchor_family_counts": {"density": 6, "sparse_background_control": 2},
         "footprint_family_counts": {"medium_operational": 8},
         "point_hits_per_query": {"p10": 3.0, "p50": 5.0, "p90": 8.0},
         "ship_hits_per_query": {"p10": 1.0, "p50": 2.0, "p90": 3.0},
@@ -5858,11 +5852,11 @@ def test_predictability_audit_is_diagnostic_only_and_reports_gate_fields() -> No
         n_queries=5,
         workload_map={"range": 1.0},
         seed=13,
-        workload_profile_id="range_workload_v1",
+        workload_profile_id="range_query_mix",
         range_max_point_hit_fraction=1.0,
         range_duplicate_iou_threshold=1.0,
     )
-    targets = build_query_useful_v1_targets(
+    targets = build_query_local_utility_targets(
         points=points,
         boundaries=boundaries,
         typed_queries=workload.typed_queries,
@@ -5872,7 +5866,7 @@ def test_predictability_audit_is_diagnostic_only_and_reports_gate_fields() -> No
         boundaries=boundaries,
         typed_queries=workload.typed_queries,
         labels=targets.labels,
-        workload_profile_id="range_workload_v1",
+        workload_profile_id="range_query_mix",
         train_workload_seed=13,
     )
 
@@ -5916,12 +5910,13 @@ def test_predictability_audit_is_diagnostic_only_and_reports_gate_fields() -> No
     assert family_prior["available"] is True
     assert family_prior["diagnostic_only"] is True
     assert family_prior["used_for_gate"] is False
-    assert "small_local" in family_prior["group_by"]["footprint_family"]
-    small_local = family_prior["group_by"]["footprint_family"]["small_local"]
-    assert small_local["focus_family"] is True
-    assert small_local["valid_hit_point_count"] > 0
-    assert "segment_budget_target" in small_local["heads"]
-    segment_budget = small_local["heads"]["segment_budget_target"]
+    assert "small_local" not in family_prior["group_by"]["footprint_family"]
+    assert "medium_operational" in family_prior["group_by"]["footprint_family"]
+    medium_operational = family_prior["group_by"]["footprint_family"]["medium_operational"]
+    assert medium_operational["focus_family"] is True
+    assert medium_operational["valid_hit_point_count"] > 0
+    assert "segment_budget_target" in medium_operational["heads"]
+    segment_budget = medium_operational["heads"]["segment_budget_target"]
     assert segment_budget["available"] is True
     assert "mapped_prior_channel" in segment_budget
     assert "best_spearman" in segment_budget
@@ -5958,7 +5953,7 @@ def test_segment_budget_prior_does_not_blend_raw_route_density() -> None:
         "out_of_extent_sampling": "nearest",
         "spatial_query_hit_probability": torch.tensor([0.20]),
         "spatiotemporal_query_hit_probability": torch.tensor([[0.10]]),
-        "boundary_entry_exit_likelihood": torch.tensor([0.30]),
+        "endpoint_likelihood": torch.tensor([0.30]),
         "crossing_likelihood": torch.tensor([0.40]),
         "behavior_utility_prior": torch.tensor([0.80]),
         "route_density_prior": torch.tensor([1.00]),
@@ -5994,7 +5989,7 @@ def test_query_prior_predictability_score_gates_behavior_utility_by_query_mass()
         "out_of_extent_sampling": "nearest",
         "spatial_query_hit_probability": torch.tensor([0.01]),
         "spatiotemporal_query_hit_probability": torch.tensor([[0.01]]),
-        "boundary_entry_exit_likelihood": torch.tensor([0.0]),
+        "endpoint_likelihood": torch.tensor([0.0]),
         "crossing_likelihood": torch.tensor([0.0]),
         "behavior_utility_prior": torch.tensor([0.90]),
         "route_density_prior": torch.tensor([0.0]),
@@ -6005,48 +6000,23 @@ def test_query_prior_predictability_score_gates_behavior_utility_by_query_mass()
     assert torch.allclose(score.cpu(), torch.full((2,), 0.014))
 
 
-def test_route_corridor_family_has_actual_corridor_semantics_or_is_not_final() -> None:
-    profile = range_workload_profile("range_workload_v1")
+def test_range_query_mix_profile_uses_only_simple_footprints() -> None:
+    profile = range_workload_profile("range_query_mix")
     assert profile.final_success_allowed is True
     assert profile.target_coverage == pytest.approx(0.30)
     assert profile.max_coverage_overshoot == pytest.approx(0.020)
-    assert range_workload_profile("range_workload_v1_local").target_coverage == pytest.approx(0.10)
-    assert profile.footprint_families["route_corridor_like"]["elongation_allowed"] is True
-    points = torch.tensor(
-        [
-            [0.0, 0.0, 0.0, 1.0, 90.0],
-            [1.0, 0.0, 1.0, 1.0, 90.0],
-            [2.0, 0.0, 2.0, 1.0, 90.0],
-        ],
-        dtype=torch.float32,
-    )
-    bounds = {
-        "t_min": 0.0,
-        "t_max": 2.0,
-        "lat_min": -5.0,
-        "lat_max": 5.0,
-        "lon_min": -5.0,
-        "lon_max": 5.0,
+    assert range_workload_profile("range_query_mix_local").target_coverage == pytest.approx(0.10)
+    assert set(profile.footprint_family_weights) == {
+        "medium_operational",
+        "large_context",
     }
-    query = _make_range_query(
-        points,
-        bounds,
-        torch.Generator().manual_seed(3),
-        range_spatial_km=10.0,
-        range_time_hours=1.0,
-        range_footprint_jitter=0.0,
-        elongation_allowed=True,
-        metadata={"footprint_family": "route_corridor_like"},
-    )
-    params = query["params"]
-    metadata = query["_metadata"]
-    assert metadata["corridor_axis"] == "east_west"
-    assert float(params["lon_max"] - params["lon_min"]) > float(
-        params["lat_max"] - params["lat_min"]
+    assert all(
+        footprint["elongation_allowed"] is False
+        for footprint in profile.footprint_families.values()
     )
 
 
-def test_port_or_approach_zone_anchor_family_is_distinct_from_density_route() -> None:
+def test_range_query_mix_rejects_removed_anchor_families() -> None:
     points = torch.tensor(
         [
             [0.0, 0.0, 0.0, 0.1, 0.0, 1.0, 0.0, 0.0],
@@ -6056,13 +6026,16 @@ def test_port_or_approach_zone_anchor_family_is_distinct_from_density_route() ->
         ],
         dtype=torch.float32,
     )
-    density, _density_prob = _anchor_weights_for_family(points, "density_route")
-    port, _port_prob = _anchor_weights_for_family(points, "port_or_approach_zone")
+    density, _density_prob = _anchor_weights_for_family(points, "density")
 
     assert density is not None
-    assert port is not None
-    assert not torch.allclose(density, port)
-    assert float(port[0].item() + port[-1].item()) > float(density[0].item() + density[-1].item())
+    for removed_family in (
+        "boundary_entry_exit",
+        "crossing_turn_change",
+        "port_or_approach_zone",
+    ):
+        with pytest.raises(ValueError, match="Unknown range workload anchor family"):
+            _anchor_weights_for_family(points, removed_family)
 
 
 def test_final_profile_does_not_chase_uncovered_points_unless_declared() -> None:
@@ -6075,7 +6048,7 @@ def test_final_profile_does_not_chase_uncovered_points_unless_declared() -> None
         workload_map={"range": 1.0},
         seed=22,
         max_queries=8,
-        workload_profile_id="range_workload_v1",
+        workload_profile_id="range_query_mix",
         range_max_point_hit_fraction=1.0,
         range_duplicate_iou_threshold=1.0,
     )
@@ -6087,7 +6060,7 @@ def test_final_profile_does_not_chase_uncovered_points_unless_declared() -> None
         seed=22,
         target_coverage=0.30,
         max_queries=8,
-        workload_profile_id="range_workload_v1",
+        workload_profile_id="range_query_mix",
         coverage_calibration_mode="uncovered_anchor_chasing",
         range_max_point_hit_fraction=1.0,
         range_duplicate_iou_threshold=1.0,
@@ -6113,7 +6086,7 @@ def test_workload_stability_gate_rejects_tiny_fixed_count_workloads() -> None:
         generation_diagnostics={
             "query_generation": {
                 "mode": "fixed_count",
-                "workload_profile_id": "range_workload_v1",
+                "workload_profile_id": "range_query_mix",
                 "coverage_calibration_mode": "profile_sampled_query_count",
                 "coverage_guard_enabled": False,
                 "stop_reason": "fixed_count_completed",
@@ -6140,7 +6113,7 @@ def test_workload_stability_gate_accepts_coverage_calibrated_replicates() -> Non
         query=SimpleNamespace(
             target_coverage=0.30,
             range_max_coverage_overshoot=0.020,
-            workload_profile_id="range_workload_v1",
+            workload_profile_id="range_query_mix",
         )
     )
 
@@ -6151,7 +6124,7 @@ def test_workload_stability_gate_accepts_coverage_calibrated_replicates() -> Non
             generation_diagnostics={
                 "query_generation": {
                     "mode": "target_coverage",
-                    "workload_profile_id": "range_workload_v1",
+                    "workload_profile_id": "range_query_mix",
                     "coverage_calibration_mode": "profile_sampled_query_count",
                     "query_count_mode": "calibrated_to_coverage",
                     "target_coverage": 0.30,
@@ -6178,7 +6151,7 @@ def test_workload_stability_gate_rejects_exhausted_generation_after_coverage_sat
         query=SimpleNamespace(
             target_coverage=0.10,
             range_max_coverage_overshoot=0.0075,
-            workload_profile_id="range_workload_v1_local",
+            workload_profile_id="range_query_mix_local",
             workload_stability_gate_mode="final",
         )
     )
@@ -6188,7 +6161,7 @@ def test_workload_stability_gate_rejects_exhausted_generation_after_coverage_sat
         generation_diagnostics={
             "query_generation": {
                 "mode": "target_coverage",
-                "workload_profile_id": "range_workload_v1_local",
+                "workload_profile_id": "range_query_mix_local",
                 "coverage_calibration_mode": "profile_sampled_query_count",
                 "query_count_mode": "calibrated_to_coverage",
                 "target_coverage": 0.10,
@@ -6223,7 +6196,7 @@ def test_workload_stability_gate_rejects_calibrated_low_query_count_in_final_mod
         query=SimpleNamespace(
             target_coverage=0.05,
             range_max_coverage_overshoot=0.005,
-            workload_profile_id="range_workload_v1_focused",
+            workload_profile_id="range_query_mix_focused",
             workload_stability_gate_mode="final",
         )
     )
@@ -6233,7 +6206,7 @@ def test_workload_stability_gate_rejects_calibrated_low_query_count_in_final_mod
         generation_diagnostics={
             "query_generation": {
                 "mode": "target_coverage",
-                "workload_profile_id": "range_workload_v1_focused",
+                "workload_profile_id": "range_query_mix_focused",
                 "coverage_calibration_mode": "profile_sampled_query_count",
                 "query_count_mode": "calibrated_to_coverage",
                 "target_coverage": 0.05,
@@ -6260,7 +6233,7 @@ def test_workload_stability_gate_smoke_mode_allows_calibrated_low_query_count() 
         query=SimpleNamespace(
             target_coverage=0.05,
             range_max_coverage_overshoot=0.005,
-            workload_profile_id="range_workload_v1_focused",
+            workload_profile_id="range_query_mix_focused",
             workload_stability_gate_mode="smoke",
         )
     )
@@ -6270,7 +6243,7 @@ def test_workload_stability_gate_smoke_mode_allows_calibrated_low_query_count() 
         generation_diagnostics={
             "query_generation": {
                 "mode": "target_coverage",
-                "workload_profile_id": "range_workload_v1_focused",
+                "workload_profile_id": "range_query_mix_focused",
                 "coverage_calibration_mode": "profile_sampled_query_count",
                 "query_count_mode": "calibrated_to_coverage",
                 "target_coverage": 0.05,

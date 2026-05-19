@@ -17,7 +17,7 @@ Launcher options:
 Environment overrides:
   UV                           uv executable. Default: uv.
   UV_GROUP                     uv dependency group. Default: dev.
-  PROFILE                      runner profile. Default: range_workload_v1_workload_blind_v2.
+  PROFILE                      runner profile. Default: range_query_mix_workload_blind_v2.
   WORKLOADS                    runner --workloads value. Default: range.
   CSV_PATH                     Cleaned CSV file/directory. Default: ../AISDATA/cleaned.
   CACHE_DIR                    Cache directory, relative to Range_QDS when not absolute.
@@ -72,7 +72,7 @@ trim() {
 QDS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 UV="${UV:-uv}"
 UV_GROUP="${UV_GROUP:-dev}"
-PROFILE="${PROFILE:-range_workload_v1_workload_blind_v2}"
+PROFILE="${PROFILE:-range_query_mix_workload_blind_v2}"
 WORKLOADS="${WORKLOADS:-range}"
 CSV_PATH="${CSV_PATH:-../AISDATA/cleaned}"
 CACHE_DIR="${CACHE_DIR:-artifacts/cache/query_driven_workload_blind_v2}"

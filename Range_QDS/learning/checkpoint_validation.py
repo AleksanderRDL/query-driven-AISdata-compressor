@@ -28,10 +28,10 @@ from learning.inference import (
 from learning.model_features import build_model_point_features_for_dim
 from learning.model_setup import _pure_query_type_id
 from learning.scaler import FeatureScaler
-from learning.targets.query_useful_v1 import (
-    QUERY_USEFUL_V1_HEAD_NAMES,
-    QUERY_USEFUL_V1_TARGET_MODES,
-    build_query_useful_v1_targets,
+from learning.targets.query_local_utility import (
+    QUERY_LOCAL_UTILITY_HEAD_NAMES,
+    QUERY_LOCAL_UTILITY_TARGET_MODES,
+    build_query_local_utility_targets,
 )
 from runtime.torch_runtime import normalize_amp_mode
 from scoring.geometry_thresholds import (
@@ -41,7 +41,7 @@ from scoring.geometry_thresholds import (
 from scoring.method_scoring import score_range_usefulness, score_retained_mask
 from scoring.methods import UniformTemporalMethod
 from scoring.metrics import compute_geometric_distortion, compute_length_preservation
-from scoring.query_useful_v1 import query_useful_v1_from_range_audit
+from scoring.query_local_utility import query_local_utility_from_range_audit
 from selection.learned_segment_budget import blend_segment_support_scores
 from selection.model_score_conversion import simplify_mlqds_predictions
 from selection.selector_types import TEMPORAL_HYBRID_SELECTOR_TYPE
@@ -112,14 +112,14 @@ def _validation_global_sanity_metrics(
     }
 
 
-def _validation_query_useful_selection_score(
-    raw_query_useful_v1: float,
+def _validation_query_local_utility_selection_score(
+    raw_query_local_utility: float,
     sanity: dict[str, float],
     model_config: ModelConfig,
 ) -> float:
     """Apply a light validation-only penalty for global sanity failures."""
     if not bool(getattr(model_config, "validation_global_sanity_penalty_enabled", True)):
-        return float(raw_query_useful_v1)
+        return float(raw_query_local_utility)
     length_min = float(
         getattr(
             model_config,
@@ -160,18 +160,18 @@ def _validation_query_useful_selection_score(
         )
         * endpoint_penalty
     )
-    return float(raw_query_useful_v1 - total_penalty)
+    return float(raw_query_local_utility - total_penalty)
 
 
 def _validation_global_sanity_penalty(
-    raw_query_useful_v1: float,
+    raw_query_local_utility: float,
     sanity: dict[str, float],
     model_config: ModelConfig,
 ) -> float:
     """Return the validation-only global-sanity penalty magnitude."""
     return float(
-        raw_query_useful_v1
-        - _validation_query_useful_selection_score(raw_query_useful_v1, sanity, model_config)
+        raw_query_local_utility
+        - _validation_query_local_utility_selection_score(raw_query_local_utility, sanity, model_config)
     )
 
 
@@ -247,7 +247,7 @@ def _validation_segment_scores_from_head_logits(
     if head_logits is None:
         return None
     try:
-        segment_head_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("segment_budget_target")
+        segment_head_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("segment_budget_target")
     except ValueError:
         return None
     if int(head_logits.shape[-1]) <= segment_head_idx:
@@ -262,7 +262,7 @@ def _validation_path_length_support_scores_from_head_logits(
     if head_logits is None:
         return None
     try:
-        path_head_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("path_length_support_target")
+        path_head_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("path_length_support_target")
     except ValueError:
         return None
     if int(head_logits.shape[-1]) <= path_head_idx:
@@ -277,7 +277,7 @@ def _validation_factorized_target_fit_metrics(
     boundaries: list[tuple[int, int]],
     workload: TypedQueryWorkload,
     segment_size: int = 32,
-    target_mode: str = "query_useful_v1_factorized",
+    target_mode: str = "query_local_utility_factorized",
 ) -> dict[str, float]:
     """Return validation target-fit diagnostics for factorized heads without affecting selection."""
     metrics: dict[str, float] = {
@@ -287,17 +287,17 @@ def _validation_factorized_target_fit_metrics(
     if head_logits is None:
         return metrics
     logits = head_logits.detach().cpu().float()
-    if logits.ndim != 2 or int(logits.shape[1]) != len(QUERY_USEFUL_V1_HEAD_NAMES):
+    if logits.ndim != 2 or int(logits.shape[1]) != len(QUERY_LOCAL_UTILITY_HEAD_NAMES):
         return metrics
-    targets = build_query_useful_v1_targets(
+    targets = build_query_local_utility_targets(
         points=points.detach().cpu().float(),
         boundaries=boundaries,
         typed_queries=workload.typed_queries,
         segment_size=segment_size,
         target_mode=(
             str(target_mode).lower()
-            if str(target_mode).lower() in QUERY_USEFUL_V1_TARGET_MODES
-            else "query_useful_v1_factorized"
+            if str(target_mode).lower() in QUERY_LOCAL_UTILITY_TARGET_MODES
+            else "query_local_utility_factorized"
         ),
     )
     if targets.head_targets.shape != logits.shape or targets.head_mask.shape != logits.shape:
@@ -309,7 +309,7 @@ def _validation_factorized_target_fit_metrics(
     generator = torch.Generator().manual_seed(17_203)
     probabilities = torch.sigmoid(logits)
     metrics["factorized_target_fit_available"] = 1.0
-    for head_idx, head_name in enumerate(QUERY_USEFUL_V1_HEAD_NAMES):
+    for head_idx, head_name in enumerate(QUERY_LOCAL_UTILITY_HEAD_NAMES):
         valid = targets.head_mask[:, head_idx].detach().cpu().bool()
         if not bool(valid.any().item()):
             metrics[f"head_{head_name}_target_fit_available"] = 0.0
@@ -339,7 +339,7 @@ def _validation_factorized_target_fit_metrics(
         )
 
     try:
-        segment_head_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("segment_budget_target")
+        segment_head_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("segment_budget_target")
     except ValueError:
         return metrics
     segment_scores: list[torch.Tensor] = []
@@ -516,7 +516,7 @@ def _validation_retained_mask_from_scores(
     )
 
 
-def _validation_query_useful_score_for_mask(
+def _validation_query_local_utility_score_for_mask(
     *,
     points: torch.Tensor,
     boundaries: list[tuple[int, int]],
@@ -525,7 +525,7 @@ def _validation_query_useful_score_for_mask(
     query_cache: Any | None,
     model_config: ModelConfig,
 ) -> tuple[float, dict[str, Any], dict[str, float]]:
-    """Return raw QueryUsefulV1 plus supporting audit/sanity payloads for a validation mask."""
+    """Return raw QueryLocalUtility plus supporting audit/sanity payloads for a validation mask."""
     range_audit = score_range_usefulness(
         points=points,
         boundaries=boundaries,
@@ -539,20 +539,20 @@ def _validation_query_useful_score_for_mask(
         retained_mask=retained_mask,
         model_config=model_config,
     )
-    query_useful = query_useful_v1_from_range_audit(
+    query_local_utility = query_local_utility_from_range_audit(
         range_audit,
         length_preservation=sanity["avg_length_preserved"],
         avg_sed_km=sanity["avg_sed_km"],
         endpoint_sanity=sanity["endpoint_sanity"],
     )
-    return float(cast(Any, query_useful["query_useful_v1_score"])), range_audit, sanity
+    return float(cast(Any, query_local_utility["query_local_utility_score"])), range_audit, sanity
 
 
 def _validation_causality_ablation_metrics(
     *,
     model: torch.nn.Module,
     head_logits: torch.Tensor | None,
-    primary_query_useful_score: float,
+    primary_query_local_utility_score: float,
     predictions: torch.Tensor,
     boundaries: list[tuple[int, int]],
     workload: TypedQueryWorkload,
@@ -587,7 +587,7 @@ def _validation_causality_ablation_metrics(
             points=points,
         )
         no_behavior_score, _no_behavior_audit, _no_behavior_sanity = (
-            _validation_query_useful_score_for_mask(
+            _validation_query_local_utility_score_for_mask(
                 points=points,
                 boundaries=boundaries,
                 retained_mask=no_behavior_mask,
@@ -596,9 +596,9 @@ def _validation_causality_ablation_metrics(
                 model_config=model_config,
             )
         )
-        metrics["no_behavior_query_useful_v1"] = no_behavior_score
-        metrics["no_behavior_query_useful_delta"] = float(
-            primary_query_useful_score - no_behavior_score
+        metrics["no_behavior_query_local_utility"] = no_behavior_score
+        metrics["no_behavior_query_local_utility_delta"] = float(
+            primary_query_local_utility_score - no_behavior_score
         )
 
     if segment_budget_scores is not None:
@@ -620,7 +620,7 @@ def _validation_causality_ablation_metrics(
             points=points,
         )
         no_segment_score, _no_segment_audit, _no_segment_sanity = (
-            _validation_query_useful_score_for_mask(
+            _validation_query_local_utility_score_for_mask(
                 points=points,
                 boundaries=boundaries,
                 retained_mask=no_segment_mask,
@@ -629,9 +629,9 @@ def _validation_causality_ablation_metrics(
                 model_config=model_config,
             )
         )
-        metrics["no_segment_budget_query_useful_v1"] = no_segment_score
-        metrics["no_segment_budget_query_useful_delta"] = float(
-            primary_query_useful_score - no_segment_score
+        metrics["no_segment_budget_query_local_utility"] = no_segment_score
+        metrics["no_segment_budget_query_local_utility_delta"] = float(
+            primary_query_local_utility_score - no_segment_score
         )
 
     return metrics
@@ -715,7 +715,7 @@ def _validation_checkpoint_scores(
     }
     range_audit: dict[str, Any] | None = None
     if any(str(query.get("type", "")).lower() == "range" for query in workload.typed_queries):
-        raw_query_useful_score, range_audit, sanity = _validation_query_useful_score_for_mask(
+        raw_query_local_utility_score, range_audit, sanity = _validation_query_local_utility_score_for_mask(
             points=points,
             boundaries=boundaries,
             retained_mask=retained_mask,
@@ -723,18 +723,18 @@ def _validation_checkpoint_scores(
             query_cache=query_cache,
             model_config=model_config,
         )
-        penalized_query_useful_score = _validation_query_useful_selection_score(
-            raw_query_useful_score,
+        penalized_query_local_utility_score = _validation_query_local_utility_selection_score(
+            raw_query_local_utility_score,
             sanity,
             model_config,
         )
         metrics.update(
             {
                 "range_usefulness": float(range_audit["range_usefulness_score"]),
-                "query_useful_v1": raw_query_useful_score,
-                "query_useful_v1_selection_score": penalized_query_useful_score,
+                "query_local_utility": raw_query_local_utility_score,
+                "query_local_utility_selection_score": penalized_query_local_utility_score,
                 "validation_global_sanity_penalty": _validation_global_sanity_penalty(
-                    raw_query_useful_score,
+                    raw_query_local_utility_score,
                     sanity,
                     model_config,
                 ),
@@ -761,7 +761,7 @@ def _validation_checkpoint_scores(
             _validation_causality_ablation_metrics(
                 model=model,
                 head_logits=head_logits,
-                primary_query_useful_score=raw_query_useful_score,
+                primary_query_local_utility_score=raw_query_local_utility_score,
                 predictions=predictions,
                 boundaries=boundaries,
                 workload=workload,
@@ -782,11 +782,11 @@ def _validation_checkpoint_scores(
             return float(answer_agg), answer_pt, metrics
         score = float(range_audit["range_usefulness_score"])
         return score, {"range": score}, metrics
-    if variant == "query_useful_v1":
+    if variant == "query_local_utility":
         if range_audit is None:
             return float(answer_agg), answer_pt, metrics
-        raw_score = float(metrics.get("query_useful_v1", 0.0))
-        score = float(metrics.get("query_useful_v1_selection_score", raw_score))
+        raw_score = float(metrics.get("query_local_utility", 0.0))
+        score = float(metrics.get("query_local_utility_selection_score", raw_score))
         return score, {"range": score}, metrics
     if variant == "combined":
         return float(combined_agg), combined_pt, metrics
@@ -860,7 +860,7 @@ def _validation_uniform_score(
         )
         score = float(audit["range_usefulness_score"])
         return score, {"range": score}
-    if variant == "query_useful_v1":
+    if variant == "query_local_utility":
         audit = score_range_usefulness(
             points=points,
             boundaries=boundaries,
@@ -875,14 +875,14 @@ def _validation_uniform_score(
             model_config=model_config,
             uniform_retained_mask=retained_mask,
         )
-        query_useful = query_useful_v1_from_range_audit(
+        query_local_utility = query_local_utility_from_range_audit(
             audit,
             length_preservation=sanity["avg_length_preserved"],
             avg_sed_km=sanity["avg_sed_km"],
             endpoint_sanity=sanity["endpoint_sanity"],
         )
-        raw_score = float(cast(Any, query_useful["query_useful_v1_score"]))
-        score = _validation_query_useful_selection_score(raw_score, sanity, model_config)
+        raw_score = float(cast(Any, query_local_utility["query_local_utility_score"]))
+        score = _validation_query_local_utility_selection_score(raw_score, sanity, model_config)
         return score, {"range": score}
     if variant == "combined":
         return combined_agg, combined_pt

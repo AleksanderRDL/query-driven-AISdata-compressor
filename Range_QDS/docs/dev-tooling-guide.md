@@ -112,7 +112,7 @@ Good targets:
 - `selection/learned_segment_budget/length_repair.py`
 - `selection/learned_segment_budget/diagnostics.py`
 - `selection/learned_segment_budget/trace.py`
-- `scoring/query_useful_v1.py`
+- `scoring/query_local_utility.py`
 - `scoring/method_scoring.py`
 - `orchestration/range_diagnostics.py`
 
@@ -121,7 +121,7 @@ Good properties:
 - profile query plans sum exactly to requested count
 - prefix-balanced plans do not create avoidable family drift
 - coverage guards keep generated workloads near requested targets
-- `range_workload_v1` does not silently fall back to uncovered-anchor chasing
+- `range_query_mix` does not silently fall back to uncovered-anchor chasing
 - zeroed prior fields preserve extent, bins, metadata, and tensor shape
 - out-of-extent zero mode returns zero sampled prior features
 - selector masks never exceed retained budget

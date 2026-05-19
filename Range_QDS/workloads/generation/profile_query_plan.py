@@ -151,7 +151,7 @@ def _profile_query_settings(
     workload_seed: int | None = None,
     query_plan: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Sample query-level profile settings for one range_workload_v1 query."""
+    """Sample query-level profile settings for one range_query_mix query."""
     if profile.profile_id == LEGACY_GENERATOR_PROFILE.profile_id:
         return {}
     query_key = str(int(workload_seed) if workload_seed is not None else "unseeded")
@@ -185,7 +185,7 @@ def _profile_query_settings(
         anchor_family = _weighted_choice_with_deterministic_key(
             profile.anchor_family_weights,
             generator,
-            fallback="density_route",
+            fallback="density",
             deterministic_value=anchor_value,
         )
     if (

@@ -8,11 +8,17 @@ The guide is the source of truth. Raw metrics and stdout belong in
 
 Status: active, not complete.
 
-Current strict-cell reference with segment aggregation diagnostics:
+Active implementation after checkpoint 5.171 uses `QueryLocalUtility` schema
+`5` with the simplified `range_query_mix` profile. No strict workload-health or
+learning-coherence rerun has been performed under schema `5` and that
+simplified profile.
+
+Current pre-simplification strict-cell reference with segment aggregation
+diagnostics:
 - `artifacts/results/query_driven_v2_checkpoint85_segment_aggregation_current_best_strict_local/example_run.json`
-- MLQDS QueryUsefulV1: `0.1662115143`
-- uniform QueryUsefulV1: `0.1421296610`
-- Douglas-Peucker QueryUsefulV1: `0.1671038781`
+- MLQDS QueryLocalUtility: `0.1662115143`
+- uniform QueryLocalUtility: `0.1421296610`
+- Douglas-Peucker QueryLocalUtility: `0.1671038781`
 - Passed: workload stability, support overlap, target diffusion, workload
   signature, prior-predictive alignment, global sanity.
 - Failed: predictability, learning causality.
@@ -21,17 +27,17 @@ Current strict-cell reference with segment aggregation diagnostics:
 
 Latest rejected strict diagnostic:
 - `artifacts/results/query_driven_v2_checkpoint79_final_score_ship_blend_target_current_best_strict_local/example_run.json`
-- MLQDS QueryUsefulV1 dropped to `0.1592468202`, below both the active
+- MLQDS QueryLocalUtility dropped to `0.1592468202`, below both the active
   strict-cell reference and Douglas-Peucker `0.1671038781`.
 - The final-score/ship-presence segment-budget variant improves target-side
   ship-evidence rank alignment more than the query-hit/ship variant, but it
   still makes retained-mask quality and causality worse. Reject it as a
   training target.
 
-Latest derived workload/component compatibility diagnostic:
+Latest pre-simplification derived workload/component compatibility diagnostic:
 - `artifacts/results/query_driven_v2_checkpoint80_workload_component_compatibility_diagnosis/workload_component_compatibility_diagnosis.json`
-- Blocking families in the active strict reference are `small_local`,
-  `density_route`, `crossing_turn_change`, and `medium_operational`.
+- Blocking families in that strict reference are `small_local`,
+  `density`, `crossing_turn_change`, and `medium_operational`.
 - Persistent negative components are dominated by `ship_f1`,
   `ship_balanced_query_point_recall`, `ship_coverage`, and point-mass recall
   terms.
@@ -49,7 +55,7 @@ Latest blocker-preserving recalibration diagnostic:
 - `artifacts/results/query_driven_v2_checkpoint82_blocker_preserving_recalibration_diagnosis/workload_component_blocker_preserving_recalibration_diagnosis.json`
 - Ship/point-preserving component weights keep ship/point evidence weight at
   `0.55` and still produce a positive post-hoc score delta (`0.0015104602`).
-- Status is `still_blocked`: density-route, crossing, small-local, and
+- Status is `still_blocked`: density, crossing, small-local, and
   medium-operational keep unresolved ship-evidence signs under preserved
   critical-family profile pressure.
 
@@ -59,7 +65,7 @@ Latest family trainability strict diagnostic:
   (`-0.1663`), query-hit (`-0.1105`), behavior (`-0.1067`), and
   segment-budget (`-0.3396`) all rank against family ship-query evidence; the
   trained heads and composed score also remain negative against that evidence.
-- `density_route` is target-side weak in behavior (`-0.0867`) and especially
+- `density` is target-side weak in behavior (`-0.0867`) and especially
   segment-budget (`-0.2478`). Trained heads recover weak positive ship-evidence
   signs, but the composed retained-mask signal is still too weak to pass gates.
 
@@ -75,10 +81,10 @@ Latest family-local candidate strict diagnostic:
 - Scores and gates reproduce checkpoint83: predictability and learning
   causality still fail, final success remains `false`.
 - Point-level family query-hit/ship candidates strongly recover ship-query
-  evidence: `small_local` Spearman `0.9740`, `density_route` Spearman
+  evidence: `small_local` Spearman `0.9740`, `density` Spearman
   `0.9191`.
 - The family-local segment-budget candidate is still anti-aligned:
-  `small_local` Spearman `-0.5754`, `density_route` Spearman `-0.3675`, with
+  `small_local` Spearman `-0.5754`, `density` Spearman `-0.3675`, with
   about `0.05` ship-query pair coverage at top-k in both cases.
 
 Latest segment aggregation strict diagnostic:
@@ -87,7 +93,7 @@ Latest segment aggregation strict diagnostic:
   causality still fail, final success remains `false`.
 - Two-stage allocation diagnostics change the diagnosis. For `small_local`,
   best segment-candidate two-stage pair coverage is `0.4000` and best mass
-  recall is `0.8829`; for `density_route`, best two-stage pair coverage is
+  recall is `0.8829`; for `density`, best two-stage pair coverage is
   `0.6075` and best mass recall is `0.7214`.
 - Max-pooled and fractional ship-query segment aggregation are plausible
   diagnostic candidates. They are not active training semantics.
@@ -116,7 +122,7 @@ Latest guarded segment aggregation target strict diagnostic:
   minimum), but shuffled scores, prior ablations, and behavior-head ablation
   still fail.
 - Target-side family segment-budget alignment improves for `small_local`
-  (`0.1236`) and `density_route` (`0.2469`), but fitted `small_local`
+  (`0.1236`) and `density` (`0.2469`), but fitted `small_local`
   segment/composed head alignment is still negative (`-0.0836` / `-0.0827`).
 
 Latest derived segment-target transfer diagnostic:
@@ -127,7 +133,7 @@ Latest derived segment-target transfer diagnostic:
   `without_segment_budget_head_should_lose` newly pass.
 - Remaining failed causality children: shuffled scores, shuffled priors, no
   query priors, no behavior head.
-- `density_route` now has positive segment target and fitted segment signs
+- `density` now has positive segment target and fitted segment signs
   (`0.2469` target, `0.1040` fitted), but the transfer gap is still large.
 - `small_local` and `crossing_turn_change` are the sharper blockers: segment
   target signs flip positive, while fitted segment and composed score signs
@@ -483,7 +489,7 @@ Key results:
 - Newly passing causality child: `without_segment_budget_head_should_lose`.
 - Still failing causality children: shuffled scores, shuffled priors, no query
   priors, no behavior head.
-- `density_route`: segment target and fitted segment signs are positive, but
+- `density`: segment target and fitted segment signs are positive, but
   fitted-minus-target ship-evidence Spearman gap remains `-0.1429`.
 - `small_local`: segment target improves from `-0.3396` to `0.1236`, but fitted
   segment remains `-0.0836` and composed score remains `-0.0827`.
@@ -940,7 +946,7 @@ Changes:
 
 Tests:
 - `python3 -m py_compile` on touched selector/config/orchestration/reporting
-  files.
+  files, including reporting row helpers.
 - `uv run --group dev -- ruff check` on touched files.
 - `uv run --group dev -- pyright` on touched files.
 - `uv run --group dev -- pytest Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/unit/orchestration/test_mlqds_method_factory.py Range_QDS/tests/unit/benchmarking/test_runner.py -q` (`161 passed`)
@@ -974,6 +980,275 @@ Decision:
   Continue with workload/scoring/target compatibility diagnosis instead of
   more selector z-blend tuning.
 
+### Checkpoint 5.166 - QueryUsefulV1 Schema 3 Scoring Simplification
+
+Status: completed / Level 0 implementation only.
+
+Goal:
+- Remove the `ship_presence_and_coverage` and
+  `boundary_and_event_evidence` groups from the primary QueryUsefulV1 score.
+
+Changes:
+- Bumped QueryUsefulV1 to schema `3`.
+- Removed explicit ship-presence, ship-coverage, and boundary/event evidence
+  components from the QueryUsefulV1 aggregate and payload, including the
+  ship-coverage term hidden in `ship_balanced_query_point_recall`.
+- Renormalized the remaining query-point-mass, query-local-behavior, and
+  global-sanity weights.
+- Trimmed the workload/component compatibility diagnostic candidates so they
+  no longer propose removed QueryUsefulV1 components.
+- RangeUsefulLegacy and raw range-audit ship/boundary fields remain available
+  as diagnostics.
+
+Tests:
+- `python3 -m py_compile Range_QDS/scoring/query_useful_v1.py Range_QDS/orchestration/workload_component_compatibility.py Range_QDS/tests/unit/scoring/test_metrics.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
+- `uv run --group dev -- ruff check Range_QDS/scoring/query_useful_v1.py Range_QDS/orchestration/workload_component_compatibility.py Range_QDS/tests/unit/scoring/test_metrics.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
+- `uv run --group dev -- pyright Range_QDS/scoring/query_useful_v1.py Range_QDS/orchestration/workload_component_compatibility.py Range_QDS/tests/unit/scoring/test_metrics.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
+- `uv run --group dev -- pytest Range_QDS/tests/unit/scoring/test_metrics.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py -q` (`178 passed`)
+- `uv run --group dev -- pytest Range_QDS/tests/unit/benchmarking/test_runner.py Range_QDS/tests/unit/orchestration/test_run_payload.py Range_QDS/tests/unit/orchestration/test_range_diagnostics.py -q` (`55 passed`)
+- `git diff --check`
+
+Experiment artifact:
+- path: none
+- command: none
+
+Key results:
+- Implementation only. No strict retraining run has been performed under
+  QueryUsefulV1 schema `3`.
+- Prior schema `2` QueryUsefulV1 numbers are not directly comparable to schema
+  `3` numbers.
+
+Decision:
+- Use schema `3` for the next checkpoint evidence. Re-run the required smaller
+  strict evidence levels before making any learning-coherence or final-grid
+  claims under the simplified metric.
+
+### Checkpoint 5.167 - QueryLocalUtility Schema 4 Point-Mass Rebalance
+
+Status: completed / Level 0 implementation only.
+
+Goal:
+- Rebalance the simplified QueryLocalUtility groups to point mass `0.50`,
+  query-local behavior `0.45`, and global sanity `0.05`.
+
+Changes:
+- Bumped QueryLocalUtility to schema `4`.
+- Kept the schema `3` component set: no explicit ship-presence, ship-coverage,
+  or boundary/event evidence components in the primary aggregate.
+- Rescaled component weights inside each remaining group while preserving the
+  previous within-group proportions.
+
+Tests:
+- `python3 -m py_compile Range_QDS/scoring/query_local_utility.py Range_QDS/tests/unit/scoring/test_metrics.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
+- `uv run --group dev -- ruff check Range_QDS/scoring/query_local_utility.py Range_QDS/tests/unit/scoring/test_metrics.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
+- `uv run --group dev -- pyright Range_QDS/scoring/query_local_utility.py Range_QDS/tests/unit/scoring/test_metrics.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
+- `uv run --group dev -- pytest Range_QDS/tests/unit/scoring/test_metrics.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py -q` (`178 passed`)
+
+Experiment artifact:
+- path: none
+- command: none
+
+Key results:
+- Implementation only. No strict retraining run has been performed under
+  QueryLocalUtility schema `4`.
+- Schema `2` and schema `3` QueryLocalUtility numbers are not directly comparable
+  to schema `4` numbers.
+
+Decision:
+- Use schema `4` for the next checkpoint evidence. Re-run the required smaller
+  strict evidence levels before making learning-coherence or final-grid claims.
+
+### Checkpoint 5.168 - QueryLocalUtility Naming Cleanup
+
+Status: completed / Level 0 implementation only.
+
+Goal:
+- Rename the active primary metric from `QueryUsefulV1` to
+  `QueryLocalUtility`.
+
+Changes:
+- Renamed the scoring module to `scoring/query_local_utility.py`.
+- Renamed active score fields, schema fields, component fields, final-gate
+  labels, report columns, target mode strings, CLI/config knobs, and factorized
+  target/module symbols to `query_local_utility`.
+- Updated scripts, regression snapshots, and current README references for the
+  new name.
+- Did not keep production aliases for the old `query_useful_v1` target modes or
+  output fields.
+- Promoted shared selection/eval segment-teacher diagnostic helpers from
+  private to public names so orchestration guardrails stay clean after the
+  rename.
+
+Tests:
+- `python3 -m py_compile` on scoring, learning, orchestration, benchmarking,
+  config, model, and script Python files.
+- `uv run --group dev -- ruff check` on touched production/test surfaces.
+- `uv run --group dev -- pyright` on touched production/test surfaces.
+- `uv run --group dev -- pytest Range_QDS/tests/unit/scoring/test_metrics.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/unit/benchmarking/test_runner.py -q` (`215 passed`)
+- `uv run --group dev -- pytest Range_QDS/tests/unit/runtime/test_torch_runtime_controls.py Range_QDS/tests/unit/learning/test_model_learning_does_not_collapse.py Range_QDS/tests/unit/orchestration/test_learning_target_stage.py Range_QDS/tests/unit/orchestration/test_retained_mask_stage.py Range_QDS/tests/unit/orchestration/test_run_payload.py -q` (`78 passed`)
+- `uv run --group dev -- pytest Range_QDS/tests/guardrails/test_rework_guardrails.py Range_QDS/tests/regression/test_benchmark_report_regression.py Range_QDS/tests/regression/test_gate_summary_regression.py -q` (`22 passed`)
+- `git diff --check`
+
+Experiment artifact:
+- path: none
+- command: none
+
+Key results:
+- Implementation only. No strict retraining run has been performed under the
+  renamed metric surface.
+- Historical artifacts using `query_useful_v1` keys are not expected to load
+  through the renamed production readers unless a deliberate migration layer is
+  added later.
+
+Decision:
+- Use `QueryLocalUtility` / `query_local_utility` names for new checkpoints.
+  Next evidence remains a focused strict rerun under schema `4`.
+
+### Checkpoint 5.169 - Workload Profile Simplification
+
+Status: completed / Level 0 implementation only.
+
+Goal:
+- Simplify the active query workload profile and rename `range_workload_v1` to
+  `range_query_mix`.
+
+Changes:
+- Renamed active workload profile IDs and benchmark profile from
+  `range_workload_v1*` to `range_query_mix*`.
+- Removed `boundary_entry_exit`, `crossing_turn_change`, and
+  `port_or_approach_zone` from active anchor-family generation.
+- Renamed `density_route` to `density`.
+- Rebalanced active anchor weights to `density=0.80` and
+  `sparse_background_control=0.20`.
+- Removed `route_corridor_like` from active footprint families.
+- Rebalanced active footprint weights to `small_local=0.2777777777777778`,
+  `medium_operational=0.50`, and `large_context=0.2222222222222222`.
+- Renamed the train-prior `boundary_entry_exit_likelihood` channel to
+  `endpoint_likelihood`.
+- Updated active diagnostics, guardrails, docs, and tests for the simplified
+  family set. No production aliases were added for the removed profile IDs or
+  families.
+
+Tests:
+- `python3 -m py_compile` on touched workload, learning, orchestration,
+  benchmarking, and test files.
+- `uv run --group dev -- ruff check` on touched production/test surfaces.
+- `uv run --group dev -- pyright` on touched production/test surfaces.
+- `uv run --group dev -- pytest Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/unit/scoring/test_metrics.py Range_QDS/tests/unit/workloads/test_workload_generation.py Range_QDS/tests/property/test_workload_profile_properties.py Range_QDS/tests/guardrails/test_rework_guardrails.py -q` (`220 passed`)
+- `uv run --group dev -- pytest Range_QDS/tests/unit/benchmarking/test_runner.py Range_QDS/tests/regression/test_benchmark_report_regression.py Range_QDS/tests/regression/test_gate_summary_regression.py -q` (`40 passed`)
+- `uv run --group dev -- pytest Range_QDS/tests/unit/learning/test_model_learning_does_not_collapse.py Range_QDS/tests/unit/orchestration/test_learning_target_stage.py Range_QDS/tests/unit/orchestration/test_retained_mask_stage.py Range_QDS/tests/unit/orchestration/test_run_payload.py -q` (`56 passed`)
+- `git diff --check`
+
+Experiment artifact:
+- path: none
+- command: none
+
+Key results:
+- Implementation only. No strict retraining or workload-health rerun has been
+  performed for `range_query_mix`.
+- Active production modules no longer reference `range_workload_v1`,
+  `density_route`, `boundary_entry_exit`, `crossing_turn_change`,
+  `port_or_approach_zone`, or `route_corridor_like`.
+
+Decision:
+- Use `range_query_mix` for new checkpoints. Next evidence must rerun the
+  guide-required smaller strict workload/profile and learning-coherence probes
+  before any final-grid or success claim.
+
+### Checkpoint 5.170 - QueryLocalUtility Direct Local Components
+
+Status: completed / Level 0 implementation only.
+
+Goal:
+- Simplify point-mass and query-local behavior components, and stop deriving
+  active point mass from `range_point_f1` or behavior from fallback audit fields.
+
+Changes:
+- Bumped `QueryLocalUtility` to schema `5`.
+- Replaced point-mass components with direct `query_point_recall` at weight
+  `0.50`.
+- Replaced query-local behavior components with direct interpolation fidelity
+  (`0.20`), turn-change coverage (`0.15`), and continuity from
+  `range_gap_min_coverage` (`0.10`).
+- Kept global sanity at `0.05` through endpoint/skeleton, shape, and length
+  guardrails.
+- Added `query_point_recall` to range-audit rows, method payloads, benchmark
+  report rows, and query-family summaries while keeping `range_point_f1` as a
+  legacy diagnostic/reporting field only.
+- Updated compatibility diagnostics, focused tests, and active docs for the
+  schema `5` component names and weights.
+
+Tests:
+- `python3 -m py_compile` on touched scoring, orchestration, and focused test
+  files.
+- `uv run --group dev -- ruff check` on touched scoring, orchestration, and
+  focused test files, including reporting row helpers.
+- `uv run --group dev -- pyright` on touched scoring, orchestration, and
+  focused test files, including reporting row helpers.
+- `uv run --group dev -- pytest Range_QDS/tests/unit/scoring/test_metrics.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/unit/benchmarking/test_runner.py Range_QDS/tests/regression/test_benchmark_report_regression.py Range_QDS/tests/regression/test_gate_summary_regression.py -q` (`218 passed`)
+- `uv run --group dev -- pytest Range_QDS/tests/unit/learning/test_model_learning_does_not_collapse.py Range_QDS/tests/unit/orchestration/test_learning_target_stage.py Range_QDS/tests/unit/orchestration/test_retained_mask_stage.py Range_QDS/tests/unit/orchestration/test_run_payload.py -q` (`56 passed`)
+- `uv run --group dev -- pytest Range_QDS/tests/guardrails/test_rework_guardrails.py Range_QDS/tests/property/test_workload_profile_properties.py Range_QDS/tests/unit/workloads/test_workload_generation.py -q` (`42 passed`)
+- `git diff --check`
+- `git diff --check`
+
+Experiment artifact:
+- path: none
+- command: none
+
+Key results:
+- Implementation only. No strict retraining, workload-health, or
+  learning-coherence rerun has been performed under schema `5`.
+- Active `QueryLocalUtility` no longer changes when legacy `range_point_f1` or
+  removed ship/boundary components change in isolation.
+
+Decision:
+- Use schema `5` for new checkpoints. Next evidence must rerun the
+  guide-required smaller strict probes under schema `5` and `range_query_mix`
+  before any final-grid or success claim.
+
+### Checkpoint 5.171 - Remove Small-Local Footprint
+
+Status: completed / Level 0 implementation only.
+
+Goal:
+- Remove `small_local` from the active `range_query_mix` footprint family set
+  so schema `5` behavior scoring is not driven by tiny windows with weak local
+  behavior evidence.
+
+Changes:
+- Removed `small_local` from active `range_query_mix*` footprint weights and
+  footprint definitions.
+- Renormalized remaining active footprint weights to
+  `medium_operational=0.6923076923076923` and
+  `large_context=0.3076923076923077`.
+- Updated active workload/scoring compatibility diagnostics so active blocker
+  footprint pressure no longer includes `small_local`.
+- Updated focused workload/profile tests and active docs. Historical
+  `small_local` diagnostic tests and checkpoint notes remain historical
+  evidence, not active workload requirements.
+
+Tests:
+- `python3 -m py_compile Range_QDS/workloads/generation/workload_profiles.py Range_QDS/orchestration/workload_component_compatibility.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
+- `uv run --group dev -- ruff check Range_QDS/workloads/generation/workload_profiles.py Range_QDS/orchestration/workload_component_compatibility.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/property/test_workload_profile_properties.py`
+- `uv run --group dev -- pyright Range_QDS/workloads/generation/workload_profiles.py Range_QDS/orchestration/workload_component_compatibility.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/property/test_workload_profile_properties.py`
+- `uv run --group dev -- pytest Range_QDS/tests/unit/workloads/test_workload_generation.py Range_QDS/tests/property/test_workload_profile_properties.py Range_QDS/tests/guardrails/test_rework_guardrails.py -q` (`42 passed`)
+- `uv run --group dev -- pytest Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/unit/scoring/test_metrics.py -q` (`178 passed`)
+- `uv run --group dev -- pytest Range_QDS/tests/unit/benchmarking/test_runner.py Range_QDS/tests/regression/test_benchmark_report_regression.py Range_QDS/tests/regression/test_gate_summary_regression.py -q` (`40 passed`)
+- `uv run --group dev -- pytest Range_QDS/tests/unit/learning/test_model_learning_does_not_collapse.py Range_QDS/tests/unit/orchestration/test_learning_target_stage.py Range_QDS/tests/unit/orchestration/test_retained_mask_stage.py Range_QDS/tests/unit/orchestration/test_run_payload.py -q` (`56 passed`)
+
+Experiment artifact:
+- path: none
+- command: none
+
+Key results:
+- Implementation only. No strict retraining, workload-health, or
+  learning-coherence rerun has been performed after removing `small_local`.
+
+Decision:
+- Use the two-footprint `range_query_mix` profile for new checkpoints. Next
+  evidence must rerun the guide-required smaller strict probes before any
+  final-grid or success claim.
+
 ## Condensed Checkpoint Index
 
 ### Checkpoints 1-4.82 - Workloads, Priors, Factorized Baseline
@@ -981,7 +1256,7 @@ Decision:
 Status: completed.
 
 Decision:
-- Workload generation, train-derived priors, factorized QueryUsefulV1, and
+- Workload generation, train-derived priors, factorized QueryLocalUtility, and
   learned segment-budget selection are one contract.
 - Direct prior residuals and blunt prior scaling did not solve causality.
 
@@ -1091,7 +1366,7 @@ Experiment artifact:
 - path:
   `artifacts/results/query_driven_v2_checkpoint77_ship_presence_segment_budget_candidate_current_best_strict_local/example_run.json`
 - command:
-  `uv run --group dev -- python -m orchestration.train_and_score ... --n_ships 384 --n_points 256 --n_queries 48 --range_train_workload_replicates 4 --workload_profile_id range_workload_v1_local --final_metrics_mode diagnostic`
+  `uv run --group dev -- python -m orchestration.train_and_score ... --n_ships 384 --n_points 256 --n_queries 48 --range_train_workload_replicates 4 --workload_profile_id range_query_mix_local --final_metrics_mode diagnostic`
 
 Key results:
 - MLQDS QueryUsefulV1: `0.1662115143`
@@ -1162,7 +1437,7 @@ Experiment artifact:
 - path:
   `artifacts/results/query_driven_v2_checkpoint78_query_hit_ship_blend_target_current_best_strict_local/example_run.json`
 - command:
-  `uv run --group dev -- python -m orchestration.train_and_score ... --n_ships 384 --n_points 256 --n_queries 48 --range_train_workload_replicates 4 --workload_profile_id range_workload_v1_local --range_training_target_mode query_useful_v1_factorized_segment_budget_query_hit_ship_blend --final_metrics_mode diagnostic`
+  `uv run --group dev -- python -m orchestration.train_and_score ... --n_ships 384 --n_points 256 --n_queries 48 --range_train_workload_replicates 4 --workload_profile_id range_query_mix_local --range_training_target_mode query_useful_v1_factorized_segment_budget_query_hit_ship_blend --final_metrics_mode diagnostic`
 
 Key results:
 - MLQDS QueryUsefulV1: `0.1588862822`
@@ -1236,7 +1511,7 @@ Experiment artifact:
 - path:
   `artifacts/results/query_driven_v2_checkpoint79_final_score_ship_blend_target_current_best_strict_local/example_run.json`
 - command:
-  `uv run --group dev -- python -m orchestration.train_and_score ... --n_ships 384 --n_points 256 --n_queries 48 --range_train_workload_replicates 4 --workload_profile_id range_workload_v1_local --range_training_target_mode query_useful_v1_factorized_segment_budget_final_score_ship_blend --final_metrics_mode diagnostic`
+  `uv run --group dev -- python -m orchestration.train_and_score ... --n_ships 384 --n_points 256 --n_queries 48 --range_train_workload_replicates 4 --workload_profile_id range_query_mix_local --range_training_target_mode query_useful_v1_factorized_segment_budget_final_score_ship_blend --final_metrics_mode diagnostic`
 
 Key results:
 - MLQDS QueryUsefulV1: `0.1592468202`
@@ -1293,7 +1568,7 @@ Key results:
   `-0.0008923639`.
 - Blocking families in the active strict reference:
   `small_local` (`range_usefulness_delta=-0.0214317072`,
-  missed ships `+2`), `density_route` (`-0.0143572825`, missed ships `+7`),
+  missed ships `+2`), `density` (`-0.0143572825`, missed ships `+7`),
   `crossing_turn_change` (`-0.0087157891`, missed ships `+4`), and
   `medium_operational` (`-0.0064233545`, missed ships `+10`).
 - Largest persistent weighted component losses are `ship_f1`,
@@ -1408,7 +1683,7 @@ Key results:
   density-route ratio `0.9931034483`, small-local ratio `1.0`,
   medium-operational ratio `0.9969230769`.
 - Status: `still_blocked`. Unresolved families are `small_local`,
-  `density_route`, `medium_operational`, and `crossing_turn_change`.
+  `density`, `medium_operational`, and `crossing_turn_change`.
 
 Decision:
 - Do not adopt the candidate. Scoring/profile reweighting alone is not enough.
@@ -1429,7 +1704,7 @@ Changes:
   diagnostics.
 - Wired training fit diagnostics to pass train points, boundaries, and prior
   workload queries into the family-conditioned head diagnostic.
-- Added unit coverage for `density_route` and `small_local` family rows.
+- Added unit coverage for `density` and `small_local` family rows.
 
 Tests:
 - `python3 -m py_compile ...`
@@ -1448,7 +1723,7 @@ Key results:
 
 Decision:
 - Continue to a workload-healthy strict diagnostic to inspect
-  `density_route`/`small_local` target and head trainability before proposing
+  `density`/`small_local` target and head trainability before proposing
   another target or scoring change.
 
 ### Checkpoint 5.148 - Family Trainability Strict Diagnostic
@@ -1485,13 +1760,13 @@ Key results:
 - `small_local` is weak on both sides: target-side final/query-hit/behavior/
   segment-budget rankers are negative against family ship-query evidence, and
   fitted head/composed predictions remain negative.
-- `density_route` is mainly target-side weak in behavior and segment-budget.
+- `density` is mainly target-side weak in behavior and segment-budget.
   Head predictions are weakly positive against ship-query evidence but not
   enough to make the retained-mask decision causal.
 
 Decision:
 - Continue with diagnostic-only family-local target/head construction for
-  `small_local` and `density_route`. Do not promote a new scoring/profile
+  `small_local` and `density`. Do not promote a new scoring/profile
   default or run the final grid from this evidence.
 
 ### Checkpoint 5.149 - Family-Local Candidate Target Diagnostics
@@ -1500,7 +1775,7 @@ Status: completed / Level 0 instrumentation.
 
 Goal:
 - Add diagnostic-only family-local target candidates for the checkpoint83
-  `small_local` and `density_route` blockers without changing active semantics.
+  `small_local` and `density` blockers without changing active semantics.
 
 Changes:
 - Added `family_local_target_candidate_alignment` to QueryUsefulV1 target
@@ -1532,7 +1807,7 @@ Key results:
 Decision:
 - Continue to a strict-scale diagnostic that reads
   `family_local_target_candidate_alignment` for `small_local` and
-  `density_route`. Do not promote the candidates from unit tests or tiny probes.
+  `density`. Do not promote the candidates from unit tests or tiny probes.
 
 ### Checkpoint 5.150 - Family-Local Candidate Strict Diagnostic
 
@@ -1541,7 +1816,7 @@ Status: completed / strict diagnostic.
 Goal:
 - Run the workload-healthy current-best strict shape with
   `family_local_target_candidate_alignment` and inspect `small_local` and
-  `density_route`.
+  `density`.
 
 Changes:
 - Documentation only after the run. Active labels, losses, selectors, scoring
@@ -1568,9 +1843,9 @@ Key results:
 - gates failed: predictability, learning causality.
 - Family query-hit/ship point candidates improve strict target signal:
   `small_local` Spearman `0.9740` versus best active baseline `-0.1105`;
-  `density_route` Spearman `0.9191` versus best active baseline `0.0832`.
+  `density` Spearman `0.9191` versus best active baseline `0.0832`.
 - The family-local segment-budget candidate fails: `small_local` Spearman
-  `-0.5754`, `density_route` Spearman `-0.3675`; both cover only about `5%`
+  `-0.5754`, `density` Spearman `-0.3675`; both cover only about `5%`
   of ship-query pairs at top-k.
 
 Decision:
@@ -1618,7 +1893,7 @@ Status: completed / strict diagnostic.
 
 Goal:
 - Run the workload-healthy current-best strict shape with segment aggregation
-  diagnostics and inspect `small_local` and `density_route`.
+  diagnostics and inspect `small_local` and `density`.
 
 Changes:
 - Documentation only after the run. Active labels, losses, selectors, scoring
@@ -1645,7 +1920,7 @@ Key results:
 - gates failed: predictability, learning causality.
 - `small_local`: max-pooled segment candidate has point-level Spearman `0.6978`
   and two-stage mass recall `0.8829`; best two-stage pair coverage is `0.4000`.
-- `density_route`: pair-fractional segment candidate has best two-stage pair
+- `density`: pair-fractional segment candidate has best two-stage pair
   coverage `0.6075`; max-pooled segment candidate has best two-stage mass
   recall `0.7214`.
 
@@ -1657,21 +1932,11 @@ Decision:
 ## Validation
 
 Latest focused validation:
-- `python3 -m py_compile` on touched Python files.
-- `uv run --group dev -- ruff check Range_QDS/orchestration/workload_component_compatibility.py Range_QDS/orchestration/final_gate_summary.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
-- `uv run --group dev -- pyright Range_QDS/orchestration/workload_component_compatibility.py Range_QDS/orchestration/final_gate_summary.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
-- `uv run --group dev -- pytest Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/unit/orchestration/test_learning_target_stage.py Range_QDS/tests/unit/scoring/test_metrics.py Range_QDS/tests/unit/orchestration/test_run_payload.py Range_QDS/tests/guardrails/test_rework_guardrails.py -q`
-- `uv run --group dev -- pytest Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/unit/orchestration/test_learning_target_stage.py Range_QDS/tests/unit/orchestration/test_run_payload.py Range_QDS/tests/unit/orchestration/test_retained_mask_stage.py Range_QDS/tests/unit/scoring/test_metrics.py Range_QDS/tests/guardrails/test_rework_guardrails.py -q` (`200 passed`)
-- `jq empty` on checkpoint78 artifact.
-- `jq empty` on checkpoint79 artifact.
-- `jq empty` on checkpoint80 artifact.
-- `jq empty` on checkpoint81 artifact.
-- `jq empty` on checkpoint82 artifact.
-- `jq empty` on checkpoint83 artifact.
-- `jq empty` on checkpoint84 artifact.
-- `jq empty` on checkpoint85 artifact.
-- `python3 -m py_compile Range_QDS/learning/targets/query_useful_v1.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
-- `uv run --group dev -- ruff check Range_QDS/learning/targets/query_useful_v1.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
-- `uv run --group dev -- pyright Range_QDS/learning/targets/query_useful_v1.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
-- `uv run --group dev -- pytest Range_QDS/tests/unit/orchestration/test_query_driven_rework.py -q` (`113 passed`)
+- `python3 -m py_compile Range_QDS/workloads/generation/workload_profiles.py Range_QDS/orchestration/workload_component_compatibility.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
+- `uv run --group dev -- ruff check Range_QDS/workloads/generation/workload_profiles.py Range_QDS/orchestration/workload_component_compatibility.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/property/test_workload_profile_properties.py`
+- `uv run --group dev -- pyright Range_QDS/workloads/generation/workload_profiles.py Range_QDS/orchestration/workload_component_compatibility.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/property/test_workload_profile_properties.py`
+- `uv run --group dev -- pytest Range_QDS/tests/unit/workloads/test_workload_generation.py Range_QDS/tests/property/test_workload_profile_properties.py Range_QDS/tests/guardrails/test_rework_guardrails.py -q` (`42 passed`)
+- `uv run --group dev -- pytest Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/unit/scoring/test_metrics.py -q` (`178 passed`)
+- `uv run --group dev -- pytest Range_QDS/tests/unit/benchmarking/test_runner.py Range_QDS/tests/regression/test_benchmark_report_regression.py Range_QDS/tests/regression/test_gate_summary_regression.py -q` (`40 passed`)
+- `uv run --group dev -- pytest Range_QDS/tests/unit/learning/test_model_learning_does_not_collapse.py Range_QDS/tests/unit/orchestration/test_learning_target_stage.py Range_QDS/tests/unit/orchestration/test_retained_mask_stage.py Range_QDS/tests/unit/orchestration/test_run_payload.py -q` (`56 passed`)
 - `git diff --check`

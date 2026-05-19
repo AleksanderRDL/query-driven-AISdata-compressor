@@ -183,19 +183,20 @@ def _row_from_run(
         model_config.get("model_type"),
     )
     mlqds_aggregate_f1 = mlqds.get("aggregate_f1")
+    mlqds_query_point_recall = mlqds.get("query_point_recall")
     mlqds_range_point_f1 = mlqds.get("range_point_f1", mlqds_aggregate_f1)
     mlqds_range_usefulness = mlqds.get("range_usefulness_score")
     mlqds_inference_only_latency_ms = mlqds.get("latency_ms")
-    mlqds_query_useful_v1 = mlqds.get("query_useful_v1_score")
+    mlqds_query_local_utility = mlqds.get("query_local_utility_score")
     mlqds_gap_time_usefulness = mlqds.get("range_usefulness_gap_time_score")
     mlqds_gap_distance_usefulness = mlqds.get("range_usefulness_gap_distance_score")
     mlqds_gap_min_usefulness = mlqds.get("range_usefulness_gap_min_score")
     if (
-        final_claim_summary.get("primary_metric") == "QueryUsefulV1"
-        and mlqds_query_useful_v1 is not None
+        final_claim_summary.get("primary_metric") == "QueryLocalUtility"
+        and mlqds_query_local_utility is not None
     ):
-        mlqds_primary_score = mlqds_query_useful_v1
-        mlqds_primary_metric = "query_useful_v1"
+        mlqds_primary_score = mlqds_query_local_utility
+        mlqds_primary_metric = "query_local_utility"
     else:
         mlqds_primary_score = (
             mlqds_range_usefulness if mlqds_range_usefulness is not None else mlqds_range_point_f1
@@ -206,16 +207,18 @@ def _row_from_run(
     random_fill_range_usefulness = temporal_random_fill.get("range_usefulness_score")
     oracle_fill_range_usefulness = temporal_oracle_fill.get("range_usefulness_score")
     uniform_aggregate_f1 = uniform.get("aggregate_f1")
+    uniform_query_point_recall = uniform.get("query_point_recall")
     uniform_range_point_f1 = uniform.get("range_point_f1", uniform_aggregate_f1)
     uniform_range_usefulness = uniform.get("range_usefulness_score")
-    uniform_query_useful_v1 = uniform.get("query_useful_v1_score")
+    uniform_query_local_utility = uniform.get("query_local_utility_score")
     uniform_gap_time_usefulness = uniform.get("range_usefulness_gap_time_score")
     uniform_gap_distance_usefulness = uniform.get("range_usefulness_gap_distance_score")
     uniform_gap_min_usefulness = uniform.get("range_usefulness_gap_min_score")
     dp_aggregate_f1 = dp.get("aggregate_f1")
+    dp_query_point_recall = dp.get("query_point_recall")
     dp_range_point_f1 = dp.get("range_point_f1", dp_aggregate_f1)
     dp_range_usefulness = dp.get("range_usefulness_score")
-    dp_query_useful_v1 = dp.get("query_useful_v1_score")
+    dp_query_local_utility = dp.get("query_local_utility_score")
     dp_gap_time_usefulness = dp.get("range_usefulness_gap_time_score")
     dp_gap_distance_usefulness = dp.get("range_usefulness_gap_distance_score")
     dp_gap_min_usefulness = dp.get("range_usefulness_gap_min_score")
@@ -271,7 +274,7 @@ def _row_from_run(
         ),
         "single_cell_range_status": single_cell_range_status,
         "final_claim_status": final_claim_summary.get(
-            "status", "not_available_until_query_useful_v1"
+            "status", "not_available_until_query_local_utility"
         ),
         "final_success_allowed": bool(final_claim_summary.get("final_success_allowed", False)),
         "final_claim_blocking_gates": final_claim_summary.get("blocking_gates"),
@@ -500,13 +503,13 @@ def _row_from_run(
             no_length_support_allocation_mask.get("retained_symmetric_difference_count")
         ),
         "learning_causality_min_material_delta": learning_delta_gate.get(
-            "min_material_query_useful_delta"
+            "min_material_query_local_utility_delta"
         ),
         "learning_causality_shuffled_fraction_of_uniform_gap_min": learning_delta_gate.get(
             "shuffled_score_delta_fraction_of_uniform_gap_min"
         ),
         "learning_causality_mlqds_uniform_gap": learning_delta_gate.get(
-            "mlqds_uniform_query_useful_gap"
+            "mlqds_uniform_query_local_utility_gap"
         ),
         "learning_causality_delta_thresholds": learning_delta_gate.get("thresholds"),
         "segment_budget_head_ablation_mode": learning_causality.get(
@@ -647,10 +650,11 @@ def _row_from_run(
         "mlqds_primary_metric": mlqds_primary_metric,
         "mlqds_primary_score": mlqds_primary_score,
         "mlqds_aggregate_f1": mlqds_aggregate_f1,
+        "mlqds_query_point_recall": mlqds_query_point_recall,
         "mlqds_range_point_f1": mlqds_range_point_f1,
         "mlqds_range_usefulness": mlqds_range_usefulness,
         "mlqds_range_usefulness_score": mlqds_range_usefulness,
-        "mlqds_query_useful_v1_score": mlqds_query_useful_v1,
+        "mlqds_query_local_utility_score": mlqds_query_local_utility,
         "mlqds_range_usefulness_gap_time_score": mlqds_gap_time_usefulness,
         "mlqds_range_usefulness_gap_distance_score": mlqds_gap_distance_usefulness,
         "mlqds_range_usefulness_gap_min_score": mlqds_gap_min_usefulness,
@@ -673,10 +677,11 @@ def _row_from_run(
             "final_metrics_mode", baseline_config.get("final_metrics_mode")
         ),
         "uniform_aggregate_f1": uniform_aggregate_f1,
+        "uniform_query_point_recall": uniform_query_point_recall,
         "uniform_range_point_f1": uniform_range_point_f1,
         "uniform_range_usefulness": uniform_range_usefulness,
         "uniform_range_usefulness_score": uniform_range_usefulness,
-        "uniform_query_useful_v1_score": uniform_query_useful_v1,
+        "uniform_query_local_utility_score": uniform_query_local_utility,
         "uniform_range_usefulness_gap_time_score": uniform_gap_time_usefulness,
         "uniform_range_usefulness_gap_distance_score": uniform_gap_distance_usefulness,
         "uniform_range_usefulness_gap_min_score": uniform_gap_min_usefulness,
@@ -690,10 +695,11 @@ def _row_from_run(
         "uniform_range_shape_score": uniform.get("range_shape_score"),
         **_geometry_fields("uniform", uniform),
         "douglas_peucker_aggregate_f1": dp_aggregate_f1,
+        "douglas_peucker_query_point_recall": dp_query_point_recall,
         "douglas_peucker_range_point_f1": dp_range_point_f1,
         "douglas_peucker_range_usefulness": dp_range_usefulness,
         "douglas_peucker_range_usefulness_score": dp_range_usefulness,
-        "douglas_peucker_query_useful_v1_score": dp_query_useful_v1,
+        "douglas_peucker_query_local_utility_score": dp_query_local_utility,
         "douglas_peucker_range_usefulness_gap_time_score": dp_gap_time_usefulness,
         "douglas_peucker_range_usefulness_gap_distance_score": dp_gap_distance_usefulness,
         "douglas_peucker_range_usefulness_gap_min_score": dp_gap_min_usefulness,
@@ -711,6 +717,11 @@ def _row_from_run(
             if mlqds_range_point_f1 is not None and uniform_range_point_f1 is not None
             else None
         ),
+        "mlqds_vs_douglas_peucker_query_point_recall": (
+            float(mlqds_query_point_recall) - float(dp_query_point_recall)
+            if mlqds_query_point_recall is not None and dp_query_point_recall is not None
+            else None
+        ),
         "mlqds_vs_douglas_peucker_range_point_f1": (
             float(mlqds_range_point_f1) - float(dp_range_point_f1)
             if mlqds_range_point_f1 is not None and dp_range_point_f1 is not None
@@ -721,9 +732,9 @@ def _row_from_run(
             if mlqds_range_usefulness is not None and uniform_range_usefulness is not None
             else None
         ),
-        "mlqds_vs_uniform_query_useful_v1": (
-            float(mlqds_query_useful_v1) - float(uniform_query_useful_v1)
-            if mlqds_query_useful_v1 is not None and uniform_query_useful_v1 is not None
+        "mlqds_vs_uniform_query_local_utility": (
+            float(mlqds_query_local_utility) - float(uniform_query_local_utility)
+            if mlqds_query_local_utility is not None and uniform_query_local_utility is not None
             else None
         ),
         "mlqds_vs_douglas_peucker_range_usefulness": (
@@ -731,9 +742,9 @@ def _row_from_run(
             if mlqds_range_usefulness is not None and dp_range_usefulness is not None
             else None
         ),
-        "mlqds_vs_douglas_peucker_query_useful_v1": (
-            float(mlqds_query_useful_v1) - float(dp_query_useful_v1)
-            if mlqds_query_useful_v1 is not None and dp_query_useful_v1 is not None
+        "mlqds_vs_douglas_peucker_query_local_utility": (
+            float(mlqds_query_local_utility) - float(dp_query_local_utility)
+            if mlqds_query_local_utility is not None and dp_query_local_utility is not None
             else None
         ),
         "mlqds_vs_uniform_range_usefulness_gap_time": (

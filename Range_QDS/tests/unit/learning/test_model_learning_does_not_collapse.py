@@ -38,7 +38,7 @@ from learning.outputs import TrainingOutputs
 from learning.scaler import FeatureScaler
 from learning.supervised_windows import _filter_supervised_windows
 from learning.targets.common import _apply_temporal_residual_labels
-from learning.targets.query_useful_v1 import QUERY_USEFUL_V1_HEAD_NAMES
+from learning.targets.query_local_utility import QUERY_LOCAL_UTILITY_HEAD_NAMES
 from learning.trajectory_batching import build_trajectory_windows
 from models.historical_prior_qds_model import HistoricalPriorRangeQDSModel
 from models.trajectory_qds_model import TrajectoryQDSModel
@@ -905,10 +905,10 @@ def test_validation_selection_can_blend_length_support_head_for_learned_selector
     cfg.model.selector_type = "learned_segment_budget_v1"
     predictions = torch.zeros((points.shape[0],), dtype=torch.float32)
     head_logits = torch.zeros(
-        (points.shape[0], len(QUERY_USEFUL_V1_HEAD_NAMES)), dtype=torch.float32
+        (points.shape[0], len(QUERY_LOCAL_UTILITY_HEAD_NAMES)), dtype=torch.float32
     )
-    segment_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("segment_budget_target")
-    path_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("path_length_support_target")
+    segment_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("segment_budget_target")
+    path_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("path_length_support_target")
     head_logits[:, segment_idx] = torch.linspace(-2.0, 2.0, steps=points.shape[0])
     head_logits[:, path_idx] = torch.linspace(2.0, -2.0, steps=points.shape[0])
     captured: dict[str, Any] = {}
@@ -981,13 +981,13 @@ def test_validation_checkpoint_scores_report_factorized_causality_deltas(
     cfg = build_run_config(
         compression_ratio=0.50,
         workload="range",
-        checkpoint_score_variant="query_useful_v1",
+        checkpoint_score_variant="query_local_utility",
         validation_global_sanity_penalty_enabled=False,
     )
     cfg.model.selector_type = "learned_segment_budget_v1"
     predictions = torch.ones((points.shape[0],), dtype=torch.float32)
     head_logits = torch.ones(
-        (points.shape[0], len(QUERY_USEFUL_V1_HEAD_NAMES)), dtype=torch.float32
+        (points.shape[0], len(QUERY_LOCAL_UTILITY_HEAD_NAMES)), dtype=torch.float32
     )
 
     monkeypatch.setattr(
@@ -1032,8 +1032,8 @@ def test_validation_checkpoint_scores_report_factorized_causality_deltas(
         "learning.checkpoint_validation.score_range_usefulness", fake_range_usefulness
     )
     monkeypatch.setattr(
-        "learning.checkpoint_validation.query_useful_v1_from_range_audit",
-        lambda audit, **_kwargs: {"query_useful_v1_score": audit["range_usefulness_score"]},
+        "learning.checkpoint_validation.query_local_utility_from_range_audit",
+        lambda audit, **_kwargs: {"query_local_utility_score": audit["range_usefulness_score"]},
     )
 
     validation_score, per_type_score, metrics = _validation_checkpoint_scores(
@@ -1056,10 +1056,10 @@ def test_validation_checkpoint_scores_report_factorized_causality_deltas(
     assert metrics["factorized_target_fit_used_for_checkpoint_selection"] == 0.0
     assert metrics["head_segment_budget_target_target_fit_available"] == 1.0
     assert metrics["segment_budget_canonical_segment_fit_available"] == 1.0
-    assert metrics["no_behavior_query_useful_v1"] == pytest.approx(3.0 / point_count)
-    assert metrics["no_behavior_query_useful_delta"] == pytest.approx(2.0 / point_count)
-    assert metrics["no_segment_budget_query_useful_v1"] == pytest.approx(2.0 / point_count)
-    assert metrics["no_segment_budget_query_useful_delta"] == pytest.approx(3.0 / point_count)
+    assert metrics["no_behavior_query_local_utility"] == pytest.approx(3.0 / point_count)
+    assert metrics["no_behavior_query_local_utility_delta"] == pytest.approx(2.0 / point_count)
+    assert metrics["no_segment_budget_query_local_utility"] == pytest.approx(2.0 / point_count)
+    assert metrics["no_segment_budget_query_local_utility_delta"] == pytest.approx(3.0 / point_count)
 
 
 def test_training_accepts_precomputed_importance_labels() -> None:

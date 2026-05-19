@@ -11,7 +11,7 @@ PRIMARY_METHOD = "MLQDS"
 BASELINE_METHOD = "DouglasPeucker"
 ALIGNMENT_PATH = (
     "selector_trace_diagnostics.eval_primary."
-    "retained_decision_marginal_query_useful_alignment"
+    "retained_decision_marginal_query_local_utility_alignment"
 )
 SCORE_FIELDS = ("raw_score", "selector_score", "segment_score")
 TOP_RANK_FRACTION = 0.25
@@ -63,15 +63,15 @@ def _score_summary(artifact: dict[str, Any]) -> dict[str, float | None]:
     primary = _as_dict(matched.get(PRIMARY_METHOD))
     uniform = _as_dict(matched.get("uniform"))
     baseline = _as_dict(matched.get(BASELINE_METHOD))
-    primary_score = _as_float(primary.get("query_useful_v1_score"))
-    uniform_score = _as_float(uniform.get("query_useful_v1_score"))
-    baseline_score = _as_float(baseline.get("query_useful_v1_score"))
+    primary_score = _as_float(primary.get("query_local_utility_score"))
+    uniform_score = _as_float(uniform.get("query_local_utility_score"))
+    baseline_score = _as_float(baseline.get("query_local_utility_score"))
     return {
-        "primary_query_useful_v1": primary_score,
-        "uniform_query_useful_v1": uniform_score,
-        "baseline_query_useful_v1": baseline_score,
-        "primary_minus_uniform_query_useful_v1": _delta(primary_score, uniform_score),
-        "primary_minus_baseline_query_useful_v1": _delta(primary_score, baseline_score),
+        "primary_query_local_utility": primary_score,
+        "uniform_query_local_utility": uniform_score,
+        "baseline_query_local_utility": baseline_score,
+        "primary_minus_uniform_query_local_utility": _delta(primary_score, uniform_score),
+        "primary_minus_baseline_query_local_utility": _delta(primary_score, baseline_score),
     }
 
 
@@ -94,7 +94,7 @@ def _gate_summary(artifact: dict[str, Any]) -> dict[str, bool | None]:
 def _alignment_payload(artifact: dict[str, Any]) -> dict[str, Any]:
     return _as_dict(
         _as_dict(_as_dict(artifact.get("selector_trace_diagnostics")).get("eval_primary")).get(
-            "retained_decision_marginal_query_useful_alignment"
+            "retained_decision_marginal_query_local_utility_alignment"
         )
     )
 
@@ -120,11 +120,11 @@ def _rank(row: dict[str, Any], score_field: str) -> float | None:
 
 
 def _marginal_rank_fraction(row: dict[str, Any]) -> float | None:
-    return _as_float(row.get("marginal_query_useful_v1_candidate_rank_fraction"))
+    return _as_float(row.get("marginal_query_local_utility_candidate_rank_fraction"))
 
 
 def _marginal_rank(row: dict[str, Any]) -> float | None:
-    return _as_float(row.get("marginal_query_useful_v1_candidate_rank"))
+    return _as_float(row.get("marginal_query_local_utility_candidate_rank"))
 
 
 def _rank_fraction_at_most(row: dict[str, Any], score_field: str, threshold: float) -> bool:
@@ -171,7 +171,7 @@ def _row_ref(row: dict[str, Any]) -> dict[str, Any]:
         "source": row.get("source"),
         "decision": row.get("decision"),
         "stage_owner": _stage_owner(row),
-        "marginal_query_useful_v1": _as_float(row.get("marginal_query_useful_v1")),
+        "marginal_query_local_utility": _as_float(row.get("marginal_query_local_utility")),
         "marginal_rank": _marginal_rank(row),
         "raw_score_rank": _rank(row, "raw_score"),
         "selector_score_rank": _rank(row, "selector_score"),
@@ -606,7 +606,7 @@ def _count_by(rows: list[dict[str, Any]], key_fn: Any) -> dict[str, int]:
 
 
 def _marginal_sort_key(row: dict[str, Any]) -> tuple[float, int]:
-    return (-float(row.get("marginal_query_useful_v1") or 0.0), int(row.get("point_index") or 0))
+    return (-float(row.get("marginal_query_local_utility") or 0.0), int(row.get("point_index") or 0))
 
 
 def _overrank_sort_key(row: dict[str, Any]) -> tuple[float, int]:

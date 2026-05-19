@@ -41,16 +41,16 @@ def _nested(data: dict[str, Any], *keys: str) -> Any:
 
 
 def _score_table(run: dict[str, Any]) -> Table:
-    table = Table(title="QueryUsefulV1")
+    table = Table(title="QueryLocalUtility")
     table.add_column("Method")
     table.add_column("Score", justify="right")
-    table.add_row("MLQDS", _format_float(_nested(run, "matched", "MLQDS", "query_useful_v1_score")))
+    table.add_row("MLQDS", _format_float(_nested(run, "matched", "MLQDS", "query_local_utility_score")))
     table.add_row(
-        "uniform", _format_float(_nested(run, "matched", "uniform", "query_useful_v1_score"))
+        "uniform", _format_float(_nested(run, "matched", "uniform", "query_local_utility_score"))
     )
     table.add_row(
         "DouglasPeucker",
-        _format_float(_nested(run, "matched", "DouglasPeucker", "query_useful_v1_score")),
+        _format_float(_nested(run, "matched", "DouglasPeucker", "query_local_utility_score")),
     )
     return table
 

@@ -1,7 +1,7 @@
 """Versioned range workload profiles.
 
 The query-driven rework treats the future range-query distribution as a product
-object, not as loose benchmark knobs.  ``range_workload_v1`` is the first
+object, not as loose benchmark knobs.  ``range_query_mix`` is the first
 concrete in-distribution profile for final candidates.  Runs without an explicit
 profile remain legacy diagnostics.
 """
@@ -34,15 +34,15 @@ class RangeWorkloadProfile:
     final_success_allowed: bool = False
 
 
-RANGE_WORKLOAD_V1_FOCUSED_PROFILE_ID = "range_workload_v1_focused"
-RANGE_WORKLOAD_V1_LOCAL_PROFILE_ID = "range_workload_v1_local"
-RANGE_WORKLOAD_V1_OPERATIONAL_PROFILE_ID = "range_workload_v1_operational"
-RANGE_WORKLOAD_V1_PROFILE_ID = "range_workload_v1"
-RANGE_WORKLOAD_V1_FINAL_PROFILE_IDS = (
-    RANGE_WORKLOAD_V1_FOCUSED_PROFILE_ID,
-    RANGE_WORKLOAD_V1_LOCAL_PROFILE_ID,
-    RANGE_WORKLOAD_V1_OPERATIONAL_PROFILE_ID,
-    RANGE_WORKLOAD_V1_PROFILE_ID,
+RANGE_QUERY_MIX_FOCUSED_PROFILE_ID = "range_query_mix_focused"
+RANGE_QUERY_MIX_LOCAL_PROFILE_ID = "range_query_mix_local"
+RANGE_QUERY_MIX_OPERATIONAL_PROFILE_ID = "range_query_mix_operational"
+RANGE_QUERY_MIX_PROFILE_ID = "range_query_mix"
+RANGE_QUERY_MIX_FINAL_PROFILE_IDS = (
+    RANGE_QUERY_MIX_FOCUSED_PROFILE_ID,
+    RANGE_QUERY_MIX_LOCAL_PROFILE_ID,
+    RANGE_QUERY_MIX_OPERATIONAL_PROFILE_ID,
+    RANGE_QUERY_MIX_PROFILE_ID,
 )
 
 
@@ -68,35 +68,25 @@ LEGACY_GENERATOR_PROFILE = RangeWorkloadProfile(
 )
 
 
-def _range_workload_v1_profile(
+def _range_query_mix_profile(
     *,
     profile_id: str,
     target_coverage: float,
     max_coverage_overshoot: float,
 ) -> RangeWorkloadProfile:
-    """Build one named v1 workload profile variant."""
+    """Build one named query-local range mix profile variant."""
     return RangeWorkloadProfile(
         profile_id=profile_id,
         version=1,
         anchor_family_weights={
-            "density_route": 0.40,
-            "boundary_entry_exit": 0.20,
-            "crossing_turn_change": 0.15,
-            "port_or_approach_zone": 0.15,
-            "sparse_background_control": 0.10,
+            "density": 0.80,
+            "sparse_background_control": 0.20,
         },
         footprint_family_weights={
-            "small_local": 0.25,
-            "medium_operational": 0.45,
-            "large_context": 0.20,
-            "route_corridor_like": 0.10,
+            "medium_operational": 0.6923076923076923,
+            "large_context": 0.3076923076923077,
         },
         footprint_families={
-            "small_local": {
-                "spatial_radius_km": 1.1,
-                "time_half_window_hours": 2.5,
-                "elongation_allowed": False,
-            },
             "medium_operational": {
                 "spatial_radius_km": 2.2,
                 "time_half_window_hours": 5.0,
@@ -106,11 +96,6 @@ def _range_workload_v1_profile(
                 "spatial_radius_km": 4.0,
                 "time_half_window_hours": 8.0,
                 "elongation_allowed": False,
-            },
-            "route_corridor_like": {
-                "spatial_radius_km": 2.2,
-                "time_half_window_hours": 5.0,
-                "elongation_allowed": True,
             },
         },
         target_coverage=target_coverage,
@@ -129,33 +114,33 @@ def _range_workload_v1_profile(
     )
 
 
-RANGE_WORKLOAD_V1_FOCUSED_PROFILE = _range_workload_v1_profile(
-    profile_id=RANGE_WORKLOAD_V1_FOCUSED_PROFILE_ID,
+RANGE_QUERY_MIX_FOCUSED_PROFILE = _range_query_mix_profile(
+    profile_id=RANGE_QUERY_MIX_FOCUSED_PROFILE_ID,
     target_coverage=0.05,
     max_coverage_overshoot=0.005,
 )
-RANGE_WORKLOAD_V1_LOCAL_PROFILE = _range_workload_v1_profile(
-    profile_id=RANGE_WORKLOAD_V1_LOCAL_PROFILE_ID,
+RANGE_QUERY_MIX_LOCAL_PROFILE = _range_query_mix_profile(
+    profile_id=RANGE_QUERY_MIX_LOCAL_PROFILE_ID,
     target_coverage=0.10,
     max_coverage_overshoot=0.0075,
 )
-RANGE_WORKLOAD_V1_OPERATIONAL_PROFILE = _range_workload_v1_profile(
-    profile_id=RANGE_WORKLOAD_V1_OPERATIONAL_PROFILE_ID,
+RANGE_QUERY_MIX_OPERATIONAL_PROFILE = _range_query_mix_profile(
+    profile_id=RANGE_QUERY_MIX_OPERATIONAL_PROFILE_ID,
     target_coverage=0.15,
     max_coverage_overshoot=0.010,
 )
-RANGE_WORKLOAD_V1_PROFILE = _range_workload_v1_profile(
-    profile_id=RANGE_WORKLOAD_V1_PROFILE_ID,
+RANGE_QUERY_MIX_PROFILE = _range_query_mix_profile(
+    profile_id=RANGE_QUERY_MIX_PROFILE_ID,
     target_coverage=0.30,
     max_coverage_overshoot=0.020,
 )
 
 PROFILE_BY_ID: dict[str, RangeWorkloadProfile] = {
     LEGACY_GENERATOR_PROFILE.profile_id: LEGACY_GENERATOR_PROFILE,
-    RANGE_WORKLOAD_V1_FOCUSED_PROFILE.profile_id: RANGE_WORKLOAD_V1_FOCUSED_PROFILE,
-    RANGE_WORKLOAD_V1_LOCAL_PROFILE.profile_id: RANGE_WORKLOAD_V1_LOCAL_PROFILE,
-    RANGE_WORKLOAD_V1_OPERATIONAL_PROFILE.profile_id: RANGE_WORKLOAD_V1_OPERATIONAL_PROFILE,
-    RANGE_WORKLOAD_V1_PROFILE.profile_id: RANGE_WORKLOAD_V1_PROFILE,
+    RANGE_QUERY_MIX_FOCUSED_PROFILE.profile_id: RANGE_QUERY_MIX_FOCUSED_PROFILE,
+    RANGE_QUERY_MIX_LOCAL_PROFILE.profile_id: RANGE_QUERY_MIX_LOCAL_PROFILE,
+    RANGE_QUERY_MIX_OPERATIONAL_PROFILE.profile_id: RANGE_QUERY_MIX_OPERATIONAL_PROFILE,
+    RANGE_QUERY_MIX_PROFILE.profile_id: RANGE_QUERY_MIX_PROFILE,
 }
 WORKLOAD_PROFILE_CHOICES = tuple(PROFILE_BY_ID)
 
@@ -181,7 +166,7 @@ def range_workload_profile(profile_id: str | None) -> RangeWorkloadProfile:
 
 
 def max_point_hit_fraction_for_coverage(target_coverage: float | None) -> float:
-    """Return the v1 broad-query point-hit ceiling for a coverage target."""
+    """Return the profile broad-query point-hit ceiling for a coverage target."""
     if target_coverage is None:
         return 0.05
     target = float(target_coverage)

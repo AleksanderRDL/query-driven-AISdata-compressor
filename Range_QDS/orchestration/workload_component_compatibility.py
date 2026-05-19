@@ -10,27 +10,16 @@ from typing import Any
 PRIMARY_METHOD = "MLQDS"
 BASELINE_METHOD = "DouglasPeucker"
 GROUP_KEYS = ("anchor_family", "footprint_family", "anchor_footprint_family")
-SHIP_POINT_COMPONENTS = frozenset(
+QUERY_POINT_MASS_COMPONENTS = frozenset(
     {
-        "ship_balanced_query_point_recall",
-        "query_balanced_point_recall",
-        "query_point_mass_ratio",
-        "query_point_distribution_stability",
-        "ship_f1",
-        "ship_coverage",
-        "multi_point_ship_evidence",
+        "query_point_recall",
     }
 )
 QUERY_LOCAL_BEHAVIOR_COMPONENTS = frozenset(
     {
         "query_local_interpolation_fidelity",
         "query_local_turn_change_coverage",
-        "query_local_speed_heading_coverage",
-        "query_local_shape_score",
-        "query_local_gap_continuity",
-        "entry_exit_f1",
-        "crossing_f1",
-        "query_boundary_evidence",
+        "query_local_continuity",
     }
 )
 GUARDRAIL_COMPONENTS = frozenset(
@@ -41,77 +30,45 @@ GUARDRAIL_COMPONENTS = frozenset(
     }
 )
 BLOCKER_FAMILIES = {
-    "anchor_family": frozenset({"density_route", "crossing_turn_change"}),
-    "footprint_family": frozenset({"small_local", "medium_operational"}),
+    "anchor_family": frozenset({"density"}),
+    "footprint_family": frozenset({"medium_operational"}),
 }
 QUERY_LOCAL_SENSIBLE_COMPONENT_WEIGHTS_V0 = {
-    "ship_balanced_query_point_recall": 0.12,
-    "query_balanced_point_recall": 0.08,
-    "query_point_mass_ratio": 0.04,
-    "query_point_distribution_stability": 0.03,
-    "query_local_interpolation_fidelity": 0.13,
-    "query_local_turn_change_coverage": 0.09,
-    "query_local_speed_heading_coverage": 0.08,
-    "query_local_shape_score": 0.08,
-    "query_local_gap_continuity": 0.04,
-    "ship_f1": 0.05,
-    "ship_coverage": 0.04,
-    "multi_point_ship_evidence": 0.02,
-    "entry_exit_f1": 0.06,
-    "crossing_f1": 0.05,
-    "query_boundary_evidence": 0.04,
+    "query_point_recall": 0.45,
+    "query_local_interpolation_fidelity": 0.25,
+    "query_local_turn_change_coverage": 0.12,
+    "query_local_continuity": 0.13,
     "endpoint_or_skeleton_sanity": 0.02,
     "global_shape_guardrail_score": 0.02,
     "length_preservation_guardrail": 0.01,
 }
-SHIP_POINT_PRESERVING_SMOOTH_COMPONENT_WEIGHTS_V0 = {
-    "ship_balanced_query_point_recall": 0.18,
-    "query_balanced_point_recall": 0.12,
-    "query_point_mass_ratio": 0.09,
-    "query_point_distribution_stability": 0.05,
-    "multi_point_ship_evidence": 0.04,
-    "ship_f1": 0.04,
-    "ship_coverage": 0.03,
-    "query_local_interpolation_fidelity": 0.11,
-    "query_local_turn_change_coverage": 0.07,
-    "query_local_speed_heading_coverage": 0.06,
-    "query_local_shape_score": 0.06,
-    "query_local_gap_continuity": 0.02,
-    "entry_exit_f1": 0.04,
-    "crossing_f1": 0.03,
-    "query_boundary_evidence": 0.03,
-    "endpoint_or_skeleton_sanity": 0.01,
-    "global_shape_guardrail_score": 0.01,
+POINT_MASS_PRESERVING_SMOOTH_COMPONENT_WEIGHTS_V0 = {
+    "query_point_recall": 0.50,
+    "query_local_interpolation_fidelity": 0.20,
+    "query_local_turn_change_coverage": 0.15,
+    "query_local_continuity": 0.10,
+    "endpoint_or_skeleton_sanity": 0.02,
+    "global_shape_guardrail_score": 0.02,
     "length_preservation_guardrail": 0.01,
 }
 REBALANCED_QUERY_MIX_V0 = {
     "anchor_family": {
-        "density_route": 0.32,
-        "boundary_entry_exit": 0.22,
-        "crossing_turn_change": 0.16,
-        "port_or_approach_zone": 0.17,
-        "sparse_background_control": 0.13,
+        "density": 0.75,
+        "sparse_background_control": 0.25,
     },
     "footprint_family": {
-        "small_local": 0.18,
-        "medium_operational": 0.40,
-        "large_context": 0.27,
-        "route_corridor_like": 0.15,
+        "medium_operational": 0.70,
+        "large_context": 0.30,
     },
 }
 BLOCKER_PRESERVING_QUERY_MIX_V0 = {
     "anchor_family": {
-        "density_route": 0.40,
-        "boundary_entry_exit": 0.20,
-        "crossing_turn_change": 0.15,
-        "port_or_approach_zone": 0.15,
-        "sparse_background_control": 0.10,
+        "density": 0.80,
+        "sparse_background_control": 0.20,
     },
     "footprint_family": {
-        "small_local": 0.25,
-        "medium_operational": 0.45,
-        "large_context": 0.20,
-        "route_corridor_like": 0.10,
+        "medium_operational": 0.6923076923076923,
+        "large_context": 0.3076923076923077,
     },
 }
 
@@ -148,9 +105,9 @@ def _weight_sum(weights: dict[str, float], components: frozenset[str]) -> float:
 
 def _component_group_weight_summary(weights: dict[str, float]) -> dict[str, float]:
     normalized = _normalized_weights(weights)
-    known = SHIP_POINT_COMPONENTS | QUERY_LOCAL_BEHAVIOR_COMPONENTS | GUARDRAIL_COMPONENTS
+    known = QUERY_POINT_MASS_COMPONENTS | QUERY_LOCAL_BEHAVIOR_COMPONENTS | GUARDRAIL_COMPONENTS
     return {
-        "ship_point_evidence_weight": _weight_sum(weights, SHIP_POINT_COMPONENTS),
+        "query_point_mass_weight": _weight_sum(weights, QUERY_POINT_MASS_COMPONENTS),
         "query_local_behavior_weight": _weight_sum(weights, QUERY_LOCAL_BEHAVIOR_COMPONENTS),
         "guardrail_weight": _weight_sum(weights, GUARDRAIL_COMPONENTS),
         "other_weight": sum(
@@ -192,7 +149,7 @@ def _query_local_component_deltas(
             method=primary_method,
             group_key=group_key,
             family=family,
-        ).get("query_useful_v1_query_local_components")
+        ).get("query_local_utility_query_local_components")
     )
     baseline_components = _as_dict(
         _group_summary(
@@ -200,7 +157,7 @@ def _query_local_component_deltas(
             method=baseline_method,
             group_key=group_key,
             family=family,
-        ).get("query_useful_v1_query_local_components")
+        ).get("query_local_utility_query_local_components")
     )
     out: dict[str, float] = {}
     for component in sorted(set(primary_components) | set(baseline_components)):
@@ -214,7 +171,7 @@ def _component_weights(artifact: dict[str, Any], *, method: str) -> dict[str, fl
     weights = _as_dict(
         _as_dict(_as_dict(artifact.get("matched")).get(method))
         .get("range_audit", {})
-        .get("query_useful_v1_component_weights")
+        .get("query_local_utility_component_weights")
     )
     return {str(key): _as_float(value) for key, value in weights.items()}
 
@@ -223,7 +180,7 @@ def _method_components(artifact: dict[str, Any], *, method: str) -> dict[str, fl
     components = _as_dict(
         _as_dict(_as_dict(artifact.get("matched")).get(method))
         .get("range_audit", {})
-        .get("query_useful_v1_components")
+        .get("query_local_utility_components")
     )
     return {str(key): _as_float(value) for key, value in components.items()}
 
@@ -449,7 +406,7 @@ def _blocker_preserving_outcome(group_rows: dict[str, Any]) -> dict[str, Any]:
     pressure_preserved = True
     for group_key, group in group_rows.items():
         candidate = _as_dict(group).get(
-            "ship_point_preserving_component_blocker_preserving_profile"
+            "point_mass_preserving_component_blocker_preserving_profile"
         )
         candidate = _as_dict(candidate)
         weighted_deltas[group_key] = _as_float(candidate.get("weighted_query_local_delta"))
@@ -459,11 +416,7 @@ def _blocker_preserving_outcome(group_rows: dict[str, Any]) -> dict[str, Any]:
         for row in candidate.get("family_rows", []):
             if not isinstance(row, dict) or row.get("family") not in critical_families:
                 continue
-            if (
-                _as_float(row.get("component_weighted_delta")) < 0.0
-                or _as_float(row.get("missed_trajectory_hit_count_delta")) > 0.0
-                or _as_float(row.get("ship_presence_recall_delta")) < 0.0
-            ):
+            if _as_float(row.get("component_weighted_delta")) < 0.0:
                 unresolved_rows.append(
                     {
                         "group_key": group_key,
@@ -481,7 +434,7 @@ def _blocker_preserving_outcome(group_rows: dict[str, Any]) -> dict[str, Any]:
                     }
                 )
     return {
-        "candidate": "ship_point_preserving_component_blocker_preserving_profile",
+        "candidate": "point_mass_preserving_component_blocker_preserving_profile",
         "critical_family_pressure_preserved": pressure_preserved,
         "weighted_query_local_deltas": weighted_deltas,
         "unresolved_blocker_family_count": len(unresolved_rows),
@@ -492,7 +445,7 @@ def _blocker_preserving_outcome(group_rows: dict[str, Any]) -> dict[str, Any]:
         "status": "still_blocked" if unresolved_rows else "candidate_needs_strict_probe",
         "interpretation": (
             "A blocker-preserving candidate still has negative critical-family "
-            "ship/point evidence, so profile/scoring changes alone should not be "
+            "query-local weighted components, so profile/scoring changes alone should not be "
             "accepted until the target/head signal for those families is fixed."
             if unresolved_rows
             else "The blocker-preserving candidate removes grouped blocker signs; "
@@ -512,8 +465,8 @@ def _recalibration_candidates(
     candidates = {
         "active_component_weights": active_weights,
         "query_local_sensible_component_weights_v0": QUERY_LOCAL_SENSIBLE_COMPONENT_WEIGHTS_V0,
-        "ship_point_preserving_smooth_component_weights_v0": (
-            SHIP_POINT_PRESERVING_SMOOTH_COMPONENT_WEIGHTS_V0
+        "point_mass_preserving_smooth_component_weights_v0": (
+            POINT_MASS_PRESERVING_SMOOTH_COMPONENT_WEIGHTS_V0
         ),
     }
     primary_components = _method_components(artifact, method=primary_method)
@@ -557,16 +510,16 @@ def _recalibration_candidates(
                 profile_weights=REBALANCED_QUERY_MIX_V0.get(group_key, {}),
                 critical_families=BLOCKER_FAMILIES.get(group_key, frozenset()),
             ),
-            "ship_point_preserving_component_active_profile": _group_delta_with_weights(
+            "point_mass_preserving_component_active_profile": _group_delta_with_weights(
                 rows,
-                component_weights=SHIP_POINT_PRESERVING_SMOOTH_COMPONENT_WEIGHTS_V0,
+                component_weights=POINT_MASS_PRESERVING_SMOOTH_COMPONENT_WEIGHTS_V0,
                 profile_weights=None,
                 critical_families=BLOCKER_FAMILIES.get(group_key, frozenset()),
             ),
-            "ship_point_preserving_component_blocker_preserving_profile": (
+            "point_mass_preserving_component_blocker_preserving_profile": (
                 _group_delta_with_weights(
                     rows,
-                    component_weights=SHIP_POINT_PRESERVING_SMOOTH_COMPONENT_WEIGHTS_V0,
+                    component_weights=POINT_MASS_PRESERVING_SMOOTH_COMPONENT_WEIGHTS_V0,
                     profile_weights=BLOCKER_PRESERVING_QUERY_MIX_V0.get(group_key, {}),
                     critical_families=BLOCKER_FAMILIES.get(group_key, frozenset()),
                 )
@@ -599,7 +552,7 @@ def _recalibration_candidates(
         ),
         "masking_risk_reason": (
             "Candidate improves post-hoc score delta by downweighting currently "
-            "blocking ship/point-mass components; strict retraining evidence would "
+            "blocking query-local components; strict retraining evidence would "
             "still be required before any scoring/profile change."
         ),
     }
@@ -646,15 +599,15 @@ def _artifact_summary(
     primary = _as_dict(matched.get(primary_method))
     baseline = _as_dict(matched.get(baseline_method))
     scores = {
-        "primary_query_useful_v1": _as_float(primary.get("query_useful_v1_score")),
-        "baseline_query_useful_v1": _as_float(baseline.get("query_useful_v1_score")),
-        "primary_minus_baseline_query_useful_v1": _as_float(
-            primary.get("query_useful_v1_score")
+        "primary_query_local_utility": _as_float(primary.get("query_local_utility_score")),
+        "baseline_query_local_utility": _as_float(baseline.get("query_local_utility_score")),
+        "primary_minus_baseline_query_local_utility": _as_float(
+            primary.get("query_local_utility_score")
         )
-        - _as_float(baseline.get("query_useful_v1_score")),
+        - _as_float(baseline.get("query_local_utility_score")),
     }
     target_mode = _as_dict(
-        _as_dict(artifact.get("training_target_diagnostics")).get("query_useful_v1_factorized")
+        _as_dict(artifact.get("training_target_diagnostics")).get("query_local_utility_factorized")
     ).get("target_mode")
     if target_mode is None:
         target_mode = _as_dict(_as_dict(artifact.get("config")).get("model")).get(
@@ -745,8 +698,8 @@ def build_workload_component_compatibility_diagnostic(
         "artifacts": summaries,
         "summary": {
             "primary_artifact_label": current.get("label"),
-            "primary_minus_baseline_query_useful_v1": _as_dict(current.get("scores")).get(
-                "primary_minus_baseline_query_useful_v1"
+            "primary_minus_baseline_query_local_utility": _as_dict(current.get("scores")).get(
+                "primary_minus_baseline_query_local_utility"
             ),
             "blocking_families": blocking_families,
             "persistent_negative_query_local_components": negative_components,
@@ -762,7 +715,7 @@ def build_workload_component_compatibility_diagnostic(
                 "Grouped strict evidence points to workload/scoring compatibility, not "
                 "another segment-budget proxy. Families with negative usefulness and "
                 "missed ship evidence should drive the next workload/profile and "
-                "QueryUsefulV1 component recalibration checkpoint."
+                "QueryLocalUtility component recalibration checkpoint."
             ),
         },
     }

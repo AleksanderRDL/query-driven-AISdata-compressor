@@ -46,6 +46,7 @@ class MethodScore:
     geometric_distortion: dict[str, float] = field(default_factory=dict)
     avg_length_preserved: float = 1.0
     combined_query_shape_score: float = 0.0
+    query_point_recall: float = 0.0
     range_point_f1: float = 0.0
     range_ship_f1: float = 0.0
     range_ship_coverage: float = 0.0
@@ -65,9 +66,9 @@ class MethodScore:
     range_usefulness_gap_min_score: float = 0.0
     range_usefulness_schema_version: int = 0
     range_usefulness_gap_ablation_version: int = 0
-    query_useful_v1_score: float = 0.0
-    query_useful_v1_schema_version: int = 0
-    query_useful_v1_components: dict[str, float] = field(default_factory=dict)
+    query_local_utility_score: float = 0.0
+    query_local_utility_schema_version: int = 0
+    query_local_utility_components: dict[str, float] = field(default_factory=dict)
     range_audit: dict[str, Any] = field(default_factory=dict)
     retained_mask: torch.Tensor | None = None
 

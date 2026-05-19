@@ -32,7 +32,7 @@ from orchestration.selector_diagnostics import (
     neutral_segment_scores_for_ablation,
     query_free_retained_removal_teacher_proxy_vectors,
     query_prior_component_vectors_for_points,
-    retained_decision_marginal_query_useful_diagnostics,
+    retained_decision_marginal_query_local_utility_diagnostics,
     selector_segment_score_source_label,
     separated_marginal_teacher_selector_score_vectors,
 )
@@ -53,14 +53,14 @@ def _compact_selection_retained_marginal_teacher_summary(
 ) -> dict[str, Any]:
     source_path = (
         "selector_trace_diagnostics.selection_primary."
-        "retained_decision_marginal_query_useful_alignment"
+        "retained_decision_marginal_query_local_utility_alignment"
     )
     summary_keys = (
         "available",
         "diagnostic_only",
-        "exact_query_useful_v1_marginals",
+        "exact_query_local_utility_marginals",
         "performance_mode",
-        "primary_query_useful_v1",
+        "primary_query_local_utility",
         "retained_count",
         "point_count",
         "max_retained_per_source",
@@ -283,8 +283,8 @@ def build_selection_causality_diagnostics(
                 if selection_query_cache is not None
                 else selection_points.detach().cpu().float()
             )
-            trace["retained_decision_marginal_query_useful_alignment"] = (
-                retained_decision_marginal_query_useful_diagnostics(
+            trace["retained_decision_marginal_query_local_utility_alignment"] = (
+                retained_decision_marginal_query_local_utility_diagnostics(
                     points=marginal_points,
                     boundaries=selection_boundaries,
                     typed_queries=selection_workload.typed_queries,
@@ -311,7 +311,7 @@ def build_selection_causality_diagnostics(
             )
             selection_marginal_teacher_summary = (
                 _compact_selection_retained_marginal_teacher_summary(
-                    trace["retained_decision_marginal_query_useful_alignment"]
+                    trace["retained_decision_marginal_query_local_utility_alignment"]
                 )
             )
             selection_selector_trace = trace
@@ -324,7 +324,7 @@ def build_selection_causality_diagnostics(
                 "error": str(exc),
                 "source_path": (
                     "selector_trace_diagnostics.selection_primary."
-                    "retained_decision_marginal_query_useful_alignment"
+                    "retained_decision_marginal_query_local_utility_alignment"
                 ),
             }
             selection_selector_trace = {
@@ -348,7 +348,7 @@ def build_selection_causality_diagnostics(
     )
     if selection_selector_trace is not None:
         retained_marginal = selection_selector_trace.get(
-            "retained_decision_marginal_query_useful_alignment"
+            "retained_decision_marginal_query_local_utility_alignment"
         )
         separated_summary = (
             retained_marginal.get("separated_marginal_teacher_summary")
@@ -1040,12 +1040,12 @@ def build_selection_causality_diagnostics(
         teacher_score = ablation_scores[separated_teacher_method_name]
         separated_teacher_selector_diagnostic.update(
             {
-                "query_useful_v1_score": float(teacher_score.query_useful_v1_score),
-                "primary_query_useful_v1_delta": float(
-                    primary_score.query_useful_v1_score - teacher_score.query_useful_v1_score
+                "query_local_utility_score": float(teacher_score.query_local_utility_score),
+                "primary_query_local_utility_delta": float(
+                    primary_score.query_local_utility_score - teacher_score.query_local_utility_score
                 ),
-                "teacher_minus_primary_query_useful_v1": float(
-                    teacher_score.query_useful_v1_score - primary_score.query_useful_v1_score
+                "teacher_minus_primary_query_local_utility": float(
+                    teacher_score.query_local_utility_score - primary_score.query_local_utility_score
                 ),
                 "mask_diagnostics": mask_diagnostics.get(separated_teacher_method_name),
             }
@@ -1058,12 +1058,12 @@ def build_selection_causality_diagnostics(
             hybrid_score = ablation_scores[method_name]
             method_diag.update(
                 {
-                    "query_useful_v1_score": float(hybrid_score.query_useful_v1_score),
-                    "primary_query_useful_v1_delta": float(
-                        primary_score.query_useful_v1_score - hybrid_score.query_useful_v1_score
+                    "query_local_utility_score": float(hybrid_score.query_local_utility_score),
+                    "primary_query_local_utility_delta": float(
+                        primary_score.query_local_utility_score - hybrid_score.query_local_utility_score
                     ),
-                    "teacher_minus_primary_query_useful_v1": float(
-                        hybrid_score.query_useful_v1_score - primary_score.query_useful_v1_score
+                    "teacher_minus_primary_query_local_utility": float(
+                        hybrid_score.query_local_utility_score - primary_score.query_local_utility_score
                     ),
                     "mask_diagnostics": mask_diagnostics.get(method_name),
                 }
@@ -1076,7 +1076,7 @@ def build_selection_causality_diagnostics(
     )
     for name, tradeoff_diagnostics in payload["tradeoff_diagnostics"].items():
         if name in head_sensitivity:
-            head_sensitivity[name]["query_useful_component_tradeoff"] = tradeoff_diagnostics
+            head_sensitivity[name]["query_local_utility_component_tradeoff"] = tradeoff_diagnostics
     payload.update(
         {
             "split": "checkpoint_selection",

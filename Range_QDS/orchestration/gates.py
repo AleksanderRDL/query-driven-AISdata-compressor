@@ -8,7 +8,7 @@ import torch
 
 from config.run_config import RunConfig
 from learning.query_prior_fields import QUERY_PRIOR_FIELD_NAMES, sample_query_prior_fields
-from learning.targets.query_useful_v1 import QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE
+from learning.targets.query_local_utility import QUERY_LOCAL_UTILITY_FACTORIZED_TARGET_MODE
 from scoring.geometry_thresholds import (
     FINAL_LENGTH_PRESERVATION_MAX,
     FINAL_LENGTH_PRESERVATION_MIN,
@@ -16,7 +16,7 @@ from scoring.geometry_thresholds import (
 )
 from scoring.metrics import MethodScore
 from workloads.generation.workload_profiles import (
-    RANGE_WORKLOAD_V1_FINAL_PROFILE_IDS,
+    RANGE_QUERY_MIX_FINAL_PROFILE_IDS,
     normalize_workload_profile_id,
 )
 
@@ -185,7 +185,7 @@ def evaluate_workload_stability_gate(
     min_train_replicates = 4
     min_queries_per_workload = 8
     gate_mode = str(getattr(config.query, "workload_stability_gate_mode", "final")).lower()
-    allowed_workload_profile_ids = RANGE_WORKLOAD_V1_FINAL_PROFILE_IDS
+    allowed_workload_profile_ids = RANGE_QUERY_MIX_FINAL_PROFILE_IDS
     required_profile_id = normalize_workload_profile_id(
         getattr(config.query, "workload_profile_id", None)
     )
@@ -424,12 +424,12 @@ def evaluate_target_diffusion_gate(target_diagnostics: dict[str, Any]) -> dict[s
     low_budget_key = "0.05"
     failed_checks: list[str] = []
 
-    factorized = target_diagnostics.get(QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE)
+    factorized = target_diagnostics.get(QUERY_LOCAL_UTILITY_FACTORIZED_TARGET_MODE)
     if not isinstance(factorized, dict):
         return {
             "schema_version": 1,
             "gate_pass": False,
-            "failed_checks": ["query_useful_v1_factorized_diagnostics_missing"],
+            "failed_checks": ["query_local_utility_factorized_diagnostics_missing"],
             "final_support_threshold_key": final_support_threshold_key,
             "max_support_fraction": max_support_fraction,
             "min_top5_label_mass_fraction": min_top5_mass_fraction,

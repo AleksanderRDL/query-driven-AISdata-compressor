@@ -1,4 +1,4 @@
-"""Factorized workload-blind range model for QueryUsefulV1."""
+"""Factorized workload-blind range model for QueryLocalUtility."""
 
 from __future__ import annotations
 
@@ -6,9 +6,9 @@ import torch
 import torch.nn as nn
 
 from learning.query_prior_fields import QUERY_PRIOR_FIELD_NAMES
-from learning.targets.query_useful_v1 import (
-    QUERY_USEFUL_V1_HEAD_NAMES,
-    query_useful_v1_point_score,
+from learning.targets.query_local_utility import (
+    QUERY_LOCAL_UTILITY_HEAD_NAMES,
+    query_local_utility_point_score,
 )
 from models.positional_encoding import CachedSinusoidalPositionalEncodingMixin
 
@@ -22,7 +22,7 @@ class WorkloadBlindRangeV2Model(CachedSinusoidalPositionalEncodingMixin, nn.Modu
     """Small trainable factorized scorer for query-driven blind simplification."""
 
     workload_blind = True
-    factorized_query_useful_v1 = True
+    factorized_query_local_utility = True
 
     def __init__(
         self,
@@ -43,7 +43,7 @@ class WorkloadBlindRangeV2Model(CachedSinusoidalPositionalEncodingMixin, nn.Modu
         self.query_chunk_size = int(query_chunk_size)
         self.num_layers = max(0, int(num_layers))
         self.prior_feature_dim = min(WORKLOAD_BLIND_RANGE_V2_PRIOR_FEATURE_DIM, self.point_dim)
-        self.head_names = tuple(QUERY_USEFUL_V1_HEAD_NAMES)
+        self.head_names = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES)
         self.register_buffer("_positional_encoding_cache", torch.empty(0), persistent=False)
 
         self.point_encoder = nn.Sequential(
@@ -148,7 +148,7 @@ class WorkloadBlindRangeV2Model(CachedSinusoidalPositionalEncodingMixin, nn.Modu
             or "marginal_replacement_gain" in disabled
         ):
             replacement = torch.full_like(replacement, 0.5)
-        interpretable_score = query_useful_v1_point_score(
+        interpretable_score = query_local_utility_point_score(
             q_hit=q_hit,
             behavior=behavior,
             boundary=boundary,

@@ -12,18 +12,18 @@ from typing import Any, cast
 from orchestration.selection_eval_segment_teacher_transfer_diagnostic import (
     EVAL_TRACE_NAME,
     SELECTION_TRACE_NAME,
-    _as_bool,
-    _as_dict,
-    _as_float,
-    _feature_topk_target_lift,
-    _gate_summary,
-    _mean,
-    _score_summary,
-    _segment_rows,
-    _spearman,
-    _target_vector,
-    _teacher_segment_targets,
-    _trace,
+    as_bool,
+    as_dict,
+    as_float,
+    feature_topk_target_lift,
+    gate_summary,
+    mean,
+    score_summary,
+    segment_rows,
+    spearman,
+    target_vector,
+    teacher_segment_targets,
+    trace,
 )
 
 PRE_SELECTION_FEATURES = frozenset(
@@ -66,7 +66,7 @@ def _zscore(values: list[float]) -> list[float]:
 def _feature_values(rows: list[dict[str, Any]], feature: str) -> list[float] | None:
     out: list[float] = []
     for row in rows:
-        value = _as_float(row.get(feature))
+        value = as_float(row.get(feature))
         if value is None:
             return None
         out.append(value)
@@ -97,7 +97,7 @@ def _lift_for_candidate(
         copied = dict(row)
         copied[synthetic_feature] = value
         rows_with_score.append(copied)
-    return _feature_topk_target_lift(
+    return feature_topk_target_lift(
         rows=rows_with_score,
         targets=targets,
         feature=synthetic_feature,
@@ -199,10 +199,10 @@ def _candidate_split_metrics(
     targets: dict[int, float],
     values: list[float],
 ) -> dict[str, Any]:
-    target_values = _target_vector(rows, targets)
+    target_values = target_vector(rows, targets)
     return {
-        "spearman_with_segment_teacher_target": _spearman(values, target_values),
-        "score_mean": _mean(values),
+        "spearman_with_segment_teacher_target": spearman(values, target_values),
+        "score_mean": mean(values),
         "score_std": _std(values),
         "topk_target_lift": {
             str(fraction): _lift_for_candidate(
@@ -251,17 +251,17 @@ def _candidate_summary(
         targets=eval_targets,
         values=eval_values,
     )
-    selection_spearman = _as_float(
+    selection_spearman = as_float(
         selection_metrics.get("spearman_with_segment_teacher_target")
     )
-    eval_spearman = _as_float(eval_metrics.get("spearman_with_segment_teacher_target"))
-    selection_top5 = _as_float(
-        _as_dict(_as_dict(selection_metrics.get("topk_target_lift")).get("0.05")).get(
+    eval_spearman = as_float(eval_metrics.get("spearman_with_segment_teacher_target"))
+    selection_top5 = as_float(
+        as_dict(as_dict(selection_metrics.get("topk_target_lift")).get("0.05")).get(
             "top_target_lift"
         )
     )
-    eval_top5 = _as_float(
-        _as_dict(_as_dict(eval_metrics.get("topk_target_lift")).get("0.05")).get(
+    eval_top5 = as_float(
+        as_dict(as_dict(eval_metrics.get("topk_target_lift")).get("0.05")).get(
             "top_target_lift"
         )
     )
@@ -300,18 +300,18 @@ def _feature_coupling_summary(candidate_rows: list[dict[str, Any]]) -> dict[str,
     post_positive = [
         row
         for row in candidate_rows
-        if _as_bool(row.get("available")) is True
-        and _as_bool(_as_dict(row.get("classification")).get("uses_post_selection_coupling"))
+        if as_bool(row.get("available")) is True
+        and as_bool(as_dict(row.get("classification")).get("uses_post_selection_coupling"))
         is True
-        and _as_float(
-            _as_dict(row.get("selection_metrics")).get(
+        and as_float(
+            as_dict(row.get("selection_metrics")).get(
                 "spearman_with_segment_teacher_target"
             )
         )
         is not None
         and (
-            _as_float(
-                _as_dict(row.get("selection_metrics")).get(
+            as_float(
+                as_dict(row.get("selection_metrics")).get(
                     "spearman_with_segment_teacher_target"
                 )
             )
@@ -319,8 +319,8 @@ def _feature_coupling_summary(candidate_rows: list[dict[str, Any]]) -> dict[str,
         )
         > 0.0
         and (
-            _as_float(
-                _as_dict(row.get("eval_metrics")).get(
+            as_float(
+                as_dict(row.get("eval_metrics")).get(
                     "spearman_with_segment_teacher_target"
                 )
             )
@@ -340,12 +340,12 @@ def _feature_coupling_summary(candidate_rows: list[dict[str, Any]]) -> dict[str,
 
 
 def _artifact_summary(label: str, artifact: dict[str, Any]) -> dict[str, Any]:
-    selection_trace = _trace(artifact, SELECTION_TRACE_NAME)
-    eval_trace = _trace(artifact, EVAL_TRACE_NAME)
-    selection_rows = _segment_rows(selection_trace)
-    eval_rows = _segment_rows(eval_trace)
-    selection_targets = _teacher_segment_targets(selection_trace)
-    eval_targets = _teacher_segment_targets(eval_trace)
+    selection_trace = trace(artifact, SELECTION_TRACE_NAME)
+    eval_trace = trace(artifact, EVAL_TRACE_NAME)
+    selection_rows = segment_rows(selection_trace)
+    eval_rows = segment_rows(eval_trace)
+    selection_targets = teacher_segment_targets(selection_trace)
+    eval_targets = teacher_segment_targets(eval_trace)
     candidate_rows = [
         _candidate_summary(
             candidate,
@@ -356,16 +356,16 @@ def _artifact_summary(label: str, artifact: dict[str, Any]) -> dict[str, Any]:
         )
         for candidate in TRANSFER_CANDIDATES
     ]
-    selection_teacher = _as_dict(
-        _as_dict(_as_dict(selection_trace.get("retained_decision_marginal_query_useful_alignment")).get("separated_marginal_teacher_summary"))
+    selection_teacher = as_dict(
+        as_dict(as_dict(selection_trace.get("retained_decision_marginal_query_local_utility_alignment")).get("separated_marginal_teacher_summary"))
     )
     return {
         "label": label,
-        "scores": _score_summary(artifact),
-        "gates": _gate_summary(artifact),
+        "scores": score_summary(artifact),
+        "gates": gate_summary(artifact),
         "selection_teacher": {
-            "available": _as_bool(selection_teacher.get("available")),
-            "candidate_for_train_side_teacher": _as_bool(
+            "available": as_bool(selection_teacher.get("available")),
+            "candidate_for_train_side_teacher": as_bool(
                 selection_teacher.get("candidate_for_train_side_teacher")
             ),
             "segment_target_count": selection_teacher.get("segment_target_count"),
@@ -378,7 +378,7 @@ def _artifact_summary(label: str, artifact: dict[str, Any]) -> dict[str, Any]:
 
 
 def _decision(summary: dict[str, Any]) -> str:
-    coupling = _as_dict(summary.get("feature_coupling_summary"))
+    coupling = as_dict(summary.get("feature_coupling_summary"))
     admissible_count = int(coupling.get("admissible_candidate_count") or 0)
     post_positive_count = int(coupling.get("post_selection_positive_candidate_count") or 0)
     if admissible_count > 0:

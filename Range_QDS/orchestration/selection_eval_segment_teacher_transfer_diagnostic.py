@@ -13,7 +13,7 @@ BASELINE_METHOD = "DouglasPeucker"
 SELECTOR_TRACE_PATH = "selector_trace_diagnostics"
 SELECTION_TRACE_NAME = "selection_primary"
 EVAL_TRACE_NAME = "eval_primary"
-MARGINAL_ALIGNMENT_KEY = "retained_decision_marginal_query_useful_alignment"
+MARGINAL_ALIGNMENT_KEY = "retained_decision_marginal_query_local_utility_alignment"
 SEGMENT_FEATURES = (
     "segment_score",
     "segment_allocation_weight",
@@ -27,7 +27,7 @@ LOW_TOP_OVERLAP_MAX = 0.10
 WEAK_SPEARMAN_ABS_MAX = 0.05
 
 
-def _as_dict(value: Any) -> dict[str, Any]:
+def as_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
@@ -35,7 +35,7 @@ def _as_list(value: Any) -> list[Any]:
     return value if isinstance(value, list) else []
 
 
-def _as_float(value: Any) -> float | None:
+def as_float(value: Any) -> float | None:
     if isinstance(value, bool):
         return float(value)
     if isinstance(value, int | float):
@@ -44,11 +44,11 @@ def _as_float(value: Any) -> float | None:
     return None
 
 
-def _as_bool(value: Any) -> bool | None:
+def as_bool(value: Any) -> bool | None:
     return value if isinstance(value, bool) else None
 
 
-def _mean(values: list[float]) -> float | None:
+def mean(values: list[float]) -> float | None:
     return None if not values else float(sum(values) / len(values))
 
 
@@ -90,28 +90,28 @@ def _pearson(left: list[float], right: list[float]) -> float | None:
     return float(numerator / (left_denom * right_denom))
 
 
-def _spearman(left: list[float], right: list[float]) -> float | None:
+def spearman(left: list[float], right: list[float]) -> float | None:
     if len(left) != len(right) or len(left) < 2:
         return None
     return _pearson(_rankdata(left), _rankdata(right))
 
 
-def _score_summary(artifact: dict[str, Any]) -> dict[str, float | None]:
-    matched = _as_dict(artifact.get("matched"))
-    primary = _as_dict(matched.get(PRIMARY_METHOD))
-    uniform = _as_dict(matched.get("uniform"))
-    baseline = _as_dict(matched.get(BASELINE_METHOD))
-    primary_score = _as_float(primary.get("query_useful_v1_score"))
-    uniform_score = _as_float(uniform.get("query_useful_v1_score"))
-    baseline_score = _as_float(baseline.get("query_useful_v1_score"))
+def score_summary(artifact: dict[str, Any]) -> dict[str, float | None]:
+    matched = as_dict(artifact.get("matched"))
+    primary = as_dict(matched.get(PRIMARY_METHOD))
+    uniform = as_dict(matched.get("uniform"))
+    baseline = as_dict(matched.get(BASELINE_METHOD))
+    primary_score = as_float(primary.get("query_local_utility_score"))
+    uniform_score = as_float(uniform.get("query_local_utility_score"))
+    baseline_score = as_float(baseline.get("query_local_utility_score"))
     return {
-        "primary_query_useful_v1": primary_score,
-        "uniform_query_useful_v1": uniform_score,
-        "baseline_query_useful_v1": baseline_score,
-        "primary_minus_uniform_query_useful_v1": (
+        "primary_query_local_utility": primary_score,
+        "uniform_query_local_utility": uniform_score,
+        "baseline_query_local_utility": baseline_score,
+        "primary_minus_uniform_query_local_utility": (
             None if primary_score is None or uniform_score is None else primary_score - uniform_score
         ),
-        "primary_minus_baseline_query_useful_v1": (
+        "primary_minus_baseline_query_local_utility": (
             None
             if primary_score is None or baseline_score is None
             else primary_score - baseline_score
@@ -119,53 +119,53 @@ def _score_summary(artifact: dict[str, Any]) -> dict[str, float | None]:
     }
 
 
-def _gate_summary(artifact: dict[str, Any]) -> dict[str, bool | None]:
-    workload_signature = _as_dict(
-        _as_dict(artifact.get("workload_distribution_comparison")).get(
+def gate_summary(artifact: dict[str, Any]) -> dict[str, bool | None]:
+    workload_signature = as_dict(
+        as_dict(artifact.get("workload_distribution_comparison")).get(
             "workload_signature_gate"
         )
     )
     return {
-        "workload_stability": _as_bool(
-            _as_dict(artifact.get("workload_stability_gate")).get("gate_pass")
+        "workload_stability": as_bool(
+            as_dict(artifact.get("workload_stability_gate")).get("gate_pass")
         ),
-        "support_overlap": _as_bool(
-            _as_dict(artifact.get("support_overlap_gate")).get("gate_pass")
+        "support_overlap": as_bool(
+            as_dict(artifact.get("support_overlap_gate")).get("gate_pass")
         ),
-        "target_diffusion": _as_bool(
-            _as_dict(artifact.get("target_diffusion_gate")).get("gate_pass")
+        "target_diffusion": as_bool(
+            as_dict(artifact.get("target_diffusion_gate")).get("gate_pass")
         ),
-        "workload_signature": _as_bool(workload_signature.get("all_pass")),
-        "predictability": _as_bool(_as_dict(artifact.get("predictability_audit")).get("gate_pass")),
-        "learning_causality": _as_bool(
-            _as_dict(artifact.get("learning_causality_summary")).get(
+        "workload_signature": as_bool(workload_signature.get("all_pass")),
+        "predictability": as_bool(as_dict(artifact.get("predictability_audit")).get("gate_pass")),
+        "learning_causality": as_bool(
+            as_dict(artifact.get("learning_causality_summary")).get(
                 "learning_causality_gate_pass"
             )
         ),
-        "global_sanity": _as_bool(_as_dict(artifact.get("global_sanity_gate")).get("gate_pass")),
-        "final_success_allowed": _as_bool(
-            _as_dict(artifact.get("final_claim_summary")).get("final_success_allowed")
+        "global_sanity": as_bool(as_dict(artifact.get("global_sanity_gate")).get("gate_pass")),
+        "final_success_allowed": as_bool(
+            as_dict(artifact.get("final_claim_summary")).get("final_success_allowed")
         ),
     }
 
 
-def _trace(artifact: dict[str, Any], name: str) -> dict[str, Any]:
-    return _as_dict(_as_dict(artifact.get(SELECTOR_TRACE_PATH)).get(name))
+def trace(artifact: dict[str, Any], name: str) -> dict[str, Any]:
+    return as_dict(as_dict(artifact.get(SELECTOR_TRACE_PATH)).get(name))
 
 
 def _alignment(trace: dict[str, Any]) -> dict[str, Any]:
-    return _as_dict(trace.get(MARGINAL_ALIGNMENT_KEY))
+    return as_dict(trace.get(MARGINAL_ALIGNMENT_KEY))
 
 
 def _teacher_summary(trace: dict[str, Any]) -> dict[str, Any]:
-    separated = _as_dict(_alignment(trace).get("separated_marginal_teacher_summary"))
+    separated = as_dict(_alignment(trace).get("separated_marginal_teacher_summary"))
     return {
-        "available": _as_bool(separated.get("available")),
+        "available": as_bool(separated.get("available")),
         "teacher_usage_split": separated.get("teacher_usage_split"),
-        "teacher_target_shape_viable": _as_bool(
+        "teacher_target_shape_viable": as_bool(
             separated.get("teacher_target_shape_viable")
         ),
-        "candidate_for_train_side_teacher": _as_bool(
+        "candidate_for_train_side_teacher": as_bool(
             separated.get("candidate_for_train_side_teacher")
         ),
         "candidate_for_train_side_teacher_reason": separated.get(
@@ -176,25 +176,25 @@ def _teacher_summary(trace: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _segment_rows(trace: dict[str, Any]) -> list[dict[str, Any]]:
-    rows = _as_list(_as_dict(trace.get("segment_source_attribution")).get("rows"))
+def segment_rows(trace: dict[str, Any]) -> list[dict[str, Any]]:
+    rows = _as_list(as_dict(trace.get("segment_source_attribution")).get("rows"))
     return [row for row in rows if isinstance(row, dict)]
 
 
-def _teacher_segment_targets(trace: dict[str, Any]) -> dict[int, float]:
-    separated = _as_dict(_alignment(trace).get("separated_marginal_teacher_summary"))
+def teacher_segment_targets(trace: dict[str, Any]) -> dict[int, float]:
+    separated = as_dict(_alignment(trace).get("separated_marginal_teacher_summary"))
     targets: dict[int, float] = {}
     for row in _as_list(separated.get("segment_target_rows")):
         if not isinstance(row, dict):
             continue
         segment_index = row.get("segment_index")
-        target = _as_float(row.get("segment_target"))
+        target = as_float(row.get("segment_target"))
         if isinstance(segment_index, int) and target is not None:
             targets[segment_index] = max(targets.get(segment_index, 0.0), target)
     return targets
 
 
-def _target_vector(rows: list[dict[str, Any]], targets: dict[int, float]) -> list[float]:
+def target_vector(rows: list[dict[str, Any]], targets: dict[int, float]) -> list[float]:
     out: list[float] = []
     for row in rows:
         segment_index = row.get("segment_index")
@@ -205,7 +205,7 @@ def _target_vector(rows: list[dict[str, Any]], targets: dict[int, float]) -> lis
 def _feature_vector(rows: list[dict[str, Any]], feature: str) -> list[float] | None:
     values: list[float] = []
     for row in rows:
-        value = _as_float(row.get(feature))
+        value = as_float(row.get(feature))
         if value is None:
             return None
         values.append(value)
@@ -239,13 +239,13 @@ def _feature_values_by_segment(
     out: dict[int, float] = {}
     for row in rows:
         segment_index = row.get("segment_index")
-        value = _as_float(row.get(feature))
+        value = as_float(row.get(feature))
         if isinstance(segment_index, int) and value is not None:
             out[segment_index] = value
     return out
 
 
-def _feature_topk_target_lift(
+def feature_topk_target_lift(
     *,
     rows: list[dict[str, Any]],
     targets: dict[int, float],
@@ -256,8 +256,8 @@ def _feature_topk_target_lift(
     top_segments = _top_indices_by_values(values_by_segment, fraction=fraction)
     all_targets = [targets.get(segment, 0.0) for segment in values_by_segment]
     top_targets = [targets.get(segment, 0.0) for segment in top_segments]
-    base_mean = _mean(all_targets)
-    top_mean = _mean(top_targets)
+    base_mean = mean(all_targets)
+    top_mean = mean(top_targets)
     return {
         "fraction": fraction,
         "top_segment_count": len(top_segments),
@@ -272,9 +272,9 @@ def _feature_topk_target_lift(
 
 
 def _split_feature_alignment(trace: dict[str, Any]) -> dict[str, Any]:
-    rows = _segment_rows(trace)
-    targets = _teacher_segment_targets(trace)
-    target_values = _target_vector(rows, targets)
+    rows = segment_rows(trace)
+    targets = teacher_segment_targets(trace)
+    target_values = target_vector(rows, targets)
     feature_rows: dict[str, Any] = {}
     for feature in SEGMENT_FEATURES:
         feature_values = _feature_vector(rows, feature)
@@ -283,10 +283,10 @@ def _split_feature_alignment(trace: dict[str, Any]) -> dict[str, Any]:
             continue
         feature_rows[feature] = {
             "available": True,
-            "spearman_with_segment_teacher_target": _spearman(feature_values, target_values),
+            "spearman_with_segment_teacher_target": spearman(feature_values, target_values),
             "pearson_with_segment_teacher_target": _pearson(feature_values, target_values),
             "topk_target_lift": {
-                str(fraction): _feature_topk_target_lift(
+                str(fraction): feature_topk_target_lift(
                     rows=rows,
                     targets=targets,
                     feature=feature,
@@ -302,7 +302,7 @@ def _split_feature_alignment(trace: dict[str, Any]) -> dict[str, Any]:
         "positive_segment_target_fraction": (
             None if not rows else len(positive_targets) / len(rows)
         ),
-        "segment_teacher_target_mean": _mean(target_values),
+        "segment_teacher_target_mean": mean(target_values),
         "segment_teacher_target_std": _std(target_values),
         "feature_alignment": feature_rows,
     }
@@ -338,7 +338,7 @@ def _target_overlap(
     common_segments = sorted(set(selection_targets) | set(eval_targets))
     selection_values = [selection_targets.get(segment, 0.0) for segment in common_segments]
     eval_values = [eval_targets.get(segment, 0.0) for segment in common_segments]
-    out["selection_eval_teacher_target_spearman"] = _spearman(selection_values, eval_values)
+    out["selection_eval_teacher_target_spearman"] = spearman(selection_values, eval_values)
     out["selection_eval_teacher_target_pearson"] = _pearson(selection_values, eval_values)
     return out
 
@@ -347,19 +347,19 @@ def _feature_transfer_summary(
     selection_alignment: dict[str, Any],
     eval_alignment: dict[str, Any],
 ) -> dict[str, Any]:
-    selection_features = _as_dict(selection_alignment.get("feature_alignment"))
-    eval_features = _as_dict(eval_alignment.get("feature_alignment"))
+    selection_features = as_dict(selection_alignment.get("feature_alignment"))
+    eval_features = as_dict(eval_alignment.get("feature_alignment"))
     rows: list[dict[str, Any]] = []
     consistent_positive = 0
     contradictory = 0
     weak_both = 0
     for feature in SEGMENT_FEATURES:
-        selection_feature = _as_dict(selection_features.get(feature))
-        eval_feature = _as_dict(eval_features.get(feature))
-        selection_spearman = _as_float(
+        selection_feature = as_dict(selection_features.get(feature))
+        eval_feature = as_dict(eval_features.get(feature))
+        selection_spearman = as_float(
             selection_feature.get("spearman_with_segment_teacher_target")
         )
-        eval_spearman = _as_float(eval_feature.get("spearman_with_segment_teacher_target"))
+        eval_spearman = as_float(eval_feature.get("spearman_with_segment_teacher_target"))
         if selection_spearman is None or eval_spearman is None:
             status = "missing"
         elif (
@@ -393,16 +393,16 @@ def _feature_transfer_summary(
 
 
 def _artifact_summary(label: str, artifact: dict[str, Any]) -> dict[str, Any]:
-    selection_trace = _trace(artifact, SELECTION_TRACE_NAME)
-    eval_trace = _trace(artifact, EVAL_TRACE_NAME)
-    selection_targets = _teacher_segment_targets(selection_trace)
-    eval_targets = _teacher_segment_targets(eval_trace)
+    selection_trace = trace(artifact, SELECTION_TRACE_NAME)
+    eval_trace = trace(artifact, EVAL_TRACE_NAME)
+    selection_targets = teacher_segment_targets(selection_trace)
+    eval_targets = teacher_segment_targets(eval_trace)
     selection_alignment = _split_feature_alignment(selection_trace)
     eval_alignment = _split_feature_alignment(eval_trace)
     return {
         "label": label,
-        "scores": _score_summary(artifact),
-        "gates": _gate_summary(artifact),
+        "scores": score_summary(artifact),
+        "gates": gate_summary(artifact),
         "selection_teacher": _teacher_summary(selection_trace),
         "eval_teacher": _teacher_summary(eval_trace),
         "target_overlap": _target_overlap(selection_targets, eval_targets),
@@ -415,13 +415,13 @@ def _artifact_summary(label: str, artifact: dict[str, Any]) -> dict[str, Any]:
 
 
 def _decision(summary: dict[str, Any]) -> str:
-    selection_teacher = _as_dict(summary.get("selection_teacher"))
+    selection_teacher = as_dict(summary.get("selection_teacher"))
     if selection_teacher.get("candidate_for_train_side_teacher") is not True:
         return "add_split_eligible_selection_teacher_before_transfer_diagnosis"
-    overlap = _as_dict(summary.get("target_overlap"))
-    feature_transfer = _as_dict(summary.get("feature_transfer_summary"))
-    top_overlap = _as_float(overlap.get("top_0.1_overlap_fraction_of_selection"))
-    target_spearman = _as_float(overlap.get("selection_eval_teacher_target_spearman"))
+    overlap = as_dict(summary.get("target_overlap"))
+    feature_transfer = as_dict(summary.get("feature_transfer_summary"))
+    top_overlap = as_float(overlap.get("top_0.1_overlap_fraction_of_selection"))
+    target_spearman = as_float(overlap.get("selection_eval_teacher_target_spearman"))
     consistent_positive = int(feature_transfer.get("consistent_positive_feature_count") or 0)
     contradictory = int(feature_transfer.get("contradictory_feature_count") or 0)
     if (

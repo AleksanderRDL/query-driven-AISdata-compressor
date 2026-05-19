@@ -95,10 +95,10 @@ def _family_group_comparison(
             baseline_components.get(key, 0.0)
         )
     primary_query_local = float(
-        primary_group.get("query_useful_v1_query_local_weighted_score_normalized", 0.0)
+        primary_group.get("query_local_utility_query_local_weighted_score_normalized", 0.0)
     )
     baseline_query_local = float(
-        baseline_group.get("query_useful_v1_query_local_weighted_score_normalized", 0.0)
+        baseline_group.get("query_local_utility_query_local_weighted_score_normalized", 0.0)
     )
     primary_ship_evidence = primary_group.get("ship_evidence_counts")
     baseline_ship_evidence = baseline_group.get("ship_evidence_counts")

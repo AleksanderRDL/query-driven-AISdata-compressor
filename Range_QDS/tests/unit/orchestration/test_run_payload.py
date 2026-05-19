@@ -28,7 +28,7 @@ def _family_component_summary(score: float) -> dict[str, Any]:
         "query_count": 1,
         "range_components": {"range_point_f1": score},
         "range_usefulness_score": score,
-        "query_useful_v1_query_local_weighted_score_normalized": score,
+        "query_local_utility_query_local_weighted_score_normalized": score,
         "ship_evidence_counts": {
             "full_trajectory_hit_count_total": 10,
             "retained_trajectory_hit_count_total": int(score * 10),
@@ -39,7 +39,7 @@ def _family_component_summary(score: float) -> dict[str, Any]:
     return {
         "available": True,
         "group_by": {
-            "anchor_family": {"density_route": group},
+            "anchor_family": {"density": group},
             "footprint_family": {},
             "anchor_footprint_family": {},
         },
@@ -68,7 +68,7 @@ def test_workload_scoring_compatibility_diagnostics_compares_family_components()
 
     assert diagnostics["available"] is True
     comparison = diagnostics["comparisons_vs_baseline"]["uniform"]["anchor_family"][
-        "density_route"
+        "density"
     ]
     assert comparison["query_local_score_delta"] == 0.19999999999999996
     assert comparison["range_component_deltas"]["range_point_f1"] == 0.19999999999999996

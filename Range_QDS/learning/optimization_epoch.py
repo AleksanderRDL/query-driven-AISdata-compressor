@@ -22,7 +22,7 @@ from learning.losses import (
     _ranking_loss_for_type,
 )
 from learning.supervised_windows import _trajectory_batch_to_device
-from learning.targets.query_useful_v1 import QUERY_USEFUL_V1_HEAD_NAMES
+from learning.targets.query_local_utility import QUERY_LOCAL_UTILITY_HEAD_NAMES
 from learning.trajectory_batching import TrajectoryBatch
 from runtime.torch_runtime import torch_autocast_context
 from workloads.query_types import NUM_QUERY_TYPES
@@ -53,7 +53,7 @@ class TrainingEpochResult:
     timing: dict[str, float]
 
 
-def _factorized_query_useful_loss(
+def _factorized_query_local_utility_loss(
     *,
     head_logits: torch.Tensor,
     head_targets: torch.Tensor,
@@ -67,7 +67,7 @@ def _factorized_query_useful_loss(
     sparse_head_rank_loss_weight: float = 0.0,
     sparse_head_bce_target_mode: str = "raw",
 ) -> torch.Tensor:
-    """Return auxiliary multi-head QueryUsefulV1 loss for v2 models."""
+    """Return auxiliary multi-head QueryLocalUtility loss for v2 models."""
     if head_logits.shape != head_targets.shape or head_mask.shape != head_logits.shape:
         raise ValueError("factorized head logits, targets, and mask must have matching shape.")
     valid = head_mask.to(dtype=torch.bool)
@@ -94,8 +94,8 @@ def _factorized_query_useful_loss(
         "segment_budget_target": segment_weight,
         "path_length_support_target": 0.05,
     }
-    if int(head_logits.shape[-1]) == len(QUERY_USEFUL_V1_HEAD_NAMES):
-        weights = [default_weights.get(str(name), 0.05) for name in QUERY_USEFUL_V1_HEAD_NAMES]
+    if int(head_logits.shape[-1]) == len(QUERY_LOCAL_UTILITY_HEAD_NAMES):
+        weights = [default_weights.get(str(name), 0.05) for name in QUERY_LOCAL_UTILITY_HEAD_NAMES]
     else:
         weights = [1.0 for _idx in range(int(head_logits.shape[-1]))]
     head_weights = head_logits.new_tensor(weights).view(1, 1, -1)
@@ -150,7 +150,7 @@ def _sparse_head_rank_loss(
     if fraction <= 0.0:
         return head_logits.new_tensor(0.0)
     losses: list[torch.Tensor] = []
-    schema = tuple(QUERY_USEFUL_V1_HEAD_NAMES)
+    schema = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES)
     for head_name in head_names:
         try:
             head_idx = schema.index(head_name)
@@ -202,7 +202,7 @@ def _calibrated_sparse_head_bce_targets(
     if normalized_mode != "window_max_normalized":
         raise ValueError("sparse_head_bce_target_mode must be 'raw' or 'window_max_normalized'.")
     out = out.clone()
-    schema = tuple(QUERY_USEFUL_V1_HEAD_NAMES)
+    schema = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES)
     for head_name in head_names:
         try:
             head_idx = schema.index(head_name)
@@ -236,7 +236,7 @@ def _behavior_head_rank_loss(
     if head_logits.shape != head_targets.shape or head_mask.shape != head_logits.shape:
         raise ValueError("factorized head logits, targets, and mask must have matching shape.")
     try:
-        behavior_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("conditional_behavior_utility")
+        behavior_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("conditional_behavior_utility")
     except ValueError:  # pragma: no cover - constant schema guard.
         return head_logits.new_tensor(0.0)
     if int(head_logits.shape[-1]) <= behavior_idx:
@@ -410,7 +410,7 @@ def _train_one_epoch(
         batch_label_mask = labelled_mask_dev[safe_global_idx] & valid_batch
         aux_loss = pred_batch.new_tensor(0.0)
         aux_loss_weight = max(
-            0.0, float(getattr(model_config, "query_useful_aux_loss_weight", 0.50))
+            0.0, float(getattr(model_config, "query_local_utility_aux_loss_weight", 0.50))
         )
         batch_segment_ids = None
         if (
@@ -429,26 +429,26 @@ def _train_one_epoch(
                     batch_segment_ids,
                     torch.full_like(batch_segment_ids, -1),
                 )
-            aux_loss = _factorized_query_useful_loss(
+            aux_loss = _factorized_query_local_utility_loss(
                 head_logits=head_logits_batch.float(),
                 head_targets=batch_head_targets,
                 head_mask=batch_head_mask,
                 global_indices=batch_global_idx,
                 segment_ids=batch_segment_ids,
                 segment_budget_head_weight=float(
-                    getattr(model_config, "query_useful_segment_budget_head_weight", 0.10)
+                    getattr(model_config, "query_local_utility_segment_budget_head_weight", 0.10)
                 ),
                 segment_level_loss_weight=float(
-                    getattr(model_config, "query_useful_segment_level_loss_weight", 0.25)
+                    getattr(model_config, "query_local_utility_segment_level_loss_weight", 0.25)
                 ),
                 behavior_rank_loss_weight=float(
-                    getattr(model_config, "query_useful_behavior_rank_loss_weight", 0.0)
+                    getattr(model_config, "query_local_utility_behavior_rank_loss_weight", 0.0)
                 ),
                 sparse_head_rank_loss_weight=float(
-                    getattr(model_config, "query_useful_sparse_head_rank_loss_weight", 0.0)
+                    getattr(model_config, "query_local_utility_sparse_head_rank_loss_weight", 0.0)
                 ),
                 sparse_head_bce_target_mode=str(
-                    getattr(model_config, "query_useful_sparse_head_bce_target_mode", "raw")
+                    getattr(model_config, "query_local_utility_sparse_head_bce_target_mode", "raw")
                 ),
             )
         positive_row_mask = (batch_label_mask & (batch_labels > 0)).any(dim=1)

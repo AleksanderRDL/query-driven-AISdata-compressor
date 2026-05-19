@@ -701,6 +701,7 @@ def method_score_payload(metrics: MethodScore) -> dict[str, Any]:
         "geometric_distortion": metrics.geometric_distortion,
         "avg_length_preserved": metrics.avg_length_preserved,
         "combined_query_shape_score": metrics.combined_query_shape_score,
+        "query_point_recall": metrics.query_point_recall,
         "range_point_f1": metrics.range_point_f1,
         "range_ship_f1": metrics.range_ship_f1,
         "range_ship_coverage": metrics.range_ship_coverage,
@@ -720,9 +721,9 @@ def method_score_payload(metrics: MethodScore) -> dict[str, Any]:
         "range_usefulness_gap_min_score": metrics.range_usefulness_gap_min_score,
         "range_usefulness_schema_version": metrics.range_usefulness_schema_version,
         "range_usefulness_gap_ablation_version": metrics.range_usefulness_gap_ablation_version,
-        "query_useful_v1_score": metrics.query_useful_v1_score,
-        "query_useful_v1_schema_version": metrics.query_useful_v1_schema_version,
-        "query_useful_v1_components": metrics.query_useful_v1_components,
+        "query_local_utility_score": metrics.query_local_utility_score,
+        "query_local_utility_schema_version": metrics.query_local_utility_schema_version,
+        "query_local_utility_components": metrics.query_local_utility_components,
         "range_audit": metrics.range_audit,
     }
 

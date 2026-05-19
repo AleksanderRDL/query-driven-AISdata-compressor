@@ -1,4 +1,4 @@
-"""Factorized QueryUsefulV1 target construction."""
+"""Factorized QueryLocalUtility target construction."""
 
 from __future__ import annotations
 
@@ -19,26 +19,26 @@ from workloads.range_geometry import (
     segment_box_bracket_indices,
 )
 
-QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE = "query_useful_v1_factorized"
-QUERY_USEFUL_V1_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE = (
-    "query_useful_v1_factorized_segment_budget_query_ship_max_pool"
+QUERY_LOCAL_UTILITY_FACTORIZED_TARGET_MODE = "query_local_utility_factorized"
+QUERY_LOCAL_UTILITY_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE = (
+    "query_local_utility_factorized_segment_budget_query_ship_max_pool"
 )
-QUERY_USEFUL_V1_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE = (
-    "query_useful_v1_factorized_query_ship_local_heads"
+QUERY_LOCAL_UTILITY_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE = (
+    "query_local_utility_factorized_query_ship_local_heads"
 )
-QUERY_USEFUL_V1_EXPERIMENTAL_TARGET_MODES = frozenset(
+QUERY_LOCAL_UTILITY_EXPERIMENTAL_TARGET_MODES = frozenset(
     {
-        QUERY_USEFUL_V1_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE,
-        QUERY_USEFUL_V1_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE,
+        QUERY_LOCAL_UTILITY_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE,
+        QUERY_LOCAL_UTILITY_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE,
     }
 )
-QUERY_USEFUL_V1_TARGET_MODES = frozenset(
+QUERY_LOCAL_UTILITY_TARGET_MODES = frozenset(
     {
-        QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE,
-        *QUERY_USEFUL_V1_EXPERIMENTAL_TARGET_MODES,
+        QUERY_LOCAL_UTILITY_FACTORIZED_TARGET_MODE,
+        *QUERY_LOCAL_UTILITY_EXPERIMENTAL_TARGET_MODES,
     }
 )
-QUERY_USEFUL_V1_HEAD_NAMES = (
+QUERY_LOCAL_UTILITY_HEAD_NAMES = (
     "query_hit_probability",
     "conditional_behavior_utility",
     "boundary_event_utility",
@@ -46,19 +46,19 @@ QUERY_USEFUL_V1_HEAD_NAMES = (
     "segment_budget_target",
     "path_length_support_target",
 )
-QUERY_USEFUL_V1_FINAL_LABEL_FORMULA = (
+QUERY_LOCAL_UTILITY_FINAL_LABEL_FORMULA = (
     "query_hit_times_behavior_with_conditional_replacement_modulation_plus_boundary"
 )
 FAMILY_TRAINABILITY_GROUP_KEYS = ("anchor_family", "footprint_family")
 FAMILY_TRAINABILITY_FOCUS = {
-    "anchor_family": frozenset({"density_route", "crossing_turn_change"}),
+    "anchor_family": frozenset({"density"}),
     "footprint_family": frozenset({"small_local", "medium_operational"}),
 }
 
 
 @dataclass
-class QueryUsefulTargetBundle:
-    """Scalar and factorized training labels for QueryUsefulV1."""
+class QueryLocalUtilityTargetBundle:
+    """Scalar and factorized training labels for QueryLocalUtility."""
 
     labels: torch.Tensor
     labelled_mask: torch.Tensor
@@ -67,14 +67,14 @@ class QueryUsefulTargetBundle:
     diagnostics: dict[str, Any]
 
 
-def query_useful_v1_point_score(
+def query_local_utility_point_score(
     *,
     q_hit: torch.Tensor,
     behavior: torch.Tensor,
     boundary: torch.Tensor,
     replacement: torch.Tensor,
 ) -> torch.Tensor:
-    """Return the scalar QueryUsefulV1 point score used by labels and v2 logits."""
+    """Return the scalar QueryLocalUtility point score used by labels and v2 logits."""
     q_hit = q_hit.float().clamp(0.0, 1.0)
     behavior = behavior.float().clamp(0.0, 1.0)
     boundary = boundary.float().clamp(0.0, 1.0)
@@ -399,14 +399,14 @@ def _path_length_support_targets(
     return out
 
 
-def query_useful_v1_path_length_support_targets(
+def query_local_utility_path_length_support_targets(
     points: torch.Tensor,
     boundaries: list[tuple[int, int]],
     *,
     segment_size: int = 32,
     highpass_quantile: float = 0.50,
 ) -> torch.Tensor:
-    """Return the query-free path-length support target used by QueryUsefulV1 heads."""
+    """Return the query-free path-length support target used by QueryLocalUtility heads."""
     return _path_length_support_targets(
         points,
         boundaries,
@@ -1118,7 +1118,7 @@ def _family_local_target_candidate_alignment(
             )
             composed_score = torch.where(
                 family_valid,
-                query_useful_v1_point_score(
+                query_local_utility_point_score(
                     q_hit=query_hit_ship_blend,
                     behavior=ship_gated_behavior,
                     boundary=boundary,
@@ -1324,15 +1324,15 @@ def _segment_budget_point_value_for_target_mode(
 ) -> tuple[torch.Tensor, dict[str, Any]]:
     """Return the point value used to build the active segment-budget head target."""
     mode = str(target_mode).lower()
-    if mode == QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE:
+    if mode == QUERY_LOCAL_UTILITY_FACTORIZED_TARGET_MODE:
         return final_score, {
-            "segment_budget_target_base_source": "query_useful_v1_final_score",
+            "segment_budget_target_base_source": "query_local_utility_final_score",
             "segment_budget_target_variant": "active_final_score",
             "segment_budget_target_aggregation": "sum",
             "segment_budget_target_experimental": False,
             "final_success_allowed": True,
         }
-    if mode == QUERY_USEFUL_V1_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE:
+    if mode == QUERY_LOCAL_UTILITY_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE:
         point_value = _query_ship_blend_signal(
             q_hit=q_hit,
             ship_query_evidence=ship_query_evidence,
@@ -1351,7 +1351,7 @@ def _segment_budget_point_value_for_target_mode(
             "segment_budget_target_experimental": True,
             "final_success_allowed": False,
         }
-    if mode == QUERY_USEFUL_V1_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE:
+    if mode == QUERY_LOCAL_UTILITY_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE:
         return q_hit.float().clamp(0.0, 1.0), {
             "segment_budget_target_base_source": "query_ship_local_presence_head_target",
             "segment_budget_target_variant": "query_ship_local_heads_max_pool",
@@ -1363,32 +1363,32 @@ def _segment_budget_point_value_for_target_mode(
             "final_success_allowed": False,
         }
     raise ValueError(
-        "Unsupported QueryUsefulV1 target mode: "
-        f"{target_mode!r}. Expected one of {sorted(QUERY_USEFUL_V1_TARGET_MODES)!r}."
+        "Unsupported QueryLocalUtility target mode: "
+        f"{target_mode!r}. Expected one of {sorted(QUERY_LOCAL_UTILITY_TARGET_MODES)!r}."
     )
 
 
-def build_query_useful_v1_targets(
+def build_query_local_utility_targets(
     *,
     points: torch.Tensor,
     boundaries: list[tuple[int, int]],
     typed_queries: list[dict[str, Any]],
     segment_size: int = 32,
-    target_mode: str = QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE,
-) -> QueryUsefulTargetBundle:
-    """Build factorized QueryUsefulV1 labels from learning range workloads only."""
+    target_mode: str = QUERY_LOCAL_UTILITY_FACTORIZED_TARGET_MODE,
+) -> QueryLocalUtilityTargetBundle:
+    """Build factorized QueryLocalUtility labels from learning range workloads only."""
     target_mode = str(target_mode).lower()
-    if target_mode not in QUERY_USEFUL_V1_TARGET_MODES:
+    if target_mode not in QUERY_LOCAL_UTILITY_TARGET_MODES:
         raise ValueError(
             "target_mode must be one of "
-            f"{sorted(QUERY_USEFUL_V1_TARGET_MODES)!r}; got {target_mode!r}."
+            f"{sorted(QUERY_LOCAL_UTILITY_TARGET_MODES)!r}; got {target_mode!r}."
         )
     n_points = int(points.shape[0])
     device = points.device
     labels = torch.zeros((n_points, NUM_QUERY_TYPES), dtype=torch.float32, device=device)
     labelled_mask = torch.zeros((n_points, NUM_QUERY_TYPES), dtype=torch.bool, device=device)
     head_targets = torch.zeros(
-        (n_points, len(QUERY_USEFUL_V1_HEAD_NAMES)), dtype=torch.float32, device=device
+        (n_points, len(QUERY_LOCAL_UTILITY_HEAD_NAMES)), dtype=torch.float32, device=device
     )
     head_mask = torch.zeros_like(head_targets, dtype=torch.bool)
     range_queries = [
@@ -1396,9 +1396,9 @@ def build_query_useful_v1_targets(
     ]
     if n_points <= 0 or not range_queries:
         diagnostics = factorized_target_diagnostics(
-            head_targets, head_mask, QUERY_USEFUL_V1_HEAD_NAMES, boundaries
+            head_targets, head_mask, QUERY_LOCAL_UTILITY_HEAD_NAMES, boundaries
         )
-        return QueryUsefulTargetBundle(labels, labelled_mask, head_targets, head_mask, diagnostics)
+        return QueryLocalUtilityTargetBundle(labels, labelled_mask, head_targets, head_mask, diagnostics)
 
     behavior_base = _trajectory_change_weights(points, boundaries)
     query_hit_count = torch.zeros((n_points,), dtype=torch.float32, device=device)
@@ -1462,9 +1462,9 @@ def build_query_useful_v1_targets(
         "query_hit_target_base_source": "range_query_point_hit_probability",
         "conditional_behavior_target_variant": "active_local_behavior_change",
         "conditional_behavior_target_base_source": "query_hit_conditioned_trajectory_change",
-        "final_label_variant": "active_query_useful_v1_point_score",
+        "final_label_variant": "active_query_local_utility_point_score",
     }
-    if target_mode == QUERY_USEFUL_V1_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE:
+    if target_mode == QUERY_LOCAL_UTILITY_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE:
         target_q_hit = _query_ship_blend_signal(
             q_hit=q_hit,
             ship_query_evidence=ship_query_evidence,
@@ -1494,7 +1494,7 @@ def build_query_useful_v1_targets(
                 "final_label_variant": "query_ship_local_heads_composed_score",
             }
         )
-    final_score = query_useful_v1_point_score(
+    final_score = query_local_utility_point_score(
         q_hit=target_q_hit,
         behavior=target_behavior,
         boundary=boundary,
@@ -1527,10 +1527,10 @@ def build_query_useful_v1_targets(
         )
     else:
         raise ValueError(
-            "Unsupported QueryUsefulV1 segment-budget aggregation: "
+            "Unsupported QueryLocalUtility segment-budget aggregation: "
             f"{segment_budget_aggregation!r}."
         )
-    path_length_support = query_useful_v1_path_length_support_targets(
+    path_length_support = query_local_utility_path_length_support_targets(
         points,
         boundaries,
         segment_size=segment_size,
@@ -1554,12 +1554,12 @@ def build_query_useful_v1_targets(
     diagnostics = factorized_target_diagnostics(
         head_targets,
         head_mask,
-        QUERY_USEFUL_V1_HEAD_NAMES,
+        QUERY_LOCAL_UTILITY_HEAD_NAMES,
         boundaries,
     )
     diagnostics.update(
         {
-            "target_family": "QueryUsefulV1Factorized",
+            "target_family": "QueryLocalUtilityFactorized",
             "target_mode": target_mode,
             "range_query_count": len(range_queries),
             "segment_size_points": int(segment_size),
@@ -1575,7 +1575,7 @@ def build_query_useful_v1_targets(
             "conditional_behavior_utility_training": "masked_to_query_hit_points",
             "replacement_representative_value_normalization": "conditional_on_query_hit",
             "replacement_value_is_true_counterfactual_marginal_gain": False,
-            "final_label_formula": QUERY_USEFUL_V1_FINAL_LABEL_FORMULA,
+            "final_label_formula": QUERY_LOCAL_UTILITY_FINAL_LABEL_FORMULA,
             "final_boundary_bonus_uses_squared_event_probability": True,
             "final_label_positive_fraction": float((final_score > 0.0).float().mean().item()),
             "final_label_support_fraction_by_threshold": support_fraction_by_threshold(final_score),
@@ -1668,4 +1668,4 @@ def build_query_useful_v1_targets(
             ),
         }
     )
-    return QueryUsefulTargetBundle(labels, labelled_mask, head_targets, head_mask, diagnostics)
+    return QueryLocalUtilityTargetBundle(labels, labelled_mask, head_targets, head_mask, diagnostics)

@@ -61,6 +61,6 @@ before held-out eval queries are scored. Treat a run as invalid if
 `workload_blind_protocol.audit_masks_frozen_before_eval_query_scoring` is
 false.
 
-QueryUsefulV1 is the active primary metric for the rework. RangeUseful outputs
+QueryLocalUtility is the active primary metric for the rework. RangeUseful outputs
 must remain under `legacy_range_useful_summary` or diagnostic fields, not
 `final_claim_summary`.

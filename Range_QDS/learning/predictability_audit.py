@@ -8,13 +8,13 @@ from typing import Any
 import torch
 
 from learning.query_prior_fields import QUERY_PRIOR_FIELD_NAMES, sample_query_prior_fields
-from learning.targets.query_useful_v1 import (
+from learning.targets.query_local_utility import (
     FAMILY_TRAINABILITY_FOCUS,
     FAMILY_TRAINABILITY_GROUP_KEYS,
-    QUERY_USEFUL_V1_HEAD_NAMES,
-    QUERY_USEFUL_V1_TARGET_MODES,
+    QUERY_LOCAL_UTILITY_HEAD_NAMES,
+    QUERY_LOCAL_UTILITY_TARGET_MODES,
     _range_query_family_evidence,
-    build_query_useful_v1_targets,
+    build_query_local_utility_targets,
 )
 
 PREDICTABILITY_AUDIT_SCHEMA_VERSION = 3
@@ -310,7 +310,7 @@ def _prior_channel_scores(
         1.0,
     )
     boundary_event = torch.maximum(
-        channels["boundary_entry_exit_likelihood"],
+        channels["endpoint_likelihood"],
         channels["crossing_likelihood"],
     )
     behavior = channels["behavior_utility_prior"]
@@ -347,7 +347,7 @@ def _per_head_predictability(
     channels = _prior_channel_scores(points, query_prior_field)
     per_head: dict[str, Any] = {}
     positive_spearman_count = 0
-    for head_idx, head_name in enumerate(QUERY_USEFUL_V1_HEAD_NAMES):
+    for head_idx, head_name in enumerate(QUERY_LOCAL_UTILITY_HEAD_NAMES):
         if head_idx >= int(head_targets.shape[1]):
             continue
         score_name = HEAD_PRIOR_SCORE_MAP.get(head_name, "combined_prior_score")
@@ -385,8 +385,8 @@ def _per_head_predictability(
         failed_checks.append("too_few_positive_spearman_heads")
 
     channel_vs_final: dict[str, Any] = {}
-    final_target = head_targets[:, list(QUERY_USEFUL_V1_HEAD_NAMES).index("segment_budget_target")]
-    final_mask = head_mask[:, list(QUERY_USEFUL_V1_HEAD_NAMES).index("segment_budget_target")]
+    final_target = head_targets[:, list(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("segment_budget_target")]
+    final_mask = head_mask[:, list(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("segment_budget_target")]
     for channel_name, score in channels.items():
         channel_vs_final[channel_name] = _score_target_metrics(
             score=score,
@@ -395,7 +395,7 @@ def _per_head_predictability(
         )
     channel_vs_head: dict[str, Any] = {}
     best_channel_by_head: dict[str, Any] = {}
-    for head_idx, head_name in enumerate(QUERY_USEFUL_V1_HEAD_NAMES):
+    for head_idx, head_name in enumerate(QUERY_LOCAL_UTILITY_HEAD_NAMES):
         if head_idx >= int(head_targets.shape[1]):
             continue
         head_rows: dict[str, Any] = {}
@@ -519,7 +519,7 @@ def _family_conditioned_prior_predictability(
                 group_out[str(family)] = family_out
                 continue
             weak_heads: list[str] = []
-            for head_idx, head_name in enumerate(QUERY_USEFUL_V1_HEAD_NAMES):
+            for head_idx, head_name in enumerate(QUERY_LOCAL_UTILITY_HEAD_NAMES):
                 if head_idx >= int(head_targets.shape[1]):
                     continue
                 valid_mask = head_mask[:, head_idx].detach().cpu().bool() & family_valid
@@ -597,7 +597,7 @@ def _prior_predictability_score(
         return torch.zeros((int(points.shape[0]),), dtype=torch.float32, device=points.device)
     spatial_query_hit_probability = sampled[:, 0].clamp(0.0, 1.0)
     spatiotemporal_query_hit_probability = sampled[:, 1].clamp(0.0, 1.0)
-    boundary_entry_exit_likelihood = sampled[:, 2].clamp(0.0, 1.0)
+    endpoint_likelihood = sampled[:, 2].clamp(0.0, 1.0)
     crossing_likelihood = sampled[:, 3].clamp(0.0, 1.0)
     behavior_utility_prior = sampled[:, 4].clamp(0.0, 1.0)
 
@@ -609,7 +609,7 @@ def _prior_predictability_score(
         0.0,
         1.0,
     )
-    boundary_event = torch.maximum(boundary_entry_exit_likelihood, crossing_likelihood)
+    boundary_event = torch.maximum(endpoint_likelihood, crossing_likelihood)
     score = torch.clamp(
         query_mass * (0.50 + behavior_utility_prior) + 0.25 * boundary_event.square(),
         0.0,
@@ -631,7 +631,7 @@ def query_prior_predictability_audit(
     boundaries: list[tuple[int, int]],
     eval_typed_queries: list[dict[str, Any]],
     query_prior_field: dict[str, Any] | None,
-    target_mode: str = "query_useful_v1_factorized",
+    target_mode: str = "query_local_utility_factorized",
 ) -> dict[str, Any]:
     """Measure whether train-derived query-prior fields predict held-out eval usefulness."""
     if query_prior_field is None:
@@ -641,14 +641,14 @@ def query_prior_predictability_audit(
             "gate_pass": False,
             "reason": "missing_query_prior_field",
         }
-    eval_targets = build_query_useful_v1_targets(
+    eval_targets = build_query_local_utility_targets(
         points=points,
         boundaries=boundaries,
         typed_queries=eval_typed_queries,
         target_mode=(
             str(target_mode).lower()
-            if str(target_mode).lower() in QUERY_USEFUL_V1_TARGET_MODES
-            else "query_useful_v1_factorized"
+            if str(target_mode).lower() in QUERY_LOCAL_UTILITY_TARGET_MODES
+            else "query_local_utility_factorized"
         ),
     )
     target = eval_targets.labels[:, 0].float().detach().cpu()
@@ -724,7 +724,7 @@ def query_prior_predictability_audit(
         "available": True,
         "scoring_stage": "after_masks_frozen_diagnostic_only",
         "score_source": "train_query_prior_fields",
-        "target_source": "heldout_eval_query_useful_v1_targets",
+        "target_source": "heldout_eval_query_local_utility_targets",
         "target_mode": str(target_mode).lower(),
         "score_formula": "query_mass_gated_behavior_boundary",
         "used_for_training": False,

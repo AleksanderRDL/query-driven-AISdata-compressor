@@ -12,7 +12,7 @@ BASELINE_METHOD = "DouglasPeucker"
 SELECTOR_TRACE_PATH = "selector_trace_diagnostics"
 SELECTION_TRACE_NAME = "selection_primary"
 EVAL_TRACE_NAME = "eval_primary"
-MARGINAL_ALIGNMENT_KEY = "retained_decision_marginal_query_useful_alignment"
+MARGINAL_ALIGNMENT_KEY = "retained_decision_marginal_query_local_utility_alignment"
 TOP_SEGMENT_LIMIT = 10
 LOW_RANK_FRACTION = 0.50
 
@@ -54,17 +54,17 @@ def _score_summary(artifact: dict[str, Any]) -> dict[str, float | None]:
     primary = _as_dict(matched.get(PRIMARY_METHOD))
     uniform = _as_dict(matched.get("uniform"))
     baseline = _as_dict(matched.get(BASELINE_METHOD))
-    primary_score = _as_float(primary.get("query_useful_v1_score"))
-    uniform_score = _as_float(uniform.get("query_useful_v1_score"))
-    baseline_score = _as_float(baseline.get("query_useful_v1_score"))
+    primary_score = _as_float(primary.get("query_local_utility_score"))
+    uniform_score = _as_float(uniform.get("query_local_utility_score"))
+    baseline_score = _as_float(baseline.get("query_local_utility_score"))
     return {
-        "primary_query_useful_v1": primary_score,
-        "uniform_query_useful_v1": uniform_score,
-        "baseline_query_useful_v1": baseline_score,
-        "primary_minus_uniform_query_useful_v1": (
+        "primary_query_local_utility": primary_score,
+        "uniform_query_local_utility": uniform_score,
+        "baseline_query_local_utility": baseline_score,
+        "primary_minus_uniform_query_local_utility": (
             None if primary_score is None or uniform_score is None else primary_score - uniform_score
         ),
-        "primary_minus_baseline_query_useful_v1": (
+        "primary_minus_baseline_query_local_utility": (
             None
             if primary_score is None or baseline_score is None
             else primary_score - baseline_score

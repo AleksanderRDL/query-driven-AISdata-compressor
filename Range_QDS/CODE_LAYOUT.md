@@ -47,7 +47,7 @@ Operational tooling reference: `docs/dev-tooling-guide.md`.
 | --- | --- |
 | `workloads/generation/` | Query workload generation, workload profiles, anchor policy, coverage guards, and signatures. |
 | `benchmarking/reporting/` | Benchmark row construction, metric helpers, audit extraction, and report path helpers. |
-| `learning/targets/` | Target mode registries, active QueryUsefulV1 labels, shared scalar helpers, retained-frequency targets, structural/marginal targets, query-spine/residual targets, set-utility/local-swap targets, and aggregation. |
+| `learning/targets/` | Target mode registries, active QueryLocalUtility labels, shared scalar helpers, retained-frequency targets, structural/marginal targets, query-spine/residual targets, set-utility/local-swap targets, and aggregation. |
 | `selection/learned_segment_budget/` | Learned segment-budget selector orchestration, allocation, length repair, diagnostics, and trace construction. |
 | `tests/unit/<component>/` | Component-scoped tests for data preparation, workloads, learning, selection, scoring, orchestration, benchmarking, and runtime. |
 | `tests/integration/` | Cross-stage behavior tests. |

@@ -9,9 +9,9 @@ import pytest
 import torch
 
 from config.run_config import build_run_config, derive_seed_bundle
-from learning.targets.query_useful_v1 import (
-    QUERY_USEFUL_V1_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE,
-    QUERY_USEFUL_V1_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE,
+from learning.targets.query_local_utility import (
+    QUERY_LOCAL_UTILITY_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE,
+    QUERY_LOCAL_UTILITY_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE,
 )
 from orchestration.learning_target_stage import prepare_training_targets
 from orchestration.range_runtime_cache import RangeRuntimeCache
@@ -76,7 +76,7 @@ def _minimal_points() -> torch.Tensor:
 def test_factorized_target_preparation_does_not_precompute_train_labels() -> None:
     config = build_run_config(
         model_type="workload_blind_range_v2",
-        range_training_target_mode="query_useful_v1_factorized",
+        range_training_target_mode="query_local_utility_factorized",
     )
     workload = _empty_workload()
 
@@ -101,9 +101,9 @@ def test_factorized_target_preparation_does_not_precompute_train_labels() -> Non
     )
 
     assert prepared.train_labels is None
-    assert prepared.range_training_target_mode == "query_useful_v1_factorized"
+    assert prepared.range_training_target_mode == "query_local_utility_factorized"
     assert prepared.range_training_target_transform["enabled"] is True
-    assert prepared.range_training_target_transform["target_family"] == "QueryUsefulV1Factorized"
+    assert prepared.range_training_target_transform["target_family"] == "QueryLocalUtilityFactorized"
     assert prepared.range_training_target_transform["final_success_allowed"] is True
     assert prepared.selection_query_cache is None
     assert prepared.selection_geometry_scores is None
@@ -112,7 +112,7 @@ def test_factorized_target_preparation_does_not_precompute_train_labels() -> Non
 def test_experimental_query_ship_max_pool_target_preparation_is_guarded() -> None:
     config = build_run_config(
         model_type="workload_blind_range_v2",
-        range_training_target_mode=QUERY_USEFUL_V1_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE,
+        range_training_target_mode=QUERY_LOCAL_UTILITY_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE,
     )
     workload = _empty_workload()
 
@@ -139,19 +139,19 @@ def test_experimental_query_ship_max_pool_target_preparation_is_guarded() -> Non
     assert prepared.train_labels is None
     assert (
         prepared.range_training_target_mode
-        == QUERY_USEFUL_V1_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE
+        == QUERY_LOCAL_UTILITY_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE
     )
     transform = prepared.range_training_target_transform
     assert transform["enabled"] is True
-    assert transform["target_family"] == "QueryUsefulV1Factorized"
+    assert transform["target_family"] == "QueryLocalUtilityFactorized"
     assert transform["final_success_allowed"] is False
-    assert "Experimental QueryUsefulV1 target mode" in transform["diagnostic_reason"]
+    assert "Experimental QueryLocalUtility target mode" in transform["diagnostic_reason"]
 
 
 def test_experimental_query_ship_local_heads_target_preparation_is_guarded() -> None:
     config = build_run_config(
         model_type="workload_blind_range_v2",
-        range_training_target_mode=QUERY_USEFUL_V1_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE,
+        range_training_target_mode=QUERY_LOCAL_UTILITY_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE,
     )
     workload = _empty_workload()
 
@@ -176,22 +176,22 @@ def test_experimental_query_ship_local_heads_target_preparation_is_guarded() -> 
     )
 
     assert prepared.train_labels is None
-    assert prepared.range_training_target_mode == QUERY_USEFUL_V1_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE
+    assert prepared.range_training_target_mode == QUERY_LOCAL_UTILITY_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE
     transform = prepared.range_training_target_transform
     assert transform["enabled"] is True
-    assert transform["target_family"] == "QueryUsefulV1Factorized"
+    assert transform["target_family"] == "QueryLocalUtilityFactorized"
     assert transform["final_success_allowed"] is False
-    assert "Experimental QueryUsefulV1 target mode" in transform["diagnostic_reason"]
+    assert "Experimental QueryLocalUtility target mode" in transform["diagnostic_reason"]
 
 
 @pytest.mark.parametrize(
     "target_mode",
     [
-        "query_useful_v1_factorized_segment_budget_query_hit_ship_blend",
-        "query_useful_v1_factorized_segment_budget_final_score_ship_blend",
+        "query_local_utility_factorized_segment_budget_query_hit_ship_blend",
+        "query_local_utility_factorized_segment_budget_final_score_ship_blend",
     ],
 )
-def test_rejected_experimental_query_useful_target_modes_are_not_prepared(
+def test_rejected_experimental_query_local_utility_target_modes_are_not_prepared(
     target_mode: str,
 ) -> None:
     config = build_run_config(
@@ -200,7 +200,7 @@ def test_rejected_experimental_query_useful_target_modes_are_not_prepared(
     )
     workload = _empty_workload()
 
-    with pytest.raises(RuntimeError, match="QueryUsefulV1 factorized target mode"):
+    with pytest.raises(RuntimeError, match="QueryLocalUtility factorized target mode"):
         prepare_training_targets(
             config=config,
             seeds=derive_seed_bundle(7),
@@ -225,7 +225,7 @@ def test_rejected_experimental_query_useful_target_modes_are_not_prepared(
 def test_target_preparation_builds_selection_query_cache_for_range_validation() -> None:
     config = build_run_config(
         model_type="workload_blind_range_v2",
-        range_training_target_mode="query_useful_v1_factorized",
+        range_training_target_mode="query_local_utility_factorized",
     )
     train_workload = _empty_workload()
     selection_workload = _range_workload()
@@ -261,7 +261,7 @@ def test_target_preparation_builds_selection_query_cache_for_range_validation() 
 def test_target_preparation_rejects_invalid_replicate_aggregation() -> None:
     config = build_run_config(
         model_type="workload_blind_range_v2",
-        range_training_target_mode="query_useful_v1_factorized",
+        range_training_target_mode="query_local_utility_factorized",
         range_replicate_target_aggregation="unsupported",
     )
     workload = _empty_workload()
@@ -291,7 +291,7 @@ def test_target_preparation_rejects_invalid_replicate_aggregation() -> None:
 def test_target_preparation_rejects_replicates_for_query_aware_model() -> None:
     config = build_run_config(
         model_type="baseline",
-        range_training_target_mode="query_useful_v1_factorized",
+        range_training_target_mode="query_local_utility_factorized",
     )
     workload = _empty_workload()
 
@@ -320,7 +320,7 @@ def test_target_preparation_rejects_replicates_for_query_aware_model() -> None:
 def test_target_preparation_rejects_balancing_without_precomputed_labels() -> None:
     config = build_run_config(
         model_type="workload_blind_range_v2",
-        range_training_target_mode="query_useful_v1_factorized",
+        range_training_target_mode="query_local_utility_factorized",
         range_target_balance_mode="trajectory_unit_mass",
     )
     workload = _empty_workload()

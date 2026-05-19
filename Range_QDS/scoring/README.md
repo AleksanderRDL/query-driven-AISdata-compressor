@@ -13,7 +13,7 @@ with baseline and diagnostic methods.
 | `query_cache.py` | Retained-independent query/audit cache. |
 | `method_scoring.py` | Method execution and retained-mask scoring. |
 | `score_tables.py` | Text tables for reports. |
-| `query_useful_v1.py` | Active primary query-driven metric for `range_workload_v1`. |
+| `query_local_utility.py` | Active primary query-driven metric for `range_query_mix`. |
 
 ## Methods
 
@@ -33,9 +33,9 @@ Current range diagnostics:
   query-driven rework and cannot support final acceptance by itself.
 - `RangePointF1`: retained in-box point-hit F1. Useful, but too narrow for
   final claims.
-- `QueryUsefulV1`: active primary metric for the query-driven rework. It
-  combines retained query-hit support, query-local behavior, replacement
-  usefulness, and guardrails such as length preservation.
+- `QueryLocalUtility`: active primary metric for the query-driven rework. It
+  combines direct query-point recall, query-local interpolation/turn/continuity
+  behavior, and light guardrails such as length preservation.
 
 Range audit components:
 
@@ -63,7 +63,7 @@ diagnostic ablations. Current benchmark work is range-only.
 ## Reporting Rules
 
 - Final benchmark audits should use exact retained-mask scoring.
-- `final_claim_summary` is allowed only for the QueryUsefulV1 protocol and must
+- `final_claim_summary` is allowed only for the QueryLocalUtility protocol and must
   block if required single-run gates or final-grid gates fail. Old RangeUseful
   results belong under `legacy_range_useful_summary`.
 - Checkpoint diagnostics may use cheaper sampling where explicitly configured.

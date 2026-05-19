@@ -1,4 +1,4 @@
-"""Derived transfer diagnostics for guarded QueryUsefulV1 segment targets."""
+"""Derived transfer diagnostics for guarded QueryLocalUtility segment targets."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from typing import Any
 PRIMARY_METHOD = "MLQDS"
 BASELINE_METHOD = "DouglasPeucker"
 FOCUS_FAMILIES = {
-    "anchor_family": ("density_route", "crossing_turn_change"),
+    "anchor_family": ("density",),
     "footprint_family": ("small_local", "medium_operational"),
 }
 HEAD_NAMES = (
@@ -77,17 +77,17 @@ def _matched_score_summary(
     primary = _as_dict(matched.get(primary_method))
     uniform = _as_dict(matched.get("uniform"))
     baseline = _as_dict(matched.get(baseline_method))
-    primary_query = _as_float(primary.get("query_useful_v1_score"), None)
-    uniform_query = _as_float(uniform.get("query_useful_v1_score"), None)
-    baseline_query = _as_float(baseline.get("query_useful_v1_score"), None)
+    primary_query = _as_float(primary.get("query_local_utility_score"), None)
+    uniform_query = _as_float(uniform.get("query_local_utility_score"), None)
+    baseline_query = _as_float(baseline.get("query_local_utility_score"), None)
     primary_range = _as_float(primary.get("range_usefulness_score"), None)
     baseline_range = _as_float(baseline.get("range_usefulness_score"), None)
     return {
-        "primary_query_useful_v1": primary_query,
-        "uniform_query_useful_v1": uniform_query,
-        "baseline_query_useful_v1": baseline_query,
-        "primary_minus_uniform_query_useful_v1": _delta(primary_query, uniform_query),
-        "primary_minus_baseline_query_useful_v1": _delta(primary_query, baseline_query),
+        "primary_query_local_utility": primary_query,
+        "uniform_query_local_utility": uniform_query,
+        "baseline_query_local_utility": baseline_query,
+        "primary_minus_uniform_query_local_utility": _delta(primary_query, uniform_query),
+        "primary_minus_baseline_query_local_utility": _delta(primary_query, baseline_query),
         "primary_range_useful_legacy": primary_range,
         "baseline_range_useful_legacy": baseline_range,
         "primary_minus_baseline_range_useful_legacy": _delta(primary_range, baseline_range),
@@ -179,7 +179,7 @@ def _target_family_row(
     family: str,
 ) -> dict[str, Any]:
     diagnostics = _as_dict(
-        _as_dict(artifact.get("training_target_diagnostics")).get("query_useful_v1_factorized")
+        _as_dict(artifact.get("training_target_diagnostics")).get("query_local_utility_factorized")
     )
     row = _as_dict(
         _as_dict(
@@ -282,7 +282,7 @@ def _family_local_candidate_row(
     family: str,
 ) -> dict[str, Any]:
     diagnostics = _as_dict(
-        _as_dict(artifact.get("training_target_diagnostics")).get("query_useful_v1_factorized")
+        _as_dict(artifact.get("training_target_diagnostics")).get("query_local_utility_factorized")
     )
     row = _as_dict(
         _as_dict(
@@ -369,7 +369,7 @@ def _transfer_status(target_ship: float | None, fitted_ship: float | None) -> st
 def _retained_marginal_summary(artifact: dict[str, Any]) -> dict[str, Any]:
     alignment = _as_dict(
         _as_dict(_as_dict(artifact.get("selector_trace_diagnostics")).get("eval_primary")).get(
-            "retained_decision_marginal_query_useful_alignment"
+            "retained_decision_marginal_query_local_utility_alignment"
         )
     )
     overall = _as_dict(alignment.get("overall"))
@@ -382,7 +382,7 @@ def _retained_marginal_summary(artifact: dict[str, Any]) -> dict[str, Any]:
         "retained_removal_loss": _score_alignment_subset(retained_loss),
         "layout": (
             "selector_trace_diagnostics.eval_primary."
-            "retained_decision_marginal_query_useful_alignment"
+            "retained_decision_marginal_query_local_utility_alignment"
         ),
     }
 
@@ -408,7 +408,7 @@ def _artifact_summary(
     baseline_method: str,
 ) -> dict[str, Any]:
     target_diagnostics = _as_dict(
-        _as_dict(artifact.get("training_target_diagnostics")).get("query_useful_v1_factorized")
+        _as_dict(artifact.get("training_target_diagnostics")).get("query_local_utility_factorized")
     )
     family_transfer = {
         group_key: {
@@ -503,8 +503,8 @@ def _candidate_vs_reference_comparison(
 
 def _score_delta_summary(reference: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
     keys = (
-        "primary_query_useful_v1",
-        "primary_minus_baseline_query_useful_v1",
+        "primary_query_local_utility",
+        "primary_minus_baseline_query_local_utility",
         "primary_range_useful_legacy",
         "primary_minus_baseline_range_useful_legacy",
     )
@@ -664,7 +664,7 @@ def _parse_labeled_artifact(value: str) -> tuple[str, Path]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Build a derived QueryUsefulV1 segment-target transfer diagnostic."
+        description="Build a derived QueryLocalUtility segment-target transfer diagnostic."
     )
     parser.add_argument(
         "--artifact",

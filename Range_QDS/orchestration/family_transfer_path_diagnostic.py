@@ -1,4 +1,4 @@
-"""Derived family/head transfer diagnostics for QueryUsefulV1 candidates."""
+"""Derived family/head transfer diagnostics for QueryLocalUtility candidates."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from typing import Any
 PRIMARY_METHOD = "MLQDS"
 BASELINE_METHOD = "DouglasPeucker"
 FOCUS_FAMILIES = {
-    "anchor_family": ("crossing_turn_change", "density_route"),
+    "anchor_family": ("density",),
     "footprint_family": ("small_local", "medium_operational"),
 }
 FOCUS_HEADS = (
@@ -22,7 +22,7 @@ FOCUS_HEADS = (
 HEAD_TARGET_FIT_MIN_TAU = 0.20
 RETAINED_MARGINAL_ALIGNMENT_PATH = (
     "selector_trace_diagnostics.eval_primary."
-    "retained_decision_marginal_query_useful_alignment"
+    "retained_decision_marginal_query_local_utility_alignment"
 )
 
 
@@ -63,15 +63,15 @@ def _score_summary(artifact: dict[str, Any]) -> dict[str, float | None]:
     primary = _as_dict(matched.get(PRIMARY_METHOD))
     uniform = _as_dict(matched.get("uniform"))
     baseline = _as_dict(matched.get(BASELINE_METHOD))
-    primary_score = _as_float(primary.get("query_useful_v1_score"))
-    uniform_score = _as_float(uniform.get("query_useful_v1_score"))
-    baseline_score = _as_float(baseline.get("query_useful_v1_score"))
+    primary_score = _as_float(primary.get("query_local_utility_score"))
+    uniform_score = _as_float(uniform.get("query_local_utility_score"))
+    baseline_score = _as_float(baseline.get("query_local_utility_score"))
     return {
-        "primary_query_useful_v1": primary_score,
-        "uniform_query_useful_v1": uniform_score,
-        "baseline_query_useful_v1": baseline_score,
-        "primary_minus_uniform_query_useful_v1": _delta(primary_score, uniform_score),
-        "primary_minus_baseline_query_useful_v1": _delta(primary_score, baseline_score),
+        "primary_query_local_utility": primary_score,
+        "uniform_query_local_utility": uniform_score,
+        "baseline_query_local_utility": baseline_score,
+        "primary_minus_uniform_query_local_utility": _delta(primary_score, uniform_score),
+        "primary_minus_baseline_query_local_utility": _delta(primary_score, baseline_score),
     }
 
 
@@ -111,7 +111,7 @@ def _gate_summary(artifact: dict[str, Any]) -> dict[str, bool | None]:
 
 def _target_metadata(artifact: dict[str, Any]) -> dict[str, Any]:
     target = _as_dict(
-        _as_dict(artifact.get("training_target_diagnostics")).get("query_useful_v1_factorized")
+        _as_dict(artifact.get("training_target_diagnostics")).get("query_local_utility_factorized")
     )
     return {
         "target_mode": target.get("target_mode"),
@@ -207,7 +207,7 @@ def _target_family_ranker(
     head: str,
 ) -> dict[str, Any]:
     target = _as_dict(
-        _as_dict(artifact.get("training_target_diagnostics")).get("query_useful_v1_factorized")
+        _as_dict(artifact.get("training_target_diagnostics")).get("query_local_utility_factorized")
     )
     row = _as_dict(
         _as_dict(
@@ -343,7 +343,7 @@ def _retained_marginal_alignment(artifact: dict[str, Any]) -> dict[str, Any]:
     selector_trace = _as_dict(artifact.get("selector_trace_diagnostics"))
     alignment = _as_dict(
         _as_dict(selector_trace.get("eval_primary")).get(
-            "retained_decision_marginal_query_useful_alignment"
+            "retained_decision_marginal_query_local_utility_alignment"
         )
     )
     misleading_layout = _as_dict(
@@ -351,7 +351,7 @@ def _retained_marginal_alignment(artifact: dict[str, Any]) -> dict[str, Any]:
             _as_dict(artifact.get("learning_causality_summary")).get(
                 "selection_causality_diagnostics"
             )
-        ).get("retained_decision_marginal_query_useful_alignment")
+        ).get("retained_decision_marginal_query_local_utility_alignment")
     )
     overall = _as_dict(alignment.get("overall"))
     retained_removal = _as_dict(_as_dict(alignment.get("by_decision")).get("retained_removal_loss"))

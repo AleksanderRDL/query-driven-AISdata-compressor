@@ -21,7 +21,7 @@ def _final_grid_row(workload_profile_id: str, profile_index: int) -> dict[str, A
         "run_label": workload_profile_id,
         "returncode": 0,
         "workload_profile_id": workload_profile_id,
-        "mlqds_primary_metric": "query_useful_v1",
+        "mlqds_primary_metric": "query_local_utility",
         "workload_stability_gate_pass": True,
         "support_overlap_gate_pass": True,
         "predictability_gate_pass": True,
@@ -35,9 +35,9 @@ def _final_grid_row(workload_profile_id: str, profile_index: int) -> dict[str, A
     for ratio in QUERY_DRIVEN_FINAL_COMPRESSION_RATIOS:
         prefix = audit_ratio_prefix(ratio)
         base = 0.50 + (0.05 * profile_index) + ratio
-        row[f"{prefix}_mlqds_query_useful_v1"] = base + 0.05
-        row[f"{prefix}_uniform_query_useful_v1"] = base
-        row[f"{prefix}_douglas_peucker_query_useful_v1"] = base - 0.05
+        row[f"{prefix}_mlqds_query_local_utility"] = base + 0.05
+        row[f"{prefix}_uniform_query_local_utility"] = base
+        row[f"{prefix}_douglas_peucker_query_local_utility"] = base - 0.05
     return row
 
 
@@ -45,17 +45,17 @@ def _minimal_query_driven_run_json_fixture() -> dict[str, Any]:
     return {
         "matched": {
             "MLQDS": {
-                "query_useful_v1_score": 0.70,
+                "query_local_utility_score": 0.70,
                 "range_usefulness_score": 0.65,
                 "range_point_f1": 0.60,
             },
             "uniform": {
-                "query_useful_v1_score": 0.60,
+                "query_local_utility_score": 0.60,
                 "range_usefulness_score": 0.55,
                 "range_point_f1": 0.50,
             },
             "DouglasPeucker": {
-                "query_useful_v1_score": 0.50,
+                "query_local_utility_score": 0.50,
                 "range_usefulness_score": 0.45,
                 "range_point_f1": 0.40,
             },
@@ -66,10 +66,10 @@ def _minimal_query_driven_run_json_fixture() -> dict[str, Any]:
                 "model_type": "workload_blind_range_v2",
                 "selector_type": "learned_segment_budget_v1",
                 "compression_ratio": 0.05,
-                "checkpoint_score_variant": "query_useful_v1",
+                "checkpoint_score_variant": "query_local_utility",
             },
             "query": {
-                "workload_profile_id": "range_workload_v1",
+                "workload_profile_id": "range_query_mix",
                 "target_coverage": 0.10,
                 "n_queries": 48,
                 "max_queries": 256,
@@ -78,7 +78,7 @@ def _minimal_query_driven_run_json_fixture() -> dict[str, Any]:
         },
         "final_claim_summary": {
             "status": "single_cell_pass",
-            "primary_metric": "QueryUsefulV1",
+            "primary_metric": "QueryLocalUtility",
             "final_success_allowed": False,
             "blocking_gates": [],
         },
@@ -107,8 +107,8 @@ def _minimal_query_driven_run_json_fixture() -> dict[str, Any]:
             "planned_learned_controlled_retained_slot_fraction": 0.30,
             "actual_learned_controlled_retained_slot_fraction": 0.30,
             "learning_causality_delta_gate": {
-                "min_material_query_useful_delta": 0.01,
-                "mlqds_uniform_query_useful_gap": 0.10,
+                "min_material_query_local_utility_delta": 0.01,
+                "mlqds_uniform_query_local_utility_gap": 0.10,
             },
             "learned_segment_selector_config": {
                 "geometry_gain_weight": 0.2,

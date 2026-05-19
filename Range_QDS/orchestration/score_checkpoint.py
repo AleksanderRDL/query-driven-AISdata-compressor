@@ -7,10 +7,10 @@ performed, so this is safe for a local CPU/GPU machine.
 Example, from repository root:
 
     uv run --group dev -- python -m orchestration.score_checkpoint \
-        --checkpoint Range_QDS/artifacts/benchmarks/query_driven_workload_blind_v2/runs/<run_id>/range_workload_v1_workload_blind_v2/benchmark_model.pt \
+        --checkpoint Range_QDS/artifacts/benchmarks/query_driven_workload_blind_v2/runs/<run_id>/range_query_mix_workload_blind_v2/benchmark_model.pt \
         --csv_path AISDATA/cleaned/<cleaned-ais-file.csv> \
         --n_queries 512 \
-        --results_dir Range_QDS/artifacts/benchmarks/inference_range_workload_v1_workload_blind_v2
+        --results_dir Range_QDS/artifacts/benchmarks/inference_range_query_mix_workload_blind_v2
 
 Run this from the repository root so the project package resolves through uv.
 """

@@ -18,9 +18,9 @@ from learning.query_prior_fields import (
     query_prior_field_metadata,
     sample_query_prior_fields,
 )
-from learning.targets.query_useful_v1 import QUERY_USEFUL_V1_HEAD_NAMES
+from learning.targets.query_local_utility import QUERY_LOCAL_UTILITY_HEAD_NAMES
 from scoring.metrics import MethodScore
-from scoring.query_useful_v1 import QUERY_USEFUL_V1_COMPONENT_WEIGHTS
+from scoring.query_local_utility import QUERY_LOCAL_UTILITY_COMPONENT_WEIGHTS
 
 PRIOR_ABLATION_SCORE_OUTPUT_SEMANTICS = "final_selector_score_after_mlqds_score_conversion"
 PRIOR_ABLATION_DIAGNOSTIC_CHAIN = (
@@ -132,32 +132,32 @@ def build_learned_slot_summary(
     return summary
 
 
-def query_useful_delta(
+def query_local_utility_delta(
     primary: MethodScore,
     ablations: dict[str, MethodScore],
     name: str,
 ) -> float | None:
-    """Return primary minus ablation QueryUsefulV1 if the ablation exists."""
+    """Return primary minus ablation QueryLocalUtility if the ablation exists."""
     ablation = ablations.get(name)
     if ablation is None:
         return None
-    return float(primary.query_useful_v1_score - ablation.query_useful_v1_score)
+    return float(primary.query_local_utility_score - ablation.query_local_utility_score)
 
 
-def query_useful_component_delta_summary(
+def query_local_utility_component_delta_summary(
     *,
     primary: MethodScore,
     ablations: dict[str, MethodScore],
     top_k: int = 5,
 ) -> dict[str, Any]:
-    """Return component-level QueryUsefulV1 deltas for causality ablations."""
-    primary_components = dict(primary.query_useful_v1_components or {})
+    """Return component-level QueryLocalUtility deltas for causality ablations."""
+    primary_components = dict(primary.query_local_utility_components or {})
     if not primary_components:
         return {}
     summary: dict[str, Any] = {}
     limit = max(0, int(top_k))
     for name, ablation in sorted(ablations.items()):
-        ablation_components = dict(ablation.query_useful_v1_components or {})
+        ablation_components = dict(ablation.query_local_utility_components or {})
         if not ablation_components:
             summary[name] = {"available": False, "reason": "missing_ablation_components"}
             continue
@@ -170,7 +170,7 @@ def query_useful_component_delta_summary(
             )
             component_deltas[component] = delta
             weighted_deltas[component] = delta * float(
-                QUERY_USEFUL_V1_COMPONENT_WEIGHTS.get(component, 0.0)
+                QUERY_LOCAL_UTILITY_COMPONENT_WEIGHTS.get(component, 0.0)
             )
 
         rows = [
@@ -183,11 +183,11 @@ def query_useful_component_delta_summary(
         ]
         positive_rows = sorted(rows, key=lambda row: float(row["weighted_delta"]), reverse=True)
         negative_rows = sorted(rows, key=lambda row: float(row["weighted_delta"]))
-        query_delta = float(primary.query_useful_v1_score - ablation.query_useful_v1_score)
+        query_delta = float(primary.query_local_utility_score - ablation.query_local_utility_score)
         weighted_sum = float(sum(weighted_deltas.values()))
         summary[name] = {
             "available": True,
-            "query_useful_v1_delta": query_delta,
+            "query_local_utility_delta": query_delta,
             "component_deltas": component_deltas,
             "weighted_component_deltas": weighted_deltas,
             "component_weighted_delta_sum": weighted_sum,
@@ -208,7 +208,7 @@ def causality_ablation_tradeoff_summary(
     mask_diagnostics: dict[str, dict[str, Any]],
     top_k: int = 5,
 ) -> dict[str, Any]:
-    """Connect ablation mask movement to QueryUsefulV1 component movement."""
+    """Connect ablation mask movement to QueryLocalUtility component movement."""
 
     def _numeric(value: Any) -> float | None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -261,7 +261,7 @@ def causality_ablation_tradeoff_summary(
         changed_denominator = (
             changed_count if changed_count is not None and changed_count > 0.0 else None
         )
-        query_delta = float(component_row.get("query_useful_v1_delta", 0.0))
+        query_delta = float(component_row.get("query_local_utility_delta", 0.0))
         top_positive = _row_list(component_row.get("top_positive_weighted_component_deltas"))
         top_negative = _row_list(component_row.get("top_negative_weighted_component_deltas"))
         if changed_denominator is None:
@@ -287,7 +287,7 @@ def causality_ablation_tradeoff_summary(
         summary[name] = {
             "available": True,
             "tradeoff_status": tradeoff_status,
-            "query_useful_v1_delta": query_delta,
+            "query_local_utility_delta": query_delta,
             "component_weighted_delta_sum": component_row.get("component_weighted_delta_sum"),
             "component_delta_residual": component_row.get("component_delta_residual"),
             "positive_weighted_component_delta_sum": positive_weighted_sum,
@@ -306,7 +306,7 @@ def causality_ablation_tradeoff_summary(
                 if isinstance(mask_row, dict)
                 else None
             ),
-            "query_useful_v1_delta_per_changed_retained_decision": delta_per_changed_decision,
+            "query_local_utility_delta_per_changed_retained_decision": delta_per_changed_decision,
             "positive_weighted_component_delta_sum_per_changed_retained_decision": (
                 positive_sum_per_changed_decision
             ),
@@ -328,7 +328,7 @@ def causality_ablation_diagnostics_payload(
     mask_diagnostics: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
     """Return reusable score, component, and mask diagnostics for ablations."""
-    component_deltas = query_useful_component_delta_summary(
+    component_deltas = query_local_utility_component_delta_summary(
         primary=primary,
         ablations=ablations,
     )
@@ -338,13 +338,13 @@ def causality_ablation_diagnostics_payload(
     )
     return {
         "available": True,
-        "primary_query_useful_v1_score": float(primary.query_useful_v1_score),
+        "primary_query_local_utility_score": float(primary.query_local_utility_score),
         "ablation_scores": {
-            name: float(metrics.query_useful_v1_score)
+            name: float(metrics.query_local_utility_score)
             for name, metrics in sorted(ablations.items())
         },
-        "ablation_query_useful_deltas": {
-            name: float(primary.query_useful_v1_score - metrics.query_useful_v1_score)
+        "ablation_query_local_utility_deltas": {
+            name: float(primary.query_local_utility_score - metrics.query_local_utility_score)
             for name, metrics in sorted(ablations.items())
         },
         "component_deltas": component_deltas,
@@ -362,7 +362,7 @@ def learning_causality_delta_gate_config(
     primary: MethodScore,
     uniform: MethodScore | None,
 ) -> dict[str, Any]:
-    """Return material QueryUsefulV1 delta thresholds for learning-causality checks."""
+    """Return material QueryLocalUtility delta thresholds for learning-causality checks."""
     min_delta = float(LEARNING_CAUSALITY_MIN_MATERIAL_DELTA)
     thresholds = {
         "shuffled_scores_should_lose": min_delta,
@@ -375,18 +375,18 @@ def learning_causality_delta_gate_config(
     }
     uniform_gap = None
     if uniform is not None:
-        uniform_gap = float(primary.query_useful_v1_score - uniform.query_useful_v1_score)
+        uniform_gap = float(primary.query_local_utility_score - uniform.query_local_utility_score)
         if uniform_gap > 0.0:
             thresholds["shuffled_scores_should_lose"] = max(
                 min_delta,
                 float(SHUFFLED_SCORE_DELTA_FRACTION_OF_UNIFORM_GAP_MIN) * uniform_gap,
             )
     return {
-        "min_material_query_useful_delta": min_delta,
+        "min_material_query_local_utility_delta": min_delta,
         "shuffled_score_delta_fraction_of_uniform_gap_min": float(
             SHUFFLED_SCORE_DELTA_FRACTION_OF_UNIFORM_GAP_MIN
         ),
-        "mlqds_uniform_query_useful_gap": uniform_gap,
+        "mlqds_uniform_query_local_utility_gap": uniform_gap,
         "thresholds": thresholds,
     }
 
@@ -521,7 +521,7 @@ def head_output_sensitivity(
             "primary_shape": list(primary.shape),
             "ablation_shape": list(ablation.shape),
         }
-    head_names: list[str] = [str(name) for name in QUERY_USEFUL_V1_HEAD_NAMES]
+    head_names: list[str] = [str(name) for name in QUERY_LOCAL_UTILITY_HEAD_NAMES]
     logit = _feature_matrix_sensitivity(
         primary=primary,
         ablation=ablation,

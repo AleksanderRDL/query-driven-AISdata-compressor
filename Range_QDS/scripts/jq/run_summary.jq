@@ -4,11 +4,11 @@ def delta($a; $b):
 {
   final_claim_summary,
   scores: {
-    mlqds_query_useful_v1: .matched.MLQDS.query_useful_v1_score,
-    uniform_query_useful_v1: .matched.uniform.query_useful_v1_score,
-    douglas_peucker_query_useful_v1: .matched.DouglasPeucker.query_useful_v1_score,
-    mlqds_vs_uniform: delta(.matched.MLQDS.query_useful_v1_score; .matched.uniform.query_useful_v1_score),
-    mlqds_vs_douglas_peucker: delta(.matched.MLQDS.query_useful_v1_score; .matched.DouglasPeucker.query_useful_v1_score)
+    mlqds_query_local_utility: .matched.MLQDS.query_local_utility_score,
+    uniform_query_local_utility: .matched.uniform.query_local_utility_score,
+    douglas_peucker_query_local_utility: .matched.DouglasPeucker.query_local_utility_score,
+    mlqds_vs_uniform: delta(.matched.MLQDS.query_local_utility_score; .matched.uniform.query_local_utility_score),
+    mlqds_vs_douglas_peucker: delta(.matched.MLQDS.query_local_utility_score; .matched.DouglasPeucker.query_local_utility_score)
   },
   gates: {
     workload_stability: .workload_stability_gate.gate_pass,

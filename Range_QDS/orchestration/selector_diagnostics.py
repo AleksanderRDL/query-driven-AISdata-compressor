@@ -10,17 +10,17 @@ import torch
 
 from learning.model_features import transform_workload_blind_range_v2_prior_features
 from learning.query_prior_fields import QUERY_PRIOR_FIELD_NAMES, sample_query_prior_fields
-from learning.targets.query_useful_v1 import (
-    QUERY_USEFUL_V1_HEAD_NAMES,
-    query_useful_v1_path_length_support_targets,
-    query_useful_v1_point_score,
+from learning.targets.query_local_utility import (
+    QUERY_LOCAL_UTILITY_HEAD_NAMES,
+    query_local_utility_path_length_support_targets,
+    query_local_utility_point_score,
 )
 from orchestration.segment_audits import segment_top_mean
 from scoring.method_scoring import _endpoint_sanity, score_range_usefulness
 from scoring.methods import FrozenMaskMethod
 from scoring.metrics import compute_geometric_distortion, compute_length_preservation
 from scoring.query_cache import ScoringQueryCache
-from scoring.query_useful_v1 import query_useful_v1_from_range_audit
+from scoring.query_local_utility import query_local_utility_from_range_audit
 from selection.learned_segment_budget import (
     GEOMETRY_TIE_BREAKER_WEIGHT,
     SEGMENT_ALLOCATION_WEIGHT_FLOOR,
@@ -39,17 +39,17 @@ def factorized_score_component_vectors_from_logits(
     if head_logits is None:
         return {}
     logits = head_logits.detach().cpu().float()
-    if logits.ndim != 2 or int(logits.shape[1]) < len(QUERY_USEFUL_V1_HEAD_NAMES):
+    if logits.ndim != 2 or int(logits.shape[1]) < len(QUERY_LOCAL_UTILITY_HEAD_NAMES):
         return {}
-    probabilities = torch.sigmoid(logits[:, : len(QUERY_USEFUL_V1_HEAD_NAMES)]).contiguous()
+    probabilities = torch.sigmoid(logits[:, : len(QUERY_LOCAL_UTILITY_HEAD_NAMES)]).contiguous()
     out = {
         f"head_probability_{head_name}": probabilities[:, head_idx].contiguous()
-        for head_idx, head_name in enumerate(QUERY_USEFUL_V1_HEAD_NAMES)
+        for head_idx, head_name in enumerate(QUERY_LOCAL_UTILITY_HEAD_NAMES)
     }
     out.update(
         {
             f"head_logit_{head_name}": logits[:, head_idx].contiguous()
-            for head_idx, head_name in enumerate(QUERY_USEFUL_V1_HEAD_NAMES)
+            for head_idx, head_name in enumerate(QUERY_LOCAL_UTILITY_HEAD_NAMES)
         }
     )
     q_hit = probabilities[:, 0].float().clamp(0.0, 1.0)
@@ -60,7 +60,7 @@ def factorized_score_component_vectors_from_logits(
     replacement_multiplier = 0.75 + 0.25 * replacement
     q_behavior_replacement = q_hit * behavior_multiplier * replacement_multiplier
     boundary_bonus = 0.25 * boundary
-    composed_score = query_useful_v1_point_score(
+    composed_score = query_local_utility_point_score(
         q_hit=q_hit,
         behavior=behavior,
         boundary=boundary,
@@ -117,7 +117,7 @@ def query_free_retained_removal_teacher_proxy_vectors(
             continue
         endpoint_support[int(start)] = 1.0
         endpoint_support[int(end) - 1] = 1.0
-    path_support = query_useful_v1_path_length_support_targets(
+    path_support = query_local_utility_path_length_support_targets(
         points_cpu,
         boundaries,
         segment_size=max(1, int(segment_size)),
@@ -588,7 +588,7 @@ def _top_marginal_miss_bucket_summary(rows: list[dict[str, Any]]) -> dict[str, A
             bucket_counts[str(bucket)] = bucket_counts.get(str(bucket), 0) + 1
     top_rows = sorted(
         rows,
-        key=lambda row: (-float(row["marginal_query_useful_v1"]), int(row["point_index"])),
+        key=lambda row: (-float(row["marginal_query_local_utility"]), int(row["point_index"])),
     )[: min(16, len(rows))]
     return {
         "available": bool(rows),
@@ -612,8 +612,8 @@ def _attach_top_marginal_miss_diagnostics(rows: list[dict[str, Any]]) -> None:
 
     _rank_rows_desc(
         rows,
-        output_name="marginal_query_useful_v1",
-        value_getter=lambda row: row.get("marginal_query_useful_v1"),
+        output_name="marginal_query_local_utility",
+        value_getter=lambda row: row.get("marginal_query_local_utility"),
     )
     for score_name in ("raw_score", "selector_score", "segment_score"):
         _rank_rows_desc(
@@ -642,10 +642,10 @@ def _attach_top_marginal_miss_diagnostics(rows: list[dict[str, Any]]) -> None:
             component_rank_by_row[row_idx][component_name] = int(rank_idx)
 
     for row_idx, row in enumerate(rows):
-        marginal_rank = row.get("marginal_query_useful_v1_candidate_rank")
+        marginal_rank = row.get("marginal_query_local_utility_candidate_rank")
         if marginal_rank is not None and component_rank_by_row[row_idx]:
-            row["query_useful_v1_component_candidate_ranks"] = component_rank_by_row[row_idx]
-            row["query_useful_v1_component_minus_marginal_rank"] = {
+            row["query_local_utility_component_candidate_ranks"] = component_rank_by_row[row_idx]
+            row["query_local_utility_component_minus_marginal_rank"] = {
                 name: int(component_rank) - int(marginal_rank)
                 for name, component_rank in component_rank_by_row[row_idx].items()
             }
@@ -670,7 +670,7 @@ def _attach_top_marginal_miss_diagnostics(rows: list[dict[str, Any]]) -> None:
             query_free_proxy_rank_by_row[row_idx][proxy_name] = int(rank_idx)
 
     for row_idx, row in enumerate(rows):
-        marginal_rank = row.get("marginal_query_useful_v1_candidate_rank")
+        marginal_rank = row.get("marginal_query_local_utility_candidate_rank")
         if marginal_rank is not None and query_free_proxy_rank_by_row[row_idx]:
             row["query_free_teacher_proxy_candidate_ranks"] = query_free_proxy_rank_by_row[row_idx]
             row["query_free_teacher_proxy_minus_marginal_rank"] = {
@@ -680,7 +680,7 @@ def _attach_top_marginal_miss_diagnostics(rows: list[dict[str, Any]]) -> None:
 
     for row_idx, row in enumerate(rows):
         buckets: list[str] = []
-        marginal_fraction = row.get("marginal_query_useful_v1_candidate_rank_fraction")
+        marginal_fraction = row.get("marginal_query_local_utility_candidate_rank_fraction")
         raw_fraction = row.get("raw_score_candidate_rank_fraction")
         selector_fraction = row.get("selector_score_candidate_rank_fraction")
         segment_fraction = row.get("segment_score_candidate_rank_fraction")
@@ -770,7 +770,7 @@ def _bounded_candidate_indices(
     return [int(idx) for idx in selected.unique(sorted=True).tolist()]
 
 
-def _query_useful_v1_score_for_mask(
+def _query_local_utility_score_for_mask(
     *,
     points: torch.Tensor,
     boundaries: list[tuple[int, int]],
@@ -788,13 +788,13 @@ def _query_useful_v1_score_for_mask(
     geometric = compute_geometric_distortion(points, boundaries, retained_mask)
     length = compute_length_preservation(points, boundaries, retained_mask)
     endpoint_sanity = _endpoint_sanity(retained_mask.detach().cpu().bool(), boundaries)
-    query_useful = query_useful_v1_from_range_audit(
+    query_local_utility = query_local_utility_from_range_audit(
         range_audit,
         length_preservation=length,
         avg_sed_km=float(geometric.get("avg_sed_km", 0.0)),
         endpoint_sanity=endpoint_sanity,
     )
-    score = query_useful.get("query_useful_v1_score", 0.0)
+    score = query_local_utility.get("query_local_utility_score", 0.0)
     return float(score) if isinstance(score, (int, float)) and not isinstance(score, bool) else 0.0
 
 
@@ -884,20 +884,20 @@ def _score_alignment_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     summary: dict[str, Any] = {"candidate_count": len(rows)}
     if not rows:
         return summary
-    marginals = [float(row["marginal_query_useful_v1"]) for row in rows]
+    marginals = [float(row["marginal_query_local_utility"]) for row in rows]
     summary.update(
         {
-            "mean_marginal_query_useful_v1": _mean(marginals),
+            "mean_marginal_query_local_utility": _mean(marginals),
             "positive_marginal_fraction": float(
                 sum(1 for value in marginals if value > 0.0) / float(len(marginals))
             ),
-            "max_marginal_query_useful_v1": max(marginals),
-            "min_marginal_query_useful_v1": min(marginals),
+            "max_marginal_query_local_utility": max(marginals),
+            "min_marginal_query_local_utility": min(marginals),
         }
     )
     for score_key in ("raw_score", "selector_score", "segment_score"):
         valid = [
-            (float(row[score_key]), float(row["marginal_query_useful_v1"]))
+            (float(row[score_key]), float(row["marginal_query_local_utility"]))
             for row in rows
             if row.get(score_key) is not None
         ]
@@ -932,7 +932,7 @@ def _nested_value_alignment_summary(
         valid = [
             (
                 float(row[row_field_name][value_name]),
-                float(row["marginal_query_useful_v1"]),
+                float(row["marginal_query_local_utility"]),
             )
             for row in rows
             if row.get(row_field_name) is not None
@@ -969,20 +969,20 @@ def _compact_proxy_subset_alignment_summary(rows: list[dict[str, Any]]) -> dict[
     summary: dict[str, Any] = {"candidate_count": len(rows)}
     if not rows:
         return summary
-    marginals = [float(row["marginal_query_useful_v1"]) for row in rows]
+    marginals = [float(row["marginal_query_local_utility"]) for row in rows]
     summary.update(
         {
-            "mean_marginal_query_useful_v1": _mean(marginals),
+            "mean_marginal_query_local_utility": _mean(marginals),
             "positive_marginal_fraction": float(
                 sum(1 for value in marginals if value > 0.0) / float(len(marginals))
             ),
-            "max_marginal_query_useful_v1": max(marginals),
-            "min_marginal_query_useful_v1": min(marginals),
+            "max_marginal_query_local_utility": max(marginals),
+            "min_marginal_query_local_utility": min(marginals),
         }
     )
     for score_key in ("raw_score", "selector_score", "segment_score"):
         valid = [
-            (float(row[score_key]), float(row["marginal_query_useful_v1"]))
+            (float(row[score_key]), float(row["marginal_query_local_utility"]))
             for row in rows
             if row.get(score_key) is not None
         ]
@@ -1093,14 +1093,14 @@ def _learned_controllable_marginal_teacher_summary(
         if str(row.get("source")) == "learned" and not _guard_owned_retained_row(row)
     ]
     summary = _score_alignment_summary(learned_rows)
-    marginals = [float(row["marginal_query_useful_v1"]) for row in learned_rows]
+    marginals = [float(row["marginal_query_local_utility"]) for row in learned_rows]
     value_variation = (max(marginals) - min(marginals)) if len(marginals) >= 2 else 0.0
     usable_candidate = len(marginals) >= 2 and value_variation > 1e-12
     summary.update(
         {
             "available": bool(learned_rows),
             "diagnostic_only": True,
-            "teacher_signal": "exact_retained_removal_marginal_query_useful_v1",
+            "teacher_signal": "exact_retained_removal_marginal_query_local_utility",
             "teacher_scope": "learned_controllable_retained_removal",
             "decision": "retained_removal_loss",
             "source": "learned",
@@ -1159,7 +1159,7 @@ def _separated_marginal_teacher_targets(
     summary: dict[str, Any] = {
         "available": False,
         "diagnostic_only": True,
-        "teacher_signal": "exact_retained_removal_marginal_query_useful_v1",
+        "teacher_signal": "exact_retained_removal_marginal_query_local_utility",
         "teacher_scope": "learned_controllable_retained_removal",
         "teacher_shape": "separated_segment_and_within_segment_point_targets",
         "teacher_usage_split": usage_split,
@@ -1207,7 +1207,7 @@ def _separated_marginal_teacher_targets(
     max_point_positive = 0.0
     for group_rows in grouped.values():
         positives = [
-            max(0.0, float(row.get("marginal_query_useful_v1", 0.0))) for row in group_rows
+            max(0.0, float(row.get("marginal_query_local_utility", 0.0))) for row in group_rows
         ]
         max_segment_sum = max(max_segment_sum, sum(positives))
         max_point_positive = max(max_point_positive, max(positives, default=0.0))
@@ -1217,16 +1217,16 @@ def _separated_marginal_teacher_targets(
     for (trajectory_idx, segment_idx, segment_start, segment_end), group_rows in grouped.items():
         context = group_rows[0].get("selector_segment_context") or {}
         positive_marginals = [
-            max(0.0, float(row.get("marginal_query_useful_v1", 0.0))) for row in group_rows
+            max(0.0, float(row.get("marginal_query_local_utility", 0.0))) for row in group_rows
         ]
-        raw_marginals = [float(row.get("marginal_query_useful_v1", 0.0)) for row in group_rows]
+        raw_marginals = [float(row.get("marginal_query_local_utility", 0.0)) for row in group_rows]
         segment_positive_sum = sum(positive_marginals)
         segment_positive_max = max(positive_marginals, default=0.0)
         local_max = max(segment_positive_max, 1e-12)
         ordered_group = sorted(
             group_rows,
             key=lambda row: (
-                -max(0.0, float(row.get("marginal_query_useful_v1", 0.0))),
+                -max(0.0, float(row.get("marginal_query_local_utility", 0.0))),
                 int(row.get("point_index", -1)),
             ),
         )
@@ -1265,7 +1265,7 @@ def _separated_marginal_teacher_targets(
         )
         for local_rank, row in enumerate(ordered_group, start=1):
             context = row.get("selector_segment_context") or {}
-            positive_marginal = max(0.0, float(row.get("marginal_query_useful_v1", 0.0)))
+            positive_marginal = max(0.0, float(row.get("marginal_query_local_utility", 0.0)))
             point_rows.append(
                 {
                     "point_index": _optional_int(row.get("point_index")),
@@ -1276,7 +1276,7 @@ def _separated_marginal_teacher_targets(
                     "point_offset_in_segment": _optional_int(
                         context.get("point_offset_in_segment")
                     ),
-                    "raw_point_marginal": float(row.get("marginal_query_useful_v1", 0.0)),
+                    "raw_point_marginal": float(row.get("marginal_query_local_utility", 0.0)),
                     "point_target_within_segment": float(positive_marginal / local_max),
                     "point_target_global": (
                         float(positive_marginal / max_point_positive)
@@ -1643,7 +1643,7 @@ def separated_marginal_teacher_selector_score_vectors(
     return segment_scores, point_scores, diagnostics
 
 
-def retained_decision_marginal_query_useful_diagnostics(
+def retained_decision_marginal_query_local_utility_diagnostics(
     *,
     points: torch.Tensor,
     boundaries: list[tuple[int, int]],
@@ -1663,7 +1663,7 @@ def retained_decision_marginal_query_useful_diagnostics(
     max_removed_candidates: int = 128,
     teacher_usage_split: str = "unknown",
 ) -> dict[str, Any]:
-    """Score bounded point-level QueryUsefulV1 marginals after masks are frozen.
+    """Score bounded point-level QueryLocalUtility marginals after masks are frozen.
 
     Retained candidates use leave-one-out loss. Removed candidates use add-one
     gain. The diagnostic is bounded and diagnostic-only; it is not a training
@@ -1731,7 +1731,7 @@ def retained_decision_marginal_query_useful_diagnostics(
         effective_query_cache = ScoringQueryCache.for_workload(points, boundaries, typed_queries)
         query_cache_created = True
 
-    primary_score = _query_useful_v1_score_for_mask(
+    primary_score = _query_local_utility_score_for_mask(
         points=points,
         boundaries=boundaries,
         typed_queries=typed_queries,
@@ -1752,7 +1752,7 @@ def retained_decision_marginal_query_useful_diagnostics(
             "point_index": int(index),
             "source": source,
             "decision": decision,
-            "marginal_query_useful_v1": float(marginal),
+            "marginal_query_local_utility": float(marginal),
             "raw_score": None if raw_vector is None else float(raw_vector[int(index)].item()),
             "selector_score": (
                 None if selector_vector is None else float(selector_vector[int(index)].item())
@@ -1786,7 +1786,7 @@ def retained_decision_marginal_query_useful_diagnostics(
                 name: float(vector[int(index)].item())
                 for name, vector in model_prior_component_vectors.items()
             },
-            "query_useful_v1_score_components": _row_score_component_values(
+            "query_local_utility_score_components": _row_score_component_values(
                 vectors=component_vectors,
                 index=int(index),
             ),
@@ -1808,7 +1808,7 @@ def retained_decision_marginal_query_useful_diagnostics(
         ):
             candidate = primary_mask.clone()
             candidate[int(index)] = False
-            score = _query_useful_v1_score_for_mask(
+            score = _query_local_utility_score_for_mask(
                 points=points,
                 boundaries=boundaries,
                 typed_queries=typed_queries,
@@ -1832,7 +1832,7 @@ def retained_decision_marginal_query_useful_diagnostics(
     ):
         candidate = primary_mask.clone()
         candidate[int(index)] = True
-        score = _query_useful_v1_score_for_mask(
+        score = _query_local_utility_score_for_mask(
             points=points,
             boundaries=boundaries,
             typed_queries=typed_queries,
@@ -1872,7 +1872,7 @@ def retained_decision_marginal_query_useful_diagnostics(
     return {
         "available": True,
         "diagnostic_only": True,
-        "exact_query_useful_v1_marginals": True,
+        "exact_query_local_utility_marginals": True,
         "performance_mode": "exact_cached_query_support",
         "elapsed_seconds": elapsed_seconds,
         "query_cache_provided": query_cache is not None,
@@ -1891,10 +1891,10 @@ def retained_decision_marginal_query_useful_diagnostics(
         ),
         "masks_frozen_before_query_scoring_required": True,
         "description": (
-            "Bounded retained-decision marginal QueryUsefulV1 diagnostic. "
+            "Bounded retained-decision marginal QueryLocalUtility diagnostic. "
             "Retained rows are leave-one-out loss; removed rows are add-one gain."
         ),
-        "primary_query_useful_v1": float(primary_score),
+        "primary_query_local_utility": float(primary_score),
         "retained_count": int(primary_mask.sum().item()),
         "point_count": point_count,
         "max_retained_per_source": int(max_retained_per_source),
@@ -1935,7 +1935,7 @@ def retained_decision_marginal_query_useful_diagnostics(
             key=lambda row: (
                 str(row["decision"]),
                 str(row["source"]),
-                -float(row["marginal_query_useful_v1"]),
+                -float(row["marginal_query_local_utility"]),
                 int(row["point_index"]),
             ),
         ),

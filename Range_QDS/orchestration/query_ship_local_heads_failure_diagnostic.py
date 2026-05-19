@@ -10,7 +10,7 @@ from typing import Any
 PRIMARY_METHOD = "MLQDS"
 BASELINE_METHOD = "DouglasPeucker"
 FOCUS_FAMILIES = {
-    "anchor_family": ("density_route", "crossing_turn_change"),
+    "anchor_family": ("density",),
     "footprint_family": ("small_local", "medium_operational"),
 }
 HEAD_NAMES = (
@@ -64,15 +64,15 @@ def _score_summary(artifact: dict[str, Any]) -> dict[str, float | None]:
     primary = _as_dict(matched.get(PRIMARY_METHOD))
     uniform = _as_dict(matched.get("uniform"))
     baseline = _as_dict(matched.get(BASELINE_METHOD))
-    primary_score = _as_float(primary.get("query_useful_v1_score"))
-    uniform_score = _as_float(uniform.get("query_useful_v1_score"))
-    baseline_score = _as_float(baseline.get("query_useful_v1_score"))
+    primary_score = _as_float(primary.get("query_local_utility_score"))
+    uniform_score = _as_float(uniform.get("query_local_utility_score"))
+    baseline_score = _as_float(baseline.get("query_local_utility_score"))
     return {
-        "primary_query_useful_v1": primary_score,
-        "uniform_query_useful_v1": uniform_score,
-        "baseline_query_useful_v1": baseline_score,
-        "primary_minus_uniform_query_useful_v1": _delta(primary_score, uniform_score),
-        "primary_minus_baseline_query_useful_v1": _delta(primary_score, baseline_score),
+        "primary_query_local_utility": primary_score,
+        "uniform_query_local_utility": uniform_score,
+        "baseline_query_local_utility": baseline_score,
+        "primary_minus_uniform_query_local_utility": _delta(primary_score, uniform_score),
+        "primary_minus_baseline_query_local_utility": _delta(primary_score, baseline_score),
     }
 
 
@@ -113,7 +113,7 @@ def _gate_summary(artifact: dict[str, Any]) -> dict[str, bool | None]:
 
 def _target_metadata(artifact: dict[str, Any]) -> dict[str, Any]:
     target = _as_dict(
-        _as_dict(artifact.get("training_target_diagnostics")).get("query_useful_v1_factorized")
+        _as_dict(artifact.get("training_target_diagnostics")).get("query_local_utility_factorized")
     )
     return {
         "target_mode": target.get("target_mode"),
@@ -200,7 +200,7 @@ def _target_family_rankers(
     family: str,
 ) -> dict[str, Any]:
     target = _as_dict(
-        _as_dict(artifact.get("training_target_diagnostics")).get("query_useful_v1_factorized")
+        _as_dict(artifact.get("training_target_diagnostics")).get("query_local_utility_factorized")
     )
     row = _as_dict(
         _as_dict(
@@ -321,13 +321,13 @@ def _comparison(reference: dict[str, Any], candidate: dict[str, Any]) -> dict[st
     ]
     return {
         "score_delta": {
-            "primary_query_useful_v1": _delta(
-                candidate_summary["scores"]["primary_query_useful_v1"],
-                reference_summary["scores"]["primary_query_useful_v1"],
+            "primary_query_local_utility": _delta(
+                candidate_summary["scores"]["primary_query_local_utility"],
+                reference_summary["scores"]["primary_query_local_utility"],
             ),
-            "primary_minus_baseline_query_useful_v1": _delta(
-                candidate_summary["scores"]["primary_minus_baseline_query_useful_v1"],
-                reference_summary["scores"]["primary_minus_baseline_query_useful_v1"],
+            "primary_minus_baseline_query_local_utility": _delta(
+                candidate_summary["scores"]["primary_minus_baseline_query_local_utility"],
+                reference_summary["scores"]["primary_minus_baseline_query_local_utility"],
             ),
         },
         "gate_regressions": [

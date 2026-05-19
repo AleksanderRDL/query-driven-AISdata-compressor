@@ -7,11 +7,8 @@ import torch
 DENSITY_ANCHOR_PROBABILITY = 0.70
 DENSITY_GRID_BINS = 64
 RANGE_ANCHOR_MODES = ("mixed_density", "dense", "uniform", "sparse")
-RANGE_WORKLOAD_V1_ANCHOR_FAMILIES = (
-    "density_route",
-    "boundary_entry_exit",
-    "crossing_turn_change",
-    "port_or_approach_zone",
+RANGE_QUERY_MIX_ANCHOR_FAMILIES = (
+    "density",
     "sparse_background_control",
 )
 
@@ -74,67 +71,6 @@ def _sparse_anchor_weights(points: torch.Tensor, bins: int = DENSITY_GRID_BINS) 
     return weights / total
 
 
-def _normalize_weights(weights: torch.Tensor) -> torch.Tensor:
-    """Return a probability vector, falling back to uniform when needed."""
-    if int(weights.numel()) == 0:
-        return weights.to(dtype=torch.float32)
-    clean = torch.nan_to_num(weights.float().clamp(min=0.0), nan=0.0, posinf=0.0, neginf=0.0)
-    total = float(clean.sum().item())
-    if total <= 1e-12:
-        return torch.ones_like(clean, dtype=torch.float32) / float(clean.numel())
-    return clean / total
-
-
-def _endpoint_anchor_weights(points: torch.Tensor) -> torch.Tensor:
-    """Return endpoint-biased anchor weights from query-free trajectory flags."""
-    if points.shape[0] == 0:
-        return torch.empty((0,), dtype=torch.float32, device=points.device)
-    weights = torch.ones((points.shape[0],), dtype=torch.float32, device=points.device)
-    if points.shape[1] > 6:
-        endpoint = (points[:, 5].float() > 0.5) | (points[:, 6].float() > 0.5)
-        weights = weights + 8.0 * endpoint.float()
-    if points.shape[1] > 7:
-        weights = weights + 3.0 * points[:, 7].float().clamp(min=0.0)
-    return _normalize_weights(weights)
-
-
-def _turn_change_anchor_weights(points: torch.Tensor) -> torch.Tensor:
-    """Return turn/change-biased anchor weights from query-free point features."""
-    if points.shape[0] == 0:
-        return torch.empty((0,), dtype=torch.float32, device=points.device)
-    weights = torch.ones((points.shape[0],), dtype=torch.float32, device=points.device)
-    if points.shape[1] > 7:
-        weights = weights + 8.0 * points[:, 7].float().clamp(min=0.0)
-    if points.shape[1] > 4:
-        prev_idx = torch.clamp(torch.arange(points.shape[0], device=points.device) - 1, min=0)
-        heading_delta = torch.abs(points[:, 4].float() - points[prev_idx, 4].float())
-        heading_delta = torch.minimum(heading_delta, 360.0 - heading_delta).clamp(min=0.0) / 180.0
-        weights = weights + 4.0 * heading_delta
-    if points.shape[1] > 3:
-        prev_idx = torch.clamp(torch.arange(points.shape[0], device=points.device) - 1, min=0)
-        speed_delta = torch.abs(points[:, 3].float() - points[prev_idx, 3].float())
-        if float(speed_delta.max().item()) > 1e-6:
-            speed_delta = speed_delta / speed_delta.max().clamp(min=1e-6)
-        weights = weights + 2.0 * speed_delta
-    return _normalize_weights(weights)
-
-
-def _port_or_approach_anchor_weights(points: torch.Tensor) -> torch.Tensor:
-    """Return hotspot/approach weights distinct from generic route density."""
-    if points.shape[0] == 0:
-        return torch.empty((0,), dtype=torch.float32, device=points.device)
-    density = _density_anchor_weights(points)
-    endpoint = _endpoint_anchor_weights(points)
-    weights = 0.35 * density + 0.35 * endpoint
-    if points.shape[1] > 3:
-        speed = points[:, 3].float().clamp(min=0.0)
-        if int(speed.numel()) > 0:
-            low_speed_cutoff = torch.quantile(speed, 0.30)
-            slow = (speed <= low_speed_cutoff).float()
-            weights = weights + 0.30 * _normalize_weights(slow)
-    return _normalize_weights(weights)
-
-
 def _normalize_range_anchor_mode(mode: str) -> str:
     """Normalize range-query anchor sampling mode names."""
     normalized = str(mode).strip().lower()
@@ -160,17 +96,11 @@ def _anchor_weights_for_family(
     points: torch.Tensor,
     family: str,
 ) -> tuple[torch.Tensor | None, float]:
-    """Return anchor weights for a range_workload_v1 anchor family."""
+    """Return anchor weights for a range_query_mix anchor family."""
     normalized = str(family).strip().lower()
     if normalized == "sparse_background_control":
         return _sparse_anchor_weights(points), 1.0
-    if normalized == "boundary_entry_exit":
-        return _endpoint_anchor_weights(points), 1.0
-    if normalized == "crossing_turn_change":
-        return _turn_change_anchor_weights(points), 1.0
-    if normalized == "port_or_approach_zone":
-        return _port_or_approach_anchor_weights(points), 1.0
-    if normalized == "density_route":
+    if normalized == "density":
         return _density_anchor_weights(points), 1.0
     raise ValueError(f"Unknown range workload anchor family: {family!r}.")
 

@@ -297,7 +297,7 @@ This is still diagnostic evidence, not final acceptance evidence. The final grid
 Current strict-cell result:
 
 ```text
-QueryUsefulV1:
+QueryLocalUtility:
   MLQDS:           0.1662115143
   uniform:         0.1421296610
   DouglasPeucker:  0.1671038781
@@ -315,7 +315,7 @@ Length preservation:
 Latest guarded target strict-cell result:
 
 ```text
-QueryUsefulV1:
+QueryLocalUtility:
   MLQDS:           0.1673482145
   uniform:         0.1421296610
   DouglasPeucker:  0.1671038781
@@ -349,7 +349,7 @@ increasing workload scale, widening caps, or running the full matrix unless a
 focused probe shows those gates regressed.
 
 The active blockers are **predictability** and **learning causality**. MLQDS
-beats uniform but still narrowly loses to Douglas-Peucker on QueryUsefulV1, so
+beats uniform but still narrowly loses to Douglas-Peucker on QueryLocalUtility, so
 there is no acceptable product win even before the causality failures.
 
 Predictability gate:
@@ -430,9 +430,9 @@ Current interpretation:
   prior/target alignment before model tuning.
 - Score ordering still has weak retained-set marginal value. The retained
   marginal payload shows overall selector-score Spearman `-0.0077522559` and
-  raw-score Spearman `-0.0248828079` against exact QueryUsefulV1 marginals.
+  raw-score Spearman `-0.0248828079` against exact QueryLocalUtility marginals.
 - The segment-context scalar-score candidate was rejected by checkpoint49. It
-  improved fit diagnostics but worsened MLQDS QueryUsefulV1 versus checkpoint42
+  improved fit diagnostics but worsened MLQDS QueryLocalUtility versus checkpoint42
   and failed predictability plus all learning-causality child gates. The active
   scalar formula is reverted to the accepted point-score contract.
 - Prior and head ablations move final masks too little, and removing behavior or
@@ -443,7 +443,7 @@ Current interpretation:
   but both artifacts fail workload stability, workload signature,
   predictability, prior-predictive alignment, and learning causality. Do not
   tune model, loss, or selector from those failed-gate artifacts.
-- Checkpoint59 is especially clear: MLQDS QueryUsefulV1 is `0.1430895194`
+- Checkpoint59 is especially clear: MLQDS QueryLocalUtility is `0.1430895194`
   versus uniform `0.1445766821`, and active scores are anti-aligned with
   learned-controllable exact marginal value at standard strict scale. Selection
   raw/selector/segment Spearman are `-0.2474340176`, `-0.2606304985`, and
@@ -473,7 +473,7 @@ Current interpretation:
 - Checkpoint63-64 tested an explicit learned-segment-budget-shaped loss
   objective, then removed the objective from production paths after strict
   rejection. Checkpoint64 passed workload/profile gates but worsened MLQDS
-  QueryUsefulV1 to `0.1630146227`, still lost to Douglas-Peucker
+  QueryLocalUtility to `0.1630146227`, still lost to Douglas-Peucker
   `0.1671038781`, and made learning causality worse: shuffled-score delta
   dropped to `0.0017380253`, untrained delta became `-0.0021686561`, and
   no-segment-budget-head delta was only `0.0021650137`. Do not re-add this
@@ -535,7 +535,7 @@ Current interpretation:
   lose to the checkpoint-selection primary.
 - Checkpoint 5.131 diagnoses the strict failure and incorporates
   `docs/keep-in-mind.md`: workload profiles, anchor-family weights, and
-  QueryUsefulV1 components are not fixed constants. The next work should
+  QueryLocalUtility components are not fixed constants. The next work should
   diagnose workload/scoring compatibility for a coherent query-local trainable
   signal before adding training semantics.
 
@@ -543,7 +543,7 @@ Relevant diagnostics before and around the current-best artifact:
 
 ```text
 checkpoint23 prior sqrt transform standard strict:
-  MLQDS QueryUsefulV1: 0.1523652257
+  MLQDS QueryLocalUtility: 0.1523652257
   failed: target diffusion, learning causality
   decision: reject sqrt_probability prior transform
 
@@ -556,7 +556,7 @@ checkpoint24 head dispersion diagnosis:
     path_length_support_target
 
 checkpoint27 dense-head rank standard strict:
-  MLQDS QueryUsefulV1: 0.1478283847
+  MLQDS QueryLocalUtility: 0.1478283847
   factorized final-score prediction_std_to_target_std: 0.1081234205
   failed: target diffusion, workload signature, learning causality
   shuffled-score delta: 0.0002758070
@@ -570,7 +570,7 @@ checkpoint28 score/selector alignment derived diagnosis:
 
 checkpoint29 retained-decision marginal instrumentation:
   old strict artifacts cannot rank exact final retained decisions by marginal
-    QueryUsefulV1 because final/source mask indices were missing
+    QueryLocalUtility because final/source mask indices were missing
   learned segment-budget trace schema: 7
   new query-free trace masks:
     retained_mask
@@ -584,9 +584,9 @@ checkpoint29 retained-decision marginal instrumentation:
 
 checkpoint30 retained-marginal helper unit diagnostic:
   added bounded diagnostic helper:
-    orchestration.selector_diagnostics.retained_decision_marginal_query_useful_diagnostics
-  retained candidates: leave-one-out QueryUsefulV1 loss
-  removed candidates: add-one QueryUsefulV1 gain
+    orchestration.selector_diagnostics.retained_decision_marginal_query_local_utility_diagnostics
+  retained candidates: leave-one-out QueryLocalUtility loss
+  removed candidates: add-one QueryLocalUtility gain
   alignment fields:
     raw_score
     selector_score
@@ -598,7 +598,7 @@ checkpoint30 retained-marginal helper unit diagnostic:
 
 checkpoint31 retained-marginal payload hook:
   payload key:
-    selector_trace_diagnostics.eval_primary.retained_decision_marginal_query_useful_alignment
+    selector_trace_diagnostics.eval_primary.retained_decision_marginal_query_local_utility_alignment
   rule:
     retained-decision marginal alignment lives under the selector trace path.
     Do not use learning_causality_summary.selection_causality_diagnostics as a
@@ -611,9 +611,9 @@ checkpoint31 retained-marginal payload hook:
     guide-allowed replay that emits this payload on a real learned-selector run
 
 checkpoint32 retained-marginal payload Level 1 smoke:
-  MLQDS QueryUsefulV1: 0.1003881274
-  uniform QueryUsefulV1: 0.1005303922
-  Douglas-Peucker QueryUsefulV1: 0.1042713959
+  MLQDS QueryLocalUtility: 0.1003881274
+  uniform QueryLocalUtility: 0.1005303922
+  Douglas-Peucker QueryLocalUtility: 0.1042713959
   payload:
     available: true
     diagnostic_only: true
@@ -634,9 +634,9 @@ checkpoint32 retained-marginal payload Level 1 smoke:
     did not cleanly exercise the selector-workload question.
 
 checkpoint33 retained-marginal payload Level 1 smoke with selection queries:
-  MLQDS QueryUsefulV1: 0.2912429205
-  uniform QueryUsefulV1: 0.2889764732
-  Douglas-Peucker QueryUsefulV1: 0.2902431939
+  MLQDS QueryLocalUtility: 0.2912429205
+  uniform QueryLocalUtility: 0.2889764732
+  Douglas-Peucker QueryLocalUtility: 0.2902431939
   workload query counts:
     train: 8
     train_r1: 8
@@ -663,9 +663,9 @@ checkpoint33 retained-marginal payload Level 1 smoke with selection queries:
     forbidden at this scale.
 
 checkpoint34 retained-marginal payload Level 2 minimum strict:
-  MLQDS QueryUsefulV1: 0.1380248104
-  uniform QueryUsefulV1: 0.1096775731
-  Douglas-Peucker QueryUsefulV1: 0.1386078304
+  MLQDS QueryLocalUtility: 0.1380248104
+  uniform QueryLocalUtility: 0.1096775731
+  Douglas-Peucker QueryLocalUtility: 0.1386078304
   gates passed:
     workload stability
     support overlap
@@ -693,9 +693,9 @@ checkpoint34 retained-marginal payload Level 2 minimum strict:
     small split/query scale.
 
 checkpoint35 retained-marginal payload standard strict v1:
-  MLQDS QueryUsefulV1: 0.1247339820
-  uniform QueryUsefulV1: 0.1404554573
-  Douglas-Peucker QueryUsefulV1: 0.1345268094
+  MLQDS QueryLocalUtility: 0.1247339820
+  uniform QueryLocalUtility: 0.1404554573
+  Douglas-Peucker QueryLocalUtility: 0.1345268094
   gates passed:
     workload stability
     support overlap
@@ -724,9 +724,9 @@ checkpoint35 retained-marginal payload standard strict v1:
     changing model, selector, or target behavior.
 
 checkpoint36 retained-marginal payload standard strict balanced local:
-  MLQDS QueryUsefulV1: 0.1549194326
-  uniform QueryUsefulV1: 0.1152263547
-  Douglas-Peucker QueryUsefulV1: 0.1749545436
+  MLQDS QueryLocalUtility: 0.1549194326
+  uniform QueryLocalUtility: 0.1152263547
+  Douglas-Peucker QueryLocalUtility: 0.1749545436
   gates passed:
     workload stability
     support overlap
@@ -759,13 +759,13 @@ checkpoint36 retained-marginal payload standard strict balanced local:
 checkpoint37 retained-marginal cached query support:
   evidence level: implementation only
   change:
-    retained-decision marginal QueryUsefulV1 diagnostics now reuse
+    retained-decision marginal QueryLocalUtility diagnostics now reuse
     ScoringQueryCache for retained-independent range-query support.
   semantics:
-    exact QueryUsefulV1 marginals are preserved. The diagnostic still scores
+    exact QueryLocalUtility marginals are preserved. The diagnostic still scores
     frozen masks after retained-mask construction and remains diagnostic-only.
   payload metadata:
-    exact_query_useful_v1_marginals
+    exact_query_local_utility_marginals
     performance_mode
     elapsed_seconds
     query_cache_provided
@@ -783,9 +783,9 @@ checkpoint37 retained-marginal cached query support:
     with the cached retained-marginal payload.
 
 checkpoint38 cached retained-marginal current-best-scale strict local:
-  MLQDS QueryUsefulV1: 0.1662115143
-  uniform QueryUsefulV1: 0.1421296610
-  Douglas-Peucker QueryUsefulV1: 0.1671038781
+  MLQDS QueryLocalUtility: 0.1662115143
+  uniform QueryLocalUtility: 0.1421296610
+  Douglas-Peucker QueryLocalUtility: 0.1671038781
   gates passed:
     workload stability
     support overlap
@@ -821,7 +821,7 @@ checkpoint38 cached retained-marginal current-best-scale strict local:
   retained-marginal payload:
     available: true
     diagnostic_only: true
-    exact_query_useful_v1_marginals: true
+    exact_query_local_utility_marginals: true
     performance_mode: exact_cached_query_support
     elapsed_seconds: 17.8225840520
     candidate_count: 160
@@ -868,7 +868,7 @@ checkpoint40 workload query-count stability generation-only:
   scale:
     384 ships, 256 points, 4 route families, balanced 0.34/0.33 split,
     48 minimum queries, 256 max queries, 4 train workload replicates,
-    range_workload_v1_local, profile_sampled_query_count
+    range_query_mix_local, profile_sampled_query_count
   seeds:
     2324, 2325, 2326, 2327, 2328
   signature results:
@@ -930,9 +930,9 @@ checkpoint41 query-count signature invariant:
       global-sanity gates.
 
 checkpoint42 mode-aware current-best strict local:
-  MLQDS QueryUsefulV1: 0.1662115143
-  uniform QueryUsefulV1: 0.1421296610
-  Douglas-Peucker QueryUsefulV1: 0.1671038781
+  MLQDS QueryLocalUtility: 0.1662115143
+  uniform QueryLocalUtility: 0.1421296610
+  Douglas-Peucker QueryLocalUtility: 0.1671038781
   gates passed:
     workload stability
     support overlap
@@ -957,7 +957,7 @@ checkpoint42 mode-aware current-best strict local:
     no-query-prior delta 0.0000575989 versus required 0.005
   retained-marginal payload:
     available: true
-    exact_query_useful_v1_marginals: true
+    exact_query_local_utility_marginals: true
     candidate_count: 160
     overall raw Spearman: -0.0248828079
     overall selector Spearman: -0.0077522559
@@ -1035,7 +1035,7 @@ checkpoint43 derived prior/head/selector marginal diagnosis:
     head fit: mixed; query-hit and segment-budget heads carry signal, while
       behavior, boundary-event, and path-length heads are weak or flat
     selector marginal alignment: blocking; raw, selector, and segment scores
-      rank exact retained-decision marginal QueryUsefulV1 weakly or negatively
+      rank exact retained-decision marginal QueryLocalUtility weakly or negatively
     learning causality: blocking; score/segment ablations move masks but do not
       clear required material-delta gates, and prior ablations barely move masks
 
@@ -1103,15 +1103,15 @@ checkpoint47 segment-context score formula implementation smoke:
   evidence level:
     Level 1 implementation/runtime smoke only
   code change:
-    QueryUsefulV1 scalar labels and workload_blind_range_v2 final logits now
+    QueryLocalUtility scalar labels and workload_blind_range_v2 final logits now
     share the same formula. The local point score is blended with
     segment_budget_target context at weight 0.15. path_length_support_target
     stays out of the scalar score because the current strict evidence shows it
     is weak and disabled in allocation.
   smoke result:
-    MLQDS QueryUsefulV1: 0.1140836937
-    uniform QueryUsefulV1: 0.1135960307
-    Douglas-Peucker QueryUsefulV1: 0.2382488243
+    MLQDS QueryLocalUtility: 0.1140836937
+    uniform QueryLocalUtility: 0.1135960307
+    Douglas-Peucker QueryLocalUtility: 0.2382488243
     failed gates: workload stability, predictability, prior-predictive
       alignment, target diffusion, workload signature, learning causality,
       global sanity
@@ -1131,9 +1131,9 @@ checkpoint48 segment-context formula minimum strict diagnostic:
     32 ships, 128 points, 3 route families, 24 accepted queries per workload,
     4 train workload replicates, 3 epochs, 5% compression
   key result:
-    MLQDS QueryUsefulV1: 0.0806495175
-    uniform QueryUsefulV1: 0.0527182052
-    Douglas-Peucker QueryUsefulV1: 0.1970008932
+    MLQDS QueryLocalUtility: 0.0806495175
+    uniform QueryLocalUtility: 0.0527182052
+    Douglas-Peucker QueryLocalUtility: 0.1970008932
   gate result:
     passed: support overlap
     failed: workload stability, workload signature, target diffusion,
@@ -1162,9 +1162,9 @@ checkpoint49 segment-context formula current-best strict diagnostic:
     384 ships, 256 points, 4 route families, 48 accepted queries per workload,
     4 train workload replicates, 3 epochs, 5% compression
   key result:
-    MLQDS QueryUsefulV1: 0.1555318121
-    uniform QueryUsefulV1: 0.1421296610
-    Douglas-Peucker QueryUsefulV1: 0.1671038781
+    MLQDS QueryLocalUtility: 0.1555318121
+    uniform QueryLocalUtility: 0.1421296610
+    Douglas-Peucker QueryLocalUtility: 0.1671038781
   gate result:
     passed: workload stability, support overlap, target diffusion, workload
       signature, prior-predictive alignment, global sanity
@@ -1196,12 +1196,12 @@ checkpoint50 top-marginal-miss payload smoke:
   code change:
     retained-marginal rows now include trajectory index, selector stage state,
     head probabilities/logits, sampled prior channels, model-facing prior
-    channels, QueryUsefulV1 score components, candidate ranks, component-vs-
+    channels, QueryLocalUtility score components, candidate ranks, component-vs-
     marginal rank deltas, and heuristic failure buckets
   smoke result:
-    MLQDS QueryUsefulV1: 0.1165340475
-    uniform QueryUsefulV1: 0.1134645206
-    Douglas-Peucker QueryUsefulV1: 0.1135542137
+    MLQDS QueryLocalUtility: 0.1165340475
+    uniform QueryLocalUtility: 0.1134645206
+    Douglas-Peucker QueryLocalUtility: 0.1135542137
     retained-marginal candidate rows: 72
     failed gates: workload stability, predictability, prior-predictive
       alignment, workload signature, learning causality, global sanity
@@ -1217,9 +1217,9 @@ checkpoint51 top-marginal-miss current-best strict diagnostic:
   evidence level:
     Level 3 current-best strict local diagnostic
   key result:
-    MLQDS QueryUsefulV1: 0.1662115143
-    uniform QueryUsefulV1: 0.1421296610
-    Douglas-Peucker QueryUsefulV1: 0.1671038781
+    MLQDS QueryLocalUtility: 0.1662115143
+    uniform QueryLocalUtility: 0.1421296610
+    Douglas-Peucker QueryLocalUtility: 0.1671038781
   gate result:
     passed: workload stability, support overlap, target diffusion, workload
       signature, prior-predictive alignment, global sanity
@@ -1260,9 +1260,9 @@ checkpoint53 teacher-proxy current-best strict diagnostic:
   evidence level:
     Level 3 current-best strict local diagnostic
   key result:
-    MLQDS QueryUsefulV1: 0.1662115143
-    uniform QueryUsefulV1: 0.1421296610
-    Douglas-Peucker QueryUsefulV1: 0.1671038781
+    MLQDS QueryLocalUtility: 0.1662115143
+    uniform QueryLocalUtility: 0.1421296610
+    Douglas-Peucker QueryLocalUtility: 0.1671038781
   gate result:
     passed: workload stability, support overlap, target diffusion, workload
       signature, prior-predictive alignment, global sanity
@@ -1319,9 +1319,9 @@ checkpoint55 query-free teacher guard-coupling current-best strict:
   evidence level:
     Level 3 current-best strict local diagnostic
   key result:
-    MLQDS QueryUsefulV1: 0.1662115143
-    uniform QueryUsefulV1: 0.1421296610
-    Douglas-Peucker QueryUsefulV1: 0.1671038781
+    MLQDS QueryLocalUtility: 0.1662115143
+    uniform QueryLocalUtility: 0.1421296610
+    Douglas-Peucker QueryLocalUtility: 0.1671038781
   gate result:
     passed: workload stability, support overlap, target diffusion, workload
       signature, prior-predictive alignment, global sanity
@@ -1380,16 +1380,16 @@ checkpoint57 selection-side marginal teacher smoke:
   code change:
     selector_trace_diagnostics now has selection_primary beside eval_primary.
     Full selection-workload exact retained-decision marginal rows live under
-      selector_trace_diagnostics.selection_primary.retained_decision_marginal_query_useful_alignment.rows.
+      selector_trace_diagnostics.selection_primary.retained_decision_marginal_query_local_utility_alignment.rows.
     learning_causality_summary.selection_causality_diagnostics exposes compact
       row-free selection_retained_decision_marginal_teacher.
     retained marginal diagnostics now include a
       learned_controllable_marginal_teacher_summary that excludes skeleton,
       fallback, and length-repair guard-owned retained-removal rows.
   smoke result:
-    MLQDS QueryUsefulV1: 0.1274302100
-    uniform QueryUsefulV1: 0.1262302903
-    Douglas-Peucker QueryUsefulV1: 0.2389240113
+    MLQDS QueryLocalUtility: 0.1274302100
+    uniform QueryLocalUtility: 0.1262302903
+    Douglas-Peucker QueryLocalUtility: 0.2389240113
     selection marginal rows: 72
     learned-controllable retained-removal teacher rows: 1
     selection trace matches frozen primary selection mask: true
@@ -1409,9 +1409,9 @@ checkpoint58 selection-side marginal teacher minimum strict:
   evidence level:
     Level 2 minimum strict diagnostic
   key result:
-    MLQDS QueryUsefulV1: 0.1392315675
-    uniform QueryUsefulV1: 0.1055556512
-    Douglas-Peucker QueryUsefulV1: 0.1120862571
+    MLQDS QueryLocalUtility: 0.1392315675
+    uniform QueryLocalUtility: 0.1055556512
+    Douglas-Peucker QueryLocalUtility: 0.1120862571
     gates passed: support overlap, target diffusion, global sanity
     gates failed: workload stability, workload signature, predictability,
       prior-predictive alignment, learning causality
@@ -1434,9 +1434,9 @@ checkpoint59 selection-side marginal teacher standard strict:
   evidence level:
     Level 3 standard strict diagnostic
   key result:
-    MLQDS QueryUsefulV1: 0.1430895194
-    uniform QueryUsefulV1: 0.1445766821
-    Douglas-Peucker QueryUsefulV1: 0.1385893349
+    MLQDS QueryLocalUtility: 0.1430895194
+    uniform QueryLocalUtility: 0.1445766821
+    Douglas-Peucker QueryLocalUtility: 0.1385893349
     gates passed: support overlap, target diffusion, global sanity
     gates failed: workload stability, workload signature, predictability,
       prior-predictive alignment, learning causality
@@ -1501,11 +1501,11 @@ checkpoint61 selection-side marginal teacher current-best strict:
   scale:
     384 ships, 256 points, 4 route families, balanced 0.34/0.33 split,
     48 minimum queries, 256 max queries, 4 train workload replicates,
-    range_workload_v1_local, profile_sampled_query_count
+    range_query_mix_local, profile_sampled_query_count
   key result:
-    MLQDS QueryUsefulV1: 0.1662115143
-    uniform QueryUsefulV1: 0.1421296610
-    Douglas-Peucker QueryUsefulV1: 0.1671038781
+    MLQDS QueryLocalUtility: 0.1662115143
+    uniform QueryLocalUtility: 0.1421296610
+    Douglas-Peucker QueryLocalUtility: 0.1671038781
     MLQDS RangeUsefulLegacy: 0.1524363397
     uniform RangeUsefulLegacy: 0.1303214771
     Douglas-Peucker RangeUsefulLegacy: 0.1526760352
@@ -1597,9 +1597,9 @@ checkpoint63 learned-segment-budget loss smoke:
       the checkpoint
   smoke result:
     artifact emitted and retained-marginal layouts stayed valid
-    MLQDS QueryUsefulV1: 0.0300736024
-    uniform QueryUsefulV1: 0.0989417253
-    Douglas-Peucker QueryUsefulV1: 0.1068160240
+    MLQDS QueryLocalUtility: 0.0300736024
+    uniform QueryLocalUtility: 0.0989417253
+    Douglas-Peucker QueryLocalUtility: 0.1068160240
     failed gates: workload stability, predictability, prior-predictive
       alignment, workload signature, learning causality, global sanity
   decision:
@@ -1614,9 +1614,9 @@ checkpoint64 learned-segment-budget loss current-best strict:
   evidence level:
     Level 3 current-best strict local diagnostic
   key result:
-    MLQDS QueryUsefulV1: 0.1630146227
-    uniform QueryUsefulV1: 0.1421296610
-    Douglas-Peucker QueryUsefulV1: 0.1671038781
+    MLQDS QueryLocalUtility: 0.1630146227
+    uniform QueryLocalUtility: 0.1421296610
+    Douglas-Peucker QueryLocalUtility: 0.1671038781
     MLQDS RangeUsefulLegacy: 0.1484470460
     uniform RangeUsefulLegacy: 0.1303214771
     Douglas-Peucker RangeUsefulLegacy: 0.1526760352
@@ -1701,7 +1701,7 @@ Primary hypothesis:
   is 0.1601869377, direct teacher is 0.1558174990, hybrid w10 is 0.1561941598,
   and hybrid w25 is 0.1563610880.
   Checkpoint 5.131 says the next checkpoint should stop treating profile
-  weights and QueryUsefulV1 component weights as constants and instead diagnose
+  weights and QueryLocalUtility component weights as constants and instead diagnose
   whether they produce a simple, query-local, trainable signal together.
   Use docs/Next-Iterations.md to guide the next checkpoint sequence.
   Keep docs/keep-in-mind.md in view: the profile/scoring design only needs to
@@ -1731,7 +1731,7 @@ Preferred scope:
   predictability and learning causality. The clean strict blocker is
   ship-level evidence: MLQDS beats Douglas-Peucker on query-local
   interpolation, shape, speed/heading, entry/exit, and length, but loses enough
-  ship-F1 and related ship/point recall to lose QueryUsefulV1 narrowly. Inspect
+  ship-F1 and related ship/point recall to lose QueryLocalUtility narrowly. Inspect
   workload_scoring_compatibility_diagnostics first, then per-method
   matched.<method>.range_audit.range_query_metadata_component_summary if grouped
   summaries are insufficient. Do not run the final grid. Do not loosen
@@ -1741,7 +1741,7 @@ Preferred scope:
   ship_query_evidence_target_alignment in target diagnostics and
   ship_evidence_counts in the range query metadata summaries. Those fields are
   diagnostic only; they are meant to show whether workload profile families,
-  QueryUsefulV1 component weights, and the target/head contract produce a
+  QueryLocalUtility component weights, and the target/head contract produce a
   trainable ship-level signal together before any semantics change.
   Checkpoint76 ran those fields at the workload-healthy current-best strict
   cell. Query-hit labels carry ship-evidence signal, but behavior is
@@ -1762,21 +1762,21 @@ Preferred scope:
   before any default target change.
   Checkpoint78 rejects the guarded query-hit/ship-presence segment-budget target
   variant. It improves target-side segment-budget ship-evidence Spearman from
-  the active `-0.0722770682` to `0.0775842420`, but MLQDS QueryUsefulV1 drops
+  the active `-0.0722770682` to `0.0775842420`, but MLQDS QueryLocalUtility drops
   to `0.1588862822`, predictability still fails, and learning causality fails
   all material ablation checks. Do not tune that blend further. The next
-  checkpoint should diagnose workload-profile and QueryUsefulV1 component
+  checkpoint should diagnose workload-profile and QueryLocalUtility component
   compatibility.
   Checkpoint79 rejects the guarded final-score/ship-presence segment-budget
   target variant as well. It improves target-side segment-budget ship-evidence
-  Spearman to `0.1583725136`, but MLQDS QueryUsefulV1 is only `0.1592468202`
+  Spearman to `0.1583725136`, but MLQDS QueryLocalUtility is only `0.1592468202`
   and learning causality regresses. Both ship-blend target modes should stay
   out of active training options. The next checkpoint should diagnose which
-  workload families and QueryUsefulV1 scoring components create non-trainable
+  workload families and QueryLocalUtility scoring components create non-trainable
   retained-set signal, not add another segment-budget proxy target.
   Checkpoint80 does that from grouped strict artifacts. The active strict
-  blocker is concentrated in `small_local`, `density_route`,
-  `crossing_turn_change`, and `medium_operational`. The largest persistent
+  blocker is concentrated in `small_local`, `density`,
+  `crossing_turn_change`, and `medium_operational`. Under schema `2`, the largest persistent
   weighted component losses are `ship_f1`, `ship_balanced_query_point_recall`,
   `ship_coverage`, `query_balanced_point_recall`, and `query_point_mass_ratio`.
   Rejected ship-blend target artifacts widen the same density and small-local
@@ -1799,7 +1799,7 @@ Preferred scope:
   scoring/profile reweighting alone is not enough; the next checkpoint should
   add family-conditioned target/head trainability instrumentation for
   density-route and small-local before any new loss or scoring default.
-  Checkpoint 5.147 adds that instrumentation. QueryUsefulV1 target diagnostics
+  Checkpoint 5.147 adds that instrumentation. QueryLocalUtility target diagnostics
   now expose `family_conditioned_target_trainability`, and factorized head-fit
   diagnostics expose `family_conditioned_head_trainability`. This is Level 0
   instrumentation only. The next evidence should run the workload-healthy
@@ -1808,7 +1808,7 @@ Preferred scope:
   Checkpoint83 provides that strict evidence. Scores and gates reproduce the
   current-best strict cell, but the family-conditioned rows isolate the blocker:
   `small_local` is weak on both target construction and fitted heads, while
-  `density_route` is mostly target-side weak in behavior and segment-budget.
+  `density` is mostly target-side weak in behavior and segment-budget.
   The next checkpoint should build a diagnostic-only family-local target/head
   candidate for those families before any loss, selector, scoring, or workload
   profile default changes.
@@ -1817,10 +1817,10 @@ Preferred scope:
   ship, ship-gated behavior, boundary/replacement/ship, composed-score, and
   segment-budget candidates while leaving active training semantics unchanged.
   Treat it as implementation evidence only until a workload-healthy strict
-  diagnostic reads the payload for `small_local` and `density_route`.
+  diagnostic reads the payload for `small_local` and `density`.
   Checkpoint84 provides that strict diagnostic. The point-level family query-hit/
   ship candidate strongly ranks ship-query evidence for `small_local` and
-  `density_route`, but the segment-budget candidate is still anti-aligned and
+  `density`, but the segment-budget candidate is still anti-aligned and
   covers only about 5% of ship-query pairs at top-k. Do not promote the current
   candidate. The next checkpoint should diagnose segment aggregation/allocation
   from family-local point signal, not add another proxy loss.
@@ -1831,24 +1831,24 @@ Preferred scope:
   diagnostic evidence. A future guarded training variant must pass unchanged
   strict retained-mask and causality gates before any default change.
   Checkpoint 5.153 adds the guarded non-default
-  `query_useful_v1_factorized_segment_budget_query_ship_max_pool` target mode.
+  `query_local_utility_factorized_segment_budget_query_ship_max_pool` target mode.
   Checkpoint86 runs it at the current-best strict cell. It slightly beats
-  Douglas-Peucker on QueryUsefulV1 and makes the no-segment-budget-head
+  Douglas-Peucker on QueryLocalUtility and makes the no-segment-budget-head
   causality child pass, but predictability and learning causality still fail.
   Do not promote it. The next checkpoint should diagnose checkpoint85 versus
   checkpoint86 target/head/causality transfer, especially why `small_local`
   fitted segment/composed head alignment remains negative after the target-side
   segment signal turns positive.
   Checkpoint 5.155 adds that derived comparison. It narrows the transfer
-  blocker: `density_route` has positive target and fitted segment signs, but
+  blocker: `density` has positive target and fitted segment signs, but
   `small_local` and `crossing_turn_change` show positive target-side segment
   signs with negative fitted segment/composed signs. The next checkpoint should
   target family/head transfer for those families under unchanged gates, not add
   another segment aggregation variant or selector blend.
   Checkpoints 5.156-5.157 test a broader guarded
-  `query_useful_v1_factorized_query_ship_local_heads` target contract that makes
+  `query_local_utility_factorized_query_ship_local_heads` target contract that makes
   the query-hit and behavior heads ship-evidence aware. Checkpoint90 rejects it:
-  MLQDS QueryUsefulV1 drops to `0.1632708811`, target diffusion fails because
+  MLQDS QueryLocalUtility drops to `0.1632708811`, target diffusion fails because
   the behavior head becomes too broad, and all fitted `small_local` and
   `crossing_turn_change` heads remain negative against family ship-query
   evidence despite positive target-side signs. Do not promote this mode or
@@ -1868,14 +1868,14 @@ Preferred scope:
   failure while its query-hit, behavior, and composed targets remain weak. The
   selector retained-decision marginal alignment is also negative at the correct
   layout
-  `selector_trace_diagnostics.eval_primary.retained_decision_marginal_query_useful_alignment`
+  `selector_trace_diagnostics.eval_primary.retained_decision_marginal_query_local_utility_alignment`
   (`selector_score` Spearman `-0.0421`). The artifact lacks
   family-conditioned prior predictability, so the next code checkpoint should
   add that diagnostic surface before choosing a model/loss or workload/scoring
   calibration change.
   Checkpoint 5.160 adds that family-conditioned prior predictability surface and
   reruns the guarded max-pool strict cell. Scores and gates reproduce
-  checkpoint86: MLQDS QueryUsefulV1 `0.1673482145`, uniform `0.1421296610`,
+  checkpoint86: MLQDS QueryLocalUtility `0.1673482145`, uniform `0.1421296610`,
   Douglas-Peucker `0.1671038781`; predictability and learning causality still
   fail. The new family-prior rows show this is not a simple prior-absence
   problem: `crossing_turn_change` query-hit and segment-budget priors are useful
@@ -1929,12 +1929,50 @@ Preferred scope:
   attribution, no length-support counter-signal, frozen-primary trace match,
   trace schema `8`, and final effective length-support allocation weight
   `0.0`. It still fails predictability and learning causality. MLQDS
-  QueryUsefulV1 is `0.1672369132`, slightly above Douglas-Peucker
+  QueryLocalUtility is `0.1672369132`, slightly above Douglas-Peucker
   `0.1671038781` but `0.0001113013` below checkpoint93. Shuffled scores,
   shuffled priors, no query-prior features, and no behavior-head causality
   children still fail. Reject the simple allocation-weight z-blend as a
   promotion path; continue with workload/scoring/target compatibility rather
   than more selector z-blend tuning.
+  Checkpoint 5.166 simplifies the primary metric as schema `3`: the primary
+  aggregate no longer includes `ship_presence_and_coverage`,
+  `boundary_and_event_evidence`, or the ship-coverage term hidden in
+  `ship_balanced_query_point_recall`. Remaining query-point-mass,
+  query-local-behavior, and global-sanity weights are renormalized. This is an
+  implementation-only metric change; schema `2` strict scores are not directly
+  comparable. The next evidence checkpoint must rerun the required smaller
+  strict levels under schema `3` before making learning-coherence or final-grid
+  claims.
+  Checkpoint 5.167 rebalances the simplified metric as schema `4`: point mass
+  `0.50`, query-local behavior `0.45`, and global sanity `0.05`, preserving
+  the schema `3` component set and within-group proportions. Schema `2` and
+  schema `3` scores are not directly comparable to schema `4`; the next
+  evidence checkpoint must rerun the required smaller strict levels under
+  schema `4`.
+  Checkpoint 5.168 renames the active metric to `QueryLocalUtility` and the
+  production/reporting keys to `query_local_utility`. Old `query_useful_v1`
+  target modes and output fields are intentionally not kept as production
+  aliases. New checkpoint artifacts should use the new names; historical
+  checkpoint evidence should be read as historical, not as a compatibility
+  contract.
+  Checkpoint 5.169 simplifies the active workload profile to `range_query_mix`:
+  active anchor families are now `density` and `sparse_background_control`,
+  and active footprint families are `small_local`, `medium_operational`, and
+  `large_context`. Historical `range_workload_v1`, `density_route`,
+  `boundary_entry_exit`, `crossing_turn_change`, `port_or_approach_zone`, and
+  `route_corridor_like` references are not production aliases.
+  Checkpoint 5.170 simplifies `QueryLocalUtility` as schema `5`: point mass is
+  direct `query_point_recall`; query-local behavior is direct interpolation,
+  turn coverage, and min-gap continuity; the active score no longer sources
+  point mass from `range_point_f1` or substitutes missing behavior from fallback
+  audit fields. The next evidence checkpoint must rerun the required smaller
+  strict levels under schema `5` and `range_query_mix`.
+  Checkpoint 5.171 removes `small_local` from the active `range_query_mix`
+  footprint family set. Active footprint weights are now
+  `medium_operational=0.6923076923076923` and
+  `large_context=0.3076923076923077`. Historical `small_local` diagnostics
+  remain historical evidence, not active workload requirements.
 
 Avoid:
   building an endpoint teacher from aggregate endpoint alignment
@@ -2031,51 +2069,41 @@ The query workload is the product prior. It must be stable enough for the model 
 ### Active profile
 
 ```text
-workload_profile_id = range_workload_v1
+workload_profile_id = range_query_mix
 ```
 
 ### Recommended anchor-family weights
 
-Use these unless real product query logs justify a change:
+Use these as the current default. They are not fixed constants; change them
+when strict workload/scoring diagnostics show a more trainable query-local
+signal under unchanged gates.
 
 ```yaml
 anchor_family_weights:
-  density_route: 0.40
-  boundary_entry_exit: 0.20
-  crossing_turn_change: 0.15
-  port_or_approach_zone: 0.15
-  sparse_background_control: 0.10
+  density: 0.80
+  sparse_background_control: 0.20
 ```
 
 Rationale:
 
-- `density_route` captures recurring traffic corridors.
-- `boundary_entry_exit` supports range-query entry/exit evidence.
-- `crossing_turn_change` supports behavior explanation.
-- `port_or_approach_zone` captures stable AIS-relevant hotspots.
+- `density` samples query anchors from dense occupied spatial cells.
 - `sparse_background_control` prevents overfitting to only dense areas, but should not dominate.
 
 Do not increase sparse/background weight merely to make the benchmark broader. That makes uniform temporal sampling close to minimax and undermines the query-driven premise.
 
 ### Recommended footprint-family weights
 
-Start with:
+Current default:
 
 ```yaml
 footprint_family_weights:
-  small_local: 0.25
-  medium_operational: 0.45
-  large_context: 0.20
-  route_corridor_like: 0.10
+  medium_operational: 0.6923076923076923
+  large_context: 0.3076923076923077
 ```
 
 Recommended nominal shapes:
 
 ```yaml
-small_local:
-  spatial_radius_km: 1.1
-  time_half_window_hours: 2.5
-
 medium_operational:
   spatial_radius_km: 2.2
   time_half_window_hours: 5.0
@@ -2083,11 +2111,6 @@ medium_operational:
 large_context:
   spatial_radius_km: 4.0
   time_half_window_hours: 8.0
-
-route_corridor_like:
-  spatial_radius_km: 2.2
-  time_half_window_hours: 5.0
-  elongation_allowed: true
 ```
 
 Current blocker indicates the profile/acceptance settings may still be too hard to sample cleanly on small synthetic splits. Before changing the model, make accepted train/eval workload signatures stable.
@@ -2206,7 +2229,7 @@ If planned family quotas match but accepted signatures fail, acceptance filters 
 ### Primary metric
 
 ```text
-QueryUsefulV1
+QueryLocalUtility
 ```
 
 It should emphasize:
@@ -2214,9 +2237,8 @@ It should emphasize:
 ```text
 query-local point mass
 query-local behavior explanation
-ship presence and coverage inside query windows
-entry/exit and crossing evidence
-turn/shape/local interpolation
+direct query-point recall
+turn/local interpolation/continuity inside query windows
 small global sanity guardrail
 ```
 
@@ -2230,7 +2252,17 @@ Keep it for comparability and diagnostics. Do not use it as the final product me
 
 ### Current metric caveat
 
-`QueryUsefulV1` now includes a true query-local interpolation component, but it is still partly a bridge over old range-audit components. It is acceptable as the active primary metric for current work, but future improvements should continue making it more query-local and less dependent on global proxies.
+`QueryLocalUtility` schema `5` uses group weights of point mass `0.50`,
+query-local behavior `0.45`, and global sanity `0.05`. Point mass is the direct
+`query_point_recall` component; it must not be sourced from the legacy
+`range_point_f1` aggregate. Query-local behavior is limited to direct
+query-local interpolation fidelity, turn-change coverage, and continuity from
+`range_gap_min_coverage`; it must not fill missing behavior fields from shape,
+temporal, average-gap, or other fallback components. Explicit ship-presence,
+ship-coverage, boundary/event, and replacement-usefulness components are not
+part of the active primary aggregate. It is acceptable as the active primary
+metric for current work, but future improvements should keep making it more
+query-local with a simple scoring architecture.
 
 ### Recommended future metric improvements
 
@@ -2257,7 +2289,7 @@ Important rule:
 Active target:
 
 ```text
-query_useful_v1_factorized
+query_local_utility_factorized
 ```
 
 Required heads:
@@ -2291,7 +2323,7 @@ Fields should include:
 ```text
 spatial_query_hit_probability
 spatiotemporal_query_hit_probability
-boundary_entry_exit_likelihood
+endpoint_likelihood
 crossing_likelihood
 behavior_utility_prior
 route_density_prior
@@ -2303,7 +2335,7 @@ They must record:
 built_from_split: train_only
 contains_eval_queries: false
 contains_validation_queries: false
-profile_id: range_workload_v1
+profile_id: range_query_mix
 train_workload_seed: ...
 extent: ...
 out_of_extent_sampling: ...
@@ -2376,11 +2408,11 @@ num_layers: 1
 epochs: 3-5
 loss_objective: budget_topk
 mlqds_score_mode: rank_confidence
-query_useful_segment_budget_head_weight: 0.10
-query_useful_segment_level_loss_weight: 0.25
-query_useful_behavior_rank_loss_weight: 0.0
-query_useful_sparse_head_rank_loss_weight: 0.0
-query_useful_sparse_head_bce_target_mode: raw
+query_local_utility_segment_budget_head_weight: 0.10
+query_local_utility_segment_level_loss_weight: 0.25
+query_local_utility_behavior_rank_loss_weight: 0.0
+query_local_utility_sparse_head_rank_loss_weight: 0.0
+query_local_utility_sparse_head_bce_target_mode: raw
 ```
 
 For real AIS probes, increase capacity only after workload health and predictability gates pass.
@@ -2482,7 +2514,7 @@ retained masks change when relevant learned signals are ablated
 Default material delta:
 
 ```text
-min QueryUsefulV1 delta: 0.005
+min QueryLocalUtility delta: 0.005
 ```
 
 For shuffled scores, if MLQDS beats uniform, require:
@@ -2517,8 +2549,8 @@ target_diffusion_gate_pass = true
 workload_signature_gate_pass = true
 learning_causality_gate_pass = true
 global_sanity_gate_pass = true
-MLQDS QueryUsefulV1 > uniform
-MLQDS QueryUsefulV1 > DouglasPeucker
+MLQDS QueryLocalUtility > uniform
+MLQDS QueryLocalUtility > DouglasPeucker
 ```
 
 ### Support-overlap gate schema
@@ -2647,7 +2679,7 @@ accepted queries:     4-8
 train replicates:     1-2
 epochs:               1-2
 compression:          one ratio, usually 5% or 20%
-workload profile:     one profile, usually range_workload_v1 for implementation smoke
+workload profile:     one profile, usually range_query_mix for implementation smoke
 ```
 
 Allowed conclusions:
@@ -2688,7 +2720,7 @@ accepted queries:     16-32
 train replicates:     4
 epochs:               3-5
 compression:          5%
-workload profile:     one final profile, usually range_workload_v1
+workload profile:     one final profile, usually range_query_mix
 acceptance attempts:  20,000+
 ```
 
@@ -2731,7 +2763,7 @@ accepted queries:     32-64
 train replicates:     4-8
 epochs:               5-10
 compression:          5%
-workload profile:     one final profile, usually range_workload_v1_local or range_workload_v1
+workload profile:     one final profile, usually range_query_mix_local or range_query_mix
 acceptance attempts:  30,000-60,000
 ```
 
@@ -2746,8 +2778,8 @@ predictability_gate_pass = true
 prior_predictive_alignment_gate_pass = true
 learning_causality_gate_pass = true
 global_sanity_gate_pass = true
-MLQDS QueryUsefulV1 > uniform
-MLQDS QueryUsefulV1 > DouglasPeucker
+MLQDS QueryLocalUtility > uniform
+MLQDS QueryLocalUtility > DouglasPeucker
 ```
 
 Allowed conclusion:
@@ -2777,7 +2809,7 @@ accepted queries:         64-128 per workload
 train replicates:         4-8
 epochs:                   5-10
 compression:              5%
-workload profile:         one final profile, usually range_workload_v1_local or range_workload_v1
+workload profile:         one final profile, usually range_query_mix_local or range_query_mix
 ```
 
 Required evidence:
@@ -2810,7 +2842,7 @@ Recommended scale:
 ```text
 seeds:                    3-5
 real train/eval splits:    2-4 when data is available
-workload profiles:         at least range_workload_v1_local and range_workload_v1
+workload profiles:         at least range_query_mix_local and range_query_mix
 compression ratios:        at least 2%, 5%, and 10%
 accepted queries:          64-128 per workload
 train replicates:          4-8
@@ -2819,7 +2851,7 @@ train replicates:          4-8
 Required evidence:
 
 ```text
-mean and worst-case QueryUsefulV1 vs uniform/DP
+mean and worst-case QueryLocalUtility vs uniform/DP
 gate pass rate
 per-head predictability stability
 learning-causality stability
@@ -2845,8 +2877,8 @@ final acceptance
 Required grid:
 
 ```text
-workload profiles:    range_workload_v1_focused, range_workload_v1_local,
-                      range_workload_v1_operational, range_workload_v1
+workload profiles:    range_query_mix_focused, range_query_mix_local,
+                      range_query_mix_operational, range_query_mix
 compression ratios:   1%, 2%, 5%, 10%, 15%, 20%, 30%
 cells:                28
 ```
@@ -2949,7 +2981,7 @@ Use precision sweeps to answer concrete questions:
 ```text
 does TF32/BF16/FP16 materially reduce runtime or memory?
 does a precision mode flip any strict gate or child gate?
-are retained masks and QueryUsefulV1 stable under the same seed/config/data?
+are retained masks and QueryLocalUtility stable under the same seed/config/data?
 does the artifact report enough torch-runtime metadata to reproduce the result?
 ```
 
@@ -2982,10 +3014,10 @@ current-best evidence boundaries, and final comparison tables.
 Workload profiles:
 
 ```text
-range_workload_v1_focused
-range_workload_v1_local
-range_workload_v1_operational
-range_workload_v1
+range_query_mix_focused
+range_query_mix_local
+range_query_mix_operational
+range_query_mix
 ```
 
 Compression ratios:
@@ -3005,8 +3037,8 @@ Required cells:
 The benchmark-level final grid should pass:
 
 ```text
-MLQDS beats uniform on QueryUsefulV1 in at least 19 / 28 cells
-MLQDS beats Douglas-Peucker on QueryUsefulV1 in at least 24 / 28 cells
+MLQDS beats uniform on QueryLocalUtility in at least 19 / 28 cells
+MLQDS beats Douglas-Peucker on QueryLocalUtility in at least 24 / 28 cells
 MLQDS beats uniform in at least 7 / 12 low-budget cells
 MLQDS beats uniform in at least 3 / 4 matched 5% compression cells
 ```
@@ -3024,7 +3056,7 @@ These thresholds are a practical minimum for claiming “most grid cells” with
 Every final-grid run should report:
 
 ```text
-QueryUsefulV1
+QueryLocalUtility
 RangeUsefulLegacy
 RangePointF1
 ShipF1
@@ -3067,15 +3099,15 @@ When a value or strategy is ambiguous, use these defaults unless evidence says o
 ### Workload profile
 
 ```text
-Use range_workload_v1.
+Use range_query_mix.
 Use profile_sampled_query_count.
 Use final gate mode for any acceptance evidence.
 Use 4-8 train workload replicates.
 Use workload-profile defaults unless a diagnostic explicitly overrides them:
-  range_workload_v1_focused     -> target_coverage 0.05, overshoot 0.005
-  range_workload_v1_local       -> target_coverage 0.10, overshoot 0.0075
-  range_workload_v1_operational -> target_coverage 0.15, overshoot 0.010
-  range_workload_v1             -> target_coverage 0.30, overshoot 0.020
+  range_query_mix_focused     -> target_coverage 0.05, overshoot 0.005
+  range_query_mix_local       -> target_coverage 0.10, overshoot 0.0075
+  range_query_mix_operational -> target_coverage 0.15, overshoot 0.010
+  range_query_mix             -> target_coverage 0.30, overshoot 0.020
 ```
 
 Recommended query scale by evidence level:
@@ -3129,7 +3161,7 @@ train_batch_size = 8
 inference_batch_size = 8
 loss_objective = budget_topk
 checkpoint_selection_metric = uniform_gap
-checkpoint_score_variant = query_useful_v1
+checkpoint_score_variant = query_local_utility
 ```
 
 Increase model capacity only after:
@@ -3154,9 +3186,9 @@ Do not reintroduce high temporal scaffolding to improve scores. Use query-free s
 
 ### Metric
 
-Use `QueryUsefulV1` as primary. Use `RangeUsefulLegacy` only as diagnostic.
+Use `QueryLocalUtility` as primary. Use `RangeUsefulLegacy` only as diagnostic.
 
-If QueryUsefulV1 rewards behavior that conflicts with the actual product goal, improve the metric explicitly and bump/report the schema version. Do not silently change interpretation.
+If QueryLocalUtility rewards behavior that conflicts with the actual product goal, improve the metric explicitly and bump/report the schema version. Do not silently change interpretation.
 
 ---
 
@@ -3231,7 +3263,7 @@ Symptom:
 ```text
 train target fit good
 predictability maybe acceptable
-eval QueryUsefulV1 poor
+eval QueryLocalUtility poor
 ablations show learned heads not useful
 ```
 
@@ -3268,7 +3300,7 @@ report and ablate every query-free selector heuristic
 Symptom:
 
 ```text
-MLQDS improves QueryUsefulV1 but fails length/SED
+MLQDS improves QueryLocalUtility but fails length/SED
 ```
 
 Fix direction:
@@ -3353,7 +3385,7 @@ verify scores materially change retained masks
 
 ### Step 4 — Global sanity
 
-If QueryUsefulV1 improves but global sanity fails:
+If QueryLocalUtility improves but global sanity fails:
 
 ```text
 add sanity-aware selector/model constraints
@@ -3400,13 +3432,13 @@ uv run --group dev -- python -m orchestration.train_and_score \
   --n_queries 48 \
   --max_queries 256 \
   --range_train_workload_replicates 4 \
-  --workload_profile_id range_workload_v1_local \
+  --workload_profile_id range_query_mix_local \
   --coverage_calibration_mode profile_sampled_query_count \
   --workload_stability_gate_mode final \
   --model_type workload_blind_range_v2 \
-  --range_training_target_mode query_useful_v1_factorized \
+  --range_training_target_mode query_local_utility_factorized \
   --selector_type learned_segment_budget_v1 \
-  --checkpoint_score_variant query_useful_v1 \
+  --checkpoint_score_variant query_local_utility \
   --checkpoint_selection_metric uniform_gap \
   --validation_score_every 1 \
   --checkpoint_full_score_every 1 \
@@ -3448,7 +3480,6 @@ increase accepted query target only when generation is healthy
 reduce large_context weight
 reduce footprint radii
 reduce footprint jitter
-make route_corridor_like less broad
 increase max attempts only if rejection rate is not structurally high
 separate debug profile from final profile if needed
 ```
@@ -3495,8 +3526,8 @@ Pass condition:
 
 ```text
 learning_causality_gate_pass = true
-MLQDS > uniform on QueryUsefulV1
-MLQDS > DouglasPeucker on QueryUsefulV1
+MLQDS > uniform on QueryLocalUtility
+MLQDS > DouglasPeucker on QueryLocalUtility
 trained model beats untrained/shuffled/prior-only/no-head ablations
 ```
 
@@ -3541,7 +3572,7 @@ Pass condition:
 
 ```text
 all single-cell gates pass
-MLQDS beats uniform and DP on QueryUsefulV1
+MLQDS beats uniform and DP on QueryLocalUtility
 learning causality passes
 global sanity passes
 ```
@@ -3621,9 +3652,9 @@ Experiment artifact:
 - command: ...
 
 Key results:
-- MLQDS QueryUsefulV1: ...
-- uniform QueryUsefulV1: ...
-- Douglas-Peucker QueryUsefulV1: ...
+- MLQDS QueryLocalUtility: ...
+- uniform QueryLocalUtility: ...
+- Douglas-Peucker QueryLocalUtility: ...
 - gates passed: ...
 - gates failed: ...
 
@@ -3641,7 +3672,7 @@ The redesign is complete only when:
 
 ```text
 1. the full workload-profile/compression grid is present
-2. QueryUsefulV1 final-grid numeric success bars pass
+2. QueryLocalUtility final-grid numeric success bars pass
 3. all child gates pass
 4. workload-blind protocol flags prove no eval query leakage
 5. learning causality proves trained model behavior matters

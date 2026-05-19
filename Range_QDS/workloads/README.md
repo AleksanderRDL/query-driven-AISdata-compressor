@@ -16,7 +16,7 @@ the supported training, scoring, or benchmark contract.
 | `generation/anchors.py` | Anchor priors and weighted point sampling. |
 | `generation/profile_query_plan.py` | Deterministic profile family quota planning and per-query settings. |
 | `generation/coverage.py` | Point coverage masks, target normalization, and range acceptance filters. |
-| `generation/workload_profiles.py` | Versioned product workload profiles, including `range_workload_v1`. |
+| `generation/workload_profiles.py` | Versioned product workload profiles, including `range_query_mix`. |
 | `generation/signatures.py` | Range workload signature payload construction. |
 | `query_executor.py` | Range query execution. |
 | `range_geometry.py` | Shared range-box and geographic distance helpers. |
@@ -63,9 +63,9 @@ Range generation controls:
 Use `scripts/estimate_range_coverage.py` before changing query count,
 footprint, or workload-profile target coverage.
 
-`range_workload_v1` is the active product workload profile for the query-driven
+`range_query_mix` is the active product workload profile for the query-driven
 rework and defaults to 30% target coverage. The final grid uses named
-`range_workload_v1_*` profile variants rather than a raw coverage-target axis.
+`range_query_mix_*` profile variants rather than a raw coverage-target axis.
 Legacy ad hoc generator settings remain useful for diagnostics, but they are
 not final-success eligible.
 

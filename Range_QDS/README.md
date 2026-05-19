@@ -47,12 +47,12 @@ uv run --group dev -- python -m orchestration.train_and_score \
   --csv_path AISDATA/cleaned/<cleaned-ais-file.csv> \
   --cache_dir Range_QDS/artifacts/cache/manual_csv \
   --workload range \
-  --workload_profile_id range_workload_v1 \
+  --workload_profile_id range_query_mix \
   --coverage_calibration_mode profile_sampled_query_count \
   --model_type workload_blind_range_v2 \
-  --range_training_target_mode query_useful_v1_factorized \
+  --range_training_target_mode query_local_utility_factorized \
   --selector_type learned_segment_budget_v1 \
-  --checkpoint_score_variant query_useful_v1 \
+  --checkpoint_score_variant query_local_utility \
   --checkpoint_selection_metric uniform_gap \
   --n_queries 128 \
   --epochs 6 \

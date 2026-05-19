@@ -8,14 +8,14 @@ from learning.model_features import (
     WORKLOAD_BLIND_RANGE_V2_MODEL_TYPE,
     is_workload_blind_model_type,
 )
-from learning.targets.query_useful_v1 import QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE
+from learning.targets.query_local_utility import QUERY_LOCAL_UTILITY_FACTORIZED_TARGET_MODE
 from selection.selector_types import (
     LEARNED_SEGMENT_BUDGET_SELECTOR_TYPE,
     TEMPORAL_HYBRID_SELECTOR_TYPE,
 )
 from workloads.generation.workload_profiles import (
-    RANGE_WORKLOAD_V1_FINAL_PROFILE_IDS,
-    RANGE_WORKLOAD_V1_PROFILE_ID,
+    RANGE_QUERY_MIX_FINAL_PROFILE_IDS,
+    RANGE_QUERY_MIX_PROFILE_ID,
     range_workload_profile,
 )
 
@@ -26,16 +26,16 @@ BLIND_TEACHER_DISTILL_PROFILE = "range_workload_blind_teacher_distill"
 LEGACY_DIAGNOSTIC_PROFILE_NOTE = (
     "Old RangeUseful/scalar-target diagnostic path. Not valid for query-driven rework acceptance."
 )
-RANGE_WORKLOAD_V1_WORKLOAD_BLIND_V2_PROFILE = "range_workload_v1_workload_blind_v2"
+RANGE_QUERY_MIX_WORKLOAD_BLIND_V2_PROFILE = "range_query_mix_workload_blind_v2"
 PROFILE_CHOICES = (
     DEFAULT_PROFILE,
     BLIND_EXPECTED_USEFULNESS_PROFILE,
     BLIND_RETAINED_FREQUENCY_PROFILE,
     BLIND_TEACHER_DISTILL_PROFILE,
-    RANGE_WORKLOAD_V1_WORKLOAD_BLIND_V2_PROFILE,
+    RANGE_QUERY_MIX_WORKLOAD_BLIND_V2_PROFILE,
 )
 ProfileSetting = int | float | str | bool | list[float] | list[str] | None
-RANGE_WORKLOAD_PROFILE_SWEEP_IDS = RANGE_WORKLOAD_V1_FINAL_PROFILE_IDS
+RANGE_WORKLOAD_PROFILE_SWEEP_IDS = RANGE_QUERY_MIX_FINAL_PROFILE_IDS
 RANGE_COMPRESSION_SWEEP_RATIOS = (0.01, 0.02, 0.05, 0.10, 0.15, 0.20, 0.30)
 RANGE_BLIND_COVERAGE_MIN_QUERY_FLOOR = 8
 
@@ -366,8 +366,8 @@ RANGE_WORKLOAD_BLIND_TEACHER_DISTILL_PROFILE = BenchmarkProfile(
     range_teacher_epochs=4,
 )
 
-RANGE_WORKLOAD_V1_WORKLOAD_BLIND_V2_BENCHMARK_PROFILE = BenchmarkProfile(
-    name=RANGE_WORKLOAD_V1_WORKLOAD_BLIND_V2_PROFILE,
+RANGE_QUERY_MIX_WORKLOAD_BLIND_V2_BENCHMARK_PROFILE = BenchmarkProfile(
+    name=RANGE_QUERY_MIX_WORKLOAD_BLIND_V2_PROFILE,
     n_queries=RANGE_BLIND_COVERAGE_MIN_QUERY_FLOOR,
     query_coverage=None,
     range_spatial_fraction=0.0165,
@@ -395,7 +395,7 @@ RANGE_WORKLOAD_V1_WORKLOAD_BLIND_V2_BENCHMARK_PROFILE = BenchmarkProfile(
     mlqds_temporal_fraction=0.0,
     workload="range",
     checkpoint_selection_metric="uniform_gap",
-    checkpoint_score_variant="query_useful_v1",
+    checkpoint_score_variant="query_local_utility",
     float32_matmul_precision="high",
     allow_tf32=True,
     amp_mode="bf16",
@@ -412,7 +412,7 @@ RANGE_WORKLOAD_V1_WORKLOAD_BLIND_V2_BENCHMARK_PROFILE = BenchmarkProfile(
     temporal_residual_label_mode="none",
     validation_score_every=1,
     range_label_mode="usefulness",
-    range_training_target_mode=QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE,
+    range_training_target_mode=QUERY_LOCAL_UTILITY_FACTORIZED_TARGET_MODE,
     range_temporal_target_blend=0.0,
     range_target_budget_weight_power=0.0,
     range_marginal_target_radius_scale=0.50,
@@ -427,8 +427,8 @@ RANGE_WORKLOAD_V1_WORKLOAD_BLIND_V2_BENCHMARK_PROFILE = BenchmarkProfile(
     range_teacher_distillation_mode="none",
     range_teacher_epochs=4,
     final_success_allowed=True,
-    profile_note="QueryUsefulV1/range_workload_v1 final-candidate profile.",
-    workload_profile_id=RANGE_WORKLOAD_V1_PROFILE_ID,
+    profile_note="QueryLocalUtility/range_query_mix final-candidate profile.",
+    workload_profile_id=RANGE_QUERY_MIX_PROFILE_ID,
     selector_type=LEARNED_SEGMENT_BUDGET_SELECTOR_TYPE,
     range_train_workload_replicates=4,
 )
@@ -438,7 +438,7 @@ _PROFILES = {
     RANGE_WORKLOAD_BLIND_EXPECTED_USEFULNESS_PROFILE.name: RANGE_WORKLOAD_BLIND_EXPECTED_USEFULNESS_PROFILE,
     RANGE_WORKLOAD_BLIND_RETAINED_FREQUENCY_PROFILE.name: RANGE_WORKLOAD_BLIND_RETAINED_FREQUENCY_PROFILE,
     RANGE_WORKLOAD_BLIND_TEACHER_DISTILL_PROFILE.name: RANGE_WORKLOAD_BLIND_TEACHER_DISTILL_PROFILE,
-    RANGE_WORKLOAD_V1_WORKLOAD_BLIND_V2_BENCHMARK_PROFILE.name: RANGE_WORKLOAD_V1_WORKLOAD_BLIND_V2_BENCHMARK_PROFILE,
+    RANGE_QUERY_MIX_WORKLOAD_BLIND_V2_BENCHMARK_PROFILE.name: RANGE_QUERY_MIX_WORKLOAD_BLIND_V2_BENCHMARK_PROFILE,
 }
 
 
@@ -612,7 +612,7 @@ def benchmark_profile_settings(name: str) -> dict[str, ProfileSetting]:
     )
     profile_role = (
         "query_driven_workload_blind_v2"
-        if profile.range_training_target_mode == QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE
+        if profile.range_training_target_mode == QUERY_LOCAL_UTILITY_FACTORIZED_TARGET_MODE
         else "workload_blind_teacher_distill"
         if profile.range_teacher_distillation_mode != "none"
         else "workload_blind_marginal_coverage"
@@ -630,7 +630,7 @@ def benchmark_profile_settings(name: str) -> dict[str, ProfileSetting]:
         "profile_role": profile_role,
         "profile_diagnostic_only": not final_candidate,
         "profile_note": profile.profile_note,
-        "primary_metric_family": "QueryUsefulV1" if final_candidate else "RangeUsefulLegacy",
+        "primary_metric_family": "QueryLocalUtility" if final_candidate else "RangeUsefulLegacy",
         "final_success_allowed": bool(profile.final_success_allowed),
         "final_product_candidate": final_candidate,
         "final_product_claim": False,
@@ -639,7 +639,7 @@ def benchmark_profile_settings(name: str) -> dict[str, ProfileSetting]:
             if final_candidate
             else (
                 "Diagnostic-only profile. Use the query-driven workload-blind v2 "
-                "QueryUsefulV1 profile and required evidence levels for final claims."
+                "QueryLocalUtility profile and required evidence levels for final claims."
             )
         ),
         "workload_blind": bool(workload_blind),

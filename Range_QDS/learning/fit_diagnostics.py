@@ -7,9 +7,9 @@ from typing import Any
 import torch
 
 from learning.losses import _safe_quantile
-from learning.targets.query_useful_v1 import (
-    QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE,
-    QUERY_USEFUL_V1_TARGET_MODES,
+from learning.targets.query_local_utility import (
+    QUERY_LOCAL_UTILITY_FACTORIZED_TARGET_MODE,
+    QUERY_LOCAL_UTILITY_TARGET_MODES,
 )
 from selection.model_score_conversion import pure_workload_scores, simplify_mlqds_predictions
 from selection.retained_mask_selectors import evenly_spaced_indices
@@ -56,16 +56,16 @@ def _training_target_diagnostics(
         "positive_label_mass": total_positive_label_mass,
         "budget_rows": [],
     }
-    if target_mode in QUERY_USEFUL_V1_TARGET_MODES:
+    if target_mode in QUERY_LOCAL_UTILITY_TARGET_MODES:
         diagnostics.update(
             {
-                "target_family": "QueryUsefulV1Factorized",
-                "final_success_allowed": target_mode == QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE,
+                "target_family": "QueryLocalUtilityFactorized",
+                "final_success_allowed": target_mode == QUERY_LOCAL_UTILITY_FACTORIZED_TARGET_MODE,
             }
         )
-        if target_mode != QUERY_USEFUL_V1_FACTORIZED_TARGET_MODE:
+        if target_mode != QUERY_LOCAL_UTILITY_FACTORIZED_TARGET_MODE:
             diagnostics["diagnostic_reason"] = (
-                "Experimental QueryUsefulV1 target mode. "
+                "Experimental QueryLocalUtility target mode. "
                 "Not valid for final-candidate acceptance until promoted."
             )
     else:

@@ -1,4 +1,4 @@
-"""Factorized QueryUsefulV1 head diagnostics and initialization helpers."""
+"""Factorized QueryLocalUtility head diagnostics and initialization helpers."""
 
 from __future__ import annotations
 
@@ -9,15 +9,15 @@ import torch
 
 from learning.fit_diagnostics import _discriminative_sample, _kendall_tau
 from learning.losses import _safe_quantile
-from learning.targets.query_useful_v1 import (
+from learning.targets.query_local_utility import (
     FAMILY_TRAINABILITY_FOCUS,
     FAMILY_TRAINABILITY_GROUP_KEYS,
-    QUERY_USEFUL_V1_FINAL_LABEL_FORMULA,
-    QUERY_USEFUL_V1_HEAD_NAMES,
+    QUERY_LOCAL_UTILITY_FINAL_LABEL_FORMULA,
+    QUERY_LOCAL_UTILITY_HEAD_NAMES,
     _range_query_family_evidence,
     _rank_correlation,
     _topk_overlap_and_mass_recall,
-    query_useful_v1_point_score,
+    query_local_utility_point_score,
 )
 
 
@@ -101,7 +101,7 @@ def _segment_head_fit_diagnostics(
     if head_logits is None or factorized_targets is None or factorized_mask is None:
         return {"segment_head_diagnostics_available": False}
     try:
-        segment_idx = tuple(QUERY_USEFUL_V1_HEAD_NAMES).index("segment_budget_target")
+        segment_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("segment_budget_target")
     except ValueError:
         return {
             "segment_head_diagnostics_available": False,
@@ -220,12 +220,12 @@ def _factorized_head_fit_diagnostics(
     typed_queries: list[dict[str, Any]] | None = None,
     seed: int,
 ) -> dict[str, Any]:
-    """Summarize training-set fit for every factorized QueryUsefulV1 head."""
+    """Summarize training-set fit for every factorized QueryLocalUtility head."""
     if head_logits is None or factorized_targets is None or factorized_mask is None:
         return {"factorized_head_fit_diagnostics_available": False}
     if head_logits.shape != factorized_targets.shape or factorized_mask.shape != head_logits.shape:
         return {"factorized_head_fit_diagnostics_available": False, "reason": "shape_mismatch"}
-    if int(head_logits.shape[-1]) != len(QUERY_USEFUL_V1_HEAD_NAMES):
+    if int(head_logits.shape[-1]) != len(QUERY_LOCAL_UTILITY_HEAD_NAMES):
         return {"factorized_head_fit_diagnostics_available": False, "reason": "head_count_mismatch"}
 
     diagnostics: dict[str, Any] = {
@@ -234,7 +234,7 @@ def _factorized_head_fit_diagnostics(
     }
     head_rows: dict[str, dict[str, Any]] = {}
     generator = torch.Generator().manual_seed(int(seed) + 1201)
-    for head_idx, head_name in enumerate(QUERY_USEFUL_V1_HEAD_NAMES):
+    for head_idx, head_name in enumerate(QUERY_LOCAL_UTILITY_HEAD_NAMES):
         valid = factorized_mask[:, head_idx].detach().cpu().bool()
         if not bool(valid.any().item()):
             head_rows[str(head_name)] = {"available": False, "reason": "no_valid_targets"}
@@ -311,7 +311,7 @@ def _family_conditioned_head_trainability_diagnostics(
         return {"available": False, "reason": "missing_inputs"}
     if head_logits.shape != factorized_targets.shape or factorized_mask.shape != head_logits.shape:
         return {"available": False, "reason": "shape_mismatch"}
-    if int(head_logits.shape[-1]) != len(QUERY_USEFUL_V1_HEAD_NAMES):
+    if int(head_logits.shape[-1]) != len(QUERY_LOCAL_UTILITY_HEAD_NAMES):
         return {"available": False, "reason": "head_count_mismatch"}
     range_queries = [
         query for query in typed_queries if str(query.get("type", "")).lower() == "range"
@@ -330,13 +330,13 @@ def _family_conditioned_head_trainability_diagnostics(
         range_queries=range_queries,
         group_keys=FAMILY_TRAINABILITY_GROUP_KEYS,
     )
-    target_composed = query_useful_v1_point_score(
+    target_composed = query_local_utility_point_score(
         q_hit=targets[:, 0],
         behavior=targets[:, 1],
         boundary=targets[:, 2],
         replacement=targets[:, 3],
     )
-    predicted_composed = query_useful_v1_point_score(
+    predicted_composed = query_local_utility_point_score(
         q_hit=probabilities[:, 0],
         behavior=probabilities[:, 1],
         boundary=probabilities[:, 2],
@@ -416,7 +416,7 @@ def _family_conditioned_head_trainability_diagnostics(
             reference = evidence["ship_query_evidence"].detach().cpu().float()
             head_rows: dict[str, Any] = {}
             weak_heads = []
-            for head_idx, head_name in enumerate(QUERY_USEFUL_V1_HEAD_NAMES):
+            for head_idx, head_name in enumerate(QUERY_LOCAL_UTILITY_HEAD_NAMES):
                 valid = family_valid & masks[:, head_idx]
                 row = fit_row(
                     scores=probabilities[:, head_idx],
@@ -475,13 +475,13 @@ def _factorized_final_score_composition_diagnostics(
     scalar_mask: torch.Tensor | None,
     seed: int,
 ) -> dict[str, Any]:
-    """Summarize how the factorized heads compose into the scalar QueryUseful score."""
+    """Summarize how the factorized heads compose into the scalar QueryLocalUtility score."""
     if head_logits is None or scalar_target is None or scalar_mask is None:
         return {"factorized_final_score_composition_available": False}
     logits = head_logits.detach().cpu().float()
     target = scalar_target.detach().cpu().float().flatten().clamp(0.0, 1.0)
     mask = scalar_mask.detach().cpu().bool().flatten()
-    if logits.ndim != 2 or int(logits.shape[1]) != len(QUERY_USEFUL_V1_HEAD_NAMES):
+    if logits.ndim != 2 or int(logits.shape[1]) != len(QUERY_LOCAL_UTILITY_HEAD_NAMES):
         return {
             "factorized_final_score_composition_available": False,
             "reason": "head_shape_mismatch",
@@ -502,7 +502,7 @@ def _factorized_final_score_composition_diagnostics(
         behavior = probabilities[:, 1].float().clamp(0.0, 1.0)
         boundary = probabilities[:, 2].float().clamp(0.0, 1.0)
         replacement = probabilities[:, 3].float().clamp(0.0, 1.0)
-        return query_useful_v1_point_score(
+        return query_local_utility_point_score(
             q_hit=q_hit,
             behavior=behavior,
             boundary=boundary,
@@ -548,7 +548,7 @@ def _factorized_final_score_composition_diagnostics(
     behavior_multiplier = (0.5 + probabilities[:, 1].float().clamp(0.0, 1.0))[mask]
     diagnostics: dict[str, Any] = {
         "factorized_final_score_composition_available": True,
-        "factorized_final_score_formula": QUERY_USEFUL_V1_FINAL_LABEL_FORMULA,
+        "factorized_final_score_formula": QUERY_LOCAL_UTILITY_FINAL_LABEL_FORMULA,
         "factorized_final_score_prediction_mean": float(composed.mean().item()),
         "factorized_final_score_prediction_std": prediction_std,
         "factorized_final_score_prediction_p05": prediction_p05,

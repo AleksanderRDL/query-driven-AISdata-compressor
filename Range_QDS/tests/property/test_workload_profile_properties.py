@@ -21,7 +21,7 @@ FAST_PROPERTY_SETTINGS = settings(max_examples=50, deadline=None)
 )
 @FAST_PROPERTY_SETTINGS
 def test_profile_query_plan_counts_sum_to_requested(requested: int, seed: int) -> None:
-    profile = range_workload_profile("range_workload_v1")
+    profile = range_workload_profile("range_query_mix")
 
     plan = _profile_query_plan(profile, requested_queries=requested, workload_seed=seed)
 
@@ -43,7 +43,7 @@ def test_profile_query_plan_prefixes_keep_active_families_visible(
     requested: int,
     seed: int,
 ) -> None:
-    profile = range_workload_profile("range_workload_v1")
+    profile = range_workload_profile("range_query_mix")
     plan = _profile_query_plan(profile, requested_queries=requested, workload_seed=seed)
 
     anchor_prefix = Counter(plan["anchor_family_sequence"][:32])

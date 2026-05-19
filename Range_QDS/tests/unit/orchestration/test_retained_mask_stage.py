@@ -238,10 +238,10 @@ def test_retained_mask_freezing_captures_learned_selector_trace() -> None:
         outputs.causality_ablation_methods
     )
     assert timing["total_seconds"] >= 0.0
-    marginal = outputs.primary_selector_trace["retained_decision_marginal_query_useful_alignment"]
+    marginal = outputs.primary_selector_trace["retained_decision_marginal_query_local_utility_alignment"]
     assert marginal["available"] is True
     assert marginal["diagnostic_only"] is True
-    assert marginal["exact_query_useful_v1_marginals"] is True
+    assert marginal["exact_query_local_utility_marginals"] is True
     assert marginal["performance_mode"] == "exact_cached_query_support"
     assert marginal["elapsed_seconds"] >= 0.0
     assert marginal["query_cache_created"] is True
