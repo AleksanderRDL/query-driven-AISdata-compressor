@@ -50,8 +50,12 @@ Current query-driven candidate profile:
 
 - `range_query_mix_workload_blind_v2`
 
-This is the active QueryLocalUtility workload-blind path. It is not accepted unless
-the guide-required workload stability, support, predictability, causality,
+This is the active workload-blind path. It uses `QueryLocalUtility` schema `5`,
+`query_local_utility_factorized`, and the active `range_query_mix` workload
+family weights: `density=0.80`, `sparse_background_control=0.20`,
+`medium_operational=0.6923076923076923`, and
+`large_context=0.3076923076923077`. It is not accepted unless the
+guide-required workload stability, support, predictability, causality,
 global-sanity, and final-grid gates pass.
 
 Diagnostic profiles still exist in `profiles.py` for regression,

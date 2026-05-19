@@ -60,6 +60,12 @@ signal has strict-scale evidence under unchanged gates.
 Update after checkpoint 5.171: the active workload profile is now
 `range_query_mix`, with only `density` and `sparse_background_control` anchor
 families and only `medium_operational` and `large_context` footprints.
+The active metric is `QueryLocalUtility` schema `5`: direct
+`query_point_recall=0.50`, query-local interpolation/turn/continuity totaling
+`0.45`, and global sanity totaling `0.05`. The active workload family weights
+are `density=0.80`, `sparse_background_control=0.20`,
+`medium_operational=0.6923076923076923`, and
+`large_context=0.3076923076923077`.
 Older references below to `small_local` or removed families describe
 pre-simplified artifacts and must not be treated as active workload-family
 requirements.

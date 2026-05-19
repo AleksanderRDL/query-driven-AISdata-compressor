@@ -61,6 +61,14 @@ before held-out eval queries are scored. Treat a run as invalid if
 `workload_blind_protocol.audit_masks_frozen_before_eval_query_scoring` is
 false.
 
-QueryLocalUtility is the active primary metric for the rework. RangeUseful outputs
+QueryLocalUtility schema `5` is the active primary metric for the rework. It
+uses direct `query_point_recall` for point mass and direct query-local
+interpolation, turn coverage, and continuity for behavior. RangeUseful outputs
 must remain under `legacy_range_useful_summary` or diagnostic fields, not
 `final_claim_summary`.
+
+Default workload-blind runs should pair that metric with the active
+`range_query_mix` profile: anchors `density=0.80` and
+`sparse_background_control=0.20`; footprints
+`medium_operational=0.6923076923076923` and
+`large_context=0.3076923076923077`.

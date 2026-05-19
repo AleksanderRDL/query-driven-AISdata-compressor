@@ -69,6 +69,30 @@ rework and defaults to 30% target coverage. The final grid uses named
 Legacy ad hoc generator settings remain useful for diagnostics, but they are
 not final-success eligible.
 
+Active `range_query_mix` family weights:
+
+| Family type | Family | Weight |
+| --- | --- | --- |
+| Anchor | `density` | `0.80` |
+| Anchor | `sparse_background_control` | `0.20` |
+| Footprint | `medium_operational` | `0.6923076923076923` |
+| Footprint | `large_context` | `0.3076923076923077` |
+
+The `range_query_mix_*` variants share those family weights and differ only in
+target coverage and overshoot defaults:
+
+| Profile | Target coverage | Max overshoot |
+| --- | --- | --- |
+| `range_query_mix_focused` | `0.05` | `0.005` |
+| `range_query_mix_local` | `0.10` | `0.0075` |
+| `range_query_mix_operational` | `0.15` | `0.010` |
+| `range_query_mix` | `0.30` | `0.020` |
+
+Removed profile families such as `small_local`, `density_route`,
+`boundary_entry_exit`, `crossing_turn_change`, `port_or_approach_zone`, and
+`route_corridor_like` are historical or diagnostic references only unless a
+future checkpoint deliberately reintroduces them with new evidence.
+
 ## Execution
 
 - `execute_range_query`: trajectory IDs with points inside the box.

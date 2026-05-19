@@ -8,6 +8,41 @@ The project is **not** trying to build generic trajectory simplification. The go
 
 The final result must come from learned workload-blind model behavior. A win caused mostly by query-conditioned inference, temporal scaffolding, checkpoint leakage, historical KNN lookup, or selector tricks is not acceptable.
 
+Current default implementation stack:
+
+```yaml
+primary_metric: QueryLocalUtility
+query_local_utility_schema: 5
+score_group_weights:
+  query_point_mass: 0.50
+  query_local_behavior: 0.45
+  global_sanity: 0.05
+score_component_weights:
+  query_point_recall: 0.50
+  query_local_interpolation_fidelity: 0.20
+  query_local_turn_change_coverage: 0.15
+  query_local_continuity: 0.10
+  endpoint_or_skeleton_sanity: 0.02
+  global_shape_guardrail_score: 0.02
+  length_preservation_guardrail: 0.01
+workload_profile_id: range_query_mix
+anchor_family_weights:
+  density: 0.80
+  sparse_background_control: 0.20
+footprint_family_weights:
+  medium_operational: 0.6923076923076923
+  large_context: 0.3076923076923077
+range_training_target_mode: query_local_utility_factorized
+model_type: workload_blind_range_v2
+selector_type: learned_segment_budget_v1
+checkpoint_score_variant: query_local_utility
+```
+
+`QueryUsefulV1`, `query_useful_v1`, `range_workload_v1`, `density_route`,
+`small_local`, `boundary_entry_exit`, `crossing_turn_change`,
+`port_or_approach_zone`, and `route_corridor_like` are historical or
+diagnostic references unless a later checkpoint explicitly reintroduces them.
+
 ---
 
 ## 1. End-state objective

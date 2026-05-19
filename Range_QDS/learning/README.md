@@ -61,6 +61,14 @@ The acceptance contract is in
 These settings are necessary but not sufficient. Final claims still require the
 guide's single-cell and final-grid gates.
 
+The active supervision stack is calibrated to `QueryLocalUtility` schema `5`:
+direct `query_point_recall` carries `0.50`, query-local interpolation/turn/
+continuity carries `0.45`, and global sanity guardrails carry `0.05`. The
+matching workload prior is the two-footprint `range_query_mix` profile:
+`density=0.80`, `sparse_background_control=0.20`,
+`medium_operational=0.6923076923076923`, and
+`large_context=0.3076923076923077`.
+
 ## Targets
 
 `query_local_utility_factorized` is the active target family. It keeps query-hit,

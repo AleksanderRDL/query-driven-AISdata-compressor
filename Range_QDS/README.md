@@ -10,6 +10,32 @@ Current source of truth:
 - checkpoint log: [`docs/query-driven-rework-progress.md`](docs/query-driven-rework-progress.md)
 - tooling commands: [`docs/dev-tooling-guide.md`](docs/dev-tooling-guide.md)
 
+## Current Defaults
+
+New query-driven checkpoints should use this stack unless a diagnostic
+explicitly overrides it:
+
+| Surface | Default |
+| --- | --- |
+| Primary metric | `QueryLocalUtility` schema `5` |
+| Workload profile | `range_query_mix` |
+| Target mode | `query_local_utility_factorized` |
+| Model | `workload_blind_range_v2` |
+| Selector | `learned_segment_budget_v1` |
+| Checkpoint score variant | `query_local_utility` |
+
+`QueryLocalUtility` schema `5` weights direct query-point mass at `0.50`,
+query-local behavior at `0.45`, and global sanity guardrails at `0.05`.
+The active `range_query_mix` profile uses anchor weights `density=0.80` and
+`sparse_background_control=0.20`; footprint weights are
+`medium_operational=0.6923076923076923` and
+`large_context=0.3076923076923077`.
+
+Historical names and families such as `QueryUsefulV1`, `query_useful_v1`,
+`range_workload_v1`, `density_route`, `small_local`,
+`boundary_entry_exit`, `crossing_turn_change`, `port_or_approach_zone`, and
+`route_corridor_like` are not current defaults.
+
 ## Setup
 
 Run commands from `Range_QDS/`. Make delegates Python commands through root

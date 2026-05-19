@@ -37,6 +37,32 @@ Current range diagnostics:
   combines direct query-point recall, query-local interpolation/turn/continuity
   behavior, and light guardrails such as length preservation.
 
+`QueryLocalUtility` schema `5` group weights:
+
+| Group | Weight |
+| --- | --- |
+| `query_point_mass` | `0.50` |
+| `query_local_behavior` | `0.45` |
+| `global_sanity` | `0.05` |
+
+Schema `5` component weights:
+
+| Component | Weight |
+| --- | --- |
+| `query_point_recall` | `0.50` |
+| `query_local_interpolation_fidelity` | `0.20` |
+| `query_local_turn_change_coverage` | `0.15` |
+| `query_local_continuity` | `0.10` |
+| `endpoint_or_skeleton_sanity` | `0.02` |
+| `global_shape_guardrail_score` | `0.02` |
+| `length_preservation_guardrail` | `0.01` |
+
+Schema `5` uses direct audit fields only: `query_point_recall`,
+`range_query_local_interpolation_fidelity`, `range_turn_coverage`, and
+`range_gap_min_coverage`. It must not source point mass from legacy
+`range_point_f1`, and it must not fill missing behavior from older shape,
+temporal, average-gap, ship, boundary, or replacement components.
+
 Range audit components:
 
 | Component | Meaning |

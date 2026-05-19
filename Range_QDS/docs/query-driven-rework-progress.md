@@ -9,9 +9,10 @@ The guide is the source of truth. Raw metrics and stdout belong in
 Status: active, not complete.
 
 Active implementation after checkpoint 5.171 uses `QueryLocalUtility` schema
-`5` with the simplified `range_query_mix` profile. No strict workload-health or
-learning-coherence rerun has been performed under schema `5` and that
-simplified profile.
+`5` with the simplified `range_query_mix` profile. Checkpoint 5.172 updated
+the maintained docs to treat those as the default stack going forward. No
+strict workload-health or learning-coherence rerun has been performed under
+schema `5` and that simplified profile.
 
 Current pre-simplification strict-cell reference with segment aggregation
 diagnostics:
@@ -1249,6 +1250,49 @@ Decision:
   evidence must rerun the guide-required smaller strict probes before any
   final-grid or success claim.
 
+### Checkpoint 5.172 - Current Default Documentation Alignment
+
+Status: completed / docs only.
+
+Goal:
+- Update maintained project docs so new work defaults to `QueryLocalUtility`
+  schema `5` and the two-footprint `range_query_mix` workload profile.
+
+Changes:
+- Added current-default sections to the guide plus root, scoring, workload,
+  learning, orchestration, and benchmarking README docs.
+- Documented schema `5` score weights: direct `query_point_recall=0.50`,
+  query-local interpolation/turn/continuity totaling `0.45`, and global sanity
+  totaling `0.05`.
+- Documented active `range_query_mix` family weights:
+  `density=0.80`, `sparse_background_control=0.20`,
+  `medium_operational=0.6923076923076923`, and
+  `large_context=0.3076923076923077`.
+- Marked removed metric/profile names and removed workload families as
+  historical or diagnostic references, not current defaults.
+- Updated `Next-Iterations.md` and code-layout wording for the new default
+  names.
+
+Tests:
+- `git diff --check`
+- Stale-default `rg` scan over maintained docs. Remaining hits
+  are explicit historical-name or legacy-diagnostic references.
+
+Experiment artifact:
+- path: none
+- command: none
+
+Key results:
+- Documentation only. No strict retraining, workload-health, or
+  learning-coherence rerun was performed.
+- Current/default docs now point at schema `5` and the two-footprint
+  `range_query_mix` profile instead of relying on historical checkpoint notes.
+
+Decision:
+- Use the documented schema `5` / two-footprint `range_query_mix` stack for
+  future checkpoints. Do not claim learning coherence until the guide-required
+  smaller strict evidence passes.
+
 ## Condensed Checkpoint Index
 
 ### Checkpoints 1-4.82 - Workloads, Priors, Factorized Baseline
@@ -1932,6 +1976,9 @@ Decision:
 ## Validation
 
 Latest focused validation:
+- `git diff --check`
+- Stale-default `rg` scan over maintained docs. Remaining hits
+  are explicit historical-name or legacy-diagnostic references.
 - `python3 -m py_compile Range_QDS/workloads/generation/workload_profiles.py Range_QDS/orchestration/workload_component_compatibility.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
 - `uv run --group dev -- ruff check Range_QDS/workloads/generation/workload_profiles.py Range_QDS/orchestration/workload_component_compatibility.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/property/test_workload_profile_properties.py`
 - `uv run --group dev -- pyright Range_QDS/workloads/generation/workload_profiles.py Range_QDS/orchestration/workload_component_compatibility.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/property/test_workload_profile_properties.py`
@@ -1939,4 +1986,3 @@ Latest focused validation:
 - `uv run --group dev -- pytest Range_QDS/tests/unit/orchestration/test_query_driven_rework.py Range_QDS/tests/unit/scoring/test_metrics.py -q` (`178 passed`)
 - `uv run --group dev -- pytest Range_QDS/tests/unit/benchmarking/test_runner.py Range_QDS/tests/regression/test_benchmark_report_regression.py Range_QDS/tests/regression/test_gate_summary_regression.py -q` (`40 passed`)
 - `uv run --group dev -- pytest Range_QDS/tests/unit/learning/test_model_learning_does_not_collapse.py Range_QDS/tests/unit/orchestration/test_learning_target_stage.py Range_QDS/tests/unit/orchestration/test_retained_mask_stage.py Range_QDS/tests/unit/orchestration/test_run_payload.py -q` (`56 passed`)
-- `git diff --check`
