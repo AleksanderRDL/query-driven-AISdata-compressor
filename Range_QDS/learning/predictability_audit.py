@@ -9,12 +9,14 @@ import torch
 
 from learning.query_prior_fields import QUERY_PRIOR_FIELD_NAMES, sample_query_prior_fields
 from learning.targets.query_local_utility import (
-    DIAGNOSTIC_TRAINABILITY_FOCUS_FAMILIES,
-    FAMILY_TRAINABILITY_GROUP_KEYS,
     QUERY_LOCAL_UTILITY_HEAD_NAMES,
     QUERY_LOCAL_UTILITY_TARGET_MODES,
-    _range_query_family_evidence,
     build_query_local_utility_targets,
+)
+from learning.targets.query_local_utility_family import (
+    DIAGNOSTIC_TRAINABILITY_FOCUS_FAMILIES,
+    FAMILY_TRAINABILITY_GROUP_KEYS,
+    _range_query_family_evidence,
 )
 
 PREDICTABILITY_AUDIT_SCHEMA_VERSION = 3
@@ -385,7 +387,9 @@ def _per_head_predictability(
         failed_checks.append("too_few_positive_spearman_heads")
 
     channel_vs_final: dict[str, Any] = {}
-    final_target = head_targets[:, list(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("segment_budget_target")]
+    final_target = head_targets[
+        :, list(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("segment_budget_target")
+    ]
     final_mask = head_mask[:, list(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("segment_budget_target")]
     for channel_name, score in channels.items():
         channel_vs_final[channel_name] = _score_target_metrics(
@@ -577,9 +581,7 @@ def _family_conditioned_prior_predictability(
                         "metrics": _metric_subset(best_lift_metrics),
                     },
                     "family_prior_status": (
-                        "weak_family_prior_alignment"
-                        if weak_prior
-                        else "diagnostic_only"
+                        "weak_family_prior_alignment" if weak_prior else "diagnostic_only"
                     ),
                 }
             family_out["weak_family_prior_heads"] = weak_heads

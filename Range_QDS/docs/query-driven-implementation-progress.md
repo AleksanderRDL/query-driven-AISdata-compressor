@@ -342,39 +342,37 @@ Decision:
 - Keep this progress log compact. Add new entries only when they change the
   current state, evidence boundary, accepted defaults, or next action.
 
-## Checkpoint Group 7 - Stale-Code And Naming Cleanup
+## Checkpoint Group 7 - Default Cleanup And Legacy Guardrails
 
-Status: completed / code hygiene only.
+Status: completed / hygiene and tests.
 
 Goal:
 
-- Remove or update clearly stale implementation wording and misleading names
-  after the scoring/profile simplification, without deleting historical
-  diagnostics that are still useful for comparing old blockers.
+- Remove stale wording, misleading names, and stale test fixtures after the
+  schema `5` scoring/profile simplification while preserving useful historical
+  diagnostics and negative guardrails.
 
 Changes:
 
-- Replaced remaining production/test prose that used old redesign wording with
-  implementation/current-acceptance wording.
-- Renamed ambiguous diagnostic focus constants so historical blocker families
-  are not confused with active workload-profile requirements.
-- Removed `small_local` from active target-trainability focus families; it now
-  remains only in explicitly historical transfer diagnostics and tests.
-- Renamed vague workload/scoring recalibration probe names from "sensible" and
-  "point-mass-preserving" to behavior-heavy and point-mass-heavy names.
-- Renamed the deprecated retained-marginal alignment layout flag so it points
-  callers at the current
-  `selector_trace_diagnostics.eval_primary.retained_decision_marginal_query_local_utility_alignment`
-  path.
+- Replaced remaining redesign/legacy wording with current implementation and
+  acceptance wording.
+- Renamed ambiguous diagnostic focus constants and recalibration probe labels so
+  historical blocker families are not confused with active workload defaults.
+- Removed `small_local` from active target-trainability focus families; remaining
+  uses are explicitly historical diagnostics or test fixtures.
+- Clarified legacy/fixed-count/no-fallback test fixtures so they protect current
+  invariants instead of implying old defaults are active.
+- Kept historical diagnostic readers and report-compatibility checks only where
+  they protect artifact comparability, removed APIs, or final-claim separation.
 
 Tests:
 
 - `git diff --check`
-- `python3 -m py_compile` on touched production and test files.
-- `uv run --group dev -- ruff check` on touched production and test files.
-- `uv run --group dev -- pyright` on touched production files.
-- `uv run --group dev -- pytest Range_QDS/tests/unit/orchestration/test_query_driven_implementation.py Range_QDS/tests/unit/scoring/test_metrics.py Range_QDS/tests/guardrails/test_implementation_guardrails.py -q`
-  (`197 passed`)
+- `python3 -m py_compile`, `uv run --group dev -- ruff check`, and
+  `uv run --group dev -- pyright` on the then-current touched production and
+  test surfaces.
+- `uv run --group dev -- pytest` on the then-current query-driven
+  implementation, scoring, and guardrail test surfaces (`197 passed`).
 
 Experiment artifact:
 
@@ -383,53 +381,56 @@ Experiment artifact:
 
 Key results:
 
-- Code hygiene only. No strict retraining, workload-health, or
+- Hygiene and tests only. No strict retraining, workload-health, or
   learning-coherence rerun was performed.
 - Active diagnostic focus now matches the current workload defaults:
   `density` and `medium_operational`.
-- Historical `small_local` transfer diagnostics remain isolated and explicitly
-  marked as historical.
+- Remaining legacy/test references are negative guardrails,
+  report-compatibility checks, or explicitly historical diagnostic fixtures.
 
 Decision:
 
-- Keep compatibility/legacy paths only when they still serve diagnostics,
-  artifact comparability, or checkpoint loading. Do not present them as active
-  defaults.
+- Keep legacy paths only when they serve diagnostics, artifact comparability,
+  checkpoint loading, removed-API guardrails, or final-claim separation. Do not
+  present them as active defaults.
 
-## Checkpoint Group 8 - Test Stale-Logic Cleanup
+## Checkpoint Group 8 - Code Layout, Test Split, And Diagnostic Package Structure
 
-Status: completed / tests only.
+Status: completed / architecture and package organization.
 
 Goal:
 
-- Remove or clarify stale test logic after the production cleanup, without
-  deleting negative guardrails for legacy/reporting behavior that is still
-  intentionally supported.
+- Improve top-down codebase reasoning by documenting structural pressure points,
+  splitting the oversized query-driven test surface, and moving completed-artifact
+  analyzers out of the flat orchestration stage namespace.
 
 Changes:
 
-- Made historical `small_local` transfer-diagnostic fixtures explicit via
-  `HISTORICAL_SMALL_LOCAL_FAMILY` instead of leaving old family names as
-  neutral-looking active fixtures.
-- Renamed the historical `small_local` transfer-gap test and local variables so
-  the test reads as historical artifact coverage.
-- Renamed misleading QueryLocalUtility no-fallback test variables to
-  `legacy_range_point_only_*`, matching the schema-5 assertion.
-- Renamed the uncovered-anchor-chasing workload fixture so it no longer reads as
-  the active/default generator path.
-- Made the legacy fixed-count workload-stability fixture internally consistent:
-  `legacy_generator` plus `legacy_fixed_or_target_coverage`.
-- Replaced a generic `legacy` benchmark run label in a guardrail fixture with a
-  `range_useful_diagnostic` label.
+- Updated `CODE_LAYOUT.md` with current package responsibilities, pressure
+  points, and a conservative refactor order.
+- Removed the old 6.3k-line catch-all query-driven orchestration test file and
+  redistributed its tests by owner across workload, learning, orchestration,
+  selection, and diagnostic test files.
+- Added `orchestration/diagnostics/` and moved completed-artifact analyzers into
+  that package: family transfer, query-ship local/max-pool transfer,
+  selection-eval teacher transfer, selection marginal/segment calibration,
+  selector marginal calibration, and workload-component compatibility.
+- Updated docs and imports so the split tests and diagnostic package are the
+  maintained structure.
 
 Tests:
 
+- Structure scans using `find`, `du`, `wc -l`, and targeted `rg` listings.
+- `python3 -m py_compile`, `uv run --group dev -- ruff check`, and
+  `uv run --group dev -- pyright` on the split query-driven tests and moved
+  diagnostic modules.
+- `uv run --group dev -- pytest --collect-only` on all split query-driven test
+  files (`123 tests collected`).
+- `uv run --group dev -- pytest` on all split query-driven test files
+  (`123 passed`) and focused diagnostic tests (`8 passed`).
+- `uv run --group dev -- python -m orchestration.diagnostics.<module> --help`
+  on representative moved diagnostic CLIs.
 - `git diff --check`
-- `python3 -m py_compile Range_QDS/tests/unit/orchestration/test_query_driven_implementation.py Range_QDS/tests/unit/scoring/test_metrics.py Range_QDS/tests/guardrails/test_implementation_guardrails.py`
-- `uv run --group dev -- ruff check Range_QDS/tests/unit/orchestration/test_query_driven_implementation.py Range_QDS/tests/unit/scoring/test_metrics.py Range_QDS/tests/guardrails/test_implementation_guardrails.py`
-- `uv run --group dev -- pyright Range_QDS/tests/unit/orchestration/test_query_driven_implementation.py Range_QDS/tests/unit/scoring/test_metrics.py Range_QDS/tests/guardrails/test_implementation_guardrails.py`
-- `uv run --group dev -- pytest Range_QDS/tests/unit/orchestration/test_query_driven_implementation.py Range_QDS/tests/unit/scoring/test_metrics.py Range_QDS/tests/guardrails/test_implementation_guardrails.py -q`
-  (`197 passed`)
 
 Experiment artifact:
 
@@ -438,53 +439,62 @@ Experiment artifact:
 
 Key results:
 
-- Tests only. No strict retraining, workload-health, or learning-coherence rerun
-  was performed.
-- Remaining legacy/test references are negative guardrails, report-compatibility
-  checks, or explicitly historical diagnostic fixtures.
+- Structure and test organization only. No scientific gates, training, scoring,
+  or workload behavior changed.
+- Query-driven tests are now owner-scoped instead of concentrated in one
+  monolith.
+- Flat `orchestration/` now separates run-stage modules from completed-artifact
+  diagnostic analyzers.
 
 Decision:
 
-- Keep legacy test data only when it protects a current invariant: removed APIs
-  stay removed, final claims stay separated from legacy metrics, or historical
-  diagnostic readers still parse old artifacts correctly.
+- Keep the split by owner. Do not recreate a catch-all query-driven
+  orchestration test file.
+- Add new one-off artifact analyzers under `orchestration/diagnostics/`; keep
+  pipeline stages, gates, and payload assembly in top-level `orchestration/`.
 
-## Checkpoint Group 9 - Code Organization Review
+## Checkpoint Group 9 - Target And Selector Helper Extraction
 
-Status: completed / architecture review only.
+Status: completed / production organization only.
 
 Goal:
 
-- Identify structural pressure points that make the project harder to understand
-  top-down, without starting broad file moves during an active research track.
+- Apply the production refactor recommendations from `CODE_LAYOUT.md` by
+  extracting pure helper modules from QueryLocalUtility target construction and
+  selector diagnostics while preserving public behavior and artifact fields.
 
 Changes:
 
-- Updated `CODE_LAYOUT.md` with current organization pressure points and a
-  conservative refactor order.
-- Recorded the largest source/test hotspots and separated immediate
-  maintainability wins from higher-risk production refactors.
-
-Findings:
-
-- Highest-return cleanup is splitting
-  `tests/unit/orchestration/test_query_driven_implementation.py`, which is
-  roughly 6.3k lines and crosses too many ownership boundaries.
-- The flat `orchestration/` package now mixes pipeline stages, CLI entrypoints,
-  gates, payload assembly, and derived artifact analyzers. The derived analyzers
-  should move under `orchestration/diagnostics/`.
-- `orchestration/selector_diagnostics.py`,
-  `learning/targets/query_local_utility.py`, and `scoring/method_scoring.py`
-  are the main production modularization candidates, but should be split by
-  pure helper boundaries with focused regression tests.
-- `Range_QDS/artifacts/` is correctly ignored, but local generated output
-  dominates tree size and should be kept out of source/docs reasoning.
+- Added `learning/targets/query_local_utility_segments.py` for segment-budget,
+  segment-pooling, ship-query fractional segment, and path-length support
+  helpers.
+- Added `learning/targets/query_local_utility_family.py` for family keys,
+  diagnostic focus families, family labels, and per-family range-query evidence.
+- Updated predictability and factorized-head diagnostics to import family
+  evidence from the new family module.
+- Added selector helper modules:
+  `orchestration/selector_trace_payloads.py`,
+  `orchestration/selector_marginal_alignment.py`, and
+  `orchestration/selector_teacher_vectors.py`.
+- Moved selector trace mask/state parsing, segment-context parsing,
+  retained-marginal alignment summaries, separated teacher target summaries,
+  and teacher score-vector builders out of `selector_diagnostics.py`.
+- Updated focused tests and selection-causality code to import helpers from
+  their new owners.
+- Updated `CODE_LAYOUT.md` after each extraction so the remaining pressure
+  points reflect the current codebase rather than completed splits.
 
 Tests:
 
+- `python3 -m py_compile`, `uv run --group dev -- ruff check`, and
+  `uv run --group dev -- pyright` on touched target, selector, causality,
+  predictability, and diagnostic modules.
+- Focused selector/causality/diagnostic test batches, including `34 passed`,
+  `42 passed`, and `62 passed` at the relevant extraction checkpoints.
+- `uv run --group dev -- pytest` on the split query-driven unit suite
+  (`123 passed`) after each production extraction.
 - `git diff --check`
-- Structure scans using `find`, `du`, `wc -l`, and targeted `rg` import/function
-  listings.
+- Removed generated `__pycache__` directories after validation.
 
 Experiment artifact:
 
@@ -493,19 +503,28 @@ Experiment artifact:
 
 Key results:
 
-- No production code or test behavior changed.
-- Refactor order is now documented so future cleanup can be staged without
-  confusing research evidence with code movement.
+- Production organization only. No scientific gates, training, scoring, or
+  workload behavior changed.
+- `query_local_utility.py` dropped from roughly 1.7k lines to roughly 1.4k
+  lines and no longer owns segment/path math or family-evidence construction.
+- `selector_diagnostics.py` dropped from roughly 1.9k lines to roughly 0.9k
+  lines and no longer owns trace payload parsing, retained-marginal summary
+  construction, or teacher score-vector construction.
 
 Decision:
 
-- Do not start production module moves until the target/selector blocker
-  diagnostics are stable enough to protect with small focused tests. Split the
-  oversized orchestration test file first.
+- The remaining `selector_diagnostics.py` surface is coherent enough for now:
+  score component vector construction, frozen-mask convenience wrappers, and
+  exact retained-mask marginal scoring.
+- Next production refactor should either extract QueryLocalUtility
+  candidate/trainability diagnostics behind focused tests or start guarded work
+  on `scoring/method_scoring.py` only after row/regression coverage protects
+  artifact fields.
 
 ## Validation
 
-Current docs validation:
+Latest focused validation is listed in the most recent checkpoint group above.
+Earlier broad docs validation before the organization-only refactors:
 
 - `git diff --check`
 - Stale-guide `rg` scan for legacy naming, old metric/profile names, old
@@ -515,7 +534,7 @@ Current docs validation:
   historical-name or legacy-diagnostic references.
 - Broken old-doc-link `rg` scan for removed legacy filenames.
 
-Current focused implementation validation before docs-only condensation:
+Earlier focused implementation validation before docs-only condensation:
 
 - `python3 -m py_compile` on active workload/profile, orchestration
   compatibility, and focused orchestration test files.

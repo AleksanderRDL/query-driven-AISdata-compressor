@@ -10,14 +10,16 @@ import torch
 from learning.fit_diagnostics import _discriminative_sample, _kendall_tau
 from learning.losses import _safe_quantile
 from learning.targets.query_local_utility import (
-    DIAGNOSTIC_TRAINABILITY_FOCUS_FAMILIES,
-    FAMILY_TRAINABILITY_GROUP_KEYS,
     QUERY_LOCAL_UTILITY_FINAL_LABEL_FORMULA,
     QUERY_LOCAL_UTILITY_HEAD_NAMES,
-    _range_query_family_evidence,
     _rank_correlation,
     _topk_overlap_and_mass_recall,
     query_local_utility_point_score,
+)
+from learning.targets.query_local_utility_family import (
+    DIAGNOSTIC_TRAINABILITY_FOCUS_FAMILIES,
+    FAMILY_TRAINABILITY_GROUP_KEYS,
+    _range_query_family_evidence,
 )
 
 
@@ -395,9 +397,7 @@ def _family_conditioned_head_trainability_diagnostics(
                 reference,
                 valid,
             ),
-            "topk_family_ship_query_evidence_mass_recall": ship_topk[
-                "reference_mass_recall"
-            ],
+            "topk_family_ship_query_evidence_mass_recall": ship_topk["reference_mass_recall"],
         }
 
     out: dict[str, Any] = {
@@ -461,9 +461,7 @@ def _family_conditioned_head_trainability_diagnostics(
                 "factorized_composed_score_fit": composed_row,
                 "weak_ship_evidence_heads": weak_heads,
                 "head_trainability_status": (
-                    "weak_family_head_signal"
-                    if focus_family and weak_heads
-                    else "diagnostic_only"
+                    "weak_family_head_signal" if focus_family and weak_heads else "diagnostic_only"
                 ),
             }
         out["group_by"][group_key] = group_out

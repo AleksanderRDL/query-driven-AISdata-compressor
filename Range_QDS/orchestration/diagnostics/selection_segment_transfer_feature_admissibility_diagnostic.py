@@ -9,7 +9,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
-from orchestration.selection_eval_segment_teacher_transfer_diagnostic import (
+from orchestration.diagnostics.selection_eval_segment_teacher_transfer_diagnostic import (
     EVAL_TRACE_NAME,
     SELECTION_TRACE_NAME,
     as_bool,

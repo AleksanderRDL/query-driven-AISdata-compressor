@@ -38,6 +38,7 @@ implementation checks.
 | `gates.py` | Single-run final-candidate gate helpers. |
 | `causality.py` / `model_ablations.py` / `selection_causality_diagnostics.py` | Learning-causality and ablation diagnostics. |
 | `segment_audits.py` / `length_diagnostics.py` / `selector_diagnostics.py` | Selector and geometry diagnostic helpers. |
+| `diagnostics/` | Derived analyzers over completed run artifacts, separate from pipeline stages. |
 | `train_and_score.py` | Main learning/scoring entry point. |
 | `score_checkpoint.py` | Score a saved checkpoint without retraining. |
 

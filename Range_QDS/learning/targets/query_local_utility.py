@@ -12,12 +12,18 @@ from learning.factorized_target_diagnostics import (
     factorized_target_diagnostics,
     support_fraction_by_threshold,
 )
-from workloads.query_types import NUM_QUERY_TYPES, QUERY_TYPE_ID_RANGE
-from workloads.range_geometry import (
-    local_equirectangular_distance_km,
-    points_in_range_box,
-    segment_box_bracket_indices,
+from learning.targets.query_local_utility_family import (
+    DIAGNOSTIC_TRAINABILITY_FOCUS_FAMILIES,
+    _range_query_family_evidence,
 )
+from learning.targets.query_local_utility_segments import (
+    _segment_budget_targets,
+    _segment_pooled_targets,
+    _ship_query_pair_fractional_segment_targets,
+    query_local_utility_path_length_support_targets,
+)
+from workloads.query_types import NUM_QUERY_TYPES, QUERY_TYPE_ID_RANGE
+from workloads.range_geometry import points_in_range_box, segment_box_bracket_indices
 
 QUERY_LOCAL_UTILITY_FACTORIZED_TARGET_MODE = "query_local_utility_factorized"
 QUERY_LOCAL_UTILITY_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE = (
@@ -49,13 +55,6 @@ QUERY_LOCAL_UTILITY_HEAD_NAMES = (
 QUERY_LOCAL_UTILITY_FINAL_LABEL_FORMULA = (
     "query_hit_times_behavior_with_conditional_replacement_modulation_plus_boundary"
 )
-FAMILY_TRAINABILITY_GROUP_KEYS = ("anchor_family", "footprint_family")
-# Diagnostic focus for current blocker localization; this is not a workload
-# profile definition.
-DIAGNOSTIC_TRAINABILITY_FOCUS_FAMILIES = {
-    "anchor_family": frozenset({"density"}),
-    "footprint_family": frozenset({"medium_operational"}),
-}
 
 
 @dataclass
@@ -202,219 +201,6 @@ def _boundary_indices_for_query(
     if not parts:
         return torch.empty((0,), dtype=torch.long, device=range_mask.device)
     return torch.cat(parts).to(device=range_mask.device, dtype=torch.long).unique(sorted=True)
-
-
-def _segment_budget_targets(
-    point_value: torch.Tensor,
-    boundaries: list[tuple[int, int]],
-    segment_size: int,
-) -> torch.Tensor:
-    """Assign each point its segment's normalized query-local value mass."""
-    out = torch.zeros_like(point_value.float())
-    segment_masses: list[torch.Tensor] = []
-    segment_slices: list[tuple[int, int]] = []
-    size = max(1, int(segment_size))
-    for start, end in boundaries:
-        for seg_start in range(int(start), int(end), size):
-            seg_end = min(int(end), seg_start + size)
-            if seg_end <= seg_start:
-                continue
-            mass = point_value[seg_start:seg_end].float().clamp(min=0.0).sum()
-            segment_masses.append(mass)
-            segment_slices.append((seg_start, seg_end))
-    if not segment_masses:
-        return out
-    masses = torch.stack(segment_masses)
-    max_mass = masses.max().clamp(min=1e-6)
-    normalized = (masses / max_mass).clamp(0.0, 1.0)
-    for value, (seg_start, seg_end) in zip(normalized, segment_slices, strict=True):
-        out[seg_start:seg_end] = value
-    return out
-
-
-def _segment_pooled_targets(
-    point_value: torch.Tensor,
-    boundaries: list[tuple[int, int]],
-    segment_size: int,
-    *,
-    pool: str,
-) -> torch.Tensor:
-    """Assign each point its segment's pooled point value for allocation diagnostics."""
-    out = torch.zeros_like(point_value.float())
-    segment_values: list[torch.Tensor] = []
-    segment_slices: list[tuple[int, int]] = []
-    size = max(1, int(segment_size))
-    for start, end in boundaries:
-        for seg_start in range(int(start), int(end), size):
-            seg_end = min(int(end), seg_start + size)
-            if seg_end <= seg_start:
-                continue
-            local = point_value[seg_start:seg_end].float().clamp(min=0.0)
-            if int(local.numel()) <= 0:
-                continue
-            if str(pool) == "max":
-                value = local.max()
-            elif str(pool) == "top20_mean":
-                keep = min(int(local.numel()), max(1, math.ceil(0.20 * int(local.numel()))))
-                value = torch.topk(local, k=keep, largest=True).values.mean()
-            elif str(pool) == "mean":
-                value = local.mean()
-            else:
-                raise ValueError(f"Unsupported segment pool: {pool!r}")
-            segment_values.append(value)
-            segment_slices.append((seg_start, seg_end))
-    if not segment_values:
-        return out
-    values = torch.stack(segment_values)
-    max_value = values.max().clamp(min=1e-6)
-    normalized = (values / max_value).clamp(0.0, 1.0)
-    for value, (seg_start, seg_end) in zip(normalized, segment_slices, strict=True):
-        out[seg_start:seg_end] = value
-    return out
-
-
-def _ship_query_pair_fractional_segment_targets(
-    *,
-    query_hit_masks: list[torch.Tensor],
-    boundaries: list[tuple[int, int]],
-    segment_size: int,
-    point_count: int,
-    device: torch.device,
-) -> torch.Tensor:
-    """Return segment scores with one fractional credit per ship-query pair."""
-    out = torch.zeros((int(point_count),), dtype=torch.float32, device=device)
-    segment_values: list[float] = []
-    segment_slices: list[tuple[int, int, int]] = []
-    size = max(1, int(segment_size))
-    for trajectory_id, (start, end) in enumerate(boundaries):
-        for seg_start in range(int(start), int(end), size):
-            seg_end = min(int(end), seg_start + size)
-            if seg_end <= seg_start:
-                continue
-            segment_slices.append((int(trajectory_id), int(seg_start), int(seg_end)))
-            segment_values.append(0.0)
-    if not segment_slices:
-        return out
-
-    segments_by_trajectory: dict[int, list[int]] = {}
-    for segment_idx, (trajectory_id, _seg_start, _seg_end) in enumerate(segment_slices):
-        segments_by_trajectory.setdefault(int(trajectory_id), []).append(int(segment_idx))
-
-    for query_mask in query_hit_masks:
-        query_hit = query_mask.to(device=device, dtype=torch.bool)
-        for _trajectory_id, segment_indices in segments_by_trajectory.items():
-            hit_segment_indices = [
-                segment_idx
-                for segment_idx in segment_indices
-                if bool(
-                    query_hit[
-                        segment_slices[segment_idx][1] : segment_slices[segment_idx][2]
-                    ]
-                    .any()
-                    .item()
-                )
-            ]
-            if not hit_segment_indices:
-                continue
-            credit = 1.0 / float(len(hit_segment_indices))
-            for segment_idx in hit_segment_indices:
-                segment_values[segment_idx] += credit
-
-    if max(segment_values, default=0.0) <= 1e-12:
-        return out
-    max_value = max(segment_values)
-    for value, (_trajectory_id, seg_start, seg_end) in zip(
-        segment_values,
-        segment_slices,
-        strict=True,
-    ):
-        out[int(seg_start) : int(seg_end)] = float(value / max_value)
-    return out
-
-
-def _lat_lon_distance_km(
-    points: torch.Tensor, left_idx: torch.Tensor, right_idx: torch.Tensor
-) -> torch.Tensor:
-    """Return approximate lat/lon distance in km for local index pairs."""
-    left = points[left_idx.long()]
-    right = points[right_idx.long()]
-    lat1 = left[:, 1].float()
-    lon1 = left[:, 2].float()
-    lat2 = right[:, 1].float()
-    lon2 = right[:, 2].float()
-    return local_equirectangular_distance_km(lat1, lon1, lat2, lon2)
-
-
-def _path_length_support_targets(
-    points: torch.Tensor,
-    boundaries: list[tuple[int, int]],
-    segment_size: int,
-    highpass_quantile: float = 0.50,
-) -> torch.Tensor:
-    """Assign each point its segment's normalized query-free path-length support."""
-    n_points = int(points.shape[0])
-    raw = torch.zeros((n_points,), dtype=torch.float32, device=points.device)
-    if n_points <= 0 or int(points.shape[1]) < 3:
-        return raw
-
-    for start, end in boundaries:
-        start_i = int(start)
-        end_i = int(end)
-        count = int(end_i - start_i)
-        if count < 3:
-            continue
-        local = points[start_i:end_i]
-        mid_idx = torch.arange(1, count - 1, dtype=torch.long, device=points.device)
-        prev_idx = mid_idx - 1
-        next_idx = mid_idx + 1
-        via_mid = _lat_lon_distance_km(local, prev_idx, mid_idx) + _lat_lon_distance_km(
-            local, mid_idx, next_idx
-        )
-        shortcut = _lat_lon_distance_km(local, prev_idx, next_idx)
-        raw[start_i + mid_idx] = torch.clamp(via_mid - shortcut, min=0.0)
-
-    out = torch.zeros_like(raw)
-    size = max(1, int(segment_size))
-    quantile = max(0.0, min(1.0, float(highpass_quantile)))
-    for start, end in boundaries:
-        segment_masses: list[torch.Tensor] = []
-        segment_slices: list[tuple[int, int]] = []
-        for seg_start in range(int(start), int(end), size):
-            seg_end = min(int(end), seg_start + size)
-            if seg_end <= seg_start:
-                continue
-            segment_masses.append(raw[seg_start:seg_end].float().clamp(min=0.0).sum())
-            segment_slices.append((seg_start, seg_end))
-        if not segment_masses:
-            continue
-        masses = torch.stack(segment_masses)
-        if float(masses.max().item()) <= 1e-12:
-            continue
-        if int(masses.numel()) == 1:
-            normalized = masses / masses.max().clamp(min=1e-6)
-        else:
-            threshold = torch.quantile(masses, quantile)
-            span = (masses.max() - threshold).clamp(min=1e-6)
-            normalized = ((masses - threshold) / span).clamp(0.0, 1.0)
-        for value, (seg_start, seg_end) in zip(normalized, segment_slices, strict=True):
-            out[seg_start:seg_end] = value
-    return out
-
-
-def query_local_utility_path_length_support_targets(
-    points: torch.Tensor,
-    boundaries: list[tuple[int, int]],
-    *,
-    segment_size: int = 32,
-    highpass_quantile: float = 0.50,
-) -> torch.Tensor:
-    """Return the query-free path-length support target used by QueryLocalUtility heads."""
-    return _path_length_support_targets(
-        points,
-        boundaries,
-        segment_size=max(1, int(segment_size)),
-        highpass_quantile=float(highpass_quantile),
-    )
 
 
 def _query_replacement_support(
@@ -738,71 +524,10 @@ def _two_stage_segment_point_selection_diagnostics(
                 selected_mass / max(ideal_mass, 1e-12)
             ),
             "two_stage_ship_query_pair_count": coverage["ship_query_pair_count"],
-            "two_stage_ship_query_pair_covered_count": coverage[
-                "ship_query_pair_covered_count"
-            ],
+            "two_stage_ship_query_pair_covered_count": coverage["ship_query_pair_covered_count"],
             "two_stage_ship_query_pair_coverage": coverage["ship_query_pair_coverage"],
         }
     )
-    return out
-
-
-def _query_family_label(query: dict[str, Any], group_key: str) -> str:
-    metadata = query.get("_metadata")
-    if not isinstance(metadata, dict):
-        return "unspecified"
-    raw_value = metadata.get(group_key)
-    if raw_value is None:
-        return "unspecified"
-    value = str(raw_value).strip()
-    return value if value else "unspecified"
-
-
-def _range_query_family_evidence(
-    *,
-    points: torch.Tensor,
-    boundaries: list[tuple[int, int]],
-    range_queries: list[dict[str, Any]],
-    group_keys: tuple[str, ...] = FAMILY_TRAINABILITY_GROUP_KEYS,
-) -> dict[str, dict[str, dict[str, Any]]]:
-    """Return per-family query-hit and one-credit-per-ship evidence tensors."""
-    device = points.device
-    n_points = int(points.shape[0])
-    out: dict[str, dict[str, dict[str, Any]]] = {group_key: {} for group_key in group_keys}
-    for group_key in group_keys:
-        families = sorted({_query_family_label(query, group_key) for query in range_queries})
-        for family in families:
-            family_queries = [
-                query for query in range_queries if _query_family_label(query, group_key) == family
-            ]
-            query_hit_count = torch.zeros((n_points,), dtype=torch.float32, device=device)
-            ship_query_evidence_mass = torch.zeros_like(query_hit_count)
-            query_hit_masks: list[torch.Tensor] = []
-            for query in family_queries:
-                mask = points_in_range_box(points, query["params"]).to(
-                    device=device,
-                    dtype=torch.bool,
-                )
-                query_hit_masks.append(mask)
-                if not bool(mask.any().item()):
-                    continue
-                query_hit_count[mask] += 1.0
-                for start, end in boundaries:
-                    local_mask = mask[int(start) : int(end)]
-                    if not bool(local_mask.any().item()):
-                        continue
-                    local_hit_count = int(local_mask.sum().item())
-                    if local_hit_count <= 0:
-                        continue
-                    local_indices = torch.where(local_mask)[0] + int(start)
-                    ship_query_evidence_mass[local_indices] += float(1.0 / local_hit_count)
-            query_count = float(max(1, len(family_queries)))
-            out[group_key][family] = {
-                "query_count": len(family_queries),
-                "query_hit_probability": (query_hit_count / query_count).clamp(0.0, 1.0),
-                "ship_query_evidence": (ship_query_evidence_mass / query_count).clamp(0.0, 1.0),
-                "query_hit_masks": query_hit_masks,
-            }
     return out
 
 
@@ -949,9 +674,7 @@ def _target_distribution_summary(values: torch.Tensor, valid: torch.Tensor) -> d
             float(valid_values.mean().item()) if int(valid_values.numel()) > 0 else 0.0
         ),
         "target_std": (
-            float(valid_values.std(unbiased=False).item())
-            if int(valid_values.numel()) > 0
-            else 0.0
+            float(valid_values.std(unbiased=False).item()) if int(valid_values.numel()) > 0 else 0.0
         ),
     }
 
@@ -1232,9 +955,7 @@ def _family_local_target_candidate_alignment(
                     ratio=ratio,
                 )
                 row["topk_overlap_with_active_final_score"] = final_topk["overlap"]
-                row["topk_active_final_score_mass_recall"] = final_topk[
-                    "reference_mass_recall"
-                ]
+                row["topk_active_final_score_mass_recall"] = final_topk["reference_mass_recall"]
                 row["topk_overlap_with_active_query_hit_probability"] = q_hit_topk["overlap"]
                 row["topk_active_query_hit_probability_mass_recall"] = q_hit_topk[
                     "reference_mass_recall"
@@ -1353,8 +1074,7 @@ def _segment_budget_point_value_for_target_mode(
             "segment_budget_target_variant": "query_ship_blend_max_pool",
             "segment_budget_target_aggregation": "max_pool",
             "segment_budget_target_point_formula": (
-                "0.65_normalized_query_hit_probability_plus_"
-                "0.35_normalized_ship_query_evidence"
+                "0.65_normalized_query_hit_probability_plus_0.35_normalized_ship_query_evidence"
             ),
             "segment_budget_target_experimental": True,
             "final_success_allowed": False,
@@ -1364,9 +1084,7 @@ def _segment_budget_point_value_for_target_mode(
             "segment_budget_target_base_source": "query_ship_local_presence_head_target",
             "segment_budget_target_variant": "query_ship_local_heads_max_pool",
             "segment_budget_target_aggregation": "max_pool",
-            "segment_budget_target_point_formula": (
-                "query_ship_local_presence_head_target"
-            ),
+            "segment_budget_target_point_formula": ("query_ship_local_presence_head_target"),
             "segment_budget_target_experimental": True,
             "final_success_allowed": False,
         }
@@ -1406,7 +1124,9 @@ def build_query_local_utility_targets(
         diagnostics = factorized_target_diagnostics(
             head_targets, head_mask, QUERY_LOCAL_UTILITY_HEAD_NAMES, boundaries
         )
-        return QueryLocalUtilityTargetBundle(labels, labelled_mask, head_targets, head_mask, diagnostics)
+        return QueryLocalUtilityTargetBundle(
+            labels, labelled_mask, head_targets, head_mask, diagnostics
+        )
 
     behavior_base = _trajectory_change_weights(points, boundaries)
     query_hit_count = torch.zeros((n_points,), dtype=torch.float32, device=device)
@@ -1489,8 +1209,7 @@ def build_query_local_utility_targets(
             {
                 "query_hit_target_variant": "query_ship_local_presence_utility",
                 "query_hit_target_base_source": (
-                    "0.65_normalized_query_hit_probability_plus_"
-                    "0.35_normalized_ship_query_evidence"
+                    "0.65_normalized_query_hit_probability_plus_0.35_normalized_ship_query_evidence"
                 ),
                 "conditional_behavior_target_variant": "query_ship_local_behavior_utility",
                 "conditional_behavior_target_base_source": (
@@ -1676,4 +1395,6 @@ def build_query_local_utility_targets(
             ),
         }
     )
-    return QueryLocalUtilityTargetBundle(labels, labelled_mask, head_targets, head_mask, diagnostics)
+    return QueryLocalUtilityTargetBundle(
+        labels, labelled_mask, head_targets, head_mask, diagnostics
+    )

@@ -27,13 +27,15 @@ from orchestration.model_ablations import (
 )
 from orchestration.selector_diagnostics import (
     factorized_score_component_vectors_from_logits,
-    hybrid_marginal_teacher_selector_score_vectors,
     learned_segment_frozen_method,
     neutral_segment_scores_for_ablation,
     query_free_retained_removal_teacher_proxy_vectors,
     query_prior_component_vectors_for_points,
     retained_decision_marginal_query_local_utility_diagnostics,
     selector_segment_score_source_label,
+)
+from orchestration.selector_teacher_vectors import (
+    hybrid_marginal_teacher_selector_score_vectors,
     separated_marginal_teacher_selector_score_vectors,
 )
 from scoring.method_scoring import score_method
@@ -479,9 +481,7 @@ def build_selection_causality_diagnostics(
                             hybrid_diag.update(
                                 {
                                     "frozen_mask_available": True,
-                                    "retained_count": int(
-                                        hybrid_method.retained_mask.sum().item()
-                                    ),
+                                    "retained_count": int(hybrid_method.retained_mask.sum().item()),
                                     "geometry_tie_breaker_weight": geometry_gain_weight,
                                     "segment_length_support_weight": (
                                         allocation_length_support_weight
@@ -969,29 +969,27 @@ def build_selection_causality_diagnostics(
                 ablation_point_scores = getattr(ablation_method, "_score_cache", None)
                 ablation_raw_preds = getattr(ablation_method, "_raw_pred_cache", None)
                 ablation_head_logits = getattr(ablation_method, "_head_logit_cache", None)
-                prior_sensitivity[prior_sensitivity_key] = (
-                    prior_ablation_sensitivity_from_tensors(
-                        sampled_prior_features=prior_feature_sensitivity,
-                        model_prior_features=model_prior_sensitivity,
-                        primary_scores=primary_scores,
-                        ablation_scores=ablation_point_scores
-                        if isinstance(ablation_point_scores, torch.Tensor)
-                        else None,
-                        primary_raw_predictions=primary_raw_preds
-                        if isinstance(primary_raw_preds, torch.Tensor)
-                        else None,
-                        ablation_raw_predictions=ablation_raw_preds
-                        if isinstance(ablation_raw_preds, torch.Tensor)
-                        else None,
-                        primary_head_logits=primary_head_logits
-                        if isinstance(primary_head_logits, torch.Tensor)
-                        else None,
-                        ablation_head_logits=ablation_head_logits
-                        if isinstance(ablation_head_logits, torch.Tensor)
-                        else None,
-                        primary_mask=primary_mask,
-                        ablation_mask=ablation_mask,
-                    )
+                prior_sensitivity[prior_sensitivity_key] = prior_ablation_sensitivity_from_tensors(
+                    sampled_prior_features=prior_feature_sensitivity,
+                    model_prior_features=model_prior_sensitivity,
+                    primary_scores=primary_scores,
+                    ablation_scores=ablation_point_scores
+                    if isinstance(ablation_point_scores, torch.Tensor)
+                    else None,
+                    primary_raw_predictions=primary_raw_preds
+                    if isinstance(primary_raw_preds, torch.Tensor)
+                    else None,
+                    ablation_raw_predictions=ablation_raw_preds
+                    if isinstance(ablation_raw_preds, torch.Tensor)
+                    else None,
+                    primary_head_logits=primary_head_logits
+                    if isinstance(primary_head_logits, torch.Tensor)
+                    else None,
+                    ablation_head_logits=ablation_head_logits
+                    if isinstance(ablation_head_logits, torch.Tensor)
+                    else None,
+                    primary_mask=primary_mask,
+                    ablation_mask=ablation_mask,
                 )
                 ablation_methods.append(
                     FrozenMaskMethod(
@@ -1042,10 +1040,12 @@ def build_selection_causality_diagnostics(
             {
                 "query_local_utility_score": float(teacher_score.query_local_utility_score),
                 "primary_query_local_utility_delta": float(
-                    primary_score.query_local_utility_score - teacher_score.query_local_utility_score
+                    primary_score.query_local_utility_score
+                    - teacher_score.query_local_utility_score
                 ),
                 "teacher_minus_primary_query_local_utility": float(
-                    teacher_score.query_local_utility_score - primary_score.query_local_utility_score
+                    teacher_score.query_local_utility_score
+                    - primary_score.query_local_utility_score
                 ),
                 "mask_diagnostics": mask_diagnostics.get(separated_teacher_method_name),
             }
@@ -1060,10 +1060,12 @@ def build_selection_causality_diagnostics(
                 {
                     "query_local_utility_score": float(hybrid_score.query_local_utility_score),
                     "primary_query_local_utility_delta": float(
-                        primary_score.query_local_utility_score - hybrid_score.query_local_utility_score
+                        primary_score.query_local_utility_score
+                        - hybrid_score.query_local_utility_score
                     ),
                     "teacher_minus_primary_query_local_utility": float(
-                        hybrid_score.query_local_utility_score - primary_score.query_local_utility_score
+                        hybrid_score.query_local_utility_score
+                        - primary_score.query_local_utility_score
                     ),
                     "mask_diagnostics": mask_diagnostics.get(method_name),
                 }
