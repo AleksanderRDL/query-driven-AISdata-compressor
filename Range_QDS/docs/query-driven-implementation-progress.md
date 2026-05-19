@@ -449,6 +449,60 @@ Decision:
   stay removed, final claims stay separated from legacy metrics, or historical
   diagnostic readers still parse old artifacts correctly.
 
+## Checkpoint Group 9 - Code Organization Review
+
+Status: completed / architecture review only.
+
+Goal:
+
+- Identify structural pressure points that make the project harder to understand
+  top-down, without starting broad file moves during an active research track.
+
+Changes:
+
+- Updated `CODE_LAYOUT.md` with current organization pressure points and a
+  conservative refactor order.
+- Recorded the largest source/test hotspots and separated immediate
+  maintainability wins from higher-risk production refactors.
+
+Findings:
+
+- Highest-return cleanup is splitting
+  `tests/unit/orchestration/test_query_driven_implementation.py`, which is
+  roughly 6.3k lines and crosses too many ownership boundaries.
+- The flat `orchestration/` package now mixes pipeline stages, CLI entrypoints,
+  gates, payload assembly, and derived artifact analyzers. The derived analyzers
+  should move under `orchestration/diagnostics/`.
+- `orchestration/selector_diagnostics.py`,
+  `learning/targets/query_local_utility.py`, and `scoring/method_scoring.py`
+  are the main production modularization candidates, but should be split by
+  pure helper boundaries with focused regression tests.
+- `Range_QDS/artifacts/` is correctly ignored, but local generated output
+  dominates tree size and should be kept out of source/docs reasoning.
+
+Tests:
+
+- `git diff --check`
+- Structure scans using `find`, `du`, `wc -l`, and targeted `rg` import/function
+  listings.
+
+Experiment artifact:
+
+- path: none
+- command: none
+
+Key results:
+
+- No production code or test behavior changed.
+- Refactor order is now documented so future cleanup can be staged without
+  confusing research evidence with code movement.
+
+Decision:
+
+- Do not start production module moves until the target/selector blocker
+  diagnostics are stable enough to protect with small focused tests. Split the
+  oversized orchestration test file first.
+
 ## Validation
 
 Current docs validation:
