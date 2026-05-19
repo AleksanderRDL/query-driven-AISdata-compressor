@@ -28,7 +28,7 @@ the supported training, scoring, or benchmark contract.
 | --- | --- | --- |
 | `range` | 0 | Spatiotemporal box; range scoring also measures retained point support. |
 
-Workloads are range-only for active rework runs, e.g. `{"range": 1.0}`.
+Workloads are range-only for active query-driven runs, e.g. `{"range": 1.0}`.
 `pad_query_features` converts typed query dicts into `[M, 12]` features plus
 `[M]` type IDs.
 
@@ -64,7 +64,7 @@ Use `scripts/estimate_range_coverage.py` before changing query count,
 footprint, or workload-profile target coverage.
 
 `range_query_mix` is the active product workload profile for the query-driven
-rework and defaults to 30% target coverage. The final grid uses named
+system and defaults to 30% target coverage. The final grid uses named
 `range_query_mix_*` profile variants rather than a raw coverage-target axis.
 Legacy ad hoc generator settings remain useful for diagnostics, but they are
 not final-success eligible.

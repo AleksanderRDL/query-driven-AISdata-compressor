@@ -30,10 +30,10 @@ Current range diagnostics:
 
 - `RangeUsefulLegacy`: retained old aggregate range usefulness audit for
   diagnostics and artifact comparability. It is not the primary metric for the
-  query-driven rework and cannot support final acceptance by itself.
+  query-driven system and cannot support final acceptance by itself.
 - `RangePointF1`: retained in-box point-hit F1. Useful, but too narrow for
   final claims.
-- `QueryLocalUtility`: active primary metric for the query-driven rework. It
+- `QueryLocalUtility`: active primary metric for the query-driven system. It
   combines direct query-point recall, query-local interpolation/turn/continuity
   behavior, and light guardrails such as length preservation.
 

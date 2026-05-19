@@ -1,4 +1,4 @@
-# Query-Driven Rework Progress
+# Query-Driven Checkpoint Progress
 
 This is the short checkpoint log required by `docs/query-driven-rework-guide.md`.
 The guide is the source of truth. Raw metrics and stdout belong in
@@ -13,6 +13,10 @@ Active implementation after checkpoint 5.171 uses `QueryLocalUtility` schema
 the maintained docs to treat those as the default stack going forward. No
 strict workload-health or learning-coherence rerun has been performed under
 schema `5` and that simplified profile.
+
+Checkpoint 5.173 refactored the guide into the current implementation/research
+guide and removed duplicated checkpoint chronology from that source-of-truth
+document. The progress log remains the place for checkpoint history.
 
 Current pre-simplification strict-cell reference with segment aggregation
 diagnostics:
@@ -1293,6 +1297,49 @@ Decision:
   future checkpoints. Do not claim learning coherence until the guide-required
   smaller strict evidence passes.
 
+### Checkpoint 5.173 - Guide Refactor To Current Implementation Contract
+
+Status: completed / docs only.
+
+Goal:
+- Make the source-of-truth guide read as the current implementation/research
+  guide instead of a historical rework narrative.
+
+Changes:
+- Retitled the guide to `Range_QDS Query-Driven Implementation and Research
+  Guide`.
+- Replaced the long checkpoint-history section with a short current-state
+  section that points checkpoint chronology to this progress log.
+- Removed stale current-best/checkpoint prose from the guide body and changed
+  the roadmap from reset-numbered checkpoints to ordered implementation
+  phases.
+- Kept current defaults explicit: `QueryLocalUtility` schema `5`,
+  `range_query_mix`, `query_local_utility_factorized`,
+  `workload_blind_range_v2`, and `learned_segment_budget_v1`.
+- Updated neighboring README/layout wording that still called the current
+  protocol a rework or redesign.
+
+Tests:
+- `git diff --check`
+- Stale-guide `rg` scan for `rework`, `redesign`, historical metric/profile
+  names, old schemas, and current-best/latest checkpoint prose.
+
+Experiment artifact:
+- path: none
+- command: none
+
+Key results:
+- Documentation only. No strict retraining, workload-health, or
+  learning-coherence rerun was performed.
+- The guide dropped from about `3720` lines to about `1788` lines and no
+  longer embeds checkpoint-by-checkpoint evidence history.
+- Remaining guide hits for old metric/profile names are explicit historical
+  exclusions or the `range_point_f1` no-fallback caveat.
+
+Decision:
+- Treat the guide as the implementation/research contract. Keep checkpoint
+  history in this progress log and artifacts, not in the guide.
+
 ## Condensed Checkpoint Index
 
 ### Checkpoints 1-4.82 - Workloads, Priors, Factorized Baseline
@@ -1977,6 +2024,11 @@ Decision:
 
 Latest focused validation:
 - `git diff --check`
+- Stale-guide `rg` scan for rework/redesign wording, old metric/profile names,
+  old schemas, and latest/current-best checkpoint prose. Remaining guide hits
+  are explicit historical exclusions or the `range_point_f1` no-fallback caveat.
+- Surrounding-doc `rg` scan for visible rework/redesign wording in maintained
+  README/layout docs.
 - Stale-default `rg` scan over maintained docs. Remaining hits
   are explicit historical-name or legacy-diagnostic references.
 - `python3 -m py_compile Range_QDS/workloads/generation/workload_profiles.py Range_QDS/orchestration/workload_component_compatibility.py Range_QDS/tests/unit/orchestration/test_query_driven_rework.py`
