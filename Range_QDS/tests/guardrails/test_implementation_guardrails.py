@@ -184,7 +184,7 @@ def test_historical_prior_metadata_blocks_success() -> None:
 def test_benchmark_row_separates_final_claim_from_legacy_range_useful(tmp_path: Path) -> None:
     row = _row_from_run(
         workload="range",
-        run_label="legacy",
+        run_label="range_useful_diagnostic",
         command=["python", "-m", "orchestration.train_and_score"],
         returncode=0,
         elapsed_seconds=1.0,

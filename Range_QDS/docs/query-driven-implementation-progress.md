@@ -396,6 +396,59 @@ Decision:
   artifact comparability, or checkpoint loading. Do not present them as active
   defaults.
 
+## Checkpoint Group 8 - Test Stale-Logic Cleanup
+
+Status: completed / tests only.
+
+Goal:
+
+- Remove or clarify stale test logic after the production cleanup, without
+  deleting negative guardrails for legacy/reporting behavior that is still
+  intentionally supported.
+
+Changes:
+
+- Made historical `small_local` transfer-diagnostic fixtures explicit via
+  `HISTORICAL_SMALL_LOCAL_FAMILY` instead of leaving old family names as
+  neutral-looking active fixtures.
+- Renamed the historical `small_local` transfer-gap test and local variables so
+  the test reads as historical artifact coverage.
+- Renamed misleading QueryLocalUtility no-fallback test variables to
+  `legacy_range_point_only_*`, matching the schema-5 assertion.
+- Renamed the uncovered-anchor-chasing workload fixture so it no longer reads as
+  the active/default generator path.
+- Made the legacy fixed-count workload-stability fixture internally consistent:
+  `legacy_generator` plus `legacy_fixed_or_target_coverage`.
+- Replaced a generic `legacy` benchmark run label in a guardrail fixture with a
+  `range_useful_diagnostic` label.
+
+Tests:
+
+- `git diff --check`
+- `python3 -m py_compile Range_QDS/tests/unit/orchestration/test_query_driven_implementation.py Range_QDS/tests/unit/scoring/test_metrics.py Range_QDS/tests/guardrails/test_implementation_guardrails.py`
+- `uv run --group dev -- ruff check Range_QDS/tests/unit/orchestration/test_query_driven_implementation.py Range_QDS/tests/unit/scoring/test_metrics.py Range_QDS/tests/guardrails/test_implementation_guardrails.py`
+- `uv run --group dev -- pyright Range_QDS/tests/unit/orchestration/test_query_driven_implementation.py Range_QDS/tests/unit/scoring/test_metrics.py Range_QDS/tests/guardrails/test_implementation_guardrails.py`
+- `uv run --group dev -- pytest Range_QDS/tests/unit/orchestration/test_query_driven_implementation.py Range_QDS/tests/unit/scoring/test_metrics.py Range_QDS/tests/guardrails/test_implementation_guardrails.py -q`
+  (`197 passed`)
+
+Experiment artifact:
+
+- path: none
+- command: none
+
+Key results:
+
+- Tests only. No strict retraining, workload-health, or learning-coherence rerun
+  was performed.
+- Remaining legacy/test references are negative guardrails, report-compatibility
+  checks, or explicitly historical diagnostic fixtures.
+
+Decision:
+
+- Keep legacy test data only when it protects a current invariant: removed APIs
+  stay removed, final claims stay separated from legacy metrics, or historical
+  diagnostic readers still parse old artifacts correctly.
+
 ## Validation
 
 Current docs validation:

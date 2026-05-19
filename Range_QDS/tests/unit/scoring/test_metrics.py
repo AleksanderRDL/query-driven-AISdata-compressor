@@ -1274,20 +1274,26 @@ def test_query_local_utility_schema5_uses_direct_query_local_components() -> Non
     assert removed_components.isdisjoint(component_weights)
     assert base["query_local_utility_score"] == pytest.approx(changed["query_local_utility_score"])
 
-    fallback_only_audit = {
+    legacy_range_point_only_audit = {
         "range_point_f1": 1.0,
         "range_shape_score": 1.0,
         "range_gap_time_coverage": 1.0,
         "range_gap_distance_coverage": 1.0,
     }
-    fallback_only = query_local_utility_from_range_audit(fallback_only_audit)
-    fallback_components = cast(
-        dict[str, float], fallback_only["query_local_utility_components"]
+    legacy_range_point_only = query_local_utility_from_range_audit(
+        legacy_range_point_only_audit
     )
-    assert fallback_components["query_point_recall"] == pytest.approx(0.0)
-    assert fallback_components["query_local_interpolation_fidelity"] == pytest.approx(0.0)
-    assert fallback_components["query_local_turn_change_coverage"] == pytest.approx(0.0)
-    assert fallback_components["query_local_continuity"] == pytest.approx(0.0)
+    legacy_range_point_components = cast(
+        dict[str, float], legacy_range_point_only["query_local_utility_components"]
+    )
+    assert legacy_range_point_components["query_point_recall"] == pytest.approx(0.0)
+    assert legacy_range_point_components["query_local_interpolation_fidelity"] == pytest.approx(
+        0.0
+    )
+    assert legacy_range_point_components["query_local_turn_change_coverage"] == pytest.approx(
+        0.0
+    )
+    assert legacy_range_point_components["query_local_continuity"] == pytest.approx(0.0)
 
 
 def test_method_comparison_table_shows_close_f1_values() -> None:

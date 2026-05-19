@@ -166,6 +166,8 @@ from workloads.generation.profile_query_plan import (
 from workloads.generation.workload_profiles import range_workload_profile
 from workloads.query_types import QUERY_TYPE_ID_RANGE
 
+HISTORICAL_SMALL_LOCAL_FAMILY = "small_local"
+
 
 def _boundaries(trajectories: list[torch.Tensor]) -> list[tuple[int, int]]:
     cursor = 0
@@ -1142,7 +1144,7 @@ def test_workload_component_compatibility_diagnostic_finds_blocking_families() -
     assert blocker_outcome["unresolved_blocker_family_count"] == 1
 
 
-def test_query_ship_max_pool_transfer_diagnostic_flags_small_local_transfer_gap() -> None:
+def test_query_ship_max_pool_transfer_diagnostic_flags_historical_small_local_transfer_gap() -> None:
     def artifact(
         *,
         mode: str,
@@ -1202,7 +1204,7 @@ def test_query_ship_max_pool_transfer_diagnostic_flags_small_local_transfer_gap(
                     "family_conditioned_target_trainability": {
                         "group_by": {
                             "footprint_family": {
-                                "small_local": {
+                                HISTORICAL_SMALL_LOCAL_FAMILY: {
                                     "query_count": 4,
                                     "valid_hit_point_count": 12,
                                     "target_trainability_status": (
@@ -1230,7 +1232,7 @@ def test_query_ship_max_pool_transfer_diagnostic_flags_small_local_transfer_gap(
                     "family_local_target_candidate_alignment": {
                         "group_by": {
                             "footprint_family": {
-                                "small_local": {
+                                HISTORICAL_SMALL_LOCAL_FAMILY: {
                                     "best_segment_candidate_two_stage_ship_query_pair_coverage": 0.4,
                                     "best_segment_candidate_two_stage_ship_query_evidence_mass_recall": 0.8,
                                 }
@@ -1243,7 +1245,7 @@ def test_query_ship_max_pool_transfer_diagnostic_flags_small_local_transfer_gap(
                 "family_conditioned_head_trainability": {
                     "group_by": {
                         "footprint_family": {
-                            "small_local": {
+                            HISTORICAL_SMALL_LOCAL_FAMILY: {
                                 "query_count": 4,
                                 "valid_hit_point_count": 12,
                                 "head_trainability_status": "weak_family_head_signal",
@@ -1322,7 +1324,7 @@ def test_query_ship_max_pool_transfer_diagnostic_flags_small_local_transfer_gap(
         "without_segment_budget_head_should_lose"
     ]
     transfer_rows = comparison["families_with_positive_target_negative_fit"]
-    assert transfer_rows[0]["family"] == "small_local"
+    assert transfer_rows[0]["family"] == HISTORICAL_SMALL_LOCAL_FAMILY
     assert transfer_rows[0]["segment_budget_transfer_status"] == (
         "target_positive_fit_negative"
     )
@@ -1424,7 +1426,7 @@ def test_query_ship_local_heads_failure_diagnostic_rejects_broad_head_target() -
                     "family_conditioned_target_trainability": {
                         "group_by": {
                             "footprint_family": {
-                                "small_local": {
+                                HISTORICAL_SMALL_LOCAL_FAMILY: {
                                     "weak_ship_evidence_rankers": [],
                                     "ranker_alignment": {
                                         "query_hit_probability": {
@@ -1456,7 +1458,7 @@ def test_query_ship_local_heads_failure_diagnostic_rejects_broad_head_target() -
                 "family_conditioned_head_trainability": {
                     "group_by": {
                         "footprint_family": {
-                            "small_local": {
+                            HISTORICAL_SMALL_LOCAL_FAMILY: {
                                 "weak_ship_evidence_heads": [
                                     "query_hit_probability",
                                     "conditional_behavior_utility",
@@ -1532,11 +1534,13 @@ def test_query_ship_local_heads_failure_diagnostic_rejects_broad_head_target() -
     assert comparison["target_diffusion_failure"]["failed_checks"] == [
         "conditional_behavior_utility:support_fraction_above_max"
     ]
-    small_local = next(
-        row for row in comparison["family_failure_rows"] if row["family"] == "small_local"
+    historical_small_local = next(
+        row
+        for row in comparison["family_failure_rows"]
+        if row["family"] == HISTORICAL_SMALL_LOCAL_FAMILY
     )
-    assert small_local["family"] == "small_local"
-    assert small_local["candidate_positive_target_negative_fit_heads"] == [
+    assert historical_small_local["family"] == HISTORICAL_SMALL_LOCAL_FAMILY
+    assert historical_small_local["candidate_positive_target_negative_fit_heads"] == [
         "query_hit_probability",
         "conditional_behavior_utility",
         "segment_budget_target",
@@ -1561,11 +1565,11 @@ def test_family_transfer_path_diagnostic_flags_missing_family_prior_surface() ->
             "train": {
                 "workload_profile": {
                     "anchor_family_weights": {"density": 0.80},
-                    "footprint_family_weights": {"small_local": 0.25},
+                    "footprint_family_weights": {HISTORICAL_SMALL_LOCAL_FAMILY: 0.25},
                 },
                 "workload_signature": {
                     "anchor_family_counts": {"density": 7},
-                    "footprint_family_counts": {"small_local": 12},
+                    "footprint_family_counts": {HISTORICAL_SMALL_LOCAL_FAMILY: 12},
                 },
             }
         },
@@ -1631,7 +1635,7 @@ def test_family_transfer_path_diagnostic_flags_missing_family_prior_surface() ->
                 "family_conditioned_target_trainability": {
                     "group_by": {
                         "footprint_family": {
-                            "small_local": {
+                            HISTORICAL_SMALL_LOCAL_FAMILY: {
                                 "ranker_alignment": {
                                     "segment_budget_target": {
                                         "spearman_with_ship_query_evidence": 0.12,
@@ -1654,7 +1658,7 @@ def test_family_transfer_path_diagnostic_flags_missing_family_prior_surface() ->
             "family_conditioned_head_trainability": {
                 "group_by": {
                     "footprint_family": {
-                        "small_local": {
+                        HISTORICAL_SMALL_LOCAL_FAMILY: {
                             "query_count": 4,
                             "valid_hit_point_count": 64,
                             "weak_ship_evidence_heads": ["segment_budget_target"],
@@ -1712,7 +1716,7 @@ def test_family_transfer_path_diagnostic_flags_missing_family_prior_surface() ->
         "retained_decision_marginal_query_local_utility_alignment"
     )
     blocked = summary["blocked_family_head_rows"]
-    assert blocked[0]["family"] == "small_local"
+    assert blocked[0]["family"] == HISTORICAL_SMALL_LOCAL_FAMILY
     assert blocked[0]["head"] == "segment_budget_target"
     assert blocked[0]["transfer_status"] == "fits_target_but_misorders_ship_evidence"
     retained = diagnostic["artifacts"][0]["retained_marginal_alignment"]
@@ -5914,7 +5918,7 @@ def test_predictability_audit_is_diagnostic_only_and_reports_gate_fields() -> No
     assert family_prior["available"] is True
     assert family_prior["diagnostic_only"] is True
     assert family_prior["used_for_gate"] is False
-    assert "small_local" not in family_prior["group_by"]["footprint_family"]
+    assert HISTORICAL_SMALL_LOCAL_FAMILY not in family_prior["group_by"]["footprint_family"]
     assert "medium_operational" in family_prior["group_by"]["footprint_family"]
     medium_operational = family_prior["group_by"]["footprint_family"]["medium_operational"]
     assert medium_operational["focus_family"] is True
@@ -6057,7 +6061,7 @@ def test_final_profile_does_not_chase_uncovered_points_unless_declared() -> None
         range_duplicate_iou_threshold=1.0,
     )
     generation = (workload.generation_diagnostics or {})["query_generation"]
-    legacy = generate_typed_query_workload(
+    uncovered_anchor_chasing_workload = generate_typed_query_workload(
         trajectories=trajectories,
         n_queries=4,
         workload_map={"range": 1.0},
@@ -6069,14 +6073,16 @@ def test_final_profile_does_not_chase_uncovered_points_unless_declared() -> None
         range_max_point_hit_fraction=1.0,
         range_duplicate_iou_threshold=1.0,
     )
-    legacy_generation = (legacy.generation_diagnostics or {})["query_generation"]
+    chasing_generation = (uncovered_anchor_chasing_workload.generation_diagnostics or {})[
+        "query_generation"
+    ]
 
     assert generation["coverage_calibration_mode"] == "profile_sampled_query_count"
     assert generation["target_coverage"] == pytest.approx(0.30)
-    assert legacy_generation["coverage_calibration_mode"] == "uncovered_anchor_chasing"
+    assert chasing_generation["coverage_calibration_mode"] == "uncovered_anchor_chasing"
 
 
-def test_workload_stability_gate_rejects_tiny_fixed_count_workloads() -> None:
+def test_workload_stability_gate_rejects_legacy_fixed_count_workloads() -> None:
     config = SimpleNamespace(
         query=SimpleNamespace(
             target_coverage=None,
@@ -6090,8 +6096,8 @@ def test_workload_stability_gate_rejects_tiny_fixed_count_workloads() -> None:
         generation_diagnostics={
             "query_generation": {
                 "mode": "fixed_count",
-                "workload_profile_id": "range_query_mix",
-                "coverage_calibration_mode": "profile_sampled_query_count",
+                "workload_profile_id": "legacy_generator",
+                "coverage_calibration_mode": "legacy_fixed_or_target_coverage",
                 "coverage_guard_enabled": False,
                 "stop_reason": "fixed_count_completed",
             }
