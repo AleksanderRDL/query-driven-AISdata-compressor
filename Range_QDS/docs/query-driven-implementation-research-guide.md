@@ -1732,44 +1732,7 @@ Those were useful historically but are no longer the main path.
 
 ---
 
-## 17. Progress-log format
-
-Use concise checkpoints. Each checkpoint should record:
-
-```md
-## Checkpoint N — <short name>
-
-Status: completed / partial / failed
-
-Goal:
-- ...
-
-Changes:
-- ...
-
-Tests:
-- ...
-
-Experiment artifact:
-- path: ...
-- command: ...
-
-Key results:
-- MLQDS QueryLocalUtility: ...
-- uniform QueryLocalUtility: ...
-- Douglas-Peucker QueryLocalUtility: ...
-- gates passed: ...
-- gates failed: ...
-
-Decision:
-- continue / pivot / stop and diagnose
-```
-
-Keep the progress log short. Detailed stdout and raw metrics belong in artifacts.
-
----
-
-## 18. Completion definition
+## 17. Completion definition
 
 The implementation reaches acceptance only when:
 
