@@ -9,10 +9,6 @@ import pytest
 import torch
 
 from config.run_config import build_run_config, derive_seed_bundle
-from learning.targets.query_local_utility import (
-    QUERY_LOCAL_UTILITY_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE,
-    QUERY_LOCAL_UTILITY_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE,
-)
 from orchestration.learning_target_stage import prepare_training_targets
 from orchestration.range_runtime_cache import RangeRuntimeCache
 from workloads.query_types import pad_query_features
@@ -109,86 +105,13 @@ def test_factorized_target_preparation_does_not_precompute_train_labels() -> Non
     assert prepared.selection_geometry_scores is None
 
 
-def test_experimental_query_ship_max_pool_target_preparation_is_guarded() -> None:
-    config = build_run_config(
-        model_type="workload_blind_range",
-        range_training_target_mode=QUERY_LOCAL_UTILITY_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE,
-    )
-    workload = _empty_workload()
-
-    prepared = prepare_training_targets(
-        config=config,
-        seeds=derive_seed_bundle(7),
-        train_traj=[_minimal_points()],
-        train_points=_minimal_points(),
-        train_boundaries=[(0, 3)],
-        train_workload=workload,
-        train_workload_map={"range": 1.0},
-        train_label_workloads=[workload],
-        train_label_workload_seeds=[101],
-        train_source_ids=None,
-        train_mmsis=None,
-        selection_workload=None,
-        selection_points=None,
-        selection_boundaries=None,
-        eval_workload_map={"range": 1.0},
-        range_runtime_caches=_runtime_caches(),
-        phase=_noop_phase,
-    )
-
-    assert prepared.train_labels is None
-    assert (
-        prepared.range_training_target_mode
-        == QUERY_LOCAL_UTILITY_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE
-    )
-    transform = prepared.range_training_target_transform
-    assert transform["enabled"] is True
-    assert transform["target_family"] == "QueryLocalUtilityFactorized"
-    assert transform["final_success_allowed"] is False
-    assert "Experimental QueryLocalUtility target mode" in transform["diagnostic_reason"]
-
-
-def test_experimental_query_ship_local_heads_target_preparation_is_guarded() -> None:
-    config = build_run_config(
-        model_type="workload_blind_range",
-        range_training_target_mode=QUERY_LOCAL_UTILITY_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE,
-    )
-    workload = _empty_workload()
-
-    prepared = prepare_training_targets(
-        config=config,
-        seeds=derive_seed_bundle(7),
-        train_traj=[_minimal_points()],
-        train_points=_minimal_points(),
-        train_boundaries=[(0, 3)],
-        train_workload=workload,
-        train_workload_map={"range": 1.0},
-        train_label_workloads=[workload],
-        train_label_workload_seeds=[101],
-        train_source_ids=None,
-        train_mmsis=None,
-        selection_workload=None,
-        selection_points=None,
-        selection_boundaries=None,
-        eval_workload_map={"range": 1.0},
-        range_runtime_caches=_runtime_caches(),
-        phase=_noop_phase,
-    )
-
-    assert prepared.train_labels is None
-    assert prepared.range_training_target_mode == QUERY_LOCAL_UTILITY_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE
-    transform = prepared.range_training_target_transform
-    assert transform["enabled"] is True
-    assert transform["target_family"] == "QueryLocalUtilityFactorized"
-    assert transform["final_success_allowed"] is False
-    assert "Experimental QueryLocalUtility target mode" in transform["diagnostic_reason"]
-
-
 @pytest.mark.parametrize(
     "target_mode",
     [
         "query_local_utility_factorized_segment_budget_query_hit_ship_blend",
         "query_local_utility_factorized_segment_budget_final_score_ship_blend",
+        "query_local_utility_factorized_segment_budget_query_ship_max_pool",
+        "query_local_utility_factorized_query_ship_local_heads",
     ],
 )
 def test_rejected_experimental_query_local_utility_target_modes_are_not_prepared(
@@ -200,7 +123,7 @@ def test_rejected_experimental_query_local_utility_target_modes_are_not_prepared
     )
     workload = _empty_workload()
 
-    with pytest.raises(RuntimeError, match="QueryLocalUtility factorized target mode"):
+    with pytest.raises(RuntimeError, match="range_training_target_mode"):
         prepare_training_targets(
             config=config,
             seeds=derive_seed_bundle(7),

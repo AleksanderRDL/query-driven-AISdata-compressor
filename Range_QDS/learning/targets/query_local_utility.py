@@ -26,22 +26,9 @@ from workloads.query_types import NUM_QUERY_TYPES, QUERY_TYPE_ID_RANGE
 from workloads.range_geometry import points_in_range_box, segment_box_bracket_indices
 
 QUERY_LOCAL_UTILITY_FACTORIZED_TARGET_MODE = "query_local_utility_factorized"
-QUERY_LOCAL_UTILITY_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE = (
-    "query_local_utility_factorized_segment_budget_query_ship_max_pool"
-)
-QUERY_LOCAL_UTILITY_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE = (
-    "query_local_utility_factorized_query_ship_local_heads"
-)
-QUERY_LOCAL_UTILITY_EXPERIMENTAL_TARGET_MODES = frozenset(
-    {
-        QUERY_LOCAL_UTILITY_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE,
-        QUERY_LOCAL_UTILITY_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE,
-    }
-)
 QUERY_LOCAL_UTILITY_TARGET_MODES = frozenset(
     {
         QUERY_LOCAL_UTILITY_FACTORIZED_TARGET_MODE,
-        *QUERY_LOCAL_UTILITY_EXPERIMENTAL_TARGET_MODES,
     }
 )
 QUERY_LOCAL_UTILITY_HEAD_NAMES = (
@@ -84,43 +71,6 @@ def query_local_utility_point_score(
     return (q_hit * (0.5 + behavior) * (0.75 + 0.25 * replacement) + 0.25 * boundary).clamp(
         0.0, 1.0
     )
-
-
-def _query_ship_blend_signal(
-    *,
-    q_hit: torch.Tensor,
-    ship_query_evidence: torch.Tensor,
-    valid: torch.Tensor,
-) -> torch.Tensor:
-    """Return a query-local presence utility that preserves ship-level evidence."""
-    valid = valid.to(dtype=torch.bool)
-    normalized_q_hit = _normalize_0_1(q_hit, valid)
-    normalized_ship = _normalize_0_1(ship_query_evidence, valid)
-    blended = (0.65 * normalized_q_hit + 0.35 * normalized_ship).clamp(0.0, 1.0)
-    return torch.where(valid, blended, torch.zeros_like(blended))
-
-
-def _query_ship_local_behavior_signal(
-    *,
-    behavior: torch.Tensor,
-    boundary: torch.Tensor,
-    replacement: torch.Tensor,
-    ship_query_evidence: torch.Tensor,
-    valid: torch.Tensor,
-) -> torch.Tensor:
-    """Return a compact query-local behavior utility for retained-set value."""
-    valid = valid.to(dtype=torch.bool)
-    normalized_behavior = _normalize_0_1(behavior, valid)
-    normalized_boundary = _normalize_0_1(boundary, valid)
-    normalized_replacement = _normalize_0_1(replacement, valid)
-    normalized_ship = _normalize_0_1(ship_query_evidence, valid)
-    utility = (
-        0.45 * normalized_ship
-        + 0.25 * normalized_behavior
-        + 0.20 * normalized_replacement
-        + 0.10 * normalized_boundary
-    ).clamp(0.0, 1.0)
-    return torch.where(valid, utility, torch.zeros_like(utility))
 
 
 def _query_segment_local_behavior_signal(
@@ -292,6 +242,66 @@ def _rank_correlation(x: torch.Tensor, y: torch.Tensor, valid: torch.Tensor) -> 
     if float(denom.item()) <= 1e-12:
         return None
     return float((x_centered * y_centered).sum().item() / float(denom.item()))
+
+
+def _rank_vector(values: torch.Tensor) -> torch.Tensor | None:
+    """Return stable ranks for a 1-D tensor, or None when the tensor is constant."""
+    if int(values.numel()) < 2:
+        return None
+    values = values.float()
+    if float(values.std(unbiased=False).item()) <= 1e-12:
+        return None
+    order = torch.argsort(values, stable=True)
+    ranks = torch.empty_like(values)
+    ranks[order] = torch.arange(int(values.numel()), dtype=torch.float32, device=values.device)
+    return ranks
+
+
+def _residualize_against(values: torch.Tensor, control: torch.Tensor) -> torch.Tensor | None:
+    """Return linear residuals of values after regressing out control."""
+    control_centered = control.float() - control.float().mean()
+    denom = (control_centered * control_centered).sum()
+    if float(denom.item()) <= 1e-12:
+        return None
+    values_f = values.float()
+    slope = ((values_f - values_f.mean()) * control_centered).sum() / denom
+    fitted = values_f.mean() + slope * control_centered
+    return values_f - fitted
+
+
+def _tensor_correlation(x: torch.Tensor, y: torch.Tensor) -> float | None:
+    """Return Pearson correlation between 1-D tensors."""
+    if int(x.numel()) < 2 or int(y.numel()) < 2:
+        return None
+    x_centered = x.float() - x.float().mean()
+    y_centered = y.float() - y.float().mean()
+    denom = x_centered.norm() * y_centered.norm()
+    if float(denom.item()) <= 1e-12:
+        return None
+    return float((x_centered * y_centered).sum().item() / float(denom.item()))
+
+
+def _partial_rank_correlation(
+    *,
+    x: torch.Tensor,
+    y: torch.Tensor,
+    control: torch.Tensor,
+    valid: torch.Tensor,
+) -> float | None:
+    """Return Spearman-style partial correlation of x and y controlling for control."""
+    valid = valid.to(dtype=torch.bool)
+    if int(valid.sum().item()) < 3:
+        return None
+    x_rank = _rank_vector(x[valid].float())
+    y_rank = _rank_vector(y[valid].float())
+    control_rank = _rank_vector(control[valid].float())
+    if x_rank is None or y_rank is None or control_rank is None:
+        return None
+    x_residual = _residualize_against(x_rank, control_rank)
+    y_residual = _residualize_against(y_rank, control_rank)
+    if x_residual is None or y_residual is None:
+        return None
+    return _tensor_correlation(x_residual, y_residual)
 
 
 def _topk_overlap_and_mass_recall(
@@ -699,6 +709,37 @@ def _conditional_behavior_candidate_diagnostics(
     return out
 
 
+def _conditional_behavior_replacement_partial_alignment(
+    *,
+    behavior: torch.Tensor,
+    replacement: torch.Tensor,
+    valid: torch.Tensor,
+    references: dict[str, torch.Tensor],
+) -> dict[str, Any]:
+    """Return behavior alignment after controlling for replacement rank."""
+    valid = valid.to(dtype=torch.bool)
+    out: dict[str, Any] = {
+        "available": bool(valid.any().item()),
+        "diagnostic_only": True,
+        "control": "replacement_representative_value",
+        "valid_point_count": int(valid.sum().item()),
+        "behavior_replacement_spearman": _rank_correlation(behavior, replacement, valid),
+        "references": {},
+    }
+    for reference_name, reference in references.items():
+        out["references"][str(reference_name)] = {
+            "behavior_spearman": _rank_correlation(behavior, reference, valid),
+            "replacement_spearman": _rank_correlation(replacement, reference, valid),
+            "behavior_partial_spearman_controlling_replacement": _partial_rank_correlation(
+                x=behavior,
+                y=reference,
+                control=replacement,
+                valid=valid,
+            ),
+        }
+    return out
+
+
 def _target_distribution_summary(values: torch.Tensor, valid: torch.Tensor) -> dict[str, Any]:
     """Return compact target-shape stats on the selected support."""
     valid = valid.to(dtype=torch.bool)
@@ -1083,9 +1124,6 @@ def _segment_budget_point_value_for_target_mode(
     *,
     target_mode: str,
     final_score: torch.Tensor,
-    q_hit: torch.Tensor,
-    ship_query_evidence: torch.Tensor,
-    valid: torch.Tensor,
 ) -> tuple[torch.Tensor, dict[str, Any]]:
     """Return the point value used to build the active segment-budget head target."""
     mode = str(target_mode).lower()
@@ -1096,33 +1134,6 @@ def _segment_budget_point_value_for_target_mode(
             "segment_budget_target_aggregation": "top20_mean",
             "segment_budget_target_experimental": False,
             "final_success_allowed": True,
-        }
-    if mode == QUERY_LOCAL_UTILITY_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE:
-        point_value = _query_ship_blend_signal(
-            q_hit=q_hit,
-            ship_query_evidence=ship_query_evidence,
-            valid=valid,
-        )
-        return point_value, {
-            "segment_budget_target_base_source": (
-                "normalized_query_hit_probability_plus_normalized_ship_query_evidence"
-            ),
-            "segment_budget_target_variant": "query_ship_blend_max_pool",
-            "segment_budget_target_aggregation": "max_pool",
-            "segment_budget_target_point_formula": (
-                "0.65_normalized_query_hit_probability_plus_0.35_normalized_ship_query_evidence"
-            ),
-            "segment_budget_target_experimental": True,
-            "final_success_allowed": False,
-        }
-    if mode == QUERY_LOCAL_UTILITY_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE:
-        return q_hit.float().clamp(0.0, 1.0), {
-            "segment_budget_target_base_source": "query_ship_local_presence_head_target",
-            "segment_budget_target_variant": "query_ship_local_heads_max_pool",
-            "segment_budget_target_aggregation": "max_pool",
-            "segment_budget_target_point_formula": ("query_ship_local_presence_head_target"),
-            "segment_budget_target_experimental": True,
-            "final_success_allowed": False,
         }
     raise ValueError(
         "Unsupported QueryLocalUtility target mode: "
@@ -1237,35 +1248,6 @@ def build_query_local_utility_targets(
         ),
         "final_label_variant": "active_query_local_utility_point_score",
     }
-    if target_mode == QUERY_LOCAL_UTILITY_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE:
-        target_q_hit = _query_ship_blend_signal(
-            q_hit=q_hit,
-            ship_query_evidence=ship_query_evidence,
-            valid=hit_positive,
-        )
-        target_behavior = _query_ship_local_behavior_signal(
-            behavior=behavior,
-            boundary=boundary,
-            replacement=replacement,
-            ship_query_evidence=ship_query_evidence,
-            valid=hit_positive,
-        )
-        head_variant_diagnostics.update(
-            {
-                "query_hit_target_variant": "query_ship_local_presence_utility",
-                "query_hit_target_base_source": (
-                    "0.65_normalized_query_hit_probability_plus_0.35_normalized_ship_query_evidence"
-                ),
-                "conditional_behavior_target_variant": "query_ship_local_behavior_utility",
-                "conditional_behavior_target_base_source": (
-                    "0.45_normalized_ship_query_evidence_plus_"
-                    "0.25_normalized_behavior_change_plus_"
-                    "0.20_normalized_replacement_value_plus_"
-                    "0.10_normalized_boundary_event_utility"
-                ),
-                "final_label_variant": "query_ship_local_heads_composed_score",
-            }
-        )
     final_score = query_local_utility_point_score(
         q_hit=target_q_hit,
         behavior=target_behavior,
@@ -1276,9 +1258,6 @@ def build_query_local_utility_targets(
         _segment_budget_point_value_for_target_mode(
             target_mode=target_mode,
             final_score=final_score,
-            q_hit=target_q_hit,
-            ship_query_evidence=ship_query_evidence,
-            valid=hit_positive,
         )
     )
     segment_budget_aggregation = str(
@@ -1389,6 +1368,20 @@ def build_query_local_utility_targets(
                 },
                 query_hit_masks=query_hit_masks,
                 boundaries=boundaries,
+            ),
+            "conditional_behavior_replacement_partial_alignment": (
+                _conditional_behavior_replacement_partial_alignment(
+                    behavior=target_behavior,
+                    replacement=replacement,
+                    valid=hit_positive,
+                    references={
+                        "final_score": final_score,
+                        "query_hit_probability": target_q_hit,
+                        "ship_query_evidence": ship_query_evidence,
+                        "segment_budget_target": segment_budget,
+                        "path_length_support_target": path_length_support,
+                    },
+                )
             ),
             "ship_query_evidence_target_alignment": _ship_query_evidence_target_alignment(
                 ship_query_evidence=ship_query_evidence,

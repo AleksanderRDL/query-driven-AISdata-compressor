@@ -24,8 +24,6 @@ from benchmarking.reporting.row_fields import _row_from_run
 from learning.model_features import model_type_metadata
 from learning.targets.modes import SCALAR_RANGE_TARGET_MODES
 from learning.targets.query_local_utility import (
-    QUERY_LOCAL_UTILITY_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE,
-    QUERY_LOCAL_UTILITY_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE,
     QUERY_LOCAL_UTILITY_TARGET_MODES,
 )
 
@@ -156,16 +154,9 @@ def test_scalar_and_query_local_utility_target_modes_are_separated() -> None:
     assert "retained_frequency" in SCALAR_RANGE_TARGET_MODES
     assert "historical_prior_retained_frequency" in SCALAR_RANGE_TARGET_MODES
     assert "query_local_utility_factorized" not in SCALAR_RANGE_TARGET_MODES
-    assert (
-        QUERY_LOCAL_UTILITY_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE
-        not in SCALAR_RANGE_TARGET_MODES
-    )
-    assert QUERY_LOCAL_UTILITY_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE not in SCALAR_RANGE_TARGET_MODES
     assert QUERY_LOCAL_UTILITY_TARGET_MODES == frozenset(
         {
             "query_local_utility_factorized",
-            QUERY_LOCAL_UTILITY_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE,
-            QUERY_LOCAL_UTILITY_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE,
         }
     )
 

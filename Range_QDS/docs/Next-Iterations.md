@@ -31,18 +31,20 @@ must keep being computed and improved where possible, but during the current
 phase it is a reported guardrail rather than the first hard blocker ahead of
 local query behavior and learning causality.
 
-The latest current-default strict training artifact is the source-stratified
-Level 3 replay of the active multiplicative
+The latest current-default strict blocker-localizing artifact is the
+source-stratified Level 3 replay of the multiplicative
 `query_segment_local_behavior_utility` target at the 64-ship/256-point/40-query
 shape:
 `artifacts/results/query_driven_behavior_segment_target_mult_level3_scale64_query40_seed2527/example_run.json`.
 
-This replay is the current blocker-localizing reference. MLQDS beats uniform
-and Douglas-Peucker on QueryLocalUtility (`0.1431090566` versus `0.1247681518`
-and `0.1153266238`). It passes workload stability, support overlap, target
-diffusion, workload signature, predictability, prior-predictive alignment, and
-global sanity. It still fails learning causality and the final grid requirement.
-Do not make final success claims from it.
+This replay remains the blocker-localizing reference. Later direct
+turn/continuity behavior-target variants failed the guide's smaller evidence
+levels and were rejected. MLQDS beats uniform and Douglas-Peucker on
+QueryLocalUtility (`0.1431090566` versus `0.1247681518` and `0.1153266238`).
+It passes workload stability, support overlap, target diffusion, workload
+signature, predictability, prior-predictive alignment, and global sanity. It
+still fails learning causality and the final grid requirement. Do not make
+final success claims from it.
 
 The smaller active-target diagnostics remain useful scale context:
 `artifacts/results/query_driven_behavior_segment_target_mult_level2_seed2532/example_run.json`
@@ -51,6 +53,22 @@ failed workload stability and workload signature at 32/192/24-query scale.
 fixed workload stability at 48/192/32-query scale but still failed workload
 signature, predictability, prior alignment, and learning causality. Treat those
 runs as blocker localization, not learning evidence.
+
+A later Level 2 partial-alignment replay emitted the current
+behavior/replacement diagnostic surface but is not promotion evidence:
+`artifacts/results/query_driven_behavior_partial_alignment_level2_seed2633/example_run.json`
+and
+`artifacts/results/query_driven_behavior_partial_alignment_level2_seed2633/family_transfer_path_diagnostic.json`.
+MLQDS lost to uniform on QueryLocalUtility (`0.0811594668` versus
+`0.1133670216`) and failed target diffusion, workload signature,
+predictability, prior-predictive alignment, learning causality, and global
+sanity. Its partial-alignment readout was mixed: behavior partial Spearman
+controlling replacement was positive for final score (`0.1854`), query-hit
+(`0.1207`), and path support (`0.1740`), but negative for ship evidence
+(`-0.0488`) and segment budget (`-0.0165`). Replacement aligned more strongly
+than behavior to final score and ship evidence. Use this artifact only as a
+diagnostic-surface validation and failed pre-causality localization, not as a
+reason to promote behavior-head semantics or residualized pseudo-targets.
 
 The remaining Level 3 failure is specific. Shuffled scores, untrained control,
 prior-field-only, and no-segment-budget controls lose as expected. The failed
@@ -337,6 +355,11 @@ Required diagnosis during the next checkpoint:
   `segment_budget_target`; use this after workload signatures are stable, and
   make the next fix semantic/training-pressure oriented rather than another
   prior input scale change
+- behavior/replacement partial-alignment diagnostics under
+  `conditional_behavior_replacement_partial_alignment`; these are
+  diagnostic-only and must not be treated as accepted target semantics. The
+  retired positive-residual pseudo-target did not show replacement-rank
+  decoupling at Level 1 and should not be promoted.
 - family/head transfer for active families, especially whether the weak
   `conditional_behavior_utility` path is a target problem or a downstream
   low-contrast selector problem
