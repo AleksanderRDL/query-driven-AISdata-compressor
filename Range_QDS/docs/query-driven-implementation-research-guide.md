@@ -93,8 +93,8 @@ project_status: active, not accepted
 current_metric: QueryLocalUtility
 current_workload_profile: range_query_mix
 current_profile_footprints: medium_operational, large_context
-strict_current_two_footprint_rerun: performed before the active segment-aware behavior target change; workload gates passed at generator Level 3 and 64/256/40 training replay
-active_behavior_target_level: Level 0 tests plus Level 1 wiring smoke only
+strict_current_two_footprint_rerun: active segment-aware behavior target has Level 2, 48/192/32-query, and 64/256/40 Level 3 strict diagnostics
+active_behavior_target_level: Level 3 strict synthetic replay passes pre-causality gates but fails learning causality
 current_blockers: learning causality, especially query-prior and behavior-head dependence
 global_sanity: reported guardrail during initial local-query-learning phase
 final_grid: not run
@@ -107,10 +107,11 @@ evidence is useful for diagnosis, but it predates the current metric and
 workload defaults. Do not compare old scores as if they were current-metric
 acceptance evidence.
 
-The next admissible evidence must start with the smaller strict levels in this
-guide under the current defaults or an explicitly justified profile/metric
-variant. Run workload/profile health, support overlap, prior predictability, and
-learning-causality checks before any final-grid run.
+The next admissible work should diagnose learning causality under the healthy
+64/256/40 strict cell before any final-grid run. If a metric/profile/target
+variant changes the evidence boundary, restart at the smaller strict levels in
+this guide and rerun workload/profile health, support overlap, prior
+predictability, and learning-causality checks.
 
 ## 3. Design Contract
 

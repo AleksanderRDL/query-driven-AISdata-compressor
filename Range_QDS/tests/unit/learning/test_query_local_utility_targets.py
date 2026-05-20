@@ -25,11 +25,8 @@ from learning.query_prior_fields import (
 from learning.targets.query_local_utility import (
     QUERY_LOCAL_UTILITY_FINAL_LABEL_FORMULA,
     QUERY_LOCAL_UTILITY_HEAD_NAMES,
-    QUERY_LOCAL_UTILITY_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE,
-    QUERY_LOCAL_UTILITY_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE,
     build_query_local_utility_targets,
 )
-from learning.targets.query_local_utility_segments import _segment_pooled_targets
 from scoring.geometry_thresholds import (
     max_sed_ratio_for_compression,
 )
@@ -479,6 +476,20 @@ def test_conditional_behavior_target_alignment_diagnostics_report_final_mass_rec
     assert current["ship_query_pair_coverage_at_topk"] == 0.5
     assert "topk_ship_query_evidence_mass_recall_ranked_by_behavior" in replacement_gated
 
+    partial = targets.diagnostics["conditional_behavior_replacement_partial_alignment"]
+    assert partial["available"] is True
+    assert partial["diagnostic_only"] is True
+    assert partial["control"] == "replacement_representative_value"
+    assert partial["valid_point_count"] == 10
+    assert partial["behavior_replacement_spearman"] is not None
+    partial_final = partial["references"]["final_score"]
+    assert partial_final["behavior_spearman"] is not None
+    assert partial_final["replacement_spearman"] is not None
+    assert (
+        partial_final["behavior_partial_spearman_controlling_replacement"]
+        is not None
+    )
+
     ship_alignment = targets.diagnostics["ship_query_evidence_target_alignment"]
     assert ship_alignment["available"] is True
     assert ship_alignment["diagnostic_only"] is True
@@ -579,6 +590,7 @@ def test_ship_presence_segment_budget_candidate_improves_ship_evidence_alignment
     ship_presence = candidates["ship_presence_segment_budget_candidate"]
     query_hit_blend = candidates["query_hit_ship_presence_blend_segment_budget_candidate"]
 
+    assert active["target_std"] > 0.0
     assert ship_presence["spearman_with_ship_query_evidence"] > active[
         "spearman_with_ship_query_evidence"
     ]
@@ -652,138 +664,3 @@ def test_family_local_target_candidate_improves_medium_operational_ship_evidence
     assert segment_top20["two_stage_selected_point_count"] == segment_sum[
         "two_stage_selected_point_count"
     ]
-
-
-def test_query_ship_max_pool_target_mode_only_changes_segment_budget_head() -> None:
-    points = torch.zeros((8, 8), dtype=torch.float32)
-    points[:, 0] = torch.arange(8, dtype=torch.float32)
-    points[:, 1] = torch.arange(8, dtype=torch.float32) * 0.01
-    points[:, 2] = 0.0
-    points[:2, 7] = 1.0
-    query = {
-        "type": "range",
-        "params": {
-            "t_start": -1.0,
-            "t_end": 6.0,
-            "lat_min": -1.0,
-            "lat_max": 1.0,
-            "lon_min": -1.0,
-            "lon_max": 1.0,
-        },
-        "_metadata": {
-            "anchor_family": "density",
-            "footprint_family": "medium_operational",
-        },
-    }
-
-    boundaries = [(0, 6), (6, 8)]
-    segment_size = 2
-    active = build_query_local_utility_targets(
-        points=points,
-        boundaries=boundaries,
-        typed_queries=[query],
-        segment_size=segment_size,
-    )
-    variant = build_query_local_utility_targets(
-        points=points,
-        boundaries=boundaries,
-        typed_queries=[query],
-        segment_size=segment_size,
-        target_mode=QUERY_LOCAL_UTILITY_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE,
-    )
-
-    assert torch.allclose(active.labels, variant.labels)
-    assert torch.equal(active.labelled_mask, variant.labelled_mask)
-    assert torch.equal(active.head_mask, variant.head_mask)
-    for head_idx, head_name in enumerate(QUERY_LOCAL_UTILITY_HEAD_NAMES):
-        active_head = active.head_targets[:, head_idx]
-        variant_head = variant.head_targets[:, head_idx]
-        if head_name == "segment_budget_target":
-            assert not torch.allclose(active_head, variant_head)
-        else:
-            assert torch.allclose(active_head, variant_head)
-
-    segment_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("segment_budget_target")
-    assert torch.allclose(
-        active.head_targets[:, segment_idx],
-        _segment_pooled_targets(
-            active.labels[:, QUERY_TYPE_ID_RANGE],
-            boundaries,
-            segment_size,
-            pool="top20_mean",
-        ),
-    )
-    assert active.diagnostics["segment_budget_target_aggregation"] == "top20_mean"
-    assert active.diagnostics["final_success_allowed"] is True
-    assert variant.diagnostics["target_mode"] == (
-        QUERY_LOCAL_UTILITY_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE
-    )
-    assert variant.diagnostics["segment_budget_target_variant"] == "query_ship_blend_max_pool"
-    assert variant.diagnostics["segment_budget_target_aggregation"] == "max_pool"
-    assert variant.diagnostics["segment_budget_target_experimental"] is True
-    assert variant.diagnostics["final_success_allowed"] is False
-
-
-def test_query_ship_local_heads_target_mode_changes_composed_head_contract() -> None:
-    points = torch.zeros((8, 8), dtype=torch.float32)
-    points[:, 0] = torch.arange(8, dtype=torch.float32)
-    points[:, 1] = torch.arange(8, dtype=torch.float32) * 0.01
-    points[:, 2] = 0.0
-    points[:2, 7] = 1.0
-    query = {
-        "type": "range",
-        "params": {
-            "t_start": -1.0,
-            "t_end": 9.0,
-            "lat_min": -1.0,
-            "lat_max": 1.0,
-            "lon_min": -1.0,
-            "lon_max": 1.0,
-        },
-        "_metadata": {
-            "anchor_family": "density",
-            "footprint_family": "medium_operational",
-        },
-    }
-
-    active = build_query_local_utility_targets(
-        points=points,
-        boundaries=[(0, 6), (6, 8)],
-        typed_queries=[query],
-        segment_size=2,
-    )
-    variant = build_query_local_utility_targets(
-        points=points,
-        boundaries=[(0, 6), (6, 8)],
-        typed_queries=[query],
-        segment_size=2,
-        target_mode=QUERY_LOCAL_UTILITY_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE,
-    )
-
-    assert torch.equal(active.labelled_mask, variant.labelled_mask)
-    assert torch.equal(active.head_mask, variant.head_mask)
-    changed_heads = {
-        head_name
-        for head_idx, head_name in enumerate(QUERY_LOCAL_UTILITY_HEAD_NAMES)
-        if not torch.allclose(active.head_targets[:, head_idx], variant.head_targets[:, head_idx])
-    }
-    assert changed_heads == {
-        "query_hit_probability",
-        "conditional_behavior_utility",
-        "segment_budget_target",
-    }
-    assert not torch.allclose(active.labels, variant.labels)
-    assert variant.diagnostics["target_mode"] == QUERY_LOCAL_UTILITY_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE
-    assert variant.diagnostics["query_hit_target_variant"] == (
-        "query_ship_local_presence_utility"
-    )
-    assert variant.diagnostics["conditional_behavior_target_variant"] == (
-        "query_ship_local_behavior_utility"
-    )
-    assert variant.diagnostics["segment_budget_target_variant"] == (
-        "query_ship_local_heads_max_pool"
-    )
-    assert variant.diagnostics["segment_budget_target_aggregation"] == "max_pool"
-    assert variant.diagnostics["segment_budget_target_experimental"] is True
-    assert variant.diagnostics["final_label_variant"] == "query_ship_local_heads_composed_score"
-    assert variant.diagnostics["final_success_allowed"] is False

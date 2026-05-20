@@ -263,14 +263,13 @@ def test_family_transfer_path_diagnostic_flags_missing_family_prior_surface() ->
         },
         "training_target_diagnostics": {
             "query_local_utility_factorized": {
-                "target_mode": (
-                    "query_local_utility_factorized_segment_budget_query_ship_max_pool"
-                ),
-                "segment_budget_target_variant": "query_ship_blend_max_pool",
-                "segment_budget_target_aggregation": "max_pool",
-                "conditional_behavior_target_variant": "active_local_behavior_change",
+                "target_mode": "query_local_utility_factorized",
+                "segment_budget_target_variant": "active_final_score",
+                "segment_budget_target_aggregation": "top20_mean",
+                "conditional_behavior_target_variant": "query_segment_local_behavior_utility",
                 "conditional_behavior_target_base_source": (
-                    "query_hit_conditioned_trajectory_change"
+                    "normalized_query_hit_conditioned_trajectory_change_times_"
+                    "0.45_plus_0.35_segment_behavior_support_plus_0.20_segment_query_hit_support"
                 ),
                 "conditional_behavior_utility_training": "masked_to_query_hit_points",
                 "behavior_change_highpass_quantile": 0.70,
@@ -284,7 +283,7 @@ def test_family_transfer_path_diagnostic_flags_missing_family_prior_surface() ->
                     "topk_replacement_representative_value_mass_recall_ranked_by_behavior": 0.80,
                     "topk_segment_budget_target_mass_recall_ranked_by_behavior": 0.40,
                 },
-                "final_success_allowed": False,
+                "final_success_allowed": True,
                 "family_conditioned_target_trainability": {
                     "group_by": {
                         "footprint_family": {
