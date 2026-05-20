@@ -38,5 +38,5 @@ SPARK_LOCAL_CORES=2 \
 SPARK_SHUFFLE_PARTITIONS=96 \
 SPARK_INPUT_PARTITION_MB=32 \
 SPARK_OUTPUT_PARTITIONS=4 \
-python main.py
+uv run --group dev -- python main.py
 ```

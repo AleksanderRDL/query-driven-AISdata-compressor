@@ -6,9 +6,12 @@ output under `AISDATA/cleaned/`.
 
 ## Entry Points
 
-- Root wrapper: `main.py`
-- Module entrypoint: `python -m ais_pipeline`
-- Direct module path: `python -m ais_pipeline.pipeline`
+Run entry points through the root `uv`-managed CPython `3.14.5` virtual
+environment:
+
+- Root wrapper: `uv run --group dev -- python main.py`
+- Module entrypoint: `uv run --group dev -- python -m ais_pipeline`
+- Direct module path: `uv run --group dev -- python -m ais_pipeline.pipeline`
 
 Both run the same `run()` function.
 
