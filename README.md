@@ -11,20 +11,26 @@ AIS data tooling and query-driven trajectory simplification research.
 | QDS research | [`Range_QDS/`](Range_QDS/) | ML trajectory simplification, benchmarks, and redesign work. |
 | Data folders | [`AISDATA/`](AISDATA/) | Raw and cleaned AIS source data. |
 
+## Python Environment
+
+Use the repo-local virtual environment managed by `uv`. The project interpreter
+is CPython `3.14.5`, pinned by [`.python-version`](.python-version). Do not use
+system Python, bare `pip`, or manually managed virtualenvs for project work.
+
 ## Quick Start
 
 Root cleaning pipeline:
 
 ```bash
-uv python install 3.14
-uv sync --group dev
+uv python install 3.14.5
+uv sync --python 3.14.5 --group dev
 uv run --group dev -- python main.py
 ```
 
 QDS work:
 
 ```bash
-uv sync --group dev
+uv sync --python 3.14.5 --group dev
 make check-env
 make test
 ```

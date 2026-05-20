@@ -18,8 +18,10 @@ checks are workflow and protocol invariants:
 - benchmark summaries must expose all required gates
 - run and benchmark commands must be reproducible
 
-Use `uv` as the single Python execution layer. Do not mix active command styles
-between `uv`, bare Python, pip, and hard-coded virtualenv paths.
+Use `uv` as the single Python execution layer. Project work must use the
+repo-local `uv` virtual environment with CPython `3.14.5`, pinned by the root
+`.python-version`. Do not mix active command styles between `uv`, bare Python,
+pip, and hard-coded virtualenv paths.
 
 Do not turn learned metrics into brittle tests. Training runs are noisy; use
 regression testing for stable schema/report shape, not stochastic model scores.
@@ -37,7 +39,8 @@ which invariant failed.
 Run project Python commands through `uv` from the repository root:
 
 ```bash
-uv sync --group dev
+uv python install 3.14.5
+uv sync --python 3.14.5 --group dev
 uv lock --check
 uv run --group dev -- pytest Range_QDS/tests
 uv run --group dev -- pyright Range_QDS/benchmarking Range_QDS/config Range_QDS/data_preparation Range_QDS/scoring Range_QDS/models Range_QDS/orchestration Range_QDS/workloads Range_QDS/runtime Range_QDS/selection Range_QDS/learning Range_QDS/scripts Range_QDS/tests
@@ -233,7 +236,7 @@ their formatting is owned by the snapshot tool.
 For tooling or documentation checkpoints, run:
 
 ```bash
-uv sync --group dev
+uv sync --python 3.14.5 --group dev
 uv lock --check
 git diff --check
 uv run --group dev -- yamllint .

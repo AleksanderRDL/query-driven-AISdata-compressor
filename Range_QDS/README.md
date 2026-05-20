@@ -113,7 +113,9 @@ uv run --group dev -- python -m orchestration.train_and_score \
 ## Requirements
 
 Dependency source of truth lives in root [`../pyproject.toml`](../pyproject.toml).
-Use `uv sync --group dev` from the repo root.
+Use the root `uv`-managed virtual environment with CPython `3.14.5`, pinned by
+[`../.python-version`](../.python-version). Run `uv sync --python 3.14.5 --group dev`
+from the repo root.
 
 ## Output Policy
 
