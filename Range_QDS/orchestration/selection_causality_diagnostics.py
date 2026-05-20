@@ -52,11 +52,10 @@ from workloads.query_types import single_workload_type
 
 def _compact_selection_retained_marginal_teacher_summary(
     payload: dict[str, Any],
+    *,
+    source_path: str,
+    split_name: str,
 ) -> dict[str, Any]:
-    source_path = (
-        "selector_trace_diagnostics.selection_primary."
-        "retained_decision_marginal_query_local_utility_alignment"
-    )
     summary_keys = (
         "available",
         "diagnostic_only",
@@ -96,7 +95,7 @@ def _compact_selection_retained_marginal_teacher_summary(
         summary["top_marginal_miss_summary"] = compact_top_miss_summary
     summary.update(
         {
-            "split": "checkpoint_selection",
+            "split": split_name,
             "source_path": source_path,
             "rows_in_selector_trace_only": True,
             "query_conditioned_teacher_allowed_for_train_or_checkpoint_diagnostics_only": True,
@@ -116,6 +115,8 @@ def build_selection_causality_diagnostics(
     selection_query_cache: ScoringQueryCache | None,
     config: RunConfig,
     seeds: Any,
+    diagnostic_split: str = "checkpoint_selection",
+    selector_trace_layout_name: str = "selection_primary",
 ) -> dict[str, Any]:
     """Return checkpoint-validation ablation diagnostics without changing selection."""
     if selection_points is None or selection_boundaries is None or selection_workload is None:
@@ -126,6 +127,12 @@ def build_selection_causality_diagnostics(
     ):
         return {"available": False, "reason": "requires_learned_segment_budget_v1"}
 
+    split_name = str(diagnostic_split)
+    split_slug = split_name.replace("-", "_")
+    selector_trace_source_path = (
+        f"selector_trace_diagnostics.{selector_trace_layout_name}."
+        "retained_decision_marginal_query_local_utility_alignment"
+    )
     workload_type = single_workload_type(eval_workload_map)
 
     def _mlqds_method(
@@ -144,7 +151,7 @@ def build_selection_causality_diagnostics(
         )
 
     primary_method = _mlqds_method(
-        name="MLQDS_selection_primary",
+        name=f"MLQDS_{split_slug}_primary",
         trained_outputs=trained,
         workload=selection_workload,
     )
@@ -197,25 +204,25 @@ def build_selection_causality_diagnostics(
     selection_marginal_teacher_summary: dict[str, Any] = {
         "available": False,
         "diagnostic_only": True,
-        "split": "checkpoint_selection",
+        "split": split_name,
         "reason": "not_run",
     }
     separated_teacher_selector_diagnostic: dict[str, Any] = {
         "available": False,
         "diagnostic_only": True,
-        "split": "checkpoint_selection",
+        "split": split_name,
         "reason": "not_run",
     }
-    separated_teacher_method_name = "MLQDS_checkpoint_selection_marginal_teacher_selector"
+    separated_teacher_method_name = f"MLQDS_{split_slug}_marginal_teacher_selector"
     hybrid_teacher_weights = (0.10, 0.25)
     hybrid_teacher_method_names = {
-        weight: f"MLQDS_checkpoint_selection_marginal_teacher_primary_blend_w{int(weight * 100):02d}"
+        weight: f"MLQDS_{split_slug}_marginal_teacher_primary_blend_w{int(weight * 100):02d}"
         for weight in hybrid_teacher_weights
     }
     separated_teacher_hybrid_selector_diagnostics: dict[str, Any] = {
         "available": False,
         "diagnostic_only": True,
-        "split": "checkpoint_selection",
+        "split": split_name,
         "reason": "not_run",
         "methods": {},
     }
@@ -268,9 +275,12 @@ def build_selection_causality_diagnostics(
                     ),
                 ),
             )
-            trace["retained_mask_matches_selection_primary"] = bool(
+            mask_matches_primary = bool(
                 torch.equal(trace_mask.detach().cpu(), primary_mask.detach().cpu())
             )
+            trace["retained_mask_matches_primary"] = mask_matches_primary
+            if split_name == "checkpoint_selection":
+                trace["retained_mask_matches_selection_primary"] = mask_matches_primary
             trace["frozen_primary_retained_count"] = int(primary_mask.sum().item())
             sampled_prior_vectors, model_prior_vectors = query_prior_component_vectors_for_points(
                 selection_points.detach().cpu().float(),
@@ -308,12 +318,14 @@ def build_selection_causality_diagnostics(
                     query_cache=selection_query_cache,
                     max_retained_per_source=32,
                     max_removed_candidates=64,
-                    teacher_usage_split="checkpoint_selection",
+                    teacher_usage_split=split_name,
                 )
             )
             selection_marginal_teacher_summary = (
                 _compact_selection_retained_marginal_teacher_summary(
-                    trace["retained_decision_marginal_query_local_utility_alignment"]
+                    trace["retained_decision_marginal_query_local_utility_alignment"],
+                    source_path=selector_trace_source_path,
+                    split_name=split_name,
                 )
             )
             selection_selector_trace = trace
@@ -321,13 +333,10 @@ def build_selection_causality_diagnostics(
             selection_marginal_teacher_summary = {
                 "available": False,
                 "diagnostic_only": True,
-                "split": "checkpoint_selection",
                 "reason": "diagnostic_failed",
                 "error": str(exc),
-                "source_path": (
-                    "selector_trace_diagnostics.selection_primary."
-                    "retained_decision_marginal_query_local_utility_alignment"
-                ),
+                "source_path": selector_trace_source_path,
+                "split": split_name,
             }
             selection_selector_trace = {
                 "available": False,
@@ -367,7 +376,7 @@ def build_selection_causality_diagnostics(
                 )
                 separated_teacher_selector_diagnostic = {
                     **vector_diagnostics,
-                    "split": "checkpoint_selection",
+                    "split": split_name,
                     "method_name": separated_teacher_method_name,
                     "selector_diagnostic_only": True,
                 }
@@ -403,7 +412,9 @@ def build_selection_causality_diagnostics(
                             "frozen_mask_available": True,
                             "retained_count": int(teacher_method.retained_mask.sum().item()),
                             "uses_eval_queries": False,
-                            "uses_checkpoint_selection_queries": True,
+                            "uses_checkpoint_selection_queries": split_name
+                            == "checkpoint_selection",
+                            "uses_train_queries": split_name == "train",
                             "geometry_tie_breaker_weight": 0.0,
                             "segment_length_support_weight": 0.0,
                             "segment_score_point_blend_weight": 1.0,
@@ -439,11 +450,13 @@ def build_selection_causality_diagnostics(
                             )
                             hybrid_diag = {
                                 **hybrid_diag,
-                                "split": "checkpoint_selection",
+                                "split": split_name,
                                 "method_name": hybrid_method_name,
                                 "selector_diagnostic_only": True,
                                 "uses_eval_queries": False,
-                                "uses_checkpoint_selection_queries": True,
+                                "uses_checkpoint_selection_queries": split_name
+                                == "checkpoint_selection",
+                                "uses_train_queries": split_name == "train",
                             }
                             if hybrid_segment_scores is None or hybrid_point_scores is None:
                                 hybrid_method_diagnostics[hybrid_method_name] = hybrid_diag
@@ -497,13 +510,15 @@ def build_selection_causality_diagnostics(
                             hybrid_method_diagnostics[hybrid_method_name] = {
                                 "available": False,
                                 "diagnostic_only": True,
-                                "split": "checkpoint_selection",
+                                "split": split_name,
                                 "reason": "hybrid_teacher_selector_diagnostic_failed",
                                 "error": str(exc),
                                 "method_name": hybrid_method_name,
                                 "teacher_weight": float(teacher_weight),
                                 "uses_eval_queries": False,
-                                "uses_checkpoint_selection_queries": True,
+                                "uses_checkpoint_selection_queries": split_name
+                                == "checkpoint_selection",
+                                "uses_train_queries": split_name == "train",
                             }
                     hybrid_available = any(
                         bool(diag.get("available", False))
@@ -513,7 +528,7 @@ def build_selection_causality_diagnostics(
                     separated_teacher_hybrid_selector_diagnostics = {
                         "available": bool(hybrid_available),
                         "diagnostic_only": True,
-                        "split": "checkpoint_selection",
+                        "split": split_name,
                         "reason": None
                         if hybrid_available
                         else "no_hybrid_teacher_selector_methods_available",
@@ -525,7 +540,7 @@ def build_selection_causality_diagnostics(
                 separated_teacher_selector_diagnostic = {
                     "available": False,
                     "diagnostic_only": True,
-                    "split": "checkpoint_selection",
+                    "split": split_name,
                     "reason": "teacher_selector_diagnostic_failed",
                     "error": str(exc),
                     "method_name": separated_teacher_method_name,
@@ -534,14 +549,14 @@ def build_selection_causality_diagnostics(
             separated_teacher_selector_diagnostic = {
                 "available": False,
                 "diagnostic_only": True,
-                "split": "checkpoint_selection",
+                "split": split_name,
                 "reason": "missing_full_separated_marginal_teacher_summary",
                 "method_name": separated_teacher_method_name,
             }
             separated_teacher_hybrid_selector_diagnostics = {
                 "available": False,
                 "diagnostic_only": True,
-                "split": "checkpoint_selection",
+                "split": split_name,
                 "reason": "missing_full_separated_marginal_teacher_summary",
                 "methods": {},
             }
@@ -1081,7 +1096,7 @@ def build_selection_causality_diagnostics(
             head_sensitivity[name]["query_local_utility_component_tradeoff"] = tradeoff_diagnostics
     payload.update(
         {
-            "split": "checkpoint_selection",
+            "split": split_name,
             "diagnostic_only": True,
             "query_count": len(selection_workload.typed_queries),
             "ablation_freeze_failures": freeze_failures,

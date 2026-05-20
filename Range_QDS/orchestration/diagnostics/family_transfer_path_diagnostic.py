@@ -21,6 +21,31 @@ FOCUS_HEADS = (
     "segment_budget_target",
     "factorized_composed_score",
 )
+ACTIVE_METRIC_ALIGNMENT_FIELDS = {
+    "query_hit_probability": "head_probability_query_hit_probability",
+    "conditional_behavior_utility": "head_probability_conditional_behavior_utility",
+    "segment_budget_target": "head_probability_segment_budget_target",
+    "path_length_support_target": "head_probability_path_length_support_target",
+    "replacement_representative_value": "head_probability_replacement_representative_value",
+    "boundary_event_utility": "head_probability_boundary_event_utility",
+    "factorized_behavior_multiplier": "factorized_behavior_multiplier",
+    "factorized_replacement_multiplier": "factorized_replacement_multiplier",
+    "factorized_composed_score": "factorized_composed_score",
+}
+CAUSALITY_COMPONENT_ABLATIONS = (
+    "MLQDS_without_query_prior_features",
+    "MLQDS_shuffled_prior_fields",
+    "MLQDS_without_behavior_utility_head",
+    "MLQDS_without_segment_budget_head",
+)
+BEHAVIOR_TARGET_REFERENCE_FIELDS = (
+    "final_score",
+    "query_hit_probability",
+    "replacement_representative_value",
+    "segment_budget_target",
+    "path_length_support_target",
+    "ship_query_evidence",
+)
 HEAD_TARGET_FIT_MIN_TAU = 0.20
 RETAINED_MARGINAL_ALIGNMENT_PATH = (
     "selector_trace_diagnostics.eval_primary."
@@ -334,11 +359,30 @@ def _transfer_status(target: dict[str, Any], fitted: dict[str, Any]) -> str:
 
 
 def _focus_family_rows(artifact: dict[str, Any]) -> list[dict[str, Any]]:
+    focus_families = _focus_families(artifact)
     return [
         _family_row(artifact, group_key=group_key, family=family)
-        for group_key, families in HISTORICAL_DIAGNOSTIC_FOCUS_FAMILIES.items()
+        for group_key, families in focus_families.items()
         for family in families
     ]
+
+
+def _focus_families(artifact: dict[str, Any]) -> dict[str, tuple[str, ...]]:
+    """Return current artifact focus families, falling back for historical artifacts."""
+    target = _as_dict(
+        _as_dict(artifact.get("training_target_diagnostics")).get("query_local_utility_factorized")
+    )
+    focus = _as_dict(
+        _as_dict(target.get("family_conditioned_target_trainability")).get("focus_families")
+    )
+    out: dict[str, tuple[str, ...]] = {}
+    for group_key in ("anchor_family", "footprint_family"):
+        families = [str(item) for item in _as_list(focus.get(group_key)) if str(item)]
+        if families:
+            out[group_key] = tuple(sorted(set(families)))
+    if out:
+        return out
+    return dict(HISTORICAL_DIAGNOSTIC_FOCUS_FAMILIES)
 
 
 def _retained_marginal_alignment(artifact: dict[str, Any]) -> dict[str, Any]:
@@ -366,6 +410,9 @@ def _retained_marginal_alignment(artifact: dict[str, Any]) -> dict[str, Any]:
         ),
         "overall": _score_alignment_subset(overall),
         "retained_removal_loss": _score_alignment_subset(retained_removal),
+        "active_metric_score_component_alignment": _active_metric_score_component_alignment(
+            alignment
+        ),
         "selector_score_overall_spearman": _as_float(
             _as_dict(overall.get("selector_score")).get("spearman")
         ),
@@ -384,33 +431,237 @@ def _score_alignment_subset(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _active_metric_score_component_alignment(alignment: dict[str, Any]) -> dict[str, Any]:
+    overall = _as_dict(_as_dict(alignment.get("overall")).get("score_component_alignment"))
+    retained_removal_row = _as_dict(
+        _as_dict(alignment.get("by_decision")).get("retained_removal_loss")
+    )
+    retained_removal = _as_dict(retained_removal_row.get("score_component_alignment"))
+    return {
+        "available": bool(overall or retained_removal),
+        "source_layout": (
+            f"{RETAINED_MARGINAL_ALIGNMENT_PATH}."
+            "overall.score_component_alignment"
+        ),
+        "overall": _active_metric_alignment_subset(overall),
+        "retained_removal_loss": _active_metric_alignment_subset(retained_removal),
+        "legacy_ship_evidence_note": (
+            "family rows still report ship-query evidence as a diagnostic proxy; "
+            "active metric head alignment must be read here."
+        ),
+    }
+
+
+def _active_metric_alignment_subset(row: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for public_name, artifact_name in ACTIVE_METRIC_ALIGNMENT_FIELDS.items():
+        item = _as_dict(row.get(artifact_name))
+        out[public_name] = {
+            "available": bool(item),
+            "artifact_field": artifact_name,
+            "spearman": _as_float(item.get("spearman")),
+            "top_minus_bottom_marginal": _as_float(item.get("top_minus_bottom_marginal")),
+        }
+    return out
+
+
+def _causality_component_tradeoffs(artifact: dict[str, Any]) -> dict[str, Any]:
+    rows = _as_dict(
+        _as_dict(artifact.get("learning_causality_summary")).get(
+            "causality_ablation_component_deltas"
+        )
+    )
+    return {
+        name: _causality_component_tradeoff_row(_as_dict(rows.get(name)))
+        for name in CAUSALITY_COMPONENT_ABLATIONS
+    }
+
+
+def _causality_component_tradeoff_row(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "available": _as_bool(row.get("available")) if row else False,
+        "delta_convention": "primary_minus_ablation",
+        "query_local_utility_delta": _as_float(row.get("query_local_utility_delta")),
+        "component_weighted_delta_sum": _as_float(
+            row.get("component_weighted_delta_sum")
+        ),
+        "component_delta_residual": _as_float(row.get("component_delta_residual")),
+        "top_positive_weighted_component_deltas": _component_delta_rows(
+            row.get("top_positive_weighted_component_deltas")
+        ),
+        "top_negative_weighted_component_deltas": _component_delta_rows(
+            row.get("top_negative_weighted_component_deltas")
+        ),
+    }
+
+
+def _component_delta_rows(rows: Any) -> list[dict[str, Any]]:
+    out = []
+    for row in _as_list(rows):
+        item = _as_dict(row)
+        out.append(
+            {
+                "component": item.get("component"),
+                "component_delta": _as_float(item.get("component_delta")),
+                "weighted_delta": _as_float(item.get("weighted_delta")),
+            }
+        )
+    return out
+
+
+def _behavior_head_semantic_alignment(
+    artifact: dict[str, Any],
+    *,
+    retained_marginal_alignment: dict[str, Any],
+    component_tradeoffs: dict[str, Any],
+) -> dict[str, Any]:
+    target = _as_dict(
+        _as_dict(artifact.get("training_target_diagnostics")).get("query_local_utility_factorized")
+    )
+    fit = _as_dict(artifact.get("training_fit_diagnostics"))
+    head_fit = _as_dict(_as_dict(fit.get("factorized_head_fit")).get("conditional_behavior_utility"))
+    active_alignment = _as_dict(
+        retained_marginal_alignment.get("active_metric_score_component_alignment")
+    )
+    behavior_alignment = _active_metric_head_summary(
+        active_alignment,
+        head="conditional_behavior_utility",
+    )
+    no_behavior_tradeoff = _as_dict(
+        component_tradeoffs.get("MLQDS_without_behavior_utility_head")
+    )
+    target_alignment = _behavior_target_reference_alignment(
+        _as_dict(target.get("conditional_behavior_target_alignment"))
+    )
+    fit_std_ratio = _ratio(
+        _as_float(head_fit.get("prediction_std")),
+        _as_float(head_fit.get("target_std")),
+    )
+    row = {
+        "available": bool(target_alignment or head_fit or behavior_alignment),
+        "target_variant": target.get("conditional_behavior_target_variant"),
+        "target_base_source": target.get("conditional_behavior_target_base_source"),
+        "training_mask": target.get("conditional_behavior_utility_training"),
+        "behavior_change_highpass_quantile": _as_float(
+            target.get("behavior_change_highpass_quantile")
+        ),
+        "target_reference_alignment": target_alignment,
+        "strongest_target_reference_by_spearman": _strongest_target_reference(
+            target_alignment
+        ),
+        "head_fit": {
+            "kendall_tau": _as_float(head_fit.get("kendall_tau")),
+            "topk_mass_recall_at_5_percent": _as_float(
+                head_fit.get("topk_mass_recall_at_5_percent")
+            ),
+            "prediction_std_to_target_std": fit_std_ratio,
+            "prediction_std": _as_float(head_fit.get("prediction_std")),
+            "target_std": _as_float(head_fit.get("target_std")),
+        },
+        "active_metric_head_alignment": behavior_alignment,
+        "no_behavior_head_component_tradeoff": no_behavior_tradeoff,
+    }
+    row["semantic_statuses"] = _behavior_head_semantic_statuses(row)
+    return row
+
+
+def _behavior_target_reference_alignment(row: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for reference in BEHAVIOR_TARGET_REFERENCE_FIELDS:
+        out[reference] = {
+            "spearman": _as_float(row.get(f"spearman_with_{reference}")),
+            "topk_overlap": _as_float(row.get(f"topk_overlap_with_{reference}")),
+            "topk_mass_recall_ranked_by_behavior": _as_float(
+                row.get(f"topk_{reference}_mass_recall_ranked_by_behavior")
+            ),
+        }
+    return out
+
+
+def _strongest_target_reference(target_alignment: dict[str, Any]) -> dict[str, Any]:
+    best_name: str | None = None
+    best_spearman: float | None = None
+    for name, row in target_alignment.items():
+        spearman = _as_float(_as_dict(row).get("spearman"))
+        if spearman is None:
+            continue
+        if best_spearman is None or spearman > best_spearman:
+            best_name = str(name)
+            best_spearman = spearman
+    return {
+        "reference": best_name,
+        "spearman": best_spearman,
+    }
+
+
+def _behavior_head_semantic_statuses(row: dict[str, Any]) -> list[str]:
+    statuses: list[str] = []
+    target_alignment = _as_dict(row.get("target_reference_alignment"))
+    fit = _as_dict(row.get("head_fit"))
+    active_alignment = _as_dict(row.get("active_metric_head_alignment"))
+    no_behavior_tradeoff = _as_dict(row.get("no_behavior_head_component_tradeoff"))
+    no_behavior_delta = _as_float(no_behavior_tradeoff.get("query_local_utility_delta"))
+    retained_spearman = _as_float(active_alignment.get("retained_removal_spearman"))
+    overall_spearman = _as_float(active_alignment.get("overall_spearman"))
+    fit_tau = _as_float(fit.get("kendall_tau"))
+    fit_std_ratio = _as_float(fit.get("prediction_std_to_target_std"))
+    segment_spearman = _as_float(
+        _as_dict(target_alignment.get("segment_budget_target")).get("spearman")
+    )
+    replacement_spearman = _as_float(
+        _as_dict(target_alignment.get("replacement_representative_value")).get("spearman")
+    )
+    if no_behavior_delta is not None and no_behavior_delta < 0.0:
+        statuses.append("primary_worse_than_no_behavior_head")
+    if retained_spearman is not None and retained_spearman < 0.0:
+        statuses.append("behavior_head_misorders_retained_marginals")
+    if overall_spearman is not None and overall_spearman < 0.10:
+        statuses.append("behavior_head_weak_overall_active_metric_alignment")
+    if fit_tau is not None and fit_tau < 0.10:
+        statuses.append("fitted_behavior_head_weak_target_fit")
+    if fit_std_ratio is not None and fit_std_ratio < 0.05:
+        statuses.append("fitted_behavior_head_low_contrast")
+    if segment_spearman is not None and segment_spearman < 0.10:
+        statuses.append("behavior_target_weak_segment_budget_alignment")
+    if (
+        replacement_spearman is not None
+        and segment_spearman is not None
+        and replacement_spearman - segment_spearman >= 0.25
+    ):
+        statuses.append("behavior_target_more_replacement_than_segment_aligned")
+    return statuses or ["behavior_head_semantics_no_blocker_detected"]
+
+
 def _workload_family_pressure(artifact: dict[str, Any]) -> dict[str, Any]:
     generation = _as_dict(artifact.get("query_generation_diagnostics"))
     train = _as_dict(generation.get("train"))
     profile = _as_dict(train.get("workload_profile"))
     signature = _as_dict(train.get("workload_signature"))
+    focus_families = _focus_families(artifact)
     return {
         "anchor_family_weights": {
             family: _as_float(_as_dict(profile.get("anchor_family_weights")).get(family))
-            for family in HISTORICAL_DIAGNOSTIC_FOCUS_FAMILIES["anchor_family"]
+            for family in focus_families.get("anchor_family", ())
         },
         "footprint_family_weights": {
             family: _as_float(_as_dict(profile.get("footprint_family_weights")).get(family))
-            for family in HISTORICAL_DIAGNOSTIC_FOCUS_FAMILIES["footprint_family"]
+            for family in focus_families.get("footprint_family", ())
         },
         "anchor_family_counts": {
             family: _as_float(_as_dict(signature.get("anchor_family_counts")).get(family))
-            for family in HISTORICAL_DIAGNOSTIC_FOCUS_FAMILIES["anchor_family"]
+            for family in focus_families.get("anchor_family", ())
         },
         "footprint_family_counts": {
             family: _as_float(_as_dict(signature.get("footprint_family_counts")).get(family))
-            for family in HISTORICAL_DIAGNOSTIC_FOCUS_FAMILIES["footprint_family"]
+            for family in focus_families.get("footprint_family", ())
         },
     }
 
 
 def _artifact_summary(label: str, artifact: dict[str, Any]) -> dict[str, Any]:
     family_rows = _focus_family_rows(artifact)
+    retained_marginal_alignment = _retained_marginal_alignment(artifact)
+    component_tradeoffs = _causality_component_tradeoffs(artifact)
     return {
         "label": label,
         "target": _target_metadata(artifact),
@@ -418,7 +669,13 @@ def _artifact_summary(label: str, artifact: dict[str, Any]) -> dict[str, Any]:
         "gates": _gate_summary(artifact),
         "predictability": _predictability_summary(artifact),
         "workload_family_pressure": _workload_family_pressure(artifact),
-        "retained_marginal_alignment": _retained_marginal_alignment(artifact),
+        "retained_marginal_alignment": retained_marginal_alignment,
+        "causality_component_tradeoffs": component_tradeoffs,
+        "behavior_head_semantic_alignment": _behavior_head_semantic_alignment(
+            artifact,
+            retained_marginal_alignment=retained_marginal_alignment,
+            component_tradeoffs=component_tradeoffs,
+        ),
         "focus_family_rows": family_rows,
         "blocked_family_head_rows": _blocked_family_head_rows(family_rows),
     }
@@ -471,6 +728,17 @@ def _summary(artifact_summaries: list[dict[str, Any]]) -> dict[str, Any]:
     predictability = _as_dict(primary.get("predictability"))
     retained = _as_dict(primary.get("retained_marginal_alignment"))
     selector_spearman = _as_float(retained.get("selector_score_overall_spearman"))
+    active_alignment = _as_dict(retained.get("active_metric_score_component_alignment"))
+    behavior_alignment = _active_metric_head_summary(
+        active_alignment,
+        head="conditional_behavior_utility",
+    )
+    behavior_tradeoff = _as_dict(
+        _as_dict(primary.get("causality_component_tradeoffs")).get(
+            "MLQDS_without_behavior_utility_head"
+        )
+    )
+    behavior_semantics = _as_dict(primary.get("behavior_head_semantic_alignment"))
     return {
         "primary_label": primary.get("label"),
         "primary_target_mode": _as_dict(primary.get("target")).get("target_mode"),
@@ -481,13 +749,75 @@ def _summary(artifact_summaries: list[dict[str, Any]]) -> dict[str, Any]:
         ),
         "retained_marginal_alignment_layout": retained.get("source_layout"),
         "retained_marginal_selector_score_spearman": selector_spearman,
+        "active_metric_head_alignment_layout": active_alignment.get("source_layout"),
+        "behavior_head_active_metric_alignment": behavior_alignment,
+        "without_behavior_head_query_local_utility_delta": _as_float(
+            behavior_tradeoff.get("query_local_utility_delta")
+        ),
+        "without_behavior_head_top_negative_weighted_component_deltas": _as_list(
+            behavior_tradeoff.get("top_negative_weighted_component_deltas")
+        ),
+        "current_metric_behavior_head_status": _current_metric_behavior_head_status(
+            behavior_alignment=behavior_alignment,
+            behavior_ablation_delta=_as_float(
+                behavior_tradeoff.get("query_local_utility_delta")
+            ),
+        ),
+        "behavior_head_semantic_statuses": _as_list(
+            behavior_semantics.get("semantic_statuses")
+        ),
+        "behavior_head_strongest_target_reference": behavior_semantics.get(
+            "strongest_target_reference_by_spearman"
+        ),
         "decision": _decision(primary, blocked, selector_spearman),
         "interpretation": (
             "This is a derived strict-artifact diagnosis. It can separate "
-            "target/head transfer symptoms from missing diagnostic surfaces, "
-            "but it does not prove a new candidate learns."
+            "target/head transfer symptoms from missing diagnostic surfaces. "
+            "Ship-evidence correlations are legacy diagnostic proxies; use "
+            "active metric head alignment and component tradeoffs for current "
+            "QueryLocalUtility behavior-head conclusions. This diagnostic does "
+            "not prove a new candidate learns."
         ),
     }
+
+
+def _active_metric_head_summary(
+    active_alignment: dict[str, Any],
+    *,
+    head: str,
+) -> dict[str, Any]:
+    overall = _as_dict(_as_dict(active_alignment.get("overall")).get(head))
+    retained = _as_dict(
+        _as_dict(active_alignment.get("retained_removal_loss")).get(head)
+    )
+    return {
+        "overall_spearman": _as_float(overall.get("spearman")),
+        "overall_top_minus_bottom_marginal": _as_float(
+            overall.get("top_minus_bottom_marginal")
+        ),
+        "retained_removal_spearman": _as_float(retained.get("spearman")),
+        "retained_removal_top_minus_bottom_marginal": _as_float(
+            retained.get("top_minus_bottom_marginal")
+        ),
+    }
+
+
+def _current_metric_behavior_head_status(
+    *,
+    behavior_alignment: dict[str, Any],
+    behavior_ablation_delta: float | None,
+) -> str:
+    retained_spearman = _as_float(behavior_alignment.get("retained_removal_spearman"))
+    overall_spearman = _as_float(behavior_alignment.get("overall_spearman"))
+    if retained_spearman is None and overall_spearman is None and behavior_ablation_delta is None:
+        return "active_metric_behavior_head_diagnostics_unavailable"
+    if behavior_ablation_delta is not None and behavior_ablation_delta < 0.0:
+        return "behavior_head_hurts_active_metric_ablation"
+    if retained_spearman is not None and retained_spearman < 0.0:
+        return "behavior_head_misorders_retained_active_metric_marginals"
+    if overall_spearman is not None and overall_spearman <= 0.0:
+        return "behavior_head_weak_overall_active_metric_alignment"
+    return "behavior_head_active_metric_alignment_nonnegative"
 
 
 def _decision(

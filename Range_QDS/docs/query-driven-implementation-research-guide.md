@@ -32,7 +32,11 @@ anchor_family_weights:
 footprint_family_weights:
   medium_operational: 0.6923076923076923
   large_context: 0.3076923076923077
+footprint_point_hit_fraction_bands:
+  medium_operational: [0.006, 0.030]
+  large_context: [0.010, 0.045]
 range_training_target_mode: query_local_utility_factorized
+conditional_behavior_target_variant: query_segment_local_behavior_utility
 model_type: workload_blind_range_v2
 selector_type: learned_segment_budget_v1
 checkpoint_score_variant: query_local_utility
@@ -87,18 +91,24 @@ project_status: active, not accepted
 current_metric: QueryLocalUtility schema 5
 current_workload_profile: range_query_mix
 current_profile_footprints: medium_operational, large_context
-strict_schema5_two_footprint_rerun: not yet performed
+strict_schema5_two_footprint_rerun: performed before the active segment-aware behavior target change; workload gates passed at generator Level 3 and 64/256/40 training replay
+active_behavior_target_level: Level 0 tests plus Level 1 wiring smoke only
+current_blockers: learning causality, especially query-prior and behavior-head dependence
+global_sanity: reported guardrail during initial local-query-learning phase
 final_grid: not run
 final_success_allowed: false
 ```
 
-The previous strict-cell evidence is useful for diagnosis, but it predates the
-current schema `5` metric simplification and two-footprint workload profile. Do
-not compare old scores as if they were current-metric acceptance evidence.
+The current evidence boundary starts at the schema `5`, two-footprint
+`range_query_mix` strict single-cell reruns recorded in the progress log. Older
+strict-cell evidence is useful for diagnosis, but it predates the current metric
+and workload defaults. Do not compare old scores as if they were current-metric
+acceptance evidence.
 
 The next admissible evidence must start with the smaller strict levels in this
-guide under the current defaults. Run workload/profile health, support overlap,
-prior predictability, and learning-causality checks before any final-grid run.
+guide under the current defaults or an explicitly justified profile/metric
+variant. Run workload/profile health, support overlap, prior predictability, and
+learning-causality checks before any final-grid run.
 
 ## 3. Design Contract
 
@@ -211,13 +221,39 @@ Recommended nominal shapes:
 medium_operational:
   spatial_radius_km: 2.2
   time_half_window_hours: 5.0
+  point_hit_fraction_band: [0.006, 0.030]
 
 large_context:
   spatial_radius_km: 4.0
   time_half_window_hours: 8.0
+  point_hit_fraction_band: [0.010, 0.045]
 ```
 
-Current blocker indicates the profile/acceptance settings may still be too hard to sample cleanly on small synthetic splits. Before changing the model, make accepted train/eval workload signatures stable.
+The generator should not rely on rejection alone to enforce these bands. Current
+`range_query_mix` proposals use a deterministic low-discrepancy point-hit target
+inside the lower `25%` of each footprint band's point-hit interval, then apply
+bounded footprint calibration before the unchanged acceptance and coverage
+guards. This keeps the profile distribution trainable without loosening gates.
+
+Current generator evidence supports `n_queries=48` at Level 3 source-stratified
+synthetic scale. A 64-query floor still creates coverage-overshoot pressure
+under the current `target_coverage=0.30` and
+`range_max_coverage_overshoot=0.020` envelope. Before changing model code, make
+accepted train/eval workload signatures stable at the selected query-count
+floor.
+
+Anchor-family weights, footprint-family weights, footprint spatial/temporal
+dimensions, and score-weight distribution are recommended current defaults, not
+immutable constants. Change them when diagnostics show the workload profile and
+metric are not producing a coherent trainable query-local signal. Do not change
+them just to pass one weak probe.
+
+For synthetic route-family probes, use `validation_split_mode=source_stratified`
+when diagnosing workload signatures. Synthetic route families are now exposed as
+trajectory source ids, and single-dataset source-stratified splitting balances
+train, checkpoint-selection, and eval route-family composition. This removes a
+known source of signature drift; it does not by itself prove workload health
+because point-hit fraction floors can still cause high train rejection pressure.
 
 ### Coverage calibration
 
@@ -281,6 +317,7 @@ coverage_guard_rejection_pressure
 rejection_reasons
 rejection_reasons_by_anchor_family
 rejection_reasons_by_footprint_family
+rejection_reasons_by_anchor_footprint_pair
 planned_anchor_family_counts
 accepted_anchor_family_counts
 planned_footprint_family_counts
@@ -295,7 +332,12 @@ Train/eval signatures should compare:
 anchor-family distribution
 footprint-family distribution
 point hits per query
+point hit fractions per query
 ship hits per query
+ship hit fractions per query
+per-query anchor-family labels
+per-query footprint-family labels
+per-query anchor/footprint pair labels
 near-duplicate rate
 broad-query rate
 query count semantics
@@ -307,8 +349,9 @@ Recommended thresholds:
 ```yaml
 anchor_family_l1_distance_max: 0.12
 footprint_family_l1_distance_max: 0.12
-point_hit_distribution_ks_max: 0.20
-ship_hit_distribution_ks_max: 0.20
+point_hit_distribution_ks_max: 0.20           # fixed-count/legacy only
+point_hit_fraction_distribution_ks_max: 0.20  # profile_sampled coverage-calibrated workloads
+ship_hit_distribution_ks_max: 0.20            # fixed-count/legacy only
 near_duplicate_rate_max: 0.05
 broad_query_rate_max: 0.05
 query_count_relative_delta_max: 0.15  # fixed-count/legacy signatures only
@@ -320,11 +363,21 @@ signature check. For `calibrated_to_coverage` signatures using
 `profile_sampled_query_count`, accepted query count is a target-coverage stopping
 statistic. In that mode, the gate must require matching profile id,
 `query_count_mode`, `coverage_calibration_mode`, and `target_coverage`; it must
-still enforce `min_signature_query_count` and all distribution checks; and it
-must record query-count relative delta as a diagnostic rather than a parity
-blocker. Generation health remains a separate hard gate and must pass.
+still enforce `min_signature_query_count`, family distribution, duplicate,
+broad-query, and normalized point-hit-fraction checks; and it must record raw
+point-hit counts, ship-hit counts/fractions, and query-count relative delta as
+diagnostics rather than parity blockers. Generation health remains a separate
+hard gate and must pass.
+
+Rationale: the active `QueryLocalUtility` metric weights direct point mass and
+query-local behavior, not the old explicit ship-coverage aggregate. Raw hit
+counts and ship-hit distributions are still useful diagnostics, but making them
+hard gates under unequal train/eval split sizes blocks the current metric for
+the wrong reason.
 
 If planned family quotas match but accepted signatures fail, acceptance filters are skewing the generated workload. Fix the generator/profile first.
+Use the per-query family labels to localize hit-count drift by anchor family,
+footprint family, and anchor/footprint pair before changing model semantics.
 
 ---
 
@@ -366,7 +419,9 @@ temporal, average-gap, or other fallback components. Explicit ship-presence,
 ship-coverage, boundary/event, and replacement-usefulness components are not
 part of the active primary aggregate. It is acceptable as the active primary
 metric for current work, but future improvements should keep making it more
-query-local with a simple scoring architecture.
+query-local with a simple scoring architecture. The component weights are
+research defaults, not fixed doctrine; change them when a gate-by-gate diagnosis
+shows the scoring/workload pair is producing incoherent or untrainable signal.
 
 ### Recommended future metric improvements
 
@@ -417,6 +472,28 @@ final point score ≈ P(future query hits point)
 ```
 
 Keep the heads separate. Do not collapse everything prematurely into one retained-frequency scalar.
+
+Current active target detail:
+
+```yaml
+conditional_behavior_target_variant: query_segment_local_behavior_utility
+conditional_behavior_target_base_source: normalized_query_hit_conditioned_trajectory_change_times_0.45_plus_0.35_segment_behavior_support_plus_0.20_segment_query_hit_support
+replacement_representative_keep_fraction: 0.35
+segment_budget_target_aggregation: top20_mean
+```
+
+The behavior target is a query-hit-masked, segment-aware local behavior target.
+It keeps nonzero behavior supervision tied to local behavior-change points, then
+multiplies those points by segment behavior support and segment query-hit
+support. It must not add broad positive credit to every query-hit point. If this
+target fails diffusion or causality gates, diagnose the target/head path before
+tuning selector floors or generic loss weights.
+
+The replacement target is intentionally sparse. It should mark representative
+query-local support, not half or most of every query-hit run. The segment-budget
+target is pooled with the same top-20% segment summary consumed by the active
+selector. Diagnostic pressure should focus on whether this head causally
+controls allocation, not on a mismatched segment-mass surrogate.
 
 ### Query-prior fields
 
@@ -530,14 +607,16 @@ treat better head fit alone as evidence of learned workload-blind success.
 The sparse-head rank auxiliary is training-only pressure on the numerically
 sparse `query_hit_probability` and `boundary_event_utility` heads. Default
 `0.0` preserves the current candidate; any nonzero run is diagnostic until a
-strict replay proves head dispersion improves retained-mask causality and
-global sanity.
+strict replay proves head dispersion improves retained-mask causality. Global
+sanity remains a reported guardrail during the current local-query-learning
+phase.
 
 The sparse-head BCE target mode is a stronger diagnostic for the same blocker.
 Default `raw` preserves current labels. `window_max_normalized` may be used only
 to test whether per-window relative query-hit/boundary supervision fixes
 base-rate saturation; it must not be treated as accepted target semantics until
-a strict replay proves retained-mask causality and global sanity.
+a strict replay proves retained-mask causality. Global sanity remains a reported
+guardrail during the current local-query-learning phase.
 
 ### Selector
 
@@ -572,7 +651,7 @@ These are query-free selector guardrails. Geometry-gain tie-breaking and
 segment allocation length support are separate controls and must be reported
 separately. The allocation weight floor is a score-contrast diagnostic control;
 lower values can make learned segment scores more decisive, but any lower-floor
-result is diagnostic until a strict replay proves causality and global sanity.
+result is diagnostic until a strict replay proves causality.
 Length-repair score protection is a query-free diagnostic control for testing
 whether repair is erasing the highest learned-score decisions; default `0.0`
 preserves current behavior. They must be ablated before any final causality
@@ -592,6 +671,34 @@ prior_field_only_score
 ```
 
 If fairness preallocation or geometry tie-breaker drives the win more than learned heads, the result is not clean learned success.
+
+Guarded train-side marginal diagnostics are available through:
+
+```text
+--query_local_utility_train_marginal_diagnostics
+```
+
+This emits `selector_trace_diagnostics.train_primary` and
+`train_marginal_causality_diagnostics` using training workloads only. It is
+allowed for diagnosing whether exact retained-decision marginal segment
+teachers are split-eligible and transfer toward eval. It is diagnostic-only:
+do not treat a train-marginal teacher, checkpoint-selection teacher, or their
+hybrids as final learned success unless a later strict replay proves the trained
+model itself passes predictability and learning-causality gates.
+
+Retained-decision marginal alignment is under:
+
+```text
+selector_trace_diagnostics.eval_primary.retained_decision_marginal_query_local_utility_alignment
+```
+
+Do not read it from
+`learning_causality_summary.selection_causality_diagnostics`. Family/head
+diagnostics may still report ship-query evidence as a legacy proxy, but active
+`QueryLocalUtility` conclusions must use the exact retained-marginal
+`score_component_alignment` fields and causality component tradeoffs.
+Causality component deltas use `primary_minus_ablation`; a negative component
+delta means the primary model is worse than that ablation on the component.
 
 ---
 
@@ -650,10 +757,15 @@ prior_predictive_alignment_gate_pass = true
 target_diffusion_gate_pass = true
 workload_signature_gate_pass = true
 learning_causality_gate_pass = true
-global_sanity_gate_pass = true
 MLQDS QueryLocalUtility > uniform
 MLQDS QueryLocalUtility > DouglasPeucker
 ```
+
+`global_sanity_gate_pass` must still be computed and reported. During the
+current local-query-learning phase it is a diagnostic guardrail and optimization
+target, not an initial hard blocker. Once local query behavior and causality are
+stable, use the global-sanity correction phase to improve length retention,
+endpoint sanity, and SED/PED without adding a high temporal scaffold.
 
 ### Support-overlap gate schema
 
@@ -684,9 +796,14 @@ query_prior_support_overlap >= 0.25
 
 Support overlap is necessary but not sufficient. It proves that priors are sampled nontrivially, not that they predict usefulness.
 
-### Global sanity gate
+### Global sanity guardrail
 
-Current hard checks:
+For final acceptance and the later global-sanity correction phase, these checks
+must pass. During the current local-query-learning phase, report them as
+guardrails and improve them where practical, but do not treat them as the first
+hard blocker ahead of query-local predictability and learning causality.
+
+Current checks:
 
 ```text
 avg_length_preserved between 0.75 and 1.20
@@ -702,7 +819,9 @@ compression <= 2%:  1.75
 otherwise:          1.50
 ```
 
-If this gate repeatedly fails, do not hide the problem with a large temporal scaffold. Add query-free learned/sanity-aware selector constraints or revise the metric/threshold only with justification.
+If this guardrail repeatedly fails, do not hide the problem with a large
+temporal scaffold. Add query-free learned/sanity-aware selector constraints or
+revise the metric/threshold only with justification.
 
 ---
 
@@ -879,9 +998,17 @@ target_diffusion_gate_pass = true
 predictability_gate_pass = true
 prior_predictive_alignment_gate_pass = true
 learning_causality_gate_pass = true
-global_sanity_gate_pass = true
 MLQDS QueryLocalUtility > uniform
 MLQDS QueryLocalUtility > DouglasPeucker
+```
+
+Tracked but not initially blocking:
+
+```text
+global_sanity_gate_pass
+length preservation
+endpoint sanity
+SED/PED ratio versus uniform
 ```
 
 Allowed conclusion:
@@ -921,7 +1048,7 @@ same gates as Level 3
 route/support overlap is real but not identical leakage
 per-head predictability is stable
 causality ablations remain meaningful
-global sanity remains within thresholds
+global sanity remains tracked and improves without a high temporal scaffold
 ```
 
 Allowed conclusion:
@@ -957,7 +1084,7 @@ mean and worst-case QueryLocalUtility vs uniform/DP
 gate pass rate
 per-head predictability stability
 learning-causality stability
-global sanity stability
+global sanity stability as a reported guardrail
 runtime/latency stability
 ```
 
@@ -1521,21 +1648,20 @@ Produce a strict support-valid synthetic/debug single-cell workload where genera
 
 Use the standard strict diagnostic scale unless runtime makes it impossible. A smaller 24-32 ship / 16-query run is allowed only as a quick preliminary failure-localization step.
 
-Recommended command shape. This example uses the local workload-profile variant
-as a representative strict diagnostic. Do not express this as a raw coverage
-override; coverage and overshoot are profile-owned settings.
+Recommended command shape. Do not express this as a raw coverage override;
+coverage and overshoot are profile-owned settings.
 
 ```bash
 uv run --group dev -- python -m orchestration.train_and_score \
-  --results_dir Range_QDS/artifacts/results/query_driven_generator_health_probe_standard_profile_local_r05 \
+  --results_dir Range_QDS/artifacts/results/<generator-health-run-id> \
   --n_ships 64 \
   --n_points 256 \
   --synthetic_route_families 4 \
   --seed 2324 \
   --n_queries 48 \
-  --max_queries 256 \
+  --max_queries 384 \
   --range_train_workload_replicates 4 \
-  --workload_profile_id range_query_mix_local \
+  --workload_profile_id range_query_mix \
   --coverage_calibration_mode profile_sampled_query_count \
   --workload_stability_gate_mode final \
   --model_type workload_blind_range_v2 \
@@ -1643,6 +1769,11 @@ Goal:
 ```text
 Pass length/endpoint/SED global sanity without a high temporal scaffold.
 ```
+
+This phase starts after local query learning is causal enough to be worth
+preserving. During earlier phases, report global sanity and avoid obvious
+geometry damage, but do not treat it as the first hard blocker ahead of
+query-local predictability and learning causality.
 
 Possible fixes:
 

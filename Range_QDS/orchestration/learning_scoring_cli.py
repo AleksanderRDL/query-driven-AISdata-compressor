@@ -535,6 +535,15 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--query_local_utility_train_marginal_diagnostics",
+        action="store_true",
+        help=(
+            "Emit train-split exact retained-decision marginal diagnostics for guarded "
+            "segment-marginal calibration probes. This is diagnostic-only and can be "
+            "expensive on larger train splits."
+        ),
+    )
+    parser.add_argument(
         "--temporal_distribution_loss_weight",
         type=float,
         default=0.0,

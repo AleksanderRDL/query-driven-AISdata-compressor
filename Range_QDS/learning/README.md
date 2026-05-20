@@ -75,6 +75,18 @@ matching workload prior is the two-footprint `range_query_mix` profile:
 behavior, replacement, segment-budget, and prior-related signals separate
 instead of collapsing them into one RangeUseful scalar.
 
+The active replacement target keeps the top `0.35` of each contiguous
+query-hit run as representative support. This keeps
+`replacement_representative_value` sparse enough to act as a non-redundancy
+head instead of a broad in-query mask. The active behavior target is
+`query_segment_local_behavior_utility`: it keeps behavior supervision masked to
+query-hit points and multiplies local behavior-change points by segment behavior
+support and segment query-hit support. It should not add broad positive credit
+to every query-hit point. The active segment-budget target uses a
+top-20% pooled QueryLocalUtility value per segment, matching the allocation
+summary used by `learned_segment_budget_v1`. Treat causal control from this
+head as a live diagnostic, not as proven final behavior.
+
 Scalar `range_training_target_mode` values and teacher-distillation modes remain
 for diagnostics and regression. They are registered in `targets/modes.py` or
 `teacher_distillation.py` and are not final-success evidence. Use them only

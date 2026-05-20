@@ -473,10 +473,10 @@ def test_learned_segment_budget_trace_accepts_explicit_segment_score_source_labe
         [(0, 16)],
         compression_ratio=0.25,
         segment_scores=segment_scores,
-        segment_score_source_label="path_length_support_head_mean",
+        segment_score_source_label="path_length_support_head_top20_mean",
     )
 
-    assert trace["segment_score_source"] == "path_length_support_head_mean"
+    assert trace["segment_score_source"] == "path_length_support_head_top20_mean"
 
 
 def test_learned_segment_budget_geometry_gain_uses_trajectory_retained_anchors() -> None:
@@ -535,8 +535,8 @@ def test_no_segment_budget_head_ablation_uses_neutral_segment_scores() -> None:
     )
 
     assert torch.count_nonzero(neutral_segment_scores).item() == 0
-    assert learned_trace["segment_score_source"] == "segment_budget_head_mean"
-    assert ablated_trace["segment_score_source"] == "segment_budget_head_mean"
+    assert learned_trace["segment_score_source"] == "segment_budget_head_top20_mean"
+    assert ablated_trace["segment_score_source"] == "segment_budget_head_top20_mean"
     assert bool(learned_retained[27].item()) is True
     assert bool(ablated_retained[27].item()) is False
     assert not torch.equal(learned_retained, ablated_retained)
@@ -618,7 +618,7 @@ def test_learned_segment_budget_transfer_calibration_is_guarded_non_default() ->
     assert calibrated_trace["segment_length_support_weight"] == pytest.approx(0.0)
     assert (
         calibrated_trace["segment_score_source"]
-        == "segment_budget_head_mean+segment_score_allocation_weight_zblend"
+        == "segment_budget_head_top20_mean+segment_score_allocation_weight_zblend"
     )
     rows = calibrated_trace["segment_source_attribution"]["rows"]
     assert rows

@@ -650,6 +650,28 @@ def test_family_transfer_path_diagnostic_flags_missing_family_prior_surface() ->
         "learning_causality_summary": {
             "learning_causality_gate_pass": False,
             "selection_causality_diagnostics": {"available": True},
+            "causality_ablation_component_deltas": {
+                "MLQDS_without_behavior_utility_head": {
+                    "available": True,
+                    "query_local_utility_delta": -0.0004,
+                    "component_weighted_delta_sum": -0.0004,
+                    "component_delta_residual": 0.0,
+                    "top_positive_weighted_component_deltas": [
+                        {
+                            "component": "query_point_recall",
+                            "component_delta": 0.001,
+                            "weighted_delta": 0.0005,
+                        }
+                    ],
+                    "top_negative_weighted_component_deltas": [
+                        {
+                            "component": "query_local_turn_change_coverage",
+                            "component_delta": -0.004,
+                            "weighted_delta": -0.0006,
+                        }
+                    ],
+                }
+            },
         },
         "training_target_diagnostics": {
             "query_local_utility_factorized": {
@@ -658,6 +680,22 @@ def test_family_transfer_path_diagnostic_flags_missing_family_prior_surface() ->
                 ),
                 "segment_budget_target_variant": "query_ship_blend_max_pool",
                 "segment_budget_target_aggregation": "max_pool",
+                "conditional_behavior_target_variant": "active_local_behavior_change",
+                "conditional_behavior_target_base_source": (
+                    "query_hit_conditioned_trajectory_change"
+                ),
+                "conditional_behavior_utility_training": "masked_to_query_hit_points",
+                "behavior_change_highpass_quantile": 0.70,
+                "conditional_behavior_target_alignment": {
+                    "spearman_with_final_score": 0.32,
+                    "spearman_with_query_hit_probability": 0.11,
+                    "spearman_with_replacement_representative_value": 0.55,
+                    "spearman_with_segment_budget_target": 0.03,
+                    "spearman_with_path_length_support_target": 0.20,
+                    "spearman_with_ship_query_evidence": -0.04,
+                    "topk_replacement_representative_value_mass_recall_ranked_by_behavior": 0.80,
+                    "topk_segment_budget_target_mass_recall_ranked_by_behavior": 0.40,
+                },
                 "final_success_allowed": False,
                 "family_conditioned_target_trainability": {
                     "group_by": {
@@ -682,6 +720,14 @@ def test_family_transfer_path_diagnostic_flags_missing_family_prior_surface() ->
             }
         },
         "training_fit_diagnostics": {
+            "factorized_head_fit": {
+                "conditional_behavior_utility": {
+                    "kendall_tau": 0.04,
+                    "topk_mass_recall_at_5_percent": 0.12,
+                    "prediction_std": 0.002,
+                    "target_std": 0.20,
+                }
+            },
             "family_conditioned_head_trainability": {
                 "group_by": {
                     "footprint_family": {
@@ -718,13 +764,29 @@ def test_family_transfer_path_diagnostic_flags_missing_family_prior_surface() ->
                             "spearman": -0.06,
                             "top_minus_bottom_marginal": 0.00001,
                         },
+                        "score_component_alignment": {
+                            "head_probability_conditional_behavior_utility": {
+                                "spearman": 0.25,
+                                "top_minus_bottom_marginal": 0.0005,
+                            },
+                            "head_probability_query_hit_probability": {
+                                "spearman": 0.35,
+                                "top_minus_bottom_marginal": 0.0007,
+                            },
+                        },
                     },
                     "by_decision": {
                         "retained_removal_loss": {
                             "selector_score": {
                                 "spearman": -0.03,
                                 "top_minus_bottom_marginal": -0.00006,
-                            }
+                            },
+                            "score_component_alignment": {
+                                "head_probability_conditional_behavior_utility": {
+                                    "spearman": -0.31,
+                                    "top_minus_bottom_marginal": -0.0004,
+                                }
+                            },
                         }
                     },
                 }
@@ -748,10 +810,128 @@ def test_family_transfer_path_diagnostic_flags_missing_family_prior_surface() ->
     assert blocked[0]["transfer_status"] == "fits_target_but_misorders_ship_evidence"
     retained = diagnostic["artifacts"][0]["retained_marginal_alignment"]
     assert retained["deprecated_learning_causality_layout_present"] is False
+    active_alignment = retained["active_metric_score_component_alignment"]
+    assert active_alignment["source_layout"] == (
+        "selector_trace_diagnostics.eval_primary."
+        "retained_decision_marginal_query_local_utility_alignment."
+        "overall.score_component_alignment"
+    )
+    assert active_alignment["overall"]["conditional_behavior_utility"][
+        "artifact_field"
+    ] == "head_probability_conditional_behavior_utility"
+    assert active_alignment["retained_removal_loss"]["conditional_behavior_utility"][
+        "spearman"
+    ] == pytest.approx(-0.31)
+    assert summary["behavior_head_active_metric_alignment"][
+        "retained_removal_spearman"
+    ] == pytest.approx(-0.31)
+    assert summary["current_metric_behavior_head_status"] == (
+        "behavior_head_hurts_active_metric_ablation"
+    )
+    assert summary["without_behavior_head_query_local_utility_delta"] == pytest.approx(
+        -0.0004
+    )
+    assert summary["without_behavior_head_top_negative_weighted_component_deltas"][0][
+        "component"
+    ] == "query_local_turn_change_coverage"
+    semantics = diagnostic["artifacts"][0]["behavior_head_semantic_alignment"]
+    assert semantics["target_reference_alignment"]["replacement_representative_value"][
+        "spearman"
+    ] == pytest.approx(0.55)
+    assert semantics["strongest_target_reference_by_spearman"][
+        "reference"
+    ] == "replacement_representative_value"
+    assert semantics["strongest_target_reference_by_spearman"][
+        "spearman"
+    ] == pytest.approx(0.55)
+    assert semantics["no_behavior_head_component_tradeoff"][
+        "delta_convention"
+    ] == "primary_minus_ablation"
+    assert "fitted_behavior_head_low_contrast" in semantics["semantic_statuses"]
+    assert "behavior_target_weak_segment_budget_alignment" in summary[
+        "behavior_head_semantic_statuses"
+    ]
     prior = diagnostic["artifacts"][0]["predictability"][
         "aggregate_best_prior_channel_by_head"
     ]
     assert prior["segment_budget_target"]["best_spearman"] == pytest.approx(0.149)
+
+
+def test_family_transfer_path_diagnostic_uses_artifact_focus_families_when_present() -> None:
+    artifact = {
+        "matched": {
+            "MLQDS": {"query_local_utility_score": 0.14},
+            "uniform": {"query_local_utility_score": 0.12},
+            "DouglasPeucker": {"query_local_utility_score": 0.11},
+        },
+        "final_claim_summary": {"final_success_allowed": False},
+        "workload_stability_gate": {"gate_pass": True},
+        "support_overlap_gate": {"gate_pass": True},
+        "target_diffusion_gate": {"gate_pass": True},
+        "global_sanity_gate": {"gate_pass": True},
+        "workload_distribution_comparison": {"workload_signature_gate": {"all_pass": True}},
+        "query_generation_diagnostics": {
+            "train": {
+                "workload_profile": {
+                    "anchor_family_weights": {"density": 0.8},
+                    "footprint_family_weights": {
+                        "medium_operational": 0.7,
+                        "large_context": 0.3,
+                    },
+                },
+                "workload_signature": {
+                    "anchor_family_counts": {"density": 32},
+                    "footprint_family_counts": {
+                        "medium_operational": 28,
+                        "large_context": 12,
+                    },
+                },
+            }
+        },
+        "predictability_audit": {
+            "gate_pass": True,
+            "prior_predictive_alignment_gate": {"gate_pass": True, "failed_checks": []},
+            "metrics": {},
+        },
+        "learning_causality_summary": {"learning_causality_gate_pass": False},
+        "training_target_diagnostics": {
+            "query_local_utility_factorized": {
+                "target_mode": "query_local_utility_factorized",
+                "family_conditioned_target_trainability": {
+                    "focus_families": {
+                        "anchor_family": ["density"],
+                        "footprint_family": ["medium_operational"],
+                    },
+                    "group_by": {
+                        "anchor_family": {"density": {}},
+                        "footprint_family": {"medium_operational": {}},
+                    },
+                },
+            }
+        },
+        "training_fit_diagnostics": {
+            "family_conditioned_head_trainability": {
+                "group_by": {
+                    "anchor_family": {"density": {}},
+                    "footprint_family": {"medium_operational": {}},
+                }
+            }
+        },
+    }
+
+    diagnostic = build_family_transfer_path_diagnostic([("current", artifact)])
+
+    focus_pairs = {
+        (row["group_key"], row["family"])
+        for row in diagnostic["artifacts"][0]["focus_family_rows"]
+    }
+    assert focus_pairs == {
+        ("anchor_family", "density"),
+        ("footprint_family", "medium_operational"),
+    }
+    pressure = diagnostic["artifacts"][0]["workload_family_pressure"]
+    assert set(pressure["footprint_family_weights"]) == {"medium_operational"}
+    assert HISTORICAL_SMALL_LOCAL_FAMILY not in pressure["footprint_family_weights"]
 
 
 def test_selector_marginal_calibration_diagnostic_separates_score_and_segment_failures() -> None:
@@ -1115,11 +1295,15 @@ def test_selection_marginal_segment_calibration_diagnostic_flags_split_transfer_
     assert summary["decision"] == (
         "diagnose_selection_marginal_segment_transfer_before_training_semantics"
     )
+    assert summary["decision_scope"] == "primary_artifact_last_input"
     assert summary["selection_layout"] == (
         "selector_trace_diagnostics.selection_primary."
         "retained_decision_marginal_query_local_utility_alignment"
     )
     result = diagnostic["artifacts"][0]
+    assert result["decision"] == (
+        "diagnose_selection_marginal_segment_transfer_before_training_semantics"
+    )
     selection = result["selection_teacher"]
     assert selection["candidate_for_train_side_teacher"] is True
     assert selection["top_segment_low_selector_score_count"] == 2
@@ -1224,6 +1408,11 @@ def test_selection_eval_segment_teacher_transfer_diagnostic_blocks_direct_probe_
         "global_sanity_gate": {"gate_pass": True},
         "final_claim_summary": {"final_success_allowed": False},
         "selector_trace_diagnostics": {
+            "train_primary": _trace(
+                split="train",
+                candidate=True,
+                target_segments=(1, 2),
+            ),
             "selection_primary": _trace(
                 split="checkpoint_selection",
                 candidate=True,
@@ -1245,7 +1434,11 @@ def test_selection_eval_segment_teacher_transfer_diagnostic_blocks_direct_probe_
     assert summary["decision"] == (
         "diagnose_transfer_features_before_guarded_calibration_probe"
     )
+    assert summary["decision_scope"] == "primary_artifact_last_input"
     result = diagnostic["artifacts"][0]
+    assert result["decision"] == (
+        "diagnose_transfer_features_before_guarded_calibration_probe"
+    )
     overlap = result["target_overlap"]
     assert overlap["positive_overlap_count"] == 0
     assert overlap["top_0.1_overlap_fraction_of_selection"] == 0.0
@@ -1258,6 +1451,18 @@ def test_selection_eval_segment_teacher_transfer_diagnostic_blocks_direct_probe_
     assert eval_features["segment_score"]["spearman_with_segment_teacher_target"] < 0.0
     transfer = result["feature_transfer_summary"]
     assert transfer["contradictory_feature_count"] > 0
+
+    train_source_diagnostic = build_selection_eval_segment_teacher_transfer_diagnostic(
+        [("checkpoint93", artifact)],
+        source_trace_name="train_primary",
+    )
+    assert (
+        train_source_diagnostic["summary"]["selection_layout"]
+        == "selector_trace_diagnostics.train_primary.retained_decision_marginal_query_local_utility_alignment"
+    )
+    assert train_source_diagnostic["artifacts"][0]["selection_teacher"][
+        "teacher_usage_split"
+    ] == "train"
 
 
 def test_selection_segment_transfer_feature_admissibility_rejects_post_selection_signal() -> None:
@@ -1366,4 +1571,3 @@ def test_selection_segment_transfer_feature_admissibility_rejects_post_selection
     assert "segment_score" in result["feature_coupling_summary"][
         "admissible_candidate_names"
     ]
-

@@ -268,10 +268,71 @@ def test_final_run_summaries_block_final_grid_until_benchmark_evidence() -> None
     assert summaries.final_claim_summary["primary_metric"] == "QueryLocalUtility"
     assert summaries.final_claim_summary["final_success_allowed"] is False
     assert (
+        summaries.final_claim_summary["global_sanity_gate_required_for_initial_local_learning"]
+        is False
+    )
+    assert (
         "full_workload_profile_compression_grid" in summaries.final_claim_summary["blocking_gates"]
     )
     assert summaries.learning_causality_summary["final_success_allowed"] is False
     assert summaries.diagnostic_summary["workload_stability_gate_available"] is True
+
+
+def test_final_run_summaries_report_global_sanity_without_initial_blocking() -> None:
+    workloads = [_final_summary_workload() for _idx in range(4)]
+    primary = _final_summary_metrics(0.30)
+    primary.range_audit["endpoint_sanity"] = 0.0
+    matched = {
+        "MLQDS": primary,
+        "uniform": _final_summary_metrics(0.25),
+        "DouglasPeucker": _final_summary_metrics(0.20),
+    }
+
+    summaries = build_final_run_summaries(
+        config=cast(Any, _final_summary_config(final_candidate=True)),
+        trained=cast(
+            Any,
+            SimpleNamespace(
+                fit_diagnostics={},
+                target_diagnostics={},
+                feature_context={},
+            ),
+        ),
+        train_points=torch.zeros((3, 8), dtype=torch.float32),
+        test_points=torch.zeros((3, 8), dtype=torch.float32),
+        train_label_workloads=workloads,
+        eval_workload=_final_summary_workload(),
+        selection_workload=_final_summary_workload(),
+        matched=matched,
+        selector_budget_diagnostics={},
+        primary_selector_trace=None,
+        causality_ablation_scores={},
+        causality_ablation_mask_diagnostics={},
+        causal_ablation_freeze_failures={},
+        prior_sensitivity_diagnostics={},
+        prior_channel_ablation_diagnostics={},
+        head_ablation_sensitivity_diagnostics={},
+        selection_causality_diagnostics={"available": False, "reason": "not_run"},
+        segment_oracle_allocation_audit={},
+        target_segment_oracle_alignment_audit={},
+        segment_budget_head_ablation_mode="neutral_constant_segment_scores",
+        predictability_audit={
+            "available": True,
+            "gate_pass": True,
+            "prior_predictive_alignment_gate": {"gate_pass": True},
+        },
+        workload_distribution_comparison={
+            "workload_signature_gate": {"all_available": True, "all_pass": True}
+        },
+    )
+
+    assert summaries.global_sanity_gate["gate_pass"] is False
+    assert summaries.final_claim_summary["global_sanity_gate_pass"] is False
+    assert (
+        summaries.final_claim_summary["global_sanity_gate_role"]
+        == "diagnostic_guardrail_during_initial_query_local_learning"
+    )
+    assert "global_sanity_gates" not in summaries.final_claim_summary["blocking_gates"]
 
 
 def test_learning_causality_summary_does_not_duplicate_retained_marginal_trace() -> None:
@@ -933,5 +994,3 @@ def test_prior_sample_gate_failures_explain_empty_or_out_of_extent_priors() -> N
     assert "shuffled_prior_fields_did_not_change_model_inputs" in failures
     assert "shuffled_prior_fields_did_not_change_normalized_model_inputs" in failures
     assert "eval_points_mostly_outside_query_prior_extent" in failures
-
-

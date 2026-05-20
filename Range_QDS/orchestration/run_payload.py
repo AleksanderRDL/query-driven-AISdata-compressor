@@ -29,6 +29,8 @@ def build_run_payload(
     selector_budget_diagnostics: dict[str, Any],
     primary_selector_trace: dict[str, Any] | None,
     selection_selector_trace: dict[str, Any] | None,
+    train_selector_trace: dict[str, Any] | None,
+    train_marginal_causality_diagnostics: dict[str, Any] | None,
     segment_oracle_allocation_audit: dict[str, Any],
     target_segment_oracle_alignment_audit: dict[str, Any],
     matched: dict[str, MethodScore],
@@ -94,6 +96,9 @@ def build_run_payload(
         "data_split_diagnostics": data_split_diagnostics,
         "selector_budget_diagnostics": selector_budget_diagnostics,
         "selector_trace_diagnostics": {
+            "train_primary": train_selector_trace
+            if train_selector_trace is not None
+            else {"available": False},
             "eval_primary": primary_selector_trace
             if primary_selector_trace is not None
             else {"available": False},
@@ -101,6 +106,11 @@ def build_run_payload(
             if selection_selector_trace is not None
             else {"available": False},
         },
+        "train_marginal_causality_diagnostics": (
+            train_marginal_causality_diagnostics
+            if train_marginal_causality_diagnostics is not None
+            else {"available": False, "reason": "not_run"}
+        ),
         "segment_oracle_allocation_audit": segment_oracle_allocation_audit,
         "target_segment_oracle_alignment_audit": target_segment_oracle_alignment_audit,
         "matched": {name: method_score_payload(metrics) for name, metrics in matched.items()},

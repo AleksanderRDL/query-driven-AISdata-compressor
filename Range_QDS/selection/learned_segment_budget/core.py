@@ -239,7 +239,7 @@ def simplify_with_learned_segment_budget_v1_with_trace(
     segment_score_source = (
         str(segment_score_source_label)
         if segment_score_source_label is not None
-        else "segment_budget_head_mean"
+        else "segment_budget_head_top20_mean"
         if segment_scores is not None
         else "point_score_top20_mean"
     )

@@ -47,6 +47,32 @@ def test_source_stratified_validation_holds_out_each_train_source() -> None:
     assert split.split_diagnostics["train_source_counts"] == {"0": 2, "1": 2}
 
 
+def test_single_dataset_source_stratified_split_balances_sources() -> None:
+    cfg = build_run_config(
+        train_fraction=0.50,
+        val_fraction=0.25,
+        validation_split_mode="source_stratified",
+    )
+    trajectories = [_trajectory(float(value)) for value in range(12)]
+    source_ids = [value // 4 for value in range(12)]
+
+    split = prepare_run_split(
+        config=cfg,
+        seeds=_seeds(),
+        trajectories=trajectories,
+        needs_validation_score=True,
+        trajectory_source_ids=source_ids,
+    )
+
+    assert len(split.train_traj) == 6
+    assert len(split.selection_traj or []) == 3
+    assert len(split.test_traj) == 3
+    assert split.split_diagnostics["validation_split_mode_effective"] == "source_stratified"
+    assert split.split_diagnostics["train_source_counts"] == {"0": 2, "1": 2, "2": 2}
+    assert split.split_diagnostics["selection_source_counts"] == {"0": 1, "1": 1, "2": 1}
+    assert split.split_diagnostics["eval_source_counts"] == {"0": 1, "1": 1, "2": 1}
+
+
 def test_source_stratified_validation_requires_source_ids() -> None:
     cfg = build_run_config(validation_split_mode="source_stratified")
 
@@ -57,6 +83,18 @@ def test_source_stratified_validation_requires_source_ids() -> None:
             trajectories=[_trajectory(0.0), _trajectory(1.0)],
             needs_validation_score=True,
             eval_trajectories=[_trajectory(100.0)],
+        )
+
+
+def test_single_dataset_source_stratified_split_requires_source_ids() -> None:
+    cfg = build_run_config(validation_split_mode="source_stratified")
+
+    with pytest.raises(ValueError, match="requires train trajectory source ids"):
+        prepare_run_split(
+            config=cfg,
+            seeds=_seeds(),
+            trajectories=[_trajectory(float(value)) for value in range(12)],
+            needs_validation_score=True,
         )
 
 

@@ -19,6 +19,26 @@ def _counts_from_metadata(typed_queries: list[dict[str, Any]], key: str) -> dict
     return counts
 
 
+def _values_from_metadata(typed_queries: list[dict[str, Any]], key: str) -> list[str]:
+    """Return per-query metadata values in workload order."""
+    values: list[str] = []
+    for query in typed_queries:
+        metadata = query.get("_metadata") or {}
+        values.append(str(metadata.get(key, "unspecified")))
+    return values
+
+
+def _anchor_footprint_pairs_from_metadata(typed_queries: list[dict[str, Any]]) -> list[str]:
+    """Return per-query anchor/footprint pair labels in workload order."""
+    pairs: list[str] = []
+    for query in typed_queries:
+        metadata = query.get("_metadata") or {}
+        anchor_family = str(metadata.get("anchor_family", "unspecified"))
+        footprint_family = str(metadata.get("footprint_family", "unspecified"))
+        pairs.append(f"{anchor_family}|{footprint_family}")
+    return pairs
+
+
 def _range_workload_signature(
     *,
     points: torch.Tensor,
@@ -41,6 +61,7 @@ def _range_workload_signature(
     trajectory_hit_counts = [int(row["trajectory_hits"]) for row in query_rows]
     point_hit_fractions = [float(row["point_hit_fraction"]) for row in query_rows]
     trajectory_hit_fractions = [float(row["trajectory_hit_fraction"]) for row in query_rows]
+    anchor_footprint_pairs = _anchor_footprint_pairs_from_metadata(typed_queries)
     spatial_radii = []
     time_spans = []
     for query in typed_queries:
@@ -96,6 +117,12 @@ def _range_workload_signature(
         "total_trajectories": len(boundaries),
         "anchor_family_counts": _counts_from_metadata(typed_queries, "anchor_family"),
         "footprint_family_counts": _counts_from_metadata(typed_queries, "footprint_family"),
+        "anchor_family_per_query": _values_from_metadata(typed_queries, "anchor_family"),
+        "footprint_family_per_query": _values_from_metadata(typed_queries, "footprint_family"),
+        "anchor_footprint_pair_counts": {
+            pair: anchor_footprint_pairs.count(pair) for pair in sorted(set(anchor_footprint_pairs))
+        },
+        "anchor_footprint_pair_per_query": anchor_footprint_pairs,
         "point_hits_per_query": {
             "p10": float(summary["point_hit_count_p10"]),
             "p50": float(summary["point_hit_count_p50"]),

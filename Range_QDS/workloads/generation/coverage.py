@@ -85,6 +85,7 @@ def _normalize_coverage_overshoot(range_max_coverage_overshoot: float | None) ->
 
 def _range_acceptance_enabled(
     range_min_point_hits: int | None,
+    range_min_point_hit_fraction: float | None,
     range_max_point_hit_fraction: float | None,
     range_min_trajectory_hits: int | None,
     range_max_trajectory_hit_fraction: float | None,
@@ -96,6 +97,7 @@ def _range_acceptance_enabled(
         value is not None
         for value in (
             range_min_point_hits,
+            range_min_point_hit_fraction,
             range_max_point_hit_fraction,
             range_min_trajectory_hits,
             range_max_trajectory_hit_fraction,
@@ -145,6 +147,11 @@ def _record_rejection_for_query(state: dict[str, Any], reason: str, query: dict[
         footprint_key = str(footprint_family)
         footprint_reasons = by_footprint.setdefault(footprint_key, {})
         footprint_reasons[reason] = int(footprint_reasons.get(reason, 0)) + 1
+    if anchor_family is not None and footprint_family is not None:
+        by_pair = state.setdefault("rejection_reasons_by_anchor_footprint_pair", {})
+        pair_key = f"{anchor_family!s}|{footprint_family!s}"
+        pair_reasons = by_pair.setdefault(pair_key, {})
+        pair_reasons[reason] = int(pair_reasons.get(reason, 0)) + 1
 
 
 def _accept_range_query(
@@ -155,6 +162,7 @@ def _accept_range_query(
     bounds: dict[str, float],
     *,
     range_min_point_hits: int | None,
+    range_min_point_hit_fraction: float | None,
     range_max_point_hit_fraction: float | None,
     range_min_trajectory_hits: int | None,
     range_max_trajectory_hit_fraction: float | None,
@@ -176,6 +184,10 @@ def _accept_range_query(
     )
     if range_min_point_hits is not None and diagnostic["point_hits"] < int(range_min_point_hits):
         return False, "too_few_point_hits"
+    if range_min_point_hit_fraction is not None and diagnostic["point_hit_fraction"] < float(
+        range_min_point_hit_fraction
+    ):
+        return False, "too_low_point_hit_fraction"
     if range_min_trajectory_hits is not None and diagnostic["trajectory_hits"] < int(
         range_min_trajectory_hits
     ):

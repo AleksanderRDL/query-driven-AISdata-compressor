@@ -346,6 +346,8 @@ def build_selection_marginal_segment_calibration_diagnostic(
 ) -> dict[str, Any]:
     """Build a derived diagnostic for train/selection-side marginal segment evidence."""
     summaries = [_artifact_summary(label, artifact) for label, artifact in artifacts]
+    for summary in summaries:
+        summary["decision"] = _decision(summary)
     primary = summaries[-1] if summaries else {}
     return {
         "schema_version": 1,
@@ -361,7 +363,8 @@ def build_selection_marginal_segment_calibration_diagnostic(
                 f"{SELECTOR_TRACE_PATH}.{SELECTION_TRACE_NAME}.{MARGINAL_ALIGNMENT_KEY}"
             ),
             "eval_layout": f"{SELECTOR_TRACE_PATH}.{EVAL_TRACE_NAME}.{MARGINAL_ALIGNMENT_KEY}",
-            "decision": _decision(primary),
+            "decision": primary.get("decision"),
+            "decision_scope": "primary_artifact_last_input",
             "interpretation": (
                 "Derived diagnosis only. Selection exact marginals are split-eligible "
                 "teacher evidence, but sparse split-specific segment targets still need "

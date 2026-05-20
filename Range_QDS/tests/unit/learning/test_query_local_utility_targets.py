@@ -29,6 +29,7 @@ from learning.targets.query_local_utility import (
     QUERY_LOCAL_UTILITY_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE,
     build_query_local_utility_targets,
 )
+from learning.targets.query_local_utility_segments import _segment_pooled_targets
 from scoring.geometry_thresholds import (
     max_sed_ratio_for_compression,
 )
@@ -260,7 +261,7 @@ def test_factorized_replacement_target_is_query_local_and_final_label_keeps_quer
         :, tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("replacement_representative_value")
     ]
     final_score = targets.labels[:, QUERY_TYPE_ID_RANGE]
-    assert int((replacement > 0.0).sum().item()) == 5
+    assert int((replacement > 0.0).sum().item()) == 4
     assert int((final_score > 0.0).sum().item()) == 10
     assert (
         targets.diagnostics["replacement_representative_value_normalization"]
@@ -311,6 +312,53 @@ def test_conditional_behavior_target_is_masked_to_query_hits() -> None:
     assert (
         targets.diagnostics["conditional_behavior_utility_training"] == "masked_to_query_hit_points"
     )
+
+
+def test_conditional_behavior_target_includes_segment_query_support() -> None:
+    points = torch.zeros((8, 8), dtype=torch.float32)
+    points[:, 0] = torch.arange(8, dtype=torch.float32)
+    points[:, 1] = torch.arange(8, dtype=torch.float32)
+    points[:, 2] = 0.0
+    points[2, 7] = 1.0
+    query = {
+        "type": "range",
+        "params": {
+            "t_start": 0.0,
+            "t_end": 3.0,
+            "lat_min": 0.0,
+            "lat_max": 3.0,
+            "lon_min": -1.0,
+            "lon_max": 1.0,
+        },
+        "_metadata": {
+            "anchor_family": "density",
+            "footprint_family": "medium_operational",
+        },
+    }
+
+    targets = build_query_local_utility_targets(
+        points=points,
+        boundaries=[(0, 8)],
+        typed_queries=[query],
+        segment_size=4,
+    )
+    query_hit_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("query_hit_probability")
+    behavior_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("conditional_behavior_utility")
+    q_hit = targets.head_targets[:, query_hit_idx]
+    behavior = targets.head_targets[:, behavior_idx]
+    hit_mask = q_hit > 0.0
+
+    assert targets.diagnostics["conditional_behavior_target_variant"] == (
+        "query_segment_local_behavior_utility"
+    )
+    assert (
+        "segment_query_hit_support"
+        in targets.diagnostics["conditional_behavior_target_base_source"]
+    )
+    assert int(hit_mask.sum().item()) == 4
+    assert behavior[2] > 0.0
+    assert int((behavior > 0.0).sum().item()) < int(hit_mask.sum().item())
+    assert torch.all(behavior[~hit_mask] == 0.0)
 
 
 def test_path_length_support_target_is_query_free_segment_geometry() -> None:
@@ -628,17 +676,19 @@ def test_query_ship_max_pool_target_mode_only_changes_segment_budget_head() -> N
         },
     }
 
+    boundaries = [(0, 6), (6, 8)]
+    segment_size = 2
     active = build_query_local_utility_targets(
         points=points,
-        boundaries=[(0, 6), (6, 8)],
+        boundaries=boundaries,
         typed_queries=[query],
-        segment_size=2,
+        segment_size=segment_size,
     )
     variant = build_query_local_utility_targets(
         points=points,
-        boundaries=[(0, 6), (6, 8)],
+        boundaries=boundaries,
         typed_queries=[query],
-        segment_size=2,
+        segment_size=segment_size,
         target_mode=QUERY_LOCAL_UTILITY_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE,
     )
 
@@ -653,7 +703,17 @@ def test_query_ship_max_pool_target_mode_only_changes_segment_budget_head() -> N
         else:
             assert torch.allclose(active_head, variant_head)
 
-    assert active.diagnostics["segment_budget_target_aggregation"] == "sum"
+    segment_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("segment_budget_target")
+    assert torch.allclose(
+        active.head_targets[:, segment_idx],
+        _segment_pooled_targets(
+            active.labels[:, QUERY_TYPE_ID_RANGE],
+            boundaries,
+            segment_size,
+            pool="top20_mean",
+        ),
+    )
+    assert active.diagnostics["segment_budget_target_aggregation"] == "top20_mean"
     assert active.diagnostics["final_success_allowed"] is True
     assert variant.diagnostics["target_mode"] == (
         QUERY_LOCAL_UTILITY_SEGMENT_BUDGET_QUERY_SHIP_MAX_POOL_TARGET_MODE
@@ -727,5 +787,3 @@ def test_query_ship_local_heads_target_mode_changes_composed_head_contract() -> 
     assert variant.diagnostics["segment_budget_target_experimental"] is True
     assert variant.diagnostics["final_label_variant"] == "query_ship_local_heads_composed_score"
     assert variant.diagnostics["final_success_allowed"] is False
-
-

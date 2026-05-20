@@ -5,8 +5,10 @@ from __future__ import annotations
 import torch
 
 from data_preparation.ais_loader import generate_synthetic_ais_data
+from workloads.generation.coverage import _record_rejection_for_query
 from workloads.generation.generator import generate_typed_query_workload
 from workloads.generation.profile_query_plan import (
+    POINT_HIT_TARGET_BAND_FRACTION,
     _profile_query_plan,
     _profile_query_settings,
     _weighted_choice_with_deterministic_key,
@@ -68,11 +70,15 @@ def test_range_query_mix_footprints_match_implementation_guide_defaults() -> Non
             "spatial_radius_km": 2.2,
             "time_half_window_hours": 5.0,
             "elongation_allowed": False,
+            "min_point_hit_fraction": 0.006,
+            "max_point_hit_fraction": 0.030,
         },
         "large_context": {
             "spatial_radius_km": 4.0,
             "time_half_window_hours": 8.0,
             "elongation_allowed": False,
+            "min_point_hit_fraction": 0.010,
+            "max_point_hit_fraction": 0.045,
         },
     }
 
@@ -127,6 +133,14 @@ def test_range_query_mix_records_profile_signature() -> None:
     assert signature["coverage_calibration_mode"] == profile["coverage_calibration_mode"]
     assert sum(signature["anchor_family_counts"].values()) == len(workload.typed_queries)
     assert sum(signature["footprint_family_counts"].values()) == len(workload.typed_queries)
+    assert len(signature["anchor_family_per_query"]) == len(workload.typed_queries)
+    assert len(signature["footprint_family_per_query"]) == len(workload.typed_queries)
+    assert len(signature["anchor_footprint_pair_per_query"]) == len(workload.typed_queries)
+    assert set(signature["anchor_family_per_query"]) <= set(signature["anchor_family_counts"])
+    assert set(signature["footprint_family_per_query"]) <= set(signature["footprint_family_counts"])
+    assert set(signature["anchor_footprint_pair_per_query"]) <= set(
+        signature["anchor_footprint_pair_counts"]
+    )
     assert signature["query_count"] == len(workload.typed_queries)
     assert signature["total_points"] == sum(int(trajectory.shape[0]) for trajectory in trajectories)
     assert signature["total_trajectories"] == len(trajectories)
@@ -134,6 +148,29 @@ def test_range_query_mix_records_profile_signature() -> None:
     assert len(signature["point_hit_fractions_per_query"]) == len(workload.typed_queries)
     assert len(signature["ship_hit_counts_per_query"]) == len(workload.typed_queries)
     assert len(signature["ship_hit_fractions_per_query"]) == len(workload.typed_queries)
+
+
+def test_range_acceptance_rejections_record_anchor_footprint_pair() -> None:
+    state: dict[str, object] = {}
+    query = {
+        "_metadata": {
+            "anchor_family": "density",
+            "footprint_family": "large_context",
+        }
+    }
+
+    _record_rejection_for_query(state, "coverage_overshoot", query)
+
+    assert state["rejection_reasons"] == {"coverage_overshoot": 1}
+    assert state["rejection_reasons_by_anchor_family"] == {
+        "density": {"coverage_overshoot": 1}
+    }
+    assert state["rejection_reasons_by_footprint_family"] == {
+        "large_context": {"coverage_overshoot": 1}
+    }
+    assert state["rejection_reasons_by_anchor_footprint_pair"] == {
+        "density|large_context": {"coverage_overshoot": 1}
+    }
 
 
 def test_deterministic_profile_sampling_does_not_advance_generator() -> None:
@@ -173,6 +210,45 @@ def test_deterministic_profile_sampling_does_not_advance_generator() -> None:
     assert observed_seq == expected_seq
 
 
+def test_profile_point_hit_targets_are_prefix_stable_within_footprint_band() -> None:
+    profile = range_workload_profile("range_query_mix")
+    plan = _profile_query_plan(profile, requested_queries=20, workload_seed=123)
+
+    settings = [
+        _profile_query_settings(
+            profile,
+            torch.Generator().manual_seed(1),
+            query_index=query_index,
+            workload_seed=19,
+            query_plan=plan,
+        )
+        for query_index in range(20)
+    ]
+    same_plan_settings = [
+        _profile_query_settings(
+            profile,
+            torch.Generator().manual_seed(1),
+            query_index=query_index,
+            workload_seed=99,
+            query_plan=plan,
+        )
+        for query_index in range(20)
+    ]
+
+    assert [
+        setting["target_point_hit_fraction"] for setting in settings
+    ] == [setting["target_point_hit_fraction"] for setting in same_plan_settings]
+    for setting in settings:
+        footprint = profile.footprint_families[str(setting["footprint_family"])]
+        min_fraction = float(footprint["min_point_hit_fraction"])
+        max_fraction = float(footprint["max_point_hit_fraction"])
+        target = setting["target_point_hit_fraction"]
+        assert isinstance(target, float)
+        assert min_fraction <= target <= min_fraction + (
+            max_fraction - min_fraction
+        ) * POINT_HIT_TARGET_BAND_FRACTION
+
+
 def test_synthetic_route_families_create_same_support_trajectories() -> None:
     trajectories = generate_synthetic_ais_data(
         n_ships=5, n_points_per_ship=32, seed=86, route_families=1
@@ -181,5 +257,3 @@ def test_synthetic_route_families_create_same_support_trajectories() -> None:
 
     assert float(points[:, 1].max().item() - points[:, 1].min().item()) < 0.50
     assert float(points[:, 2].max().item() - points[:, 2].min().item()) < 0.50
-
-

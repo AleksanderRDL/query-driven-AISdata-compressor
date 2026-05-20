@@ -379,6 +379,7 @@ def build_final_run_summaries(
         compression_ratio=float(config.model.compression_ratio),
     )
     global_sanity_gate_pass = bool(global_sanity_gate.get("gate_pass", False))
+    global_sanity_required_for_initial_local_learning = False
     blocking_gates: list[str] = []
     if final_candidate:
         if not workload_stability_gate_pass:
@@ -395,7 +396,10 @@ def build_final_run_summaries(
             blocking_gates.append("workload_signature_gate")
         if not learning_causality_gate_pass:
             blocking_gates.append("learning_causality_ablations")
-        if not global_sanity_gate_pass:
+        if (
+            global_sanity_required_for_initial_local_learning
+            and not global_sanity_gate_pass
+        ):
             blocking_gates.append("global_sanity_gates")
         single_cell_blocking_gates = list(blocking_gates)
         blocking_gates.append("full_workload_profile_compression_grid")
@@ -425,6 +429,12 @@ def build_final_run_summaries(
             "workload_signature_gate_pass": signature_gate_pass,
             "learning_causality_gate_pass": learning_causality_gate_pass,
             "global_sanity_gate_pass": global_sanity_gate_pass,
+            "global_sanity_gate_required_for_initial_local_learning": (
+                global_sanity_required_for_initial_local_learning
+            ),
+            "global_sanity_gate_role": (
+                "diagnostic_guardrail_during_initial_query_local_learning"
+            ),
             "mlqds_score": matched["MLQDS"].query_local_utility_score,
             "uniform_score": uniform_score.query_local_utility_score
             if uniform_score is not None

@@ -425,6 +425,15 @@ def _segment_allocation_alignment_diagnostics(
     score_allocation_correlation = _pearson_correlation(segment_scores, allocation_counts)
     allocation_weight_correlation = _pearson_correlation(allocation_weights, allocation_counts)
     length_extra_correlation = _pearson_correlation(length_support_scores, extra_counts)
+    segment_score_length_support_correlation = _pearson_correlation(
+        segment_scores, length_support_scores
+    )
+    allocation_weight_length_support_correlation = _pearson_correlation(
+        allocation_weights, length_support_scores
+    )
+    top_20_overlap = top_groups.get("top_20_percent", {}).get(
+        "length_support_segment_score_overlap_fraction"
+    )
     diagnosis = "allocation_alignment_inconclusive"
     if (
         length_allocation_correlation is not None
@@ -433,6 +442,15 @@ def _segment_allocation_alignment_diagnostics(
         and score_allocation_correlation >= 0.50
     ):
         diagnosis = "extra_slots_score_dominated_not_length_support_aligned"
+    elif (
+        length_allocation_correlation is not None
+        and score_allocation_correlation is not None
+        and score_allocation_correlation >= 0.50
+        and score_allocation_correlation - length_allocation_correlation >= 0.25
+        and top_20_overlap is not None
+        and float(top_20_overlap) < 0.35
+    ):
+        diagnosis = "score_dominated_length_support_conflict"
     elif length_allocation_correlation is not None and length_allocation_correlation >= 0.25:
         diagnosis = "length_support_materially_influences_allocation"
 
@@ -460,9 +478,17 @@ def _segment_allocation_alignment_diagnostics(
         "segment_score_to_allocation_spearman": _spearman_correlation(
             segment_scores, allocation_counts
         ),
+        "segment_score_to_length_support_pearson": segment_score_length_support_correlation,
+        "segment_score_to_length_support_spearman": _spearman_correlation(
+            segment_scores, length_support_scores
+        ),
         "allocation_weight_to_allocation_pearson": allocation_weight_correlation,
         "allocation_weight_to_allocation_spearman": _spearman_correlation(
             allocation_weights, allocation_counts
+        ),
+        "allocation_weight_to_length_support_pearson": allocation_weight_length_support_correlation,
+        "allocation_weight_to_length_support_spearman": _spearman_correlation(
+            allocation_weights, length_support_scores
         ),
         "top_groups": top_groups,
         "length_support_deciles": length_deciles,

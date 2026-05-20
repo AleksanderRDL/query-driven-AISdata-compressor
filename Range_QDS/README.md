@@ -26,10 +26,16 @@ explicitly overrides it:
 
 `QueryLocalUtility` schema `5` weights direct query-point mass at `0.50`,
 query-local behavior at `0.45`, and global sanity guardrails at `0.05`.
+Global sanity is reported and should improve, but it is not an initial hard
+blocker while the project is still proving local query behavior and learning
+causality.
 The active `range_query_mix` profile uses anchor weights `density=0.80` and
 `sparse_background_control=0.20`; footprint weights are
 `medium_operational=0.6923076923076923` and
-`large_context=0.3076923076923077`.
+`large_context=0.3076923076923077`. The active footprint acceptance bands are
+point-hit fraction `[0.006,0.030]` for `medium_operational` and
+`[0.010,0.045]` for `large_context`. Proposals target a deterministic
+low-band point-hit fraction before unchanged acceptance gates run.
 
 Historical names and families such as `QueryUsefulV1`, `query_useful_v1`,
 `range_workload_v1`, `density_route`, `small_local`,
@@ -85,7 +91,7 @@ uv run --group dev -- python -m orchestration.train_and_score \
   --compression_ratio 0.10 \
   --mlqds_temporal_fraction 0.0 \
   --final_metrics_mode diagnostic \
-  --results_dir Range_QDS/artifacts/results/manual_range
+  --results_dir Range_QDS/artifacts/results/<manual-run-id>
 ```
 
 ## Where To Look

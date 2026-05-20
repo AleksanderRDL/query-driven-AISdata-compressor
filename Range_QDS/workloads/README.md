@@ -78,6 +78,25 @@ Active `range_query_mix` family weights:
 | Footprint | `medium_operational` | `0.6923076923076923` |
 | Footprint | `large_context` | `0.3076923076923077` |
 
+Active footprint acceptance bands:
+
+| Footprint | Point-hit fraction band |
+| --- | --- |
+| `medium_operational` | `[0.006, 0.030]` |
+| `large_context` | `[0.010, 0.045]` |
+
+Profiled range proposals target a deterministic low-discrepancy point-hit
+fraction inside the lower 25% of the selected footprint band's interval before
+the ordinary acceptance gates run. The target is a proposal aid, not a relaxed
+gate: min/max point-hit, duplicate, trajectory-hit, and coverage guards still
+decide whether the query is accepted.
+
+Workload signatures include accepted `anchor_family`,
+`footprint_family`, and `anchor_footprint_pair` labels per query. Range
+acceptance diagnostics also attribute rejection reasons by anchor family,
+footprint family, and anchor/footprint pair so coverage-pressure failures can
+be localized before changing scoring or model code.
+
 The `range_query_mix_*` variants share those family weights and differ only in
 target coverage and overshoot defaults:
 

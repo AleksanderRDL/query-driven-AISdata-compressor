@@ -11,6 +11,7 @@ import torch
 
 from config.run_config import build_run_config, derive_seed_bundle
 from learning.outputs import TrainingOutputs
+from learning.targets.query_local_utility import QUERY_LOCAL_UTILITY_HEAD_NAMES
 from orchestration.retained_mask_ablation_stage import freeze_retained_mask_ablations
 from orchestration.retained_mask_stage import freeze_workload_blind_retained_masks
 from orchestration.selector_diagnostics import (
@@ -386,3 +387,52 @@ def test_retained_mask_ablations_freeze_pre_repair_and_shuffled_scores() -> None
         "source": "selector_trace.pre_repair_retained_mask.indices",
         "retained_count": 2,
     }
+
+
+def test_retained_mask_ablations_include_behavior_segment_score_diagnostics() -> None:
+    primary_scores = torch.tensor([0.1, 0.4, 0.3, 0.2], dtype=torch.float32)
+    head_logits = torch.zeros(
+        (4, len(QUERY_LOCAL_UTILITY_HEAD_NAMES)),
+        dtype=torch.float32,
+    )
+    behavior_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("conditional_behavior_utility")
+    head_logits[:, behavior_idx] = torch.tensor([0.0, 1.0, 0.2, 0.8], dtype=torch.float32)
+    segment_scores = torch.tensor([0.1, 0.2, 0.3, 0.4], dtype=torch.float32)
+
+    outputs = freeze_retained_mask_ablations(
+        config=build_run_config(
+            model_type="workload_blind_range_v2",
+            selector_type="learned_segment_budget_v1",
+            compression_ratio=0.50,
+        ),
+        trained=_trained_stub(),
+        eval_workload=_workload(),
+        eval_workload_map={"range": 1.0},
+        test_mmsis=None,
+        test_points=_points(),
+        test_boundaries=[(0, 4)],
+        seeds=derive_seed_bundle(7),
+        primary_selector_trace={},
+        frozen_primary_masks={"MLQDS": torch.tensor([True, True, False, False])},
+        primary_scores=primary_scores,
+        primary_raw_preds=primary_scores,
+        primary_segment_scores=segment_scores,
+        primary_path_length_support_scores=None,
+        primary_selector_segment_scores=segment_scores + 0.5,
+        primary_head_logits=head_logits,
+    )
+
+    method_names = {method.name for method in outputs.causality_ablation_methods}
+    assert "MLQDS_behavior_utility_segment_head_diagnostic" in method_names
+    assert "MLQDS_behavior_utility_allocation_only_diagnostic" in method_names
+    assert "MLQDS_uniform_segment_allocation_only_diagnostic" in method_names
+    diagnostics = outputs.head_ablation_sensitivity_diagnostics
+    assert diagnostics["MLQDS_uniform_segment_allocation_only_diagnostic"][
+        "allocation_score_source"
+    ] == "uniform_segment_scores_no_length_support"
+    assert diagnostics["MLQDS_behavior_utility_segment_head_diagnostic"][
+        "replacement_head_name"
+    ] == "conditional_behavior_utility"
+    assert diagnostics["MLQDS_behavior_utility_allocation_only_diagnostic"][
+        "ablation_mode"
+    ] == "conditional_behavior_utility_allocation_only"

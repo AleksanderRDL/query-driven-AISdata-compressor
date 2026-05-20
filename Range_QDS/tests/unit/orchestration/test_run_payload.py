@@ -123,6 +123,8 @@ def test_build_run_payload_preserves_stable_artifact_fields() -> None:
         selector_budget_diagnostics={"eval": {}},
         primary_selector_trace=None,
         selection_selector_trace=None,
+        train_selector_trace=None,
+        train_marginal_causality_diagnostics=None,
         segment_oracle_allocation_audit={},
         target_segment_oracle_alignment_audit={},
         matched={"MLQDS": MethodScore(aggregate_f1=0.7, per_type_f1={"range": 0.7})},
@@ -154,8 +156,13 @@ def test_build_run_payload_preserves_stable_artifact_fields() -> None:
     assert payload["selection_query_count"] is None
     assert payload["matched"]["MLQDS"]["aggregate_f1"] == 0.7
     assert payload["workload_scoring_compatibility_diagnostics"] == {"available": True}
+    assert payload["selector_trace_diagnostics"]["train_primary"] == {"available": False}
     assert payload["selector_trace_diagnostics"]["eval_primary"] == {"available": False}
     assert payload["selector_trace_diagnostics"]["selection_primary"] == {"available": False}
+    assert payload["train_marginal_causality_diagnostics"] == {
+        "available": False,
+        "reason": "not_run",
+    }
     assert payload["workload_blind_protocol"]["primary_masks_frozen_before_eval_query_scoring"]
     assert payload["workload_blind_protocol"]["frozen_audit_ratios"] == ["0.0500"]
     assert payload["training_history"] == [{"loss": 1.0}]

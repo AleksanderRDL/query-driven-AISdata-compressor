@@ -623,17 +623,27 @@ def test_workload_signature_gate_allows_small_calibrated_query_count_drift() -> 
 
 
 def test_workload_signature_gate_reports_normalized_hit_distribution_diagnostics() -> None:
-    def signature(total_points: int, total_trajectories: int) -> dict[str, Any]:
+    def signature(
+        total_points: int,
+        total_trajectories: int,
+        *,
+        point_counts: list[int],
+        ship_counts: list[int],
+    ) -> dict[str, Any]:
         return {
             "profile_id": "range_query_mix",
+            "target_coverage": 0.30,
+            "coverage_actual": 0.30,
+            "query_count_mode": "calibrated_to_coverage",
+            "coverage_calibration_mode": "profile_sampled_query_count",
             "query_count": 8,
             "total_points": total_points,
             "total_trajectories": total_trajectories,
             "anchor_family_counts": {"density": 8},
             "footprint_family_counts": {"medium_operational": 8},
-            "point_hit_counts_per_query": [10, 20, 10, 20, 10, 20, 10, 20],
+            "point_hit_counts_per_query": point_counts,
             "point_hit_fractions_per_query": [0.10, 0.20, 0.10, 0.20, 0.10, 0.20, 0.10, 0.20],
-            "ship_hit_counts_per_query": [1, 2, 1, 2, 1, 2, 1, 2],
+            "ship_hit_counts_per_query": ship_counts,
             "ship_hit_fractions_per_query": [0.10, 0.20, 0.10, 0.20, 0.10, 0.20, 0.10, 0.20],
             "near_duplicate_rate": 0.0,
             "broad_query_rate": 0.0,
@@ -643,12 +653,26 @@ def test_workload_signature_gate_reports_normalized_hit_distribution_diagnostics
         "train": {
             "range": {"range_query_count": 8},
             "range_signal": {},
-            "generation": {"workload_signature": signature(100, 10)},
+            "generation": {
+                "workload_signature": signature(
+                    100,
+                    10,
+                    point_counts=[10, 20, 10, 20, 10, 20, 10, 20],
+                    ship_counts=[1, 2, 1, 2, 1, 2, 1, 2],
+                )
+            },
         },
         "eval": {
             "range": {"range_query_count": 8},
             "range_signal": {},
-            "generation": {"workload_signature": signature(50, 5)},
+            "generation": {
+                "workload_signature": signature(
+                    50,
+                    5,
+                    point_counts=[5, 10, 5, 10, 5, 10, 5, 10],
+                    ship_counts=[1, 1, 1, 1, 1, 1, 1, 1],
+                )
+            },
         },
     }
 
@@ -659,6 +683,9 @@ def test_workload_signature_gate_reports_normalized_hit_distribution_diagnostics
 
     assert metrics["point_hit_fraction_distribution_ks"] == 0.0
     assert metrics["ship_hit_fraction_distribution_ks"] == 0.0
+    assert metrics["point_hit_distribution_gate_metric"] == "point_hit_fraction_distribution_ks"
+    assert metrics["ship_hit_distribution_enforced"] is False
+    assert gate["gate_pass"] is True
     assert metrics["train_total_points"] == 100
     assert metrics["eval_total_points"] == 50
     assert metrics["train_total_trajectories"] == 10
@@ -711,7 +738,7 @@ def test_workload_blind_range_v2_features_and_selector_are_query_free() -> None:
     ] == int(retained.sum().item())
     assert trace["trajectories_with_at_least_one_learned_decision"] >= 0
     assert 0.0 <= trace["segment_budget_entropy_normalized"] <= 1.0
-    assert trace["segment_score_source"] == "segment_budget_head_mean"
+    assert trace["segment_score_source"] == "segment_budget_head_top20_mean"
     assert diagnostics["selector_type"] == "learned_segment_budget_v1"
     assert diagnostics["budget_rows"][0]["no_fixed_85_percent_temporal_scaffold"] is True
 
@@ -836,5 +863,3 @@ def test_range_v2_final_score_composition_matches_query_local_utility_target_for
     assert torch.allclose(final_probabilities, expected, atol=1e-5)
     assert final_probabilities[0, 0] > 0.5
     assert final_probabilities[0, 1] > final_probabilities[0, 0]
-
-

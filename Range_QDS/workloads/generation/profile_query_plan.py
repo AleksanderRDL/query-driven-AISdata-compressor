@@ -11,6 +11,9 @@ import torch
 from workloads.generation.anchors import _weighted_sample_one
 from workloads.generation.workload_profiles import LEGACY_GENERATOR_PROFILE, RangeWorkloadProfile
 
+POINT_HIT_TARGET_BAND_FRACTION = 0.25
+LOW_DISCREPANCY_STEP = 0.6180339887498949
+
 
 def _deterministic_unit_from_payload(*parts: object) -> float:
     """Return a deterministic unit-uniform-like value from arbitrary key material."""
@@ -203,10 +206,38 @@ def _profile_query_settings(
             deterministic_value=footprint_value,
         )
     footprint = dict(profile.footprint_families.get(footprint_family) or {})
+    footprint_occurrence_index = int(query_index or 0)
+    if (
+        isinstance(query_index, int)
+        and query_index >= 0
+        and isinstance(footprint_sequence, list)
+        and query_index < len(footprint_sequence)
+    ):
+        footprint_occurrence_index = sum(
+            1 for family in footprint_sequence[: query_index + 1] if str(family) == footprint_family
+        ) - 1
+    min_point_hit_fraction = footprint.get("min_point_hit_fraction")
+    max_point_hit_fraction = footprint.get("max_point_hit_fraction")
+    target_point_hit_fraction: float | None = None
+    if isinstance(min_point_hit_fraction, (int, float)) and isinstance(
+        max_point_hit_fraction, (int, float)
+    ):
+        min_fraction = float(min_point_hit_fraction)
+        max_fraction = float(max_point_hit_fraction)
+        if max_fraction >= min_fraction:
+            target_unit = (
+                (max(0, footprint_occurrence_index) * LOW_DISCREPANCY_STEP) + 0.5
+            ) % 1.0
+            target_point_hit_fraction = min_fraction + (
+                max_fraction - min_fraction
+            ) * POINT_HIT_TARGET_BAND_FRACTION * target_unit
     return {
         "anchor_family": anchor_family,
         "footprint_family": footprint_family,
         "range_spatial_km": float(footprint.get("spatial_radius_km", 2.2)),
         "range_time_hours": float(footprint.get("time_half_window_hours", 5.0)),
         "elongation_allowed": bool(footprint.get("elongation_allowed", False)),
+        "min_point_hit_fraction": min_point_hit_fraction,
+        "max_point_hit_fraction": max_point_hit_fraction,
+        "target_point_hit_fraction": target_point_hit_fraction,
     }

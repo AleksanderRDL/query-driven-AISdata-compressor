@@ -236,11 +236,11 @@ def selector_segment_score_source_label(
     """Return an honest selector trace label for segment allocation scores."""
     weight = max(0.0, min(1.0, float(length_support_blend_weight)))
     if path_length_support_scores is not None and weight >= 1.0 - 1e-12:
-        return "path_length_support_head_mean"
+        return "path_length_support_head_top20_mean"
     if path_length_support_scores is not None and weight > 0.0:
-        return "segment_budget_path_length_support_blend_mean"
+        return "segment_budget_path_length_support_blend_top20_mean"
     if segment_scores is not None:
-        return "segment_budget_head_mean"
+        return "segment_budget_head_top20_mean"
     return "point_score_top20_mean"
 
 

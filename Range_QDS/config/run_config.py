@@ -166,6 +166,7 @@ class ModelConfig:
     query_local_utility_behavior_rank_loss_weight: float = 0.0
     query_local_utility_sparse_head_rank_loss_weight: float = 0.0
     query_local_utility_sparse_head_bce_target_mode: str = "raw"
+    query_local_utility_train_marginal_diagnostics: bool = False
     temporal_distribution_loss_weight: float = 0.0
     gradient_clip_norm: float = 1.0
     l2_score_weight: float = 1e-4
@@ -368,6 +369,7 @@ def build_run_config(
     query_local_utility_behavior_rank_loss_weight: float = 0.0,
     query_local_utility_sparse_head_rank_loss_weight: float = 0.0,
     query_local_utility_sparse_head_bce_target_mode: str = "raw",
+    query_local_utility_train_marginal_diagnostics: bool = False,
     temporal_distribution_loss_weight: float = 0.0,
     gradient_clip_norm: float = 1.0,
     compression_ratio: float = 0.2,
@@ -554,6 +556,9 @@ def build_run_config(
             query_local_utility_behavior_rank_loss_weight=query_local_utility_behavior_rank_loss_weight,
             query_local_utility_sparse_head_rank_loss_weight=query_local_utility_sparse_head_rank_loss_weight,
             query_local_utility_sparse_head_bce_target_mode=query_local_utility_sparse_head_bce_target_mode,
+            query_local_utility_train_marginal_diagnostics=(
+                query_local_utility_train_marginal_diagnostics
+            ),
             temporal_distribution_loss_weight=temporal_distribution_loss_weight,
             gradient_clip_norm=gradient_clip_norm,
             compression_ratio=compression_ratio,

@@ -524,6 +524,8 @@ def test_learned_segment_budget_reports_query_free_segment_source_attribution() 
     assert alignment["segment_count"] == attribution["segment_count"]
     assert alignment["allocation_count_total"] == summary["segment_allocation_count_total"]
     assert "top_10_percent" in alignment["top_groups"]
+    assert "segment_score_to_length_support_spearman" in alignment
+    assert "allocation_weight_to_length_support_spearman" in alignment
 
 
 def test_segment_allocation_alignment_diagnostic_flags_score_dominated_extras() -> None:
@@ -582,9 +584,47 @@ def test_segment_allocation_alignment_diagnostic_flags_score_dominated_extras() 
     assert diagnostic["extra_allocation_count_total"] == 3
     assert diagnostic["length_support_to_allocation_pearson"] < 0.0
     assert diagnostic["segment_score_to_allocation_pearson"] > 0.8
+    assert diagnostic["segment_score_to_length_support_pearson"] < 0.0
     assert (
         diagnostic["trajectory_top_length_support_extra_capture"][
             "top3_length_support_extra_count_histogram"
         ]["0"]
         == 1
+    )
+
+
+def test_segment_allocation_alignment_diagnostic_flags_score_length_conflict() -> None:
+    segment_scores = [10.0, 9.0, 1.0, 1.0, 4.0, 3.0, 2.0, 1.0, 0.0, 0.0]
+    length_support_scores = [1.0, 1.0, 10.0, 9.0, 4.0, 3.0, 2.0, 1.0, 0.0, 0.0]
+    allocation_counts = [5, 4, 3, 3, 2, 2, 1, 1, 1, 1]
+    segment_rows = [
+        {
+            "trajectory_id": 0,
+            "start": int(index * 8),
+            "end": int((index + 1) * 8),
+            "score": float(score),
+            "length_support_score": float(length_support_scores[index]),
+            "allocation_weight": float(score),
+        }
+        for index, score in enumerate(segment_scores)
+    ]
+
+    diagnostic = _segment_allocation_alignment_diagnostics(
+        segment_rows=segment_rows,
+        segment_allocations={
+            index: allocation_count
+            for index, allocation_count in enumerate(allocation_counts)
+        },
+    )
+
+    assert diagnostic["available"] is True
+    assert diagnostic["component_diagnosis"] == "score_dominated_length_support_conflict"
+    assert diagnostic["length_support_to_allocation_pearson"] > 0.20
+    assert diagnostic["segment_score_to_allocation_pearson"] > 0.80
+    assert diagnostic["segment_score_to_length_support_pearson"] < 0.0
+    assert (
+        diagnostic["top_groups"]["top_20_percent"][
+            "length_support_segment_score_overlap_fraction"
+        ]
+        == 0.0
     )
