@@ -27,7 +27,7 @@ from selection.learned_segment_budget import (
     SEGMENT_SCORE_POINT_BLEND_WEIGHT,
     SEGMENT_TRANSFER_CALIBRATION_MODE_NONE,
     blend_segment_support_scores,
-    simplify_with_learned_segment_budget_v1,
+    simplify_with_learned_segment_budget,
 )
 from selection.model_score_conversion import mlqds_simplification_scores, workload_type_head
 from selection.retained_mask_selectors import (
@@ -330,13 +330,13 @@ class MLQDSMethod:
         workload_blind = _is_workload_blind_model(self.trained.model)
         if workload_blind and self.range_geometry_blend > 0.0:
             raise ValueError(
-                "workload_blind_range scoring cannot use mlqds_range_geometry_blend; "
+                "scalar_workload_blind_range scoring cannot use mlqds_range_geometry_blend; "
                 "eval labels would affect the retained mask."
             )
 
         scores = self._simplification_scores(points, boundaries, workload_blind=workload_blind)
         if str(self.selector_type).lower() == LEARNED_SEGMENT_BUDGET_SELECTOR_TYPE:
-            return simplify_with_learned_segment_budget_v1(
+            return simplify_with_learned_segment_budget(
                 scores,
                 boundaries,
                 compression_ratio,

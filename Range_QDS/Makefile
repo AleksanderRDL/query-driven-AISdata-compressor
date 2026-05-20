@@ -24,9 +24,9 @@ BENCHMARK_CHILD_EXTRA_ARGS ?=
 BENCHMARK_PLAN_FILE ?=
 BENCHMARK_CONTINUE_ON_FAILURE ?= 0
 ATTACH ?=
-BENCHMARK_PROFILE ?= range_query_mix_workload_blind_v2
-BENCHMARK_FAMILY ?= Range_QDS/artifacts/benchmarks/query_driven_workload_blind_v2
-BENCHMARK_CACHE ?= Range_QDS/artifacts/cache/query_driven_workload_blind_v2
+BENCHMARK_PROFILE ?= range_query_mix_workload_blind
+BENCHMARK_FAMILY ?= Range_QDS/artifacts/benchmarks/query_driven_workload_blind
+BENCHMARK_CACHE ?= Range_QDS/artifacts/cache/query_driven_workload_blind
 QDS_BENCHMARK_FAMILY := $(patsubst Range_QDS/%,%,$(BENCHMARK_FAMILY))
 QDS_BENCHMARK_CACHE := $(patsubst Range_QDS/%,%,$(BENCHMARK_CACHE))
 CONFIRM ?=
@@ -50,7 +50,7 @@ help:
 	@echo "  benchmark-queue-preflight  Check prerequisites using BENCHMARK_QUEUE_SESSION"
 	@echo "  list-runs   List benchmark runs from BENCHMARK_FAMILY"
 	@echo "  clean-smoke-artifacts  Dry-run smoke artifact cleanup; set CONFIRM=1 to delete"
-	@echo "  range-benchmark-tmux  Launch the query-driven workload-blind v2 benchmark in tmux with monitoring"
+	@echo "  range-benchmark-tmux  Launch the query-driven workload-blind benchmark in tmux with monitoring"
 	@echo "  range-benchmark-queue-tmux  Launch a sequential multi-seed range benchmark queue in tmux"
 	@echo "  inspect-run  Print compact jq run summary from RUN"
 	@echo "  inspect-gates  Print jq gate diagnostics from RUN"

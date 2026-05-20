@@ -392,9 +392,15 @@ def _feature_transfer_summary(
     }
 
 
-def _artifact_summary(label: str, artifact: dict[str, Any]) -> dict[str, Any]:
-    selection_trace = trace(artifact, SELECTION_TRACE_NAME)
-    eval_trace = trace(artifact, EVAL_TRACE_NAME)
+def _artifact_summary(
+    label: str,
+    artifact: dict[str, Any],
+    *,
+    source_trace_name: str = SELECTION_TRACE_NAME,
+    eval_trace_name: str = EVAL_TRACE_NAME,
+) -> dict[str, Any]:
+    selection_trace = trace(artifact, source_trace_name)
+    eval_trace = trace(artifact, eval_trace_name)
     selection_targets = teacher_segment_targets(selection_trace)
     eval_targets = teacher_segment_targets(eval_trace)
     selection_alignment = _split_feature_alignment(selection_trace)
@@ -437,9 +443,22 @@ def _decision(summary: dict[str, Any]) -> str:
 
 def build_selection_eval_segment_teacher_transfer_diagnostic(
     artifacts: list[tuple[str, dict[str, Any]]],
+    *,
+    source_trace_name: str = SELECTION_TRACE_NAME,
+    eval_trace_name: str = EVAL_TRACE_NAME,
 ) -> dict[str, Any]:
     """Build a derived diagnostic for selection-to-eval segment teacher transfer."""
-    summaries = [_artifact_summary(label, artifact) for label, artifact in artifacts]
+    summaries = [
+        _artifact_summary(
+            label,
+            artifact,
+            source_trace_name=source_trace_name,
+            eval_trace_name=eval_trace_name,
+        )
+        for label, artifact in artifacts
+    ]
+    for summary in summaries:
+        summary["decision"] = _decision(summary)
     primary = summaries[-1] if summaries else {}
     return {
         "schema_version": 1,
@@ -452,10 +471,11 @@ def build_selection_eval_segment_teacher_transfer_diagnostic(
         "summary": {
             "primary_label": primary.get("label"),
             "selection_layout": (
-                f"{SELECTOR_TRACE_PATH}.{SELECTION_TRACE_NAME}.{MARGINAL_ALIGNMENT_KEY}"
+                f"{SELECTOR_TRACE_PATH}.{source_trace_name}.{MARGINAL_ALIGNMENT_KEY}"
             ),
-            "eval_layout": f"{SELECTOR_TRACE_PATH}.{EVAL_TRACE_NAME}.{MARGINAL_ALIGNMENT_KEY}",
-            "decision": _decision(primary),
+            "eval_layout": f"{SELECTOR_TRACE_PATH}.{eval_trace_name}.{MARGINAL_ALIGNMENT_KEY}",
+            "decision": primary.get("decision"),
+            "decision_scope": "primary_artifact_last_input",
             "interpretation": (
                 "Derived diagnosis only. Treats non-teacher segments as zero target to "
                 "test whether sparse selection-side segment marginals transfer to eval "
@@ -491,6 +511,18 @@ def main(argv: list[str] | None = None) -> int:
         required=True,
         help="Artifact path, optionally label=path. The last artifact is primary.",
     )
+    parser.add_argument(
+        "--source_trace_name",
+        default=SELECTION_TRACE_NAME,
+        choices=["train_primary", "selection_primary"],
+        help="Selector trace to treat as the train/checkpoint-side teacher source.",
+    )
+    parser.add_argument(
+        "--eval_trace_name",
+        default=EVAL_TRACE_NAME,
+        choices=[EVAL_TRACE_NAME],
+        help="Selector trace to treat as eval-side transfer target.",
+    )
     parser.add_argument("--output", required=True, help="Output JSON path.")
     args = parser.parse_args(argv)
 
@@ -498,7 +530,11 @@ def main(argv: list[str] | None = None) -> int:
         (label, _load_json(path))
         for label, path in (_parse_labeled_artifact(value) for value in args.artifact)
     ]
-    diagnostic = build_selection_eval_segment_teacher_transfer_diagnostic(artifacts)
+    diagnostic = build_selection_eval_segment_teacher_transfer_diagnostic(
+        artifacts,
+        source_trace_name=str(args.source_trace_name),
+        eval_trace_name=str(args.eval_trace_name),
+    )
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("w", encoding="utf-8") as handle:

@@ -11,7 +11,7 @@ from learning.model_features import (
     HISTORICAL_PRIOR_MODEL_TYPES,
     NONPARAMETRIC_HISTORICAL_PRIOR_MODEL_TYPES,
     SUPPORTED_MODEL_TYPES,
-    WORKLOAD_BLIND_RANGE_V2_MODEL_TYPE,
+    WORKLOAD_BLIND_RANGE_MODEL_TYPE,
     is_workload_blind_model_type,
 )
 from models.historical_prior_qds_model import (
@@ -19,8 +19,11 @@ from models.historical_prior_qds_model import (
     HistoricalPriorStudentRangeQDSModel,
 )
 from models.trajectory_qds_model import TrajectoryQDSModel
-from models.workload_blind_qds_model import SegmentContextRangeQDSModel, WorkloadBlindRangeQDSModel
-from models.workload_blind_range_v2 import WorkloadBlindRangeV2Model
+from models.workload_blind_qds_model import (
+    ScalarWorkloadBlindRangeQDSModel,
+    SegmentContextRangeQDSModel,
+)
+from models.workload_blind_range import WorkloadBlindRangeModel
 
 HistoricalPriorModel = HistoricalPriorRangeQDSModel | HistoricalPriorStudentRangeQDSModel
 
@@ -43,10 +46,10 @@ def qds_model_class(model_type: str) -> type[torch.nn.Module]:
         return HistoricalPriorStudentRangeQDSModel
     if normalized == "segment_context_range":
         return SegmentContextRangeQDSModel
-    if normalized == WORKLOAD_BLIND_RANGE_V2_MODEL_TYPE:
-        return WorkloadBlindRangeV2Model
+    if normalized == WORKLOAD_BLIND_RANGE_MODEL_TYPE:
+        return WorkloadBlindRangeModel
     if is_workload_blind_model_type(normalized):
-        return WorkloadBlindRangeQDSModel
+        return ScalarWorkloadBlindRangeQDSModel
     return TrajectoryQDSModel
 
 

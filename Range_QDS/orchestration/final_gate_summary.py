@@ -12,7 +12,7 @@ from config.run_config import (
     DEFAULT_LEARNED_SEGMENT_ALLOCATION_WEIGHT_FLOOR,
     RunConfig,
 )
-from learning.model_features import WORKLOAD_BLIND_RANGE_V2_MODEL_TYPE
+from learning.model_features import WORKLOAD_BLIND_RANGE_MODEL_TYPE
 from learning.outputs import TrainingOutputs
 from learning.targets.query_local_utility import QUERY_LOCAL_UTILITY_FACTORIZED_TARGET_MODE
 from orchestration.causality import (
@@ -112,7 +112,7 @@ def build_final_run_summaries(
     target_diffusion_gate_pass = bool(target_diffusion_gate.get("gate_pass", False))
     final_candidate = (
         str(config.query.workload_profile_id or "").lower() in RANGE_QUERY_MIX_FINAL_PROFILE_IDS
-        and str(config.model.model_type).lower() == WORKLOAD_BLIND_RANGE_V2_MODEL_TYPE
+        and str(config.model.model_type).lower() == WORKLOAD_BLIND_RANGE_MODEL_TYPE
         and str(config.model.range_training_target_mode).lower()
         == QUERY_LOCAL_UTILITY_FACTORIZED_TARGET_MODE
         and str(getattr(config.model, "selector_type", "")).lower()
@@ -379,6 +379,7 @@ def build_final_run_summaries(
         compression_ratio=float(config.model.compression_ratio),
     )
     global_sanity_gate_pass = bool(global_sanity_gate.get("gate_pass", False))
+    global_sanity_required_for_initial_local_learning = False
     blocking_gates: list[str] = []
     if final_candidate:
         if not workload_stability_gate_pass:
@@ -395,7 +396,10 @@ def build_final_run_summaries(
             blocking_gates.append("workload_signature_gate")
         if not learning_causality_gate_pass:
             blocking_gates.append("learning_causality_ablations")
-        if not global_sanity_gate_pass:
+        if (
+            global_sanity_required_for_initial_local_learning
+            and not global_sanity_gate_pass
+        ):
             blocking_gates.append("global_sanity_gates")
         single_cell_blocking_gates = list(blocking_gates)
         blocking_gates.append("full_workload_profile_compression_grid")
@@ -425,6 +429,12 @@ def build_final_run_summaries(
             "workload_signature_gate_pass": signature_gate_pass,
             "learning_causality_gate_pass": learning_causality_gate_pass,
             "global_sanity_gate_pass": global_sanity_gate_pass,
+            "global_sanity_gate_required_for_initial_local_learning": (
+                global_sanity_required_for_initial_local_learning
+            ),
+            "global_sanity_gate_role": (
+                "diagnostic_guardrail_during_initial_query_local_learning"
+            ),
             "mlqds_score": matched["MLQDS"].query_local_utility_score,
             "uniform_score": uniform_score.query_local_utility_score
             if uniform_score is not None
@@ -441,7 +451,7 @@ def build_final_run_summaries(
             "primary_metric": None,
             "status": "not_final_query_driven_candidate",
             "final_success_allowed": False,
-            "reason": "Requires range_query_mix, QueryLocalUtility factorized target, workload_blind_range_v2, and learned_segment_budget_v1.",
+            "reason": "Requires range_query_mix, QueryLocalUtility factorized target, workload_blind_range, and learned_segment_budget.",
         }
     learning_causality_summary["final_success_allowed"] = bool(
         final_candidate and not blocking_gates

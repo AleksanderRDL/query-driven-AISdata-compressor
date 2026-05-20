@@ -40,7 +40,7 @@ The current candidate path is workload-blind at compression time:
 1. Generate train-only `range_query_mix` workloads.
 2. Build factorized `QueryLocalUtility` labels.
 3. Build train-derived query-prior fields.
-4. Train `workload_blind_range_v2` from query-free point/context/prior features.
+4. Train `workload_blind_range` from query-free point/context/prior features.
 5. Select checkpoints without final eval-query scoring.
 6. Freeze retained masks before held-out eval queries are scored.
 
@@ -52,18 +52,18 @@ The acceptance contract is in
 | Setting | Active value |
 | --- | --- |
 | `workload_profile_id` | `range_query_mix` |
-| `model_type` | `workload_blind_range_v2` |
+| `model_type` | `workload_blind_range` |
 | `range_training_target_mode` | `query_local_utility_factorized` |
-| `selector_type` | `learned_segment_budget_v1` |
+| `selector_type` | `learned_segment_budget` |
 | `checkpoint_score_variant` | `query_local_utility` |
 | `checkpoint_selection_metric` | `uniform_gap` |
 
 These settings are necessary but not sufficient. Final claims still require the
 guide's single-cell and final-grid gates.
 
-The active supervision stack is calibrated to `QueryLocalUtility` schema `5`:
-direct `query_point_recall` carries `0.50`, query-local interpolation/turn/
-continuity carries `0.45`, and global sanity guardrails carry `0.05`. The
+The active supervision stack is calibrated to `QueryLocalUtility`: direct
+`query_point_recall` carries `0.50`, query-local interpolation/turn/continuity
+carries `0.45`, and global sanity guardrails carry `0.05`. The
 matching workload prior is the two-footprint `range_query_mix` profile:
 `density=0.80`, `sparse_background_control=0.20`,
 `medium_operational=0.6923076923076923`, and
@@ -74,6 +74,18 @@ matching workload prior is the two-footprint `range_query_mix` profile:
 `query_local_utility_factorized` is the active target family. It keeps query-hit,
 behavior, replacement, segment-budget, and prior-related signals separate
 instead of collapsing them into one RangeUseful scalar.
+
+The active replacement target keeps the top `0.35` of each contiguous
+query-hit run as representative support. This keeps
+`replacement_representative_value` sparse enough to act as a non-redundancy
+head instead of a broad in-query mask. The active behavior target is
+`query_segment_local_behavior_utility`: it keeps behavior supervision masked to
+query-hit points and multiplies local behavior-change points by segment behavior
+support and segment query-hit support. It should not add broad positive credit
+to every query-hit point. The active segment-budget target uses a
+top-20% pooled QueryLocalUtility value per segment, matching the allocation
+summary used by `learned_segment_budget`. Treat causal control from this
+head as a live diagnostic, not as proven final behavior.
 
 Scalar `range_training_target_mode` values and teacher-distillation modes remain
 for diagnostics and regression. They are registered in `targets/modes.py` or
@@ -98,7 +110,7 @@ when the checkpoint hypothesis explicitly needs that diagnostic path.
 diagnostic or teacher-only paths. Final blind candidates must score without
 future eval query features.
 
-`workload_blind_range_v2` is the active trainable QueryLocalUtility candidate.
+`workload_blind_range` is the active trainable QueryLocalUtility candidate.
 Other workload-blind and historical-prior feature families remain diagnostic or
 compatibility paths; they must beat or explain their non-learned controls before
 claiming learned value.

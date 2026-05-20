@@ -18,22 +18,25 @@ from models.historical_prior_qds_model import (
     HistoricalPriorStudentRangeQDSModel,
 )
 from models.trajectory_qds_model import TrajectoryQDSModel
-from models.workload_blind_qds_model import SegmentContextRangeQDSModel, WorkloadBlindRangeQDSModel
-from models.workload_blind_range_v2 import WorkloadBlindRangeV2Model
+from models.workload_blind_qds_model import (
+    ScalarWorkloadBlindRangeQDSModel,
+    SegmentContextRangeQDSModel,
+)
+from models.workload_blind_range import WorkloadBlindRangeModel
 
 
 def test_build_qds_model_maps_every_supported_model_type_to_expected_class() -> None:
     expected_classes = {
         "baseline": TrajectoryQDSModel,
         "range_aware": TrajectoryQDSModel,
-        "workload_blind_range": WorkloadBlindRangeQDSModel,
-        "range_prior": WorkloadBlindRangeQDSModel,
-        "range_prior_clock_density": WorkloadBlindRangeQDSModel,
+        "scalar_workload_blind_range": ScalarWorkloadBlindRangeQDSModel,
+        "range_prior": ScalarWorkloadBlindRangeQDSModel,
+        "range_prior_clock_density": ScalarWorkloadBlindRangeQDSModel,
         "segment_context_range": SegmentContextRangeQDSModel,
         "historical_prior": HistoricalPriorRangeQDSModel,
         "historical_prior_mmsi": HistoricalPriorRangeQDSModel,
         "historical_prior_student": HistoricalPriorStudentRangeQDSModel,
-        "workload_blind_range_v2": WorkloadBlindRangeV2Model,
+        "workload_blind_range": WorkloadBlindRangeModel,
     }
     assert set(expected_classes) == set(SUPPORTED_MODEL_TYPES)
 

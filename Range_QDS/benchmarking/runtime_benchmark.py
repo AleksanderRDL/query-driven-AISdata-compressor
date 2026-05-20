@@ -26,7 +26,7 @@ import torch
 
 from benchmarking.profiles import (
     PROFILE_CHOICES,
-    RANGE_QUERY_MIX_WORKLOAD_BLIND_V2_PROFILE,
+    RANGE_QUERY_MIX_WORKLOAD_BLIND_PROFILE,
     benchmark_profile,
     benchmark_profile_args,
 )
@@ -494,7 +494,7 @@ def _run_child_step(
 
 def _build_parser() -> argparse.ArgumentParser:
     """Build benchmark CLI parser."""
-    default_profile = benchmark_profile(RANGE_QUERY_MIX_WORKLOAD_BLIND_V2_PROFILE)
+    default_profile = benchmark_profile(RANGE_QUERY_MIX_WORKLOAD_BLIND_PROFILE)
     parser = argparse.ArgumentParser(
         description="Run stable AIS-QDS runtime benchmarks and write a JSON artifact.",
     )
@@ -507,7 +507,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--profile",
         choices=PROFILE_CHOICES,
-        default=RANGE_QUERY_MIX_WORKLOAD_BLIND_V2_PROFILE,
+        default=RANGE_QUERY_MIX_WORKLOAD_BLIND_PROFILE,
         help="Training profile for runtime benchmarking. Training modes require CSV data in --train_extra_args.",
     )
     parser.add_argument(

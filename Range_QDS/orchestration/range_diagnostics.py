@@ -419,6 +419,7 @@ def _workload_signature_gate_for_pair(
         "anchor_family_l1_distance_max": 0.12,
         "footprint_family_l1_distance_max": 0.12,
         "point_hit_distribution_ks_max": 0.20,
+        "point_hit_fraction_distribution_ks_max": 0.20,
         "ship_hit_distribution_ks_max": 0.20,
         "near_duplicate_rate_max": 0.05,
         "broad_query_rate_max": 0.05,
@@ -537,6 +538,12 @@ def _workload_signature_gate_for_pair(
         "ship_hit_distribution_ks": ship_hit_ks if ship_hit_ks is not None else ship_hit_proxy,
         "point_hit_fraction_distribution_ks": point_hit_fraction_ks,
         "ship_hit_fraction_distribution_ks": ship_hit_fraction_ks,
+        "point_hit_distribution_gate_metric": (
+            "point_hit_fraction_distribution_ks"
+            if calibrated_count_signature and point_hit_fraction_ks is not None
+            else "point_hit_distribution_ks"
+        ),
+        "ship_hit_distribution_enforced": not calibrated_count_signature,
         "point_hit_distribution_used_quantile_proxy": point_hit_ks is None,
         "ship_hit_distribution_used_quantile_proxy": ship_hit_ks is None,
         "query_count_delta": query_count_delta,
@@ -571,6 +578,8 @@ def _workload_signature_gate_for_pair(
         ),
     }
 
+    point_hit_check_name = str(metrics["point_hit_distribution_gate_metric"])
+    point_hit_check_value = metrics.get(point_hit_check_name)
     checks = {
         "anchor_family_l1_distance": (
             metrics["anchor_family_l1_distance"],
@@ -580,13 +589,13 @@ def _workload_signature_gate_for_pair(
             metrics["footprint_family_l1_distance"],
             thresholds["footprint_family_l1_distance_max"],
         ),
-        "point_hit_distribution_ks": (
-            metrics["point_hit_distribution_ks"],
-            thresholds["point_hit_distribution_ks_max"],
-        ),
-        "ship_hit_distribution_ks": (
-            metrics["ship_hit_distribution_ks"],
-            thresholds["ship_hit_distribution_ks_max"],
+        point_hit_check_name: (
+            point_hit_check_value,
+            thresholds[
+                "point_hit_fraction_distribution_ks_max"
+                if point_hit_check_name == "point_hit_fraction_distribution_ks"
+                else "point_hit_distribution_ks_max"
+            ],
         ),
         "near_duplicate_rate_max_observed": (
             metrics["near_duplicate_rate_max_observed"],
@@ -597,6 +606,11 @@ def _workload_signature_gate_for_pair(
             thresholds["broad_query_rate_max"],
         ),
     }
+    if bool(metrics["ship_hit_distribution_enforced"]):
+        checks["ship_hit_distribution_ks"] = (
+            metrics["ship_hit_distribution_ks"],
+            thresholds["ship_hit_distribution_ks_max"],
+        )
     failed = (
         [
             name
@@ -618,8 +632,10 @@ def _workload_signature_gate_for_pair(
         "eval_query_count": eval_query_count,
         "min_signature_query_count": min_signature_query_count,
         "distribution_metric_note": (
-            "Point/ship hit distribution checks use persisted per-query hit-count KS distance when available; "
-            "older signatures fall back to p10/p50/p90 quantile-distance proxies."
+            "Coverage-calibrated profile_sampled signatures enforce normalized point-hit-fraction "
+            "KS because split sizes differ; raw point-hit counts and ship-hit distributions are "
+            "reported as diagnostics. Fixed-count or legacy signatures enforce raw hit-count KS "
+            "and fall back to p10/p50/p90 quantile-distance proxies when per-query lists are missing."
         ),
         "query_count_metric_note": (
             "Fixed-count or legacy signatures enforce relative query-count parity. "

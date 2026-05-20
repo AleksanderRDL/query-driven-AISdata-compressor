@@ -204,6 +204,9 @@ def main() -> None:
         query_local_utility_behavior_rank_loss_weight=args.query_local_utility_behavior_rank_loss_weight,
         query_local_utility_sparse_head_rank_loss_weight=args.query_local_utility_sparse_head_rank_loss_weight,
         query_local_utility_sparse_head_bce_target_mode=args.query_local_utility_sparse_head_bce_target_mode,
+        query_local_utility_train_marginal_diagnostics=(
+            args.query_local_utility_train_marginal_diagnostics
+        ),
         temporal_distribution_loss_weight=args.temporal_distribution_loss_weight,
         gradient_clip_norm=args.gradient_clip_norm,
         compression_ratio=args.compression_ratio,
@@ -322,6 +325,7 @@ def main() -> None:
         f"query_local_utility_behavior_rank_loss_weight={args.query_local_utility_behavior_rank_loss_weight}  "
         f"query_local_utility_sparse_head_rank_loss_weight={args.query_local_utility_sparse_head_rank_loss_weight}  "
         f"query_local_utility_sparse_head_bce_target_mode={args.query_local_utility_sparse_head_bce_target_mode}  "
+        f"query_local_utility_train_marginal_diagnostics={args.query_local_utility_train_marginal_diagnostics}  "
         f"temporal_distribution_loss_weight={args.temporal_distribution_loss_weight}  "
         f"gradient_clip_norm={args.gradient_clip_norm}  "
         f"train_batch_size={args.train_batch_size}  "
@@ -589,6 +593,14 @@ def main() -> None:
             seed=config.data.seed,
             route_families=config.data.synthetic_route_families,
         )
+        if int(config.data.synthetic_route_families) > 0:
+            route_family_count = min(
+                int(config.data.synthetic_route_families),
+                len(trajectories),
+            )
+            train_source_ids = [
+                trajectory_idx % route_family_count for trajectory_idx in range(len(trajectories))
+            ]
     if eval_trajectories is None:
         print(
             f"[load-data] {len(trajectories)} trajectories loaded in {time.perf_counter() - t0:.2f}s",

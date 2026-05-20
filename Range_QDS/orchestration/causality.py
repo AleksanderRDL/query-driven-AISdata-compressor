@@ -8,8 +8,8 @@ from typing import Any
 import torch
 
 from learning.model_features import (
-    WORKLOAD_BLIND_RANGE_V2_MODEL_DISABLED_PRIOR_FIELDS,
-    WORKLOAD_BLIND_RANGE_V2_MODEL_PRIOR_TRANSFORM,
+    WORKLOAD_BLIND_RANGE_MODEL_DISABLED_PRIOR_FIELDS,
+    WORKLOAD_BLIND_RANGE_MODEL_PRIOR_TRANSFORM,
     build_query_free_point_features_for_dim,
 )
 from learning.outputs import TrainingOutputs
@@ -912,8 +912,8 @@ def model_prior_feature_sensitivity(
         ),
         "point_dim": point_dim_int,
         "prior_feature_count": prior_dim,
-        "disabled_prior_fields": list(WORKLOAD_BLIND_RANGE_V2_MODEL_DISABLED_PRIOR_FIELDS),
-        "model_prior_feature_transform": WORKLOAD_BLIND_RANGE_V2_MODEL_PRIOR_TRANSFORM,
+        "disabled_prior_fields": list(WORKLOAD_BLIND_RANGE_MODEL_DISABLED_PRIOR_FIELDS),
+        "model_prior_feature_transform": WORKLOAD_BLIND_RANGE_MODEL_PRIOR_TRANSFORM,
         "model_input_prior_features": model_prior_features,
         "normalized_model_prior_features": normalized_prior_features,
         "scaler_prior_feature_ranges": scaler_prior_ranges,

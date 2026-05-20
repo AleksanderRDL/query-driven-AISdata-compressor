@@ -1213,7 +1213,7 @@ def test_range_usefulness_weight_summary_groups_current_schema() -> None:
     assert group_weights["route_fidelity"] == pytest.approx(0.13)
 
 
-def test_query_local_utility_schema5_uses_direct_query_local_components() -> None:
+def test_query_local_utility_uses_direct_query_local_components() -> None:
     removed_components = {
         "ship_balanced_query_point_recall",
         "ship_f1",

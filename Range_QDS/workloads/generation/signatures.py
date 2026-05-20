@@ -19,6 +19,26 @@ def _counts_from_metadata(typed_queries: list[dict[str, Any]], key: str) -> dict
     return counts
 
 
+def _values_from_metadata(typed_queries: list[dict[str, Any]], key: str) -> list[str]:
+    """Return per-query metadata values in workload order."""
+    values: list[str] = []
+    for query in typed_queries:
+        metadata = query.get("_metadata") or {}
+        values.append(str(metadata.get(key, "unspecified")))
+    return values
+
+
+def _anchor_footprint_pairs_from_metadata(typed_queries: list[dict[str, Any]]) -> list[str]:
+    """Return per-query anchor/footprint pair labels in workload order."""
+    pairs: list[str] = []
+    for query in typed_queries:
+        metadata = query.get("_metadata") or {}
+        anchor_family = str(metadata.get("anchor_family", "unspecified"))
+        footprint_family = str(metadata.get("footprint_family", "unspecified"))
+        pairs.append(f"{anchor_family}|{footprint_family}")
+    return pairs
+
+
 def _range_workload_signature(
     *,
     points: torch.Tensor,
@@ -41,6 +61,7 @@ def _range_workload_signature(
     trajectory_hit_counts = [int(row["trajectory_hits"]) for row in query_rows]
     point_hit_fractions = [float(row["point_hit_fraction"]) for row in query_rows]
     trajectory_hit_fractions = [float(row["trajectory_hit_fraction"]) for row in query_rows]
+    anchor_footprint_pairs = _anchor_footprint_pairs_from_metadata(typed_queries)
     spatial_radii = []
     time_spans = []
     for query in typed_queries:
@@ -62,15 +83,12 @@ def _range_workload_signature(
         }
 
     profile_id = "legacy_generator"
-    profile_version: int | None = None
     target_coverage: float | None = None
     max_coverage_overshoot: float | None = None
     query_count_mode: str | None = None
     coverage_calibration_mode: str | None = None
     if profile_metadata is not None:
         profile_id = str(profile_metadata.get("profile_id", profile_id))
-        version_value = profile_metadata.get("version")
-        profile_version = int(version_value) if isinstance(version_value, (int, float)) else None
         target_value = profile_metadata.get("target_coverage")
         target_coverage = float(target_value) if isinstance(target_value, (int, float)) else None
         overshoot_value = profile_metadata.get("max_coverage_overshoot")
@@ -85,7 +103,6 @@ def _range_workload_signature(
         )
     return {
         "profile_id": profile_id,
-        "workload_profile_version": profile_version,
         "target_coverage": target_coverage,
         "max_coverage_overshoot": max_coverage_overshoot,
         "query_count_mode": query_count_mode,
@@ -96,6 +113,12 @@ def _range_workload_signature(
         "total_trajectories": len(boundaries),
         "anchor_family_counts": _counts_from_metadata(typed_queries, "anchor_family"),
         "footprint_family_counts": _counts_from_metadata(typed_queries, "footprint_family"),
+        "anchor_family_per_query": _values_from_metadata(typed_queries, "anchor_family"),
+        "footprint_family_per_query": _values_from_metadata(typed_queries, "footprint_family"),
+        "anchor_footprint_pair_counts": {
+            pair: anchor_footprint_pairs.count(pair) for pair in sorted(set(anchor_footprint_pairs))
+        },
+        "anchor_footprint_pair_per_query": anchor_footprint_pairs,
         "point_hits_per_query": {
             "p10": float(summary["point_hit_count_p10"]),
             "p50": float(summary["point_hit_count_p50"]),

@@ -6,11 +6,11 @@ of truth. Raw metrics and stdout belong in `artifacts/results/`.
 
 ## Current State - 2026-05-20
 
-Status: active, not complete.
+Status: active, not accepted.
 
 Current default stack:
 
-- primary metric: `QueryLocalUtility` schema `5`
+- primary metric: `QueryLocalUtility`
 - score groups: `query_point_mass=0.50`, `query_local_behavior=0.45`,
   `global_sanity=0.05`
 - score components: `query_point_recall=0.50`,
@@ -24,527 +24,353 @@ Current default stack:
 - active anchors: `density=0.80`, `sparse_background_control=0.20`
 - active footprints: `medium_operational=0.6923076923076923`,
   `large_context=0.3076923076923077`
+- footprint point-hit fraction bands: `medium_operational=[0.006,0.030]`,
+  `large_context=[0.010,0.045]`
 - target/model/selector: `query_local_utility_factorized`,
-  `workload_blind_range_v2`, `learned_segment_budget_v1`
+  `workload_blind_range`, `learned_segment_budget`
+- active behavior target:
+  `conditional_behavior_target_variant=query_segment_local_behavior_utility`,
+  `replacement_representative_keep_fraction=0.35`,
+  `segment_budget_target_aggregation=top20_mean`
 
 Evidence boundary:
 
-- No strict workload-health or learning-coherence rerun has been performed
-  under schema `5` and the two-footprint `range_query_mix` profile.
 - Final grid has not been run.
 - Final success remains `false`.
+- Global sanity is a reported guardrail during the current local-query-learning
+  phase, not the initial hard blocker.
+- Small smokes are implementation checks only. Training coherence requires the
+  guide's smaller strict evidence levels before any full grid.
+- Current strict evidence starts from the two-footprint `range_query_mix`
+  replay under current `QueryLocalUtility`; older strict-cell evidence is
+  diagnostic only and must not be compared as current-metric acceptance
+  evidence.
 
-Current pre-simplification strict-cell reference:
+Latest current-default strict replay:
 
 - artifact:
-  `artifacts/results/query_driven_v2_checkpoint85_segment_aggregation_current_best_strict_local/example_run.json`
-- MLQDS QueryLocalUtility: `0.1662115143`
-- uniform QueryLocalUtility: `0.1421296610`
-- Douglas-Peucker QueryLocalUtility: `0.1671038781`
+  `artifacts/results/query_driven_train_marginal_scale64_query40_level3_range_query_mix_seed2527/example_run.json`
+- scale: Level 3 source-stratified strict training replay, seed `2527`, 64
+  ships, 256 points, 40 requested queries, 5 epochs, train-side marginal
+  diagnostics enabled
+- MLQDS QueryLocalUtility: `0.1394788551`
+- uniform QueryLocalUtility: `0.1247681518`
+- Douglas-Peucker QueryLocalUtility: `0.1153266238`
 - passed: workload stability, support overlap, target diffusion, workload
-  signature, prior-predictive alignment, global sanity
-- failed: predictability, learning causality
+  signature, predictability, prior-predictive alignment, global sanity
+- failed: learning causality, final grid
+- failed causality children: `shuffled_prior_fields_should_lose`,
+  `without_query_prior_features_should_lose`,
+  `without_behavior_utility_head_should_lose`
+- material positive controls: shuffled score loses by `0.0218749319`,
+  untrained loses by `0.0242913109`, and no-segment-budget loses by
+  `0.0108408237`
+- non-causal query-field controls: shuffled-prior and no-query-prior deltas are
+  both `-0.0000086480` and change only 4 retained decisions
+- behavior-head control: no-behavior delta is `-0.0003343468`
+- segment allocation remains high-entropy and score-dominated:
+  normalized entropy `0.9869`, segment-score/allocation Spearman `0.8664`,
+  length-support/allocation Spearman `0.1639`,
+  segment-score/length-support Spearman `0.0472`, and top-20%
+  score/length-support overlap `0.2105`
+- train/eval segment-teacher transfer decision:
+  `diagnose_transfer_features_before_guarded_calibration_probe`; selection/eval
+  target Spearman is `-0.6151`, top-k overlap is zero through top `10%`, and
+  one selector feature is contradictory-sign
+- current active-metric behavior-head evidence is bad: overall exact-marginal
+  Spearman `0.0577`, retained-removal Spearman `-0.3817`, and no-behavior
+  ablation delta `-0.0003343468`, dominated by the primary model's deficit
+  versus no-behavior on `query_local_turn_change_coverage`
 
-Active blockers:
+Latest rejected diagnostics:
 
-- Predictability and learning causality are still unproven under the current
+- Head-contrast loss diagnostic:
+  `artifacts/results/query_driven_head_contrast_sparse025_behavior015_level3_scale64_query40_seed2527/example_run.json`
+  improved MLQDS only slightly to `0.1402280700`, still failed the same
+  learning-causality children, made query-prior ablations more wrong-way, and
+  did not fix feature flow.
+- Square-root prior-transform diagnostic:
+  `artifacts/results/query_driven_prior_sqrt_level3_scale64_query40_seed2527/example_run.json`
+  increased visible prior-feature differences but still failed directionality;
+  shuffled-prior, no-query-prior, and no-behavior deltas remained wrong-way.
+- Segment-aware behavior target wiring:
+  additive behavior composition failed target diffusion in a Level 1 smoke;
+  multiplicative composition passed the tiny wiring smoke and is the active
+  candidate for the next guide-compliant smaller strict level. The smoke is not
+  evidence of learning.
+
+Next admissible work:
+
+- Start from the guide's smaller strict evidence levels under current defaults
+  or an explicitly justified metric/profile variant.
+- Diagnose by gate before changing code: workload health, support overlap,
+  target diffusion, prior predictability, learning causality, then selector
+  allocation.
+- Do not run the final grid until the required smaller evidence levels pass.
+
+## Checkpoint Group 1 - Protocol, Baselines, And Current Defaults
+
+Status: completed / foundation.
+
+Covered prior checkpoints: 1-6.
+
+Scope:
+
+- Established the workload-blind protocol, leakage rules, acceptance evidence
+  levels, and final-claim gates.
+- Simplified the primary score into `QueryLocalUtility` with point mass,
+  query-local behavior, and light global sanity.
+- Simplified the active workload profile to `range_query_mix` with `density`
+  and `sparse_background_control` anchors plus `medium_operational` and
+  `large_context` footprints.
+- Removed old explicit ship-presence, boundary/event, `small_local`,
+  `density_route`, and route-corridor-style active defaults.
+
+Decision:
+
+- Current defaults are the starting point for new evidence.
+- Older `QueryUsefulV1`, `range_workload_v1`, old family names, and old scalar
+  range-audit components are historical or diagnostic only.
+- Global sanity should improve, but it is not an initial hard gate while local
+  query behavior and learning causality are being proven.
+
+## Checkpoint Group 2 - Codebase Layout And Maintained-Docs Foundation
+
+Status: completed / cleanup and structure.
+
+Covered prior checkpoints: 7.
+
+Scope:
+
+- Reorganized and documented the top-level package responsibilities in
+  `CODE_LAYOUT.md`.
+- Split large query-driven tests by owner and removed stale catch-all test
+  structure.
+- Moved derived artifact analyzers under `orchestration/diagnostics/`.
+- Updated package READMEs so the project can be understood top-down.
+
+Decision:
+
+- Keep production ownership boundaries narrow:
+  `workloads` owns generation/execution, `learning` owns targets and training,
+  `selection` owns query-free mask construction, `scoring` owns metrics, and
+  `benchmarking` owns final-grid/report policy.
+- Future refactors should extract pure helpers first and avoid compatibility
+  shims unless they are explicitly temporary.
+
+## Checkpoint Group 3 - Workload/Profile Calibration
+
+Status: completed / current-default workload health.
+
+Covered prior checkpoints: 8-13.
+
+Scope:
+
+- Rebased evidence around the current metric/profile pair instead of old
+  range-audit assumptions.
+- Diagnosed workload-signature failures as profile/query-count/split
+  compatibility problems.
+- Added deterministic profile family planning, stricter profile acceptance
+  bands, and point-hit targeted proposal calibration.
+- Fixed synthetic route-family splits so generator-only Level 3 probes pass
+  workload stability and workload signature at the `range_query_mix` 48-query
+  floor on seeds `2524` and `2525`.
+
+Decision:
+
+- `range_query_mix` is viable enough for strict diagnostics after calibration.
+- Generator-only success is not training coherence and not final success.
+- Profile/metric weights remain adjustable research choices, but changes need
+  gate-by-gate evidence that the workload/scoring pair is producing incoherent
+  or untrainable signal.
+
+## Checkpoint Group 4 - Strict Replay And Causality Localization
+
+Status: completed / blocker localization.
+
+Covered prior checkpoints: 14-18.
+
+Scope:
+
+- Ran the generator-fixed strict replay and localized the primary blocker to
+  learning causality rather than workload health alone.
+- Tested behavior-rank and allocation-floor diagnostics without changing active
   defaults.
-- Exact retained-decision marginal alignment remains a central selector/target
-  diagnostic. Current artifacts should read it from
+- Added behavior-head-as-segment allocation diagnostics.
+
+Key result:
+
+- MLQDS could beat uniform and Douglas-Peucker on current QueryLocalUtility in
+  strict replay, but learning causality still failed.
+- Query-prior and behavior-head ablations were weak, wrong-way, or immaterial.
+- Removing selector allocation floor increased score in one diagnostic but did
+  not create reliable learned control and did not pass causality.
+
+Decision:
+
+- Do not promote score gains that fail child causality gates.
+- Do not compensate for weak learning with selector tricks or temporal
+  scaffolding.
+
+## Checkpoint Group 5 - Selector Allocation And Length-Support Diagnostics
+
+Status: completed / selector diagnosis.
+
+Covered prior checkpoints: 19-23.
+
+Scope:
+
+- Isolated segment allocation behavior, length-support alignment, and learned
+  score dominance.
+- Tested guarded segment transfer calibration, route-density prior exposure,
+  and length-support allocation-weight probes.
+
+Key result:
+
+- Segment allocation remained high-entropy and score-dominated.
+- Length-support and segment-score signals were poorly aligned.
+- Non-default calibration or length-support probes did not justify a selector
+  default change under unchanged gates.
+
+Decision:
+
+- Selector allocation is a real blocker, but the stronger root issue is still
+  trainable query-local signal and transfer. Fixing allocation alone is not
+  enough.
+
+## Checkpoint Group 6 - Train-Marginal Transfer And Scale Diagnostics
+
+Status: completed / transfer diagnosis.
+
+Covered prior checkpoints: 24-28.
+
+Scope:
+
+- Added train-side marginal diagnostics and strict train-marginal replay.
+- Localized transfer failure across scale, query count, and split composition.
+- Confirmed the current 64/256/40 replay passes workload, support, target
+  diffusion, predictability, prior-predictive, and global-sanity gates while
+  still failing learning causality.
+
+Key result:
+
+- Train-side exact marginal teacher is non-leaky and shape-viable, but transfer
+  is unacceptable: selection/eval target Spearman `-0.6151` and top-k teacher
+  overlap is zero through top `10%`.
+
+Decision:
+
+- Current blocker is semantic directionality and train/eval transfer, not just
+  missing instrumentation.
+- Use retained-decision marginal alignment from
   `selector_trace_diagnostics.eval_primary.retained_decision_marginal_query_local_utility_alignment`,
   not from `learning_causality_summary.selection_causality_diagnostics`.
-- Historical `small_local`, `crossing_turn_change`, and old
-  `QueryUsefulV1` diagnostics are pre-simplification evidence. They are not
-  active workload requirements under the current profile.
 
-Next checkpoint:
+## Checkpoint Group 7 - Head/Prior/Behavior Target Diagnostics
 
-- Run the guide-required smaller strict evidence levels under schema `5` and
-  the two-footprint `range_query_mix` profile before any final-grid run.
+Status: completed / rejected diagnostic variants plus active target candidate.
 
-## Checkpoint Group 1 - Protocol, Workload, And Baseline Contract
+Covered prior checkpoints: 29-34.
 
-Status: completed / historical foundation.
+Scope:
 
-Goal:
-
-- Establish workload-blind range compression as the product contract.
-- Make workload generation, query-prior construction, retained-mask freezing,
-  scoring, and final gates auditable.
-
-Changes:
-
-- Added workload-blind protocol flags and final-gate checks.
-- Stabilized workload signatures and support-overlap diagnostics.
-- Added train-only query-prior fields and retained-mask freeze ordering.
-- Added retained-decision marginal diagnostics and selector trace payloads.
-
-Tests:
-
-- Historical implementation checkpoints ran focused `py_compile`, `ruff`,
-  `pyright`, and pytest suites at the time of each code change.
-- Detailed per-checkpoint command logs were intentionally removed from this
-  condensed progress file; raw evidence remains in artifacts and git history.
-
-Experiment artifact:
-
-- representative:
-  `artifacts/results/query_driven_v2_checkpoint61_selection_marginal_teacher_current_best_strict_local/example_run.json`
-- representative:
-  `artifacts/results/query_driven_v2_checkpoint65_selector_decision_surface_diagnosis/selector_decision_surface_diagnosis.json`
+- Tested sparse-head rank/BCE contrast, model-facing prior transforms, current
+  focus family/head transfer, active-metric alignment cleanup, behavior-head
+  semantic alignment, and segment-aware behavior target wiring.
 
 Key results:
 
-- Workload/profile gates can pass at the workload-healthy strict cell.
-- Direct selection-side exact-marginal teacher and simple hybrid teacher
-  selectors were guarded but did not beat the primary learned selector at
-  strict scale.
-- Selector score and segment allocation can move masks without ranking exact
-  retained-decision marginal value correctly.
+- Head-contrast and square-root prior-transform variants were rejected. They
+  improved some surface metrics but did not fix causality or retained-mask
+  directionality.
+- Family/head transfer diagnostics now read active focus families from the
+  artifact and surface active-metric exact-marginal alignment.
+- Behavior-head semantic alignment showed the target was most aligned with
+  replacement representative value, weakly aligned with segment budget, and
+  still harmful under the no-behavior ablation.
+- Multiplicative segment-aware behavior target passed Level 1 wiring; additive
+  composition failed target diffusion.
 
 Decision:
 
-- Keep the workload-blind protocol and selector-trace diagnostics.
-- Do not promote direct exact-marginal teacher or hybrid teacher selectors from
-  the old strict artifacts.
+- Keep the multiplicative segment-aware behavior target as the active candidate
+  for the next smaller strict evidence level.
+- Do not claim learning from Level 1 wiring.
 
-## Checkpoint Group 2 - Prior, Head, And Selector Materiality Diagnostics
+## Checkpoint Group 8 - Repository Hygiene, Canonicalization, And Stale-Code Cleanup
 
-Status: completed / rejected variants.
+Status: completed / cleanup.
 
-Goal:
+Covered prior checkpoints: 35-38.
 
-- Diagnose why learned workload-derived signal was not material enough in the
-  retained masks.
+Scope:
 
-Changes:
-
-- Tested prior scaling, dense-head rank pressure, behavior-rank pressure,
-  score/selector formula variants, query-free teacher guards, and
-  retained-marginal teacher consumers.
-- Added diagnostics that separate raw score, selector score, segment score,
-  segment rank, and exact marginal value.
-
-Tests:
-
-- Historical code checkpoints ran focused static checks and unit/regression
-  tests when each diagnostic surface was added.
-
-Experiment artifact:
-
-- representative:
-  `artifacts/results/query_driven_v2_checkpoint72_checkpoint_teacher_hybrid_current_best_strict_local/example_run.json`
-- representative:
-  `artifacts/results/query_driven_v2_checkpoint99_segment_transfer_calibration_zblend_current_best_strict_local/example_run.json`
+- Pruned stale artifacts and caches.
+- Canonicalized current names:
+  `workload_blind_range`, `learned_segment_budget`,
+  `range_query_mix_workload_blind`, `query_driven_workload_blind`.
+- Renamed the old scalar scorer to `scalar_workload_blind_range`.
+- Updated maintained docs to stop presenting chronological names or old family
+  names as active defaults.
+- Removed obsolete code paths tied to old `small_local` / ship-evidence proxy
+  derived diagnostics.
+- Removed chronological workload-profile `version` /
+  `workload_profile_version` payload fields from current workload profile
+  artifacts.
 
 Key results:
 
-- Better factorized-head fit was not enough. Several variants improved local
-  target/head diagnostics while reducing retained-mask quality or causality.
-- Exact retained-marginal information was available but did not transfer into
-  a safe production selector through direct or hybrid consumers.
-- Checkpoint99 slightly improved over some rejected paths but remained below
-  the strongest pre-simplification strict reference and still failed causality
-  children.
+- Removed `274` stale result directories and disposable cache/manual output.
+- Retained `26` result directories tied to current evidence or useful negative
+  lessons.
+- Current code no longer uses old chronological active model, selector, class,
+  or metric-schema names.
+- Removed two obsolete query-ship derived analyzers tied to the old
+  `small_local` / ship-evidence proxy path.
+- Renamed `range_v2_prior_feature_scaling` to
+  `workload_blind_range_prior_feature_scaling`.
 
 Decision:
 
-- Do not revive old scalar proxy losses, broad local-head targets, or selector
-  blend tuning without a sharper marginal-alignment hypothesis.
-
-## Checkpoint Group 3 - Workload And Scoring Compatibility Diagnosis
-
-Status: completed / diagnostic.
-
-Goal:
-
-- Determine whether the workload profile and scoring components produced a
-  trainable query-local signal.
-
-Changes:
-
-- Added workload/component compatibility diagnostics.
-- Added post-hoc recalibration probes and blocker-preserving recalibration
-  checks.
-- Added family-conditioned target/head trainability diagnostics.
-
-Tests:
-
-- Historical diagnostic checkpoints ran focused validation when instrumentation
-  changed.
-
-Experiment artifact:
-
-- `artifacts/results/query_driven_v2_checkpoint80_workload_component_compatibility_diagnosis/workload_component_compatibility_diagnosis.json`
-- `artifacts/results/query_driven_v2_checkpoint82_blocker_preserving_recalibration_diagnosis/workload_component_blocker_preserving_recalibration_diagnosis.json`
-- `artifacts/results/query_driven_v2_checkpoint83_family_trainability_current_best_strict_local/example_run.json`
-
-Key results:
-
-- Pre-simplification blockers concentrated in `small_local`, `density`,
-  `crossing_turn_change`, and `medium_operational`.
-- Persistent negative components were dominated by ship/point-mass evidence and
-  related recall terms.
-- A query-local-sensible post-hoc recalibration could flip the
-  MLQDS-minus-Douglas-Peucker delta positive, but the gain came with high
-  masking risk because it downweighted or moved away from the same blockers.
-- Blocker-preserving recalibration stayed blocked.
-
-Decision:
-
-- Do not adopt post-hoc recalibration as acceptance evidence.
-- Fix the metric/profile contract directly, then rerun strict evidence.
-
-## Checkpoint Group 4 - Family-Local And Segment Target Diagnostics
-
-Status: completed / rejected or diagnostic variants.
-
-Goal:
-
-- Test whether family-local point/segment targets could make the signal
-  trainable without weakening gates.
-
-Changes:
-
-- Added family-local query-hit/ship, ship-gated behavior, composed score, and
-  segment-budget candidate diagnostics.
-- Added segment aggregation diagnostics and two-stage allocation/point-choice
-  views.
-- Tested guarded query-ship max-pool and query-ship local-head target variants.
-- Added family-prior predictability, selector marginal calibration, and
-  segment-transfer diagnostics.
-
-Tests:
-
-- Historical checkpoints ran focused static checks and unit tests for added
-  diagnostic payloads.
-
-Experiment artifact:
-
-- `artifacts/results/query_driven_v2_checkpoint85_segment_aggregation_current_best_strict_local/example_run.json`
-- `artifacts/results/query_driven_v2_checkpoint86_query_ship_max_pool_target_current_best_strict_local/example_run.json`
-- `artifacts/results/query_driven_v2_checkpoint93_family_prior_predictability_max_pool_current_best_strict_local/example_run.json`
-
-Key results:
-
-- Family-local point candidates recovered ship-query evidence strongly in the
-  old profile: `small_local` Spearman `0.9740`, `density` Spearman `0.9191`.
-- Segment aggregation diagnostics showed useful two-stage signals:
-  `small_local` best pair coverage `0.4000`, `density` best pair coverage
-  `0.6075`.
-- The guarded query-ship max-pool target slightly beat Douglas-Peucker on the
-  old metric reference (`0.1673482145` vs `0.1671038781`) but still failed
-  predictability and learning causality.
-- Broader query-ship local heads worsened target diffusion and retained-mask
-  quality.
-
-Decision:
-
-- Do not promote family-local or guarded segment target variants.
-- Preserve the diagnostics, but treat their evidence as pre-simplification.
-
-## Checkpoint Group 5 - Current Metric And Workload Defaults
-
-Status: completed / Level 0 implementation only.
-
-Goal:
-
-- Simplify the active metric and workload profile at the root instead of
-  layering more target or selector compensation on weak old signals.
-
-Changes:
-
-- Removed explicit ship-presence/coverage and boundary/event evidence groups
-  from the primary aggregate.
-- Rebalanced groups to point mass `0.50`, query-local behavior `0.45`, and
-  global sanity `0.05`.
-- Renamed the active metric to `QueryLocalUtility` and active keys to
-  `query_local_utility`; old `query_useful_v1` production aliases were not
-  retained.
-- Renamed the active workload profile to `range_query_mix`, renamed
-  `density_route` to `density`, and removed old anchor/footprint families from
-  the active profile.
-- Made schema `5` use direct `query_point_recall`, direct query-local
-  interpolation fidelity, turn coverage, and min-gap continuity. It stopped
-  sourcing point mass from `range_point_f1` and stopped using fallback behavior
-  components.
-- Removed `small_local` from active `range_query_mix` footprints and
-  renormalized to `medium_operational` plus `large_context`.
-
-Tests:
-
-- Current focused code validation for this default stack included
-  `py_compile`, `ruff`, `pyright`, workload/property/guardrail tests,
-  orchestration/scoring tests, benchmarking/report regression tests, and
-  learning/orchestration payload tests.
-
-Experiment artifact:
-
-- path: none
-- command: none
-
-Key results:
-
-- Current code defaults now match the stack in `Current State`.
-- This is implementation evidence only. No strict retraining,
-  workload-health, or learning-coherence rerun has been performed under
-  schema `5` and the two-footprint profile.
-
-Decision:
-
-- Use schema `5` and the two-footprint `range_query_mix` profile for all new
-  checkpoints.
-- Do not compare schema `5` scores against old schema scores as if they are the
-  same metric.
-
-## Checkpoint Group 6 - Documentation And Guide Cleanup
-
-Status: completed / docs only.
-
-Goal:
-
-- Make maintained docs point at the current implementation contract without
-  carrying stale legacy/changelog noise in the source-of-truth guide.
-
-Changes:
-
-- Documented current scoring and workload defaults across maintained docs.
-- Retitled the guide as an implementation/research guide, removed duplicated
-  checkpoint chronology from it, and moved history back to this progress log.
-- Condensed this progress log into logical checkpoint groups.
-- Updated stale links from removed legacy filenames to the current
-  `query-driven-implementation-*` docs.
-- Replaced the obsolete `Next-Iterations.md` chronology with a concise current
-  next-action plan.
-- Rewrote `keep-in-mind.md` as concise project guidance instead of raw notes.
-
-Tests:
-
-- `git diff --check`
-- Stale-guide and stale-default `rg` scans over maintained docs.
-- Broken old-doc-link `rg` scan for removed legacy filenames.
-
-Experiment artifact:
-
-- path: none
-- command: none
-
-Key results:
-
-- Documentation only. No strict retraining, workload-health, or
-  learning-coherence rerun was performed.
-- The progress log now summarizes old work by logical phase instead of
-  maintaining dozens of checkpoint entries.
-- Maintained docs no longer link to removed legacy filenames.
-
-Decision:
-
-- Keep this progress log compact. Add new entries only when they change the
-  current state, evidence boundary, accepted defaults, or next action.
-
-## Checkpoint Group 7 - Default Cleanup And Legacy Guardrails
-
-Status: completed / hygiene and tests.
-
-Goal:
-
-- Remove stale wording, misleading names, and stale test fixtures after the
-  schema `5` scoring/profile simplification while preserving useful historical
-  diagnostics and negative guardrails.
-
-Changes:
-
-- Replaced remaining redesign/legacy wording with current implementation and
-  acceptance wording.
-- Renamed ambiguous diagnostic focus constants and recalibration probe labels so
-  historical blocker families are not confused with active workload defaults.
-- Removed `small_local` from active target-trainability focus families; remaining
-  uses are explicitly historical diagnostics or test fixtures.
-- Clarified legacy/fixed-count/no-fallback test fixtures so they protect current
-  invariants instead of implying old defaults are active.
-- Kept historical diagnostic readers and report-compatibility checks only where
-  they protect artifact comparability, removed APIs, or final-claim separation.
-
-Tests:
-
-- `git diff --check`
-- `python3 -m py_compile`, `uv run --group dev -- ruff check`, and
-  `uv run --group dev -- pyright` on the then-current touched production and
-  test surfaces.
-- `uv run --group dev -- pytest` on the then-current query-driven
-  implementation, scoring, and guardrail test surfaces (`197 passed`).
-
-Experiment artifact:
-
-- path: none
-- command: none
-
-Key results:
-
-- Hygiene and tests only. No strict retraining, workload-health, or
-  learning-coherence rerun was performed.
-- Active diagnostic focus now matches the current workload defaults:
-  `density` and `medium_operational`.
-- Remaining legacy/test references are negative guardrails,
-  report-compatibility checks, or explicitly historical diagnostic fixtures.
-
-Decision:
-
-- Keep legacy paths only when they serve diagnostics, artifact comparability,
-  checkpoint loading, removed-API guardrails, or final-claim separation. Do not
-  present them as active defaults.
-
-## Checkpoint Group 8 - Code Layout, Test Split, And Diagnostic Package Structure
-
-Status: completed / architecture and package organization.
-
-Goal:
-
-- Improve top-down codebase reasoning by documenting structural pressure points,
-  splitting the oversized query-driven test surface, and moving completed-artifact
-  analyzers out of the flat orchestration stage namespace.
-
-Changes:
-
-- Updated `CODE_LAYOUT.md` with current package responsibilities, pressure
-  points, and a conservative refactor order.
-- Removed the old 6.3k-line catch-all query-driven orchestration test file and
-  redistributed its tests by owner across workload, learning, orchestration,
-  selection, and diagnostic test files.
-- Added `orchestration/diagnostics/` and moved completed-artifact analyzers into
-  that package: family transfer, query-ship local/max-pool transfer,
-  selection-eval teacher transfer, selection marginal/segment calibration,
-  selector marginal calibration, and workload-component compatibility.
-- Updated docs and imports so the split tests and diagnostic package are the
-  maintained structure.
-
-Tests:
-
-- Structure scans using `find`, `du`, `wc -l`, and targeted `rg` listings.
-- `python3 -m py_compile`, `uv run --group dev -- ruff check`, and
-  `uv run --group dev -- pyright` on the split query-driven tests and moved
-  diagnostic modules.
-- `uv run --group dev -- pytest --collect-only` on all split query-driven test
-  files (`123 tests collected`).
-- `uv run --group dev -- pytest` on all split query-driven test files
-  (`123 passed`) and focused diagnostic tests (`8 passed`).
-- `uv run --group dev -- python -m orchestration.diagnostics.<module> --help`
-  on representative moved diagnostic CLIs.
-- `git diff --check`
-
-Experiment artifact:
-
-- path: none
-- command: none
-
-Key results:
-
-- Structure and test organization only. No scientific gates, training, scoring,
-  or workload behavior changed.
-- Query-driven tests are now owner-scoped instead of concentrated in one
-  monolith.
-- Flat `orchestration/` now separates run-stage modules from completed-artifact
-  diagnostic analyzers.
-
-Decision:
-
-- Keep the split by owner. Do not recreate a catch-all query-driven
-  orchestration test file.
-- Add new one-off artifact analyzers under `orchestration/diagnostics/`; keep
-  pipeline stages, gates, and payload assembly in top-level `orchestration/`.
-
-## Checkpoint Group 9 - Target And Selector Helper Extraction
-
-Status: completed / production organization only.
-
-Goal:
-
-- Apply the production refactor recommendations from `CODE_LAYOUT.md` by
-  extracting pure helper modules from QueryLocalUtility target construction and
-  selector diagnostics while preserving public behavior and artifact fields.
-
-Changes:
-
-- Added `learning/targets/query_local_utility_segments.py` for segment-budget,
-  segment-pooling, ship-query fractional segment, and path-length support
-  helpers.
-- Added `learning/targets/query_local_utility_family.py` for family keys,
-  diagnostic focus families, family labels, and per-family range-query evidence.
-- Updated predictability and factorized-head diagnostics to import family
-  evidence from the new family module.
-- Added selector helper modules:
-  `orchestration/selector_trace_payloads.py`,
-  `orchestration/selector_marginal_alignment.py`, and
-  `orchestration/selector_teacher_vectors.py`.
-- Moved selector trace mask/state parsing, segment-context parsing,
-  retained-marginal alignment summaries, separated teacher target summaries,
-  and teacher score-vector builders out of `selector_diagnostics.py`.
-- Updated focused tests and selection-causality code to import helpers from
-  their new owners.
-- Updated `CODE_LAYOUT.md` after each extraction so the remaining pressure
-  points reflect the current codebase rather than completed splits.
-
-Tests:
-
-- `python3 -m py_compile`, `uv run --group dev -- ruff check`, and
-  `uv run --group dev -- pyright` on touched target, selector, causality,
-  predictability, and diagnostic modules.
-- Focused selector/causality/diagnostic test batches, including `34 passed`,
-  `42 passed`, and `62 passed` at the relevant extraction checkpoints.
-- `uv run --group dev -- pytest` on the split query-driven unit suite
-  (`123 passed`) after each production extraction.
-- `git diff --check`
-- Removed generated `__pycache__` directories after validation.
-
-Experiment artifact:
-
-- path: none
-- command: none
-
-Key results:
-
-- Production organization only. No scientific gates, training, scoring, or
-  workload behavior changed.
-- `query_local_utility.py` dropped from roughly 1.7k lines to roughly 1.4k
-  lines and no longer owns segment/path math or family-evidence construction.
-- `selector_diagnostics.py` dropped from roughly 1.9k lines to roughly 0.9k
-  lines and no longer owns trace payload parsing, retained-marginal summary
-  construction, or teacher score-vector construction.
-
-Decision:
-
-- The remaining `selector_diagnostics.py` surface is coherent enough for now:
-  score component vector construction, frozen-mask convenience wrappers, and
-  exact retained-mask marginal scoring.
-- Next production refactor should either extract QueryLocalUtility
-  candidate/trainability diagnostics behind focused tests or start guarded work
-  on `scoring/method_scoring.py` only after row/regression coverage protects
-  artifact fields.
-
-## Validation
-
-Latest focused validation is listed in the most recent checkpoint group above.
-Earlier broad docs validation before the organization-only refactors:
-
-- `git diff --check`
-- Stale-guide `rg` scan for legacy naming, old metric/profile names, old
-  schemas, and stale strict-reference prose. Remaining guide hits are
-  explicit historical exclusions or the `range_point_f1` no-fallback caveat.
-- Stale-default `rg` scan over maintained docs. Remaining hits are explicit
-  historical-name or legacy-diagnostic references.
-- Broken old-doc-link `rg` scan for removed legacy filenames.
-
-Earlier focused implementation validation before docs-only condensation:
-
-- `python3 -m py_compile` on active workload/profile, orchestration
-  compatibility, and focused orchestration test files.
-- `uv run --group dev -- ruff check` on active workload/profile,
-  compatibility, orchestration, and property-test surfaces.
-- `uv run --group dev -- pyright` on the same focused surfaces.
-- `uv run --group dev -- pytest` workload/profile/property/guardrail suites:
-  `42 passed`.
-- `uv run --group dev -- pytest` orchestration/scoring suites: `178 passed`.
-- `uv run --group dev -- pytest` benchmarking/report regression suites:
-  `40 passed`.
-- `uv run --group dev -- pytest` learning/orchestration payload suites:
-  `56 passed`.
+- Keep `schema_version` fields only as artifact/report compatibility metadata.
+- Do not keep old derived diagnostic modules just because progress history
+  references their results. The historical result can live in the progress log;
+  active code should not preserve misleading diagnostic surfaces.
+- Use semantic variation names for diagnostic paths, not chronological suffixes.
+
+## Validation Summary
+
+Latest focused validation:
+
+- `python3 -m py_compile` on touched source and test files after stale-code
+  cleanup.
+- `uv run --group dev -- ruff check` on touched source and test files after
+  stale-code cleanup.
+- `uv run --group dev -- pytest` on focused workload-profile, diagnostics,
+  guardrail, protocol-gate, and model-feature suites after stale-code cleanup:
+  `80 passed`.
+- `git diff --check` after stale-code cleanup.
+- Targeted non-doc stale-code scans after stale-code cleanup.
+
+Recent broader validation:
+
+- Focused canonical naming pytest set covering model factory/features,
+  QueryLocalUtility training, learned segment-budget selector,
+  protocol/causality gates, retained masks, learning target stage, benchmark
+  profile/report regressions, and scoring metrics: `259 passed`.
+- `python3 -m py_compile`, `ruff check`, and `pyright` on renamed
+  model/selector/benchmark implementation surfaces.
+- Maintained-doc stale-name/stale-phrasing scans found no active-doc hits
+  outside progress history and next-iteration guardrails.
+- Maintained artifact-reference scan found no missing retained result
+  directories.
+- Earlier focused suites:
+  - workload/profile/property/guardrail: `42 passed`
+  - orchestration/scoring: `178 passed`
+  - benchmarking/report regression: `40 passed`
+  - learning/orchestration payload: `56 passed`
+
+Validation caveat:
+
+- These validations prove implementation integrity and cleanup consistency.
+  They are not scientific evidence of training coherence or final success.

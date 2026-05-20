@@ -62,7 +62,7 @@ before held-out eval queries are scored. Treat a run as invalid if
 `workload_blind_protocol.audit_masks_frozen_before_eval_query_scoring` is
 false.
 
-QueryLocalUtility schema `5` is the active primary metric for the project. It
+`QueryLocalUtility` is the active primary metric for the project. It
 uses direct `query_point_recall` for point mass and direct query-local
 interpolation, turn coverage, and continuity for behavior. RangeUseful outputs
 must remain under `legacy_range_useful_summary` or diagnostic fields, not

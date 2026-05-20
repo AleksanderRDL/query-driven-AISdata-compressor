@@ -63,8 +63,8 @@ def _minimal_query_driven_run_json_fixture() -> dict[str, Any]:
         "config": {
             "data": {"validation_split_mode": "temporal"},
             "model": {
-                "model_type": "workload_blind_range_v2",
-                "selector_type": "learned_segment_budget_v1",
+                "model_type": "workload_blind_range",
+                "selector_type": "learned_segment_budget",
                 "compression_ratio": 0.05,
                 "checkpoint_score_variant": "query_local_utility",
             },

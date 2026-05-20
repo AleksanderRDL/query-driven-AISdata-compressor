@@ -55,6 +55,7 @@ QUERY_LOCAL_UTILITY_HEAD_NAMES = (
 QUERY_LOCAL_UTILITY_FINAL_LABEL_FORMULA = (
     "query_hit_times_behavior_with_conditional_replacement_modulation_plus_boundary"
 )
+QUERY_LOCAL_UTILITY_REPLACEMENT_KEEP_FRACTION = 0.35
 
 
 @dataclass
@@ -75,7 +76,7 @@ def query_local_utility_point_score(
     boundary: torch.Tensor,
     replacement: torch.Tensor,
 ) -> torch.Tensor:
-    """Return the scalar QueryLocalUtility point score used by labels and v2 logits."""
+    """Return the scalar QueryLocalUtility point score used by labels and model logits."""
     q_hit = q_hit.float().clamp(0.0, 1.0)
     behavior = behavior.float().clamp(0.0, 1.0)
     boundary = boundary.float().clamp(0.0, 1.0)
@@ -118,6 +119,41 @@ def _query_ship_local_behavior_signal(
         + 0.25 * normalized_behavior
         + 0.20 * normalized_replacement
         + 0.10 * normalized_boundary
+    ).clamp(0.0, 1.0)
+    return torch.where(valid, utility, torch.zeros_like(utility))
+
+
+def _query_segment_local_behavior_signal(
+    *,
+    behavior: torch.Tensor,
+    q_hit: torch.Tensor,
+    valid: torch.Tensor,
+    boundaries: list[tuple[int, int]],
+    segment_size: int,
+) -> torch.Tensor:
+    """Return behavior utility coupled to query-hit and segment support."""
+    valid = valid.to(dtype=torch.bool)
+    normalized_behavior = _normalize_0_1(behavior, valid)
+    segment_behavior = _segment_pooled_targets(
+        normalized_behavior * q_hit.float().clamp(0.0, 1.0),
+        boundaries,
+        segment_size,
+        pool="top20_mean",
+    )
+    segment_query = _segment_pooled_targets(
+        q_hit.float().clamp(0.0, 1.0),
+        boundaries,
+        segment_size,
+        pool="top20_mean",
+    )
+    segment_multiplier = (
+        0.45
+        + 0.35 * _normalize_0_1(segment_behavior, valid)
+        + 0.20 * _normalize_0_1(segment_query, valid)
+    ).clamp(0.0, 1.0)
+    utility = (
+        normalized_behavior
+        * segment_multiplier
     ).clamp(0.0, 1.0)
     return torch.where(valid, utility, torch.zeros_like(utility))
 
@@ -206,7 +242,7 @@ def _boundary_indices_for_query(
 def _query_replacement_support(
     query_value: torch.Tensor,
     boundaries: list[tuple[int, int]],
-    keep_fraction: float = 0.50,
+    keep_fraction: float = QUERY_LOCAL_UTILITY_REPLACEMENT_KEEP_FRACTION,
 ) -> torch.Tensor:
     """Return sparse query-local representative support for replacement-value labels."""
     support = torch.zeros_like(query_value, dtype=torch.bool)
@@ -1057,7 +1093,7 @@ def _segment_budget_point_value_for_target_mode(
         return final_score, {
             "segment_budget_target_base_source": "query_local_utility_final_score",
             "segment_budget_target_variant": "active_final_score",
-            "segment_budget_target_aggregation": "sum",
+            "segment_budget_target_aggregation": "top20_mean",
             "segment_budget_target_experimental": False,
             "final_success_allowed": True,
         }
@@ -1184,12 +1220,21 @@ def build_query_local_utility_targets(
     ).clamp(0.0, 1.0)
     ship_query_evidence = (ship_query_evidence_mass / query_count).clamp(0.0, 1.0)
     target_q_hit = q_hit
-    target_behavior = behavior
+    target_behavior = _query_segment_local_behavior_signal(
+        behavior=behavior,
+        q_hit=target_q_hit,
+        valid=hit_positive,
+        boundaries=boundaries,
+        segment_size=segment_size,
+    )
     head_variant_diagnostics: dict[str, Any] = {
         "query_hit_target_variant": "active_query_hit_probability",
         "query_hit_target_base_source": "range_query_point_hit_probability",
-        "conditional_behavior_target_variant": "active_local_behavior_change",
-        "conditional_behavior_target_base_source": "query_hit_conditioned_trajectory_change",
+        "conditional_behavior_target_variant": "query_segment_local_behavior_utility",
+        "conditional_behavior_target_base_source": (
+            "normalized_query_hit_conditioned_trajectory_change_times_"
+            "0.45_plus_0.35_segment_behavior_support_plus_0.20_segment_query_hit_support"
+        ),
         "final_label_variant": "active_query_local_utility_point_score",
     }
     if target_mode == QUERY_LOCAL_UTILITY_QUERY_SHIP_LOCAL_HEADS_TARGET_MODE:
@@ -1237,7 +1282,7 @@ def build_query_local_utility_targets(
         )
     )
     segment_budget_aggregation = str(
-        segment_budget_variant_diagnostics.get("segment_budget_target_aggregation", "sum")
+        segment_budget_variant_diagnostics.get("segment_budget_target_aggregation", "top20_mean")
     )
     if segment_budget_aggregation == "sum":
         segment_budget = _segment_budget_targets(
@@ -1251,6 +1296,13 @@ def build_query_local_utility_targets(
             boundaries,
             segment_size,
             pool="max",
+        )
+    elif segment_budget_aggregation == "top20_mean":
+        segment_budget = _segment_pooled_targets(
+            segment_budget_point_value,
+            boundaries,
+            segment_size,
+            pool="top20_mean",
         )
     else:
         raise ValueError(
@@ -1301,6 +1353,9 @@ def build_query_local_utility_targets(
             "behavior_change_highpass_quantile": 0.70,
             "conditional_behavior_utility_training": "masked_to_query_hit_points",
             "replacement_representative_value_normalization": "conditional_on_query_hit",
+            "replacement_representative_keep_fraction": (
+                QUERY_LOCAL_UTILITY_REPLACEMENT_KEEP_FRACTION
+            ),
             "replacement_value_is_true_counterfactual_marginal_gain": False,
             "final_label_formula": QUERY_LOCAL_UTILITY_FINAL_LABEL_FORMULA,
             "final_boundary_bonus_uses_squared_event_probability": True,

@@ -67,7 +67,7 @@ def _factorized_query_local_utility_loss(
     sparse_head_rank_loss_weight: float = 0.0,
     sparse_head_bce_target_mode: str = "raw",
 ) -> torch.Tensor:
-    """Return auxiliary multi-head QueryLocalUtility loss for v2 models."""
+    """Return auxiliary multi-head QueryLocalUtility loss for the range model."""
     if head_logits.shape != head_targets.shape or head_mask.shape != head_logits.shape:
         raise ValueError("factorized head logits, targets, and mask must have matching shape.")
     valid = head_mask.to(dtype=torch.bool)

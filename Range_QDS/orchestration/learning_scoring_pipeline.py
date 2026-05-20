@@ -291,7 +291,34 @@ def run_learning_scoring_pipeline(
         }
     selection_causality_payload: dict[str, Any] = {"available": False, "reason": "not_run"}
     selection_selector_trace: dict[str, Any] | None = None
+    train_marginal_causality_payload: dict[str, Any] = {
+        "available": False,
+        "reason": "disabled",
+    }
+    train_selector_trace: dict[str, Any] | None = None
     if workload_blind_eval:
+        if bool(
+            getattr(config.model, "query_local_utility_train_marginal_diagnostics", False)
+        ):
+            with _phase("train-marginal-causality-diagnostics"):
+                train_marginal_causality_payload = build_selection_causality_diagnostics(
+                    trained=trained,
+                    selection_points=train_points,
+                    selection_boundaries=train_boundaries,
+                    selection_workload=train_workload,
+                    eval_workload_map=train_workload_map,
+                    selection_query_cache=range_runtime_caches["train"].query_cache,
+                    config=config,
+                    seeds=seeds,
+                    diagnostic_split="train",
+                    selector_trace_layout_name="train_primary",
+                )
+                raw_train_trace = train_marginal_causality_payload.pop(
+                    "selection_selector_trace_diagnostics",
+                    None,
+                )
+                if isinstance(raw_train_trace, dict):
+                    train_selector_trace = raw_train_trace
         with _phase("selection-causality-diagnostics"):
             selection_causality_payload = build_selection_causality_diagnostics(
                 trained=trained,
@@ -500,6 +527,8 @@ def run_learning_scoring_pipeline(
         selector_budget_diagnostics=selector_budget_diagnostics,
         primary_selector_trace=primary_selector_trace,
         selection_selector_trace=selection_selector_trace,
+        train_selector_trace=train_selector_trace,
+        train_marginal_causality_diagnostics=train_marginal_causality_payload,
         segment_oracle_allocation_audit=segment_oracle_allocation_audit,
         target_segment_oracle_alignment_audit=target_segment_oracle_alignment_audit,
         matched=matched,

@@ -41,8 +41,8 @@ def test_gate_summary_regression(data_regression: Any) -> None:
         },
         "config": {
             "model": {
-                "model_type": "workload_blind_range_v2",
-                "selector_type": "learned_segment_budget_v1",
+                "model_type": "workload_blind_range",
+                "selector_type": "learned_segment_budget",
             },
             "query": {"workload_profile_id": "range_query_mix"},
         },

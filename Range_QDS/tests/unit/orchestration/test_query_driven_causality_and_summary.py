@@ -9,10 +9,10 @@ import pytest
 import torch
 
 from learning.model_features import (
-    WORKLOAD_BLIND_RANGE_V2_MODEL_DISABLED_PRIOR_FIELDS,
-    WORKLOAD_BLIND_RANGE_V2_MODEL_PRIOR_TRANSFORM,
-    WORKLOAD_BLIND_RANGE_V2_POINT_DIM,
-    build_workload_blind_range_v2_point_features,
+    WORKLOAD_BLIND_RANGE_MODEL_DISABLED_PRIOR_FIELDS,
+    WORKLOAD_BLIND_RANGE_MODEL_PRIOR_TRANSFORM,
+    WORKLOAD_BLIND_RANGE_POINT_DIM,
+    build_workload_blind_range_point_features,
 )
 from learning.model_training import (
     _fit_scaler_for_model,
@@ -148,7 +148,7 @@ def test_selection_causality_diagnostics_reports_unavailable_preconditions() -> 
     assert missing_split == {"available": False, "reason": "missing_selection_split"}
     assert wrong_selector == {
         "available": False,
-        "reason": "requires_learned_segment_budget_v1",
+        "reason": "requires_learned_segment_budget",
     }
 
 
@@ -167,9 +167,9 @@ def _final_summary_config(
             workload_stability_gate_mode="final",
         ),
         model=SimpleNamespace(
-            model_type="workload_blind_range_v2",
+            model_type="workload_blind_range",
             range_training_target_mode=range_training_target_mode,
-            selector_type="learned_segment_budget_v1",
+            selector_type="learned_segment_budget",
             compression_ratio=0.10,
             learned_segment_geometry_gain_weight=0.0,
             learned_segment_score_blend_weight=0.05,
@@ -268,10 +268,71 @@ def test_final_run_summaries_block_final_grid_until_benchmark_evidence() -> None
     assert summaries.final_claim_summary["primary_metric"] == "QueryLocalUtility"
     assert summaries.final_claim_summary["final_success_allowed"] is False
     assert (
+        summaries.final_claim_summary["global_sanity_gate_required_for_initial_local_learning"]
+        is False
+    )
+    assert (
         "full_workload_profile_compression_grid" in summaries.final_claim_summary["blocking_gates"]
     )
     assert summaries.learning_causality_summary["final_success_allowed"] is False
     assert summaries.diagnostic_summary["workload_stability_gate_available"] is True
+
+
+def test_final_run_summaries_report_global_sanity_without_initial_blocking() -> None:
+    workloads = [_final_summary_workload() for _idx in range(4)]
+    primary = _final_summary_metrics(0.30)
+    primary.range_audit["endpoint_sanity"] = 0.0
+    matched = {
+        "MLQDS": primary,
+        "uniform": _final_summary_metrics(0.25),
+        "DouglasPeucker": _final_summary_metrics(0.20),
+    }
+
+    summaries = build_final_run_summaries(
+        config=cast(Any, _final_summary_config(final_candidate=True)),
+        trained=cast(
+            Any,
+            SimpleNamespace(
+                fit_diagnostics={},
+                target_diagnostics={},
+                feature_context={},
+            ),
+        ),
+        train_points=torch.zeros((3, 8), dtype=torch.float32),
+        test_points=torch.zeros((3, 8), dtype=torch.float32),
+        train_label_workloads=workloads,
+        eval_workload=_final_summary_workload(),
+        selection_workload=_final_summary_workload(),
+        matched=matched,
+        selector_budget_diagnostics={},
+        primary_selector_trace=None,
+        causality_ablation_scores={},
+        causality_ablation_mask_diagnostics={},
+        causal_ablation_freeze_failures={},
+        prior_sensitivity_diagnostics={},
+        prior_channel_ablation_diagnostics={},
+        head_ablation_sensitivity_diagnostics={},
+        selection_causality_diagnostics={"available": False, "reason": "not_run"},
+        segment_oracle_allocation_audit={},
+        target_segment_oracle_alignment_audit={},
+        segment_budget_head_ablation_mode="neutral_constant_segment_scores",
+        predictability_audit={
+            "available": True,
+            "gate_pass": True,
+            "prior_predictive_alignment_gate": {"gate_pass": True},
+        },
+        workload_distribution_comparison={
+            "workload_signature_gate": {"all_available": True, "all_pass": True}
+        },
+    )
+
+    assert summaries.global_sanity_gate["gate_pass"] is False
+    assert summaries.final_claim_summary["global_sanity_gate_pass"] is False
+    assert (
+        summaries.final_claim_summary["global_sanity_gate_role"]
+        == "diagnostic_guardrail_during_initial_query_local_learning"
+    )
+    assert "global_sanity_gates" not in summaries.final_claim_summary["blocking_gates"]
 
 
 def test_learning_causality_summary_does_not_duplicate_retained_marginal_trace() -> None:
@@ -419,7 +480,7 @@ def test_final_run_summaries_reject_non_final_candidate_profile() -> None:
         "final_success_allowed": False,
         "reason": (
             "Requires range_query_mix, QueryLocalUtility factorized target, "
-            "workload_blind_range_v2, and learned_segment_budget_v1."
+            "workload_blind_range, and learned_segment_budget."
         ),
     }
 
@@ -869,8 +930,8 @@ def test_model_prior_feature_sensitivity_reports_post_builder_and_scaler_changes
     )
     zeroed = zero_query_prior_field_like(prior)
     queries = torch.zeros((1, 12), dtype=torch.float32)
-    model_points = build_workload_blind_range_v2_point_features(points, prior)
-    scaler = _fit_scaler_for_model(model_points, queries, "workload_blind_range_v2")
+    model_points = build_workload_blind_range_point_features(points, prior)
+    scaler = _fit_scaler_for_model(model_points, queries, "workload_blind_range")
 
     raw_sampled = sample_query_prior_fields(points, prior)
     route_density_idx = QUERY_PRIOR_FIELD_NAMES.index("route_density_prior")
@@ -878,7 +939,7 @@ def test_model_prior_feature_sensitivity_reports_post_builder_and_scaler_changes
 
     diagnostics = model_prior_feature_sensitivity(
         points=points,
-        point_dim=WORKLOAD_BLIND_RANGE_V2_POINT_DIM,
+        point_dim=WORKLOAD_BLIND_RANGE_POINT_DIM,
         scaler=scaler,
         primary_prior_field=prior,
         ablation_prior_field=zeroed,
@@ -887,11 +948,11 @@ def test_model_prior_feature_sensitivity_reports_post_builder_and_scaler_changes
 
     assert diagnostics["available"] is True
     assert diagnostics["disabled_prior_fields"] == list(
-        WORKLOAD_BLIND_RANGE_V2_MODEL_DISABLED_PRIOR_FIELDS
+        WORKLOAD_BLIND_RANGE_MODEL_DISABLED_PRIOR_FIELDS
     )
     assert (
         diagnostics["model_prior_feature_transform"]
-        == WORKLOAD_BLIND_RANGE_V2_MODEL_PRIOR_TRANSFORM
+        == WORKLOAD_BLIND_RANGE_MODEL_PRIOR_TRANSFORM
     )
     model_input = diagnostics["model_input_prior_features"]
     normalized = diagnostics["normalized_model_prior_features"]
@@ -933,5 +994,3 @@ def test_prior_sample_gate_failures_explain_empty_or_out_of_extent_priors() -> N
     assert "shuffled_prior_fields_did_not_change_model_inputs" in failures
     assert "shuffled_prior_fields_did_not_change_normalized_model_inputs" in failures
     assert "eval_points_mostly_outside_query_prior_extent" in failures
-
-

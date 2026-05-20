@@ -8,7 +8,7 @@ import torch
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from selection.learned_segment_budget import simplify_with_learned_segment_budget_v1_with_trace
+from selection.learned_segment_budget import simplify_with_learned_segment_budget_with_trace
 
 pytestmark = pytest.mark.property
 
@@ -51,7 +51,7 @@ def test_learned_segment_selector_respects_budget_and_trace_accounting(
         for idx in range(trajectory_count)
     ]
 
-    mask, trace = simplify_with_learned_segment_budget_v1_with_trace(
+    mask, trace = simplify_with_learned_segment_budget_with_trace(
         scores,
         boundaries,
         compression_ratio,

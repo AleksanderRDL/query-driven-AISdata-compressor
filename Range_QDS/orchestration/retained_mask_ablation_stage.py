@@ -16,6 +16,7 @@ from learning.query_prior_fields import (
     zero_query_prior_field_channels,
     zero_query_prior_field_like,
 )
+from learning.targets.query_local_utility import QUERY_LOCAL_UTILITY_HEAD_NAMES
 from orchestration.causality import (
     head_ablation_sensitivity,
     model_prior_feature_sensitivity,
@@ -55,6 +56,22 @@ class RetainedMaskAblationOutputs:
     head_ablation_sensitivity_diagnostics: dict[str, Any]
     segment_budget_head_ablation_mode: str | None
     freeze_timing_diagnostics: dict[str, Any]
+
+
+def _factorized_head_scores_from_logits(
+    head_logits: torch.Tensor | None,
+    head_name: str,
+) -> torch.Tensor | None:
+    """Return raw factorized-head logits as query-free point scores."""
+    if head_logits is None:
+        return None
+    head_names = tuple(str(name) for name in QUERY_LOCAL_UTILITY_HEAD_NAMES)
+    if head_name not in head_names:
+        return None
+    head_idx = head_names.index(head_name)
+    if head_logits.ndim != 2 or int(head_logits.shape[1]) <= head_idx:
+        return None
+    return head_logits[:, head_idx].detach().cpu().float().contiguous()
 
 
 def freeze_retained_mask_ablations(
@@ -366,6 +383,58 @@ def freeze_retained_mask_ablations(
             head_ablation_sensitivity_diagnostics[
                 "MLQDS_without_segment_budget_allocation_only"
             ] = allocation_sensitivity
+
+            uniform_segment_allocation_method = learned_segment_frozen_method(
+                name="MLQDS_uniform_segment_allocation_only_diagnostic",
+                scores=primary_scores,
+                boundaries=test_boundaries,
+                compression_ratio=float(config.model.compression_ratio),
+                segment_scores=neutral_segment_scores,
+                segment_point_scores=primary_segment_scores,
+                points=test_points,
+                learned_segment_geometry_gain_weight=float(
+                    config.model.learned_segment_geometry_gain_weight
+                ),
+                learned_segment_allocation_length_support_weight=0.0,
+                learned_segment_allocation_weight_floor=allocation_weight_floor,
+                learned_segment_score_blend_weight=float(
+                    config.model.learned_segment_score_blend_weight
+                ),
+                learned_segment_transfer_calibration_mode=str(
+                    config.model.learned_segment_transfer_calibration_mode
+                ),
+                learned_segment_fairness_preallocation=bool(
+                    config.model.learned_segment_fairness_preallocation
+                ),
+                learned_segment_length_repair_fraction=float(
+                    config.model.learned_segment_length_repair_fraction
+                ),
+                learned_segment_length_repair_score_protection_fraction=(
+                    repair_score_protection_fraction
+                ),
+            )
+            causality_ablation_methods.append(uniform_segment_allocation_method)
+            uniform_allocation_sensitivity = head_ablation_sensitivity(
+                primary_scores=primary_scores,
+                ablation_scores=primary_scores,
+                primary_raw_predictions=primary_raw_preds,
+                ablation_raw_predictions=primary_raw_preds,
+                primary_segment_scores=primary_selector_segment_scores,
+                ablation_segment_scores=neutral_segment_scores,
+                primary_mask=frozen_primary_masks.get("MLQDS"),
+                ablation_mask=uniform_segment_allocation_method.retained_mask,
+            )
+            uniform_allocation_sensitivity["disabled_head_name"] = "segment_budget_target"
+            uniform_allocation_sensitivity["ablation_mode"] = (
+                "neutral_constant_segment_scores_without_length_support_for_allocation_only"
+            )
+            uniform_allocation_sensitivity["diagnostic_only"] = True
+            uniform_allocation_sensitivity["allocation_score_source"] = (
+                "uniform_segment_scores_no_length_support"
+            )
+            head_ablation_sensitivity_diagnostics[
+                "MLQDS_uniform_segment_allocation_only_diagnostic"
+            ] = uniform_allocation_sensitivity
 
             point_score_allocation_method = learned_segment_frozen_method(
                 name="MLQDS_point_score_allocation_diagnostic",
@@ -687,6 +756,117 @@ def freeze_retained_mask_ablations(
             }
         finally:
             _record_substage("path_length_support_ablations", substage_started_at)
+    behavior_segment_scores = _factorized_head_scores_from_logits(
+        primary_head_logits,
+        "conditional_behavior_utility",
+    )
+    if behavior_segment_scores is not None:
+        substage_started_at = time.perf_counter()
+        try:
+            behavior_segment_method = learned_segment_frozen_method(
+                name="MLQDS_behavior_utility_segment_head_diagnostic",
+                scores=primary_scores,
+                boundaries=test_boundaries,
+                compression_ratio=float(config.model.compression_ratio),
+                segment_scores=behavior_segment_scores,
+                points=test_points,
+                learned_segment_geometry_gain_weight=float(
+                    config.model.learned_segment_geometry_gain_weight
+                ),
+                learned_segment_allocation_length_support_weight=allocation_length_support_weight,
+                learned_segment_allocation_weight_floor=allocation_weight_floor,
+                learned_segment_score_blend_weight=float(
+                    config.model.learned_segment_score_blend_weight
+                ),
+                learned_segment_transfer_calibration_mode=str(
+                    config.model.learned_segment_transfer_calibration_mode
+                ),
+                learned_segment_fairness_preallocation=bool(
+                    config.model.learned_segment_fairness_preallocation
+                ),
+                learned_segment_length_repair_fraction=float(
+                    config.model.learned_segment_length_repair_fraction
+                ),
+                learned_segment_length_repair_score_protection_fraction=(
+                    repair_score_protection_fraction
+                ),
+            )
+            causality_ablation_methods.append(behavior_segment_method)
+            head_ablation_sensitivity_diagnostics[
+                "MLQDS_behavior_utility_segment_head_diagnostic"
+            ] = {
+                **head_ablation_sensitivity(
+                    primary_scores=primary_scores,
+                    ablation_scores=primary_scores,
+                    primary_raw_predictions=primary_raw_preds,
+                    ablation_raw_predictions=primary_raw_preds,
+                    primary_segment_scores=primary_selector_segment_scores,
+                    ablation_segment_scores=behavior_segment_scores,
+                    primary_mask=frozen_primary_masks.get("MLQDS"),
+                    ablation_mask=behavior_segment_method.retained_mask,
+                ),
+                "diagnostic_only": True,
+                "replacement_head_name": "conditional_behavior_utility",
+                "ablation_mode": "conditional_behavior_utility_as_segment_scores",
+            }
+            behavior_allocation_method = learned_segment_frozen_method(
+                name="MLQDS_behavior_utility_allocation_only_diagnostic",
+                scores=primary_scores,
+                boundaries=test_boundaries,
+                compression_ratio=float(config.model.compression_ratio),
+                segment_scores=behavior_segment_scores,
+                segment_point_scores=primary_segment_scores,
+                points=test_points,
+                learned_segment_geometry_gain_weight=float(
+                    config.model.learned_segment_geometry_gain_weight
+                ),
+                learned_segment_allocation_length_support_weight=allocation_length_support_weight,
+                learned_segment_allocation_weight_floor=allocation_weight_floor,
+                learned_segment_score_blend_weight=float(
+                    config.model.learned_segment_score_blend_weight
+                ),
+                learned_segment_transfer_calibration_mode=str(
+                    config.model.learned_segment_transfer_calibration_mode
+                ),
+                learned_segment_fairness_preallocation=bool(
+                    config.model.learned_segment_fairness_preallocation
+                ),
+                learned_segment_length_repair_fraction=float(
+                    config.model.learned_segment_length_repair_fraction
+                ),
+                learned_segment_length_repair_score_protection_fraction=(
+                    repair_score_protection_fraction
+                ),
+            )
+            causality_ablation_methods.append(behavior_allocation_method)
+            head_ablation_sensitivity_diagnostics[
+                "MLQDS_behavior_utility_allocation_only_diagnostic"
+            ] = {
+                **head_ablation_sensitivity(
+                    primary_scores=primary_scores,
+                    ablation_scores=primary_scores,
+                    primary_raw_predictions=primary_raw_preds,
+                    ablation_raw_predictions=primary_raw_preds,
+                    primary_segment_scores=primary_selector_segment_scores,
+                    ablation_segment_scores=behavior_segment_scores,
+                    primary_mask=frozen_primary_masks.get("MLQDS"),
+                    ablation_mask=behavior_allocation_method.retained_mask,
+                ),
+                "diagnostic_only": True,
+                "replacement_head_name": "conditional_behavior_utility",
+                "ablation_mode": "conditional_behavior_utility_allocation_only",
+            }
+        except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
+            head_ablation_sensitivity_diagnostics[
+                "MLQDS_behavior_utility_segment_head_diagnostic"
+            ] = {
+                "available": False,
+                "diagnostic_only": True,
+                "reason": "freeze_failed",
+                "error": str(exc),
+            }
+        finally:
+            _record_substage("behavior_utility_segment_score_ablations", substage_started_at)
     primary_head_logits = primary_head_logits
     if primary_head_logits is not None:
         substage_started_at = time.perf_counter()

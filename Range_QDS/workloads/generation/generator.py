@@ -127,6 +127,10 @@ def _make_range_query(
     range_footprint_jitter: float = DEFAULT_RANGE_FOOTPRINT_JITTER,
     range_time_domain_mode: str = DEFAULT_RANGE_TIME_DOMAIN_MODE,
     elongation_allowed: bool = False,
+    min_point_hits: int | None = None,
+    min_point_hit_fraction: float | None = None,
+    max_point_hit_fraction: float | None = None,
+    target_point_hit_fraction: float | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Generate one range query. See workloads/README.md for details."""
@@ -187,18 +191,70 @@ def _make_range_query(
         t_w = time_hours * 3600.0 * time_jitter
     anchor_time = float(anchor_point[0].item())
     time_min, time_max = _query_time_bounds_for_mode(anchor_time, bounds, time_domain_mode)
-    query = {
-        "type": "range",
-        "params": {
-            "lat_min": float(max(bounds["lat_min"], anchor_point[1].item() - lat_w)),
-            "lat_max": float(min(bounds["lat_max"], anchor_point[1].item() + lat_w)),
-            "lon_min": float(max(bounds["lon_min"], anchor_point[2].item() - lon_w)),
-            "lon_max": float(min(bounds["lon_max"], anchor_point[2].item() + lon_w)),
-            "t_start": float(max(time_min, anchor_time - t_w)),
-            "t_end": float(min(time_max, anchor_time + t_w)),
-        },
-    }
     query_metadata = dict(metadata or {})
+
+    def query_for_widths(lat_width: float, lon_width: float, time_width: float) -> dict[str, Any]:
+        return {
+            "type": "range",
+            "params": {
+                "lat_min": float(max(bounds["lat_min"], anchor_point[1].item() - lat_width)),
+                "lat_max": float(min(bounds["lat_max"], anchor_point[1].item() + lat_width)),
+                "lon_min": float(max(bounds["lon_min"], anchor_point[2].item() - lon_width)),
+                "lon_max": float(min(bounds["lon_max"], anchor_point[2].item() + lon_width)),
+                "t_start": float(max(time_min, anchor_time - time_width)),
+                "t_end": float(min(time_max, anchor_time + time_width)),
+            },
+        }
+
+    min_hits = max(0, int(min_point_hits or 0))
+    total_points = int(points.shape[0])
+    if isinstance(min_point_hit_fraction, (int, float)):
+        min_hits = max(min_hits, math.ceil(float(min_point_hit_fraction) * total_points))
+    max_hits: int | None = None
+    if isinstance(max_point_hit_fraction, (int, float)):
+        max_hits = max(0, math.floor(float(max_point_hit_fraction) * total_points))
+    target_hits: int | None = None
+    if isinstance(target_point_hit_fraction, (int, float)):
+        target_hits = max(0, round(float(target_point_hit_fraction) * total_points))
+        target_hits = max(target_hits, min_hits)
+        if max_hits is not None:
+            target_hits = min(target_hits, max_hits)
+    calibrated_scale = 1.0
+    query = query_for_widths(lat_w, lon_w, t_w)
+    if min_hits > 0 or max_hits is not None:
+        base_lat_w = float(lat_w)
+        base_lon_w = float(lon_w)
+        base_t_w = float(t_w)
+        for _calibration_step in range(4):
+            hit_count = int(point_coverage_mask_for_query(points, query).sum().item())
+            if min_hits > 0 and hit_count < min_hits:
+                scale = min(1.35, max(1.05, math.sqrt(float(min_hits) / max(1.0, hit_count))))
+                calibrated_scale = min(2.0, calibrated_scale * scale)
+            elif max_hits is not None and hit_count > max_hits:
+                scale = max(0.75, math.sqrt(float(max_hits) / max(1.0, hit_count)))
+                calibrated_scale = max(0.50, calibrated_scale * scale)
+            elif target_hits is not None and target_hits > 0:
+                lower_target = max(min_hits, math.floor(float(target_hits) * 0.90))
+                upper_target = math.ceil(float(target_hits) * 1.10)
+                if max_hits is not None:
+                    upper_target = min(upper_target, max_hits)
+                if hit_count < lower_target:
+                    scale = min(1.25, max(1.02, math.sqrt(float(target_hits) / max(1.0, hit_count))))
+                    calibrated_scale = min(2.0, calibrated_scale * scale)
+                elif hit_count > upper_target:
+                    scale = max(0.80, min(0.98, math.sqrt(float(target_hits) / max(1.0, hit_count))))
+                    calibrated_scale = max(0.50, calibrated_scale * scale)
+                else:
+                    break
+            else:
+                break
+            query = query_for_widths(
+                base_lat_w * calibrated_scale,
+                base_lon_w * calibrated_scale,
+                base_t_w * calibrated_scale,
+            )
+        if abs(calibrated_scale - 1.0) > 1e-9:
+            query_metadata["point_hit_band_calibration_scale"] = float(calibrated_scale)
     if bool(elongation_allowed):
         query_metadata.update(
             {
@@ -319,6 +375,7 @@ def generate_typed_query_workload(
         if profile_enabled and range_max_coverage_overshoot is None
         else range_max_coverage_overshoot
     )
+    range_max_point_hit_fraction_explicit = range_max_point_hit_fraction is not None
     if profile_enabled:
         if range_min_point_hits is None:
             range_min_point_hits = profile.min_points_per_query
@@ -340,6 +397,7 @@ def generate_typed_query_workload(
     )
     query_acceptance_enabled = _range_acceptance_enabled(
         range_min_point_hits,
+        None,
         range_max_point_hit_fraction,
         range_min_trajectory_hits,
         range_max_trajectory_hit_fraction,
@@ -404,6 +462,9 @@ def generate_typed_query_workload(
         query_anchor_probability = anchor_weight_probability
         query_spatial_km = range_spatial_km
         query_time_hours = range_time_hours
+        query_min_point_hit_fraction: float | None = None
+        query_max_point_hit_fraction = range_max_point_hit_fraction
+        query_target_point_hit_fraction: float | None = None
         query_metadata: dict[str, Any] = {}
         if profile_query:
             query_anchor_weights, query_anchor_probability = _anchor_weights_for_family(
@@ -412,6 +473,22 @@ def generate_typed_query_workload(
             )
             query_spatial_km = float(profile_query["range_spatial_km"])
             query_time_hours = float(profile_query["range_time_hours"])
+            profile_min_point_fraction = profile_query.get("min_point_hit_fraction")
+            if isinstance(profile_min_point_fraction, (int, float)):
+                query_min_point_hit_fraction = float(profile_min_point_fraction)
+            profile_max_point_fraction = profile_query.get("max_point_hit_fraction")
+            if (
+                not range_max_point_hit_fraction_explicit
+                and isinstance(profile_max_point_fraction, (int, float))
+            ):
+                query_max_point_hit_fraction = (
+                    min(float(query_max_point_hit_fraction), float(profile_max_point_fraction))
+                    if query_max_point_hit_fraction is not None
+                    else float(profile_max_point_fraction)
+                )
+            profile_target_point_fraction = profile_query.get("target_point_hit_fraction")
+            if isinstance(profile_target_point_fraction, (int, float)):
+                query_target_point_hit_fraction = float(profile_target_point_fraction)
             query_metadata = {
                 "workload_profile_id": profile.profile_id,
                 "anchor_family": str(profile_query["anchor_family"]),
@@ -419,6 +496,9 @@ def generate_typed_query_workload(
                 "spatial_radius_km": float(query_spatial_km),
                 "time_half_window_hours": float(query_time_hours),
                 "elongation_allowed": bool(profile_query.get("elongation_allowed", False)),
+                "min_point_hit_fraction": query_min_point_hit_fraction,
+                "max_point_hit_fraction": query_max_point_hit_fraction,
+                "target_point_hit_fraction": query_target_point_hit_fraction,
             }
         query = _make_range_query(
             points,
@@ -434,6 +514,10 @@ def generate_typed_query_workload(
             range_footprint_jitter=range_footprint_jitter,
             range_time_domain_mode=time_domain_mode,
             elongation_allowed=bool(profile_query.get("elongation_allowed", False)),
+            min_point_hits=range_min_point_hits,
+            min_point_hit_fraction=query_min_point_hit_fraction,
+            max_point_hit_fraction=query_max_point_hit_fraction,
+            target_point_hit_fraction=query_target_point_hit_fraction,
             metadata=query_metadata,
         )
         if not query_acceptance_enabled:
@@ -445,7 +529,8 @@ def generate_typed_query_workload(
             accepted_range_queries,
             bounds,
             range_min_point_hits=range_min_point_hits,
-            range_max_point_hit_fraction=range_max_point_hit_fraction,
+            range_min_point_hit_fraction=query_min_point_hit_fraction,
+            range_max_point_hit_fraction=query_max_point_hit_fraction,
             range_min_trajectory_hits=range_min_trajectory_hits,
             range_max_trajectory_hit_fraction=range_max_trajectory_hit_fraction,
             range_max_box_volume_fraction=range_max_box_volume_fraction,
@@ -539,7 +624,6 @@ def generate_typed_query_workload(
         query_generation = {
             "mode": "target_coverage",
             "workload_profile_id": profile.profile_id,
-            "workload_profile_version": int(profile.version),
             "query_count_mode": profile.query_count_mode,
             "coverage_calibration_mode": coverage_mode,
             "minimum_queries": int(requested_queries),
@@ -613,7 +697,6 @@ def generate_typed_query_workload(
             "query_generation": {
                 "mode": "fixed_count",
                 "workload_profile_id": profile.profile_id,
-                "workload_profile_version": int(profile.version),
                 "query_count_mode": profile.query_count_mode,
                 "coverage_calibration_mode": coverage_mode,
                 "minimum_queries": requested_queries,

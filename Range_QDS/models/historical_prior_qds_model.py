@@ -10,7 +10,7 @@ from learning.model_features import (
     HISTORICAL_PRIOR_MMSI_POINT_DIM,
     HISTORICAL_PRIOR_POINT_DIM,
 )
-from models.workload_blind_qds_model import WorkloadBlindRangeQDSModel
+from models.workload_blind_qds_model import ScalarWorkloadBlindRangeQDSModel
 
 _SOURCE_AGGREGATIONS = {"none", "mean", "min", "median"}
 
@@ -294,7 +294,7 @@ class HistoricalPriorStudentRangeQDSModel(nn.Module):
             historical_prior_source_aggregation=historical_prior_source_aggregation,
             prior_feature_count=prior_feature_count,
         )
-        self.student = WorkloadBlindRangeQDSModel(
+        self.student = ScalarWorkloadBlindRangeQDSModel(
             point_dim=self.point_dim + 1,
             query_dim=self.query_dim,
             embed_dim=embed_dim,

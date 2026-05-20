@@ -12,8 +12,8 @@ from selection.learned_segment_budget import (
     LEARNED_SEGMENT_BUDGET_SCHEMA_VERSION,
     LEARNED_SEGMENT_BUDGET_TRACE_SCHEMA_VERSION,
     learned_segment_budget_diagnostics,
-    simplify_with_learned_segment_budget_v1,
-    simplify_with_learned_segment_budget_v1_with_trace,
+    simplify_with_learned_segment_budget,
+    simplify_with_learned_segment_budget_with_trace,
 )
 from selection.learned_segment_budget.allocation import _allocate_segment_budgets
 from selection.learned_segment_budget.diagnostics import (
@@ -26,13 +26,13 @@ def test_learned_segment_budget_public_api_and_trace_accounting() -> None:
     scores = torch.linspace(0.0, 1.0, steps=24, dtype=torch.float32)
     boundaries = [(0, 12), (12, 24)]
 
-    retained, trace = simplify_with_learned_segment_budget_v1_with_trace(
+    retained, trace = simplify_with_learned_segment_budget_with_trace(
         scores,
         boundaries,
         compression_ratio=0.30,
         segment_size=4,
     )
-    without_trace = simplify_with_learned_segment_budget_v1(
+    without_trace = simplify_with_learned_segment_budget(
         scores,
         boundaries,
         compression_ratio=0.30,
@@ -48,14 +48,14 @@ def test_learned_segment_budget_public_api_and_trace_accounting() -> None:
 
     assert torch.equal(retained, without_trace)
     assert trace["schema_version"] == LEARNED_SEGMENT_BUDGET_TRACE_SCHEMA_VERSION
-    assert trace["selector_type"] == "learned_segment_budget_v1"
+    assert trace["selector_type"] == "learned_segment_budget"
     assert source_count == int(retained.sum().item())
     assert diagnostics["schema_version"] == LEARNED_SEGMENT_BUDGET_SCHEMA_VERSION
     assert diagnostics["budget_rows"][0]["no_fixed_85_percent_temporal_scaffold"] is True
 
 
 def test_learned_segment_budget_public_api_uses_trajectory_budget_keyword() -> None:
-    signature = inspect.signature(simplify_with_learned_segment_budget_v1)
+    signature = inspect.signature(simplify_with_learned_segment_budget)
 
     assert "max_budget_share_per_trajectory" in signature.parameters
     assert "max_budget_share_per_ship" not in signature.parameters
@@ -75,7 +75,7 @@ def test_learned_segment_budget_length_repair_preserves_budget_and_reports_attri
     scores[14:19] = torch.tensor([5.0, 6.0, 7.0, 6.0, 5.0])
     boundaries = [(0, 32)]
 
-    retained, trace = simplify_with_learned_segment_budget_v1_with_trace(
+    retained, trace = simplify_with_learned_segment_budget_with_trace(
         scores,
         boundaries,
         compression_ratio=0.20,
@@ -83,7 +83,7 @@ def test_learned_segment_budget_length_repair_preserves_budget_and_reports_attri
         geometry_gain_weight=0.0,
         length_repair_fraction=0.0,
     )
-    repaired, repaired_trace = simplify_with_learned_segment_budget_v1_with_trace(
+    repaired, repaired_trace = simplify_with_learned_segment_budget_with_trace(
         scores,
         boundaries,
         compression_ratio=0.20,
@@ -122,7 +122,7 @@ def test_learned_segment_budget_length_repair_can_protect_top_scores() -> None:
     scores[14:19] = torch.tensor([5.0, 6.0, 7.0, 6.0, 5.0])
     boundaries = [(0, 32)]
 
-    retained, _trace = simplify_with_learned_segment_budget_v1_with_trace(
+    retained, _trace = simplify_with_learned_segment_budget_with_trace(
         scores,
         boundaries,
         compression_ratio=0.20,
@@ -130,7 +130,7 @@ def test_learned_segment_budget_length_repair_can_protect_top_scores() -> None:
         geometry_gain_weight=0.0,
         length_repair_fraction=0.0,
     )
-    repaired, repaired_trace = simplify_with_learned_segment_budget_v1_with_trace(
+    repaired, repaired_trace = simplify_with_learned_segment_budget_with_trace(
         scores,
         boundaries,
         compression_ratio=0.20,
@@ -380,7 +380,7 @@ def test_learned_segment_budget_separates_allocation_length_support_from_geometr
     segment_scores = torch.zeros_like(scores)
     segment_scores[:16] = 10.0
 
-    _retained_score, score_trace = simplify_with_learned_segment_budget_v1_with_trace(
+    _retained_score, score_trace = simplify_with_learned_segment_budget_with_trace(
         scores,
         [(0, 32)],
         compression_ratio=0.20,
@@ -390,7 +390,7 @@ def test_learned_segment_budget_separates_allocation_length_support_from_geometr
         geometry_gain_weight=0.0,
         segment_length_support_weight=0.0,
     )
-    _retained_support, support_trace = simplify_with_learned_segment_budget_v1_with_trace(
+    _retained_support, support_trace = simplify_with_learned_segment_budget_with_trace(
         scores,
         [(0, 32)],
         compression_ratio=0.20,
@@ -431,7 +431,7 @@ def test_learned_segment_budget_reports_length_support_allocation_counterfactual
     segment_scores = torch.zeros_like(scores)
     segment_scores[:16] = 10.0
 
-    _retained, trace = simplify_with_learned_segment_budget_v1_with_trace(
+    _retained, trace = simplify_with_learned_segment_budget_with_trace(
         scores,
         [(0, 32)],
         compression_ratio=0.25,
@@ -465,7 +465,7 @@ def test_learned_segment_budget_reports_query_free_segment_source_attribution() 
     segment_scores[8:12] = 5.0
     segment_scores[20:24] = 4.0
 
-    retained, trace = simplify_with_learned_segment_budget_v1_with_trace(
+    retained, trace = simplify_with_learned_segment_budget_with_trace(
         scores,
         [(0, 12), (12, 24)],
         compression_ratio=0.30,
@@ -524,6 +524,8 @@ def test_learned_segment_budget_reports_query_free_segment_source_attribution() 
     assert alignment["segment_count"] == attribution["segment_count"]
     assert alignment["allocation_count_total"] == summary["segment_allocation_count_total"]
     assert "top_10_percent" in alignment["top_groups"]
+    assert "segment_score_to_length_support_spearman" in alignment
+    assert "allocation_weight_to_length_support_spearman" in alignment
 
 
 def test_segment_allocation_alignment_diagnostic_flags_score_dominated_extras() -> None:
@@ -582,9 +584,47 @@ def test_segment_allocation_alignment_diagnostic_flags_score_dominated_extras() 
     assert diagnostic["extra_allocation_count_total"] == 3
     assert diagnostic["length_support_to_allocation_pearson"] < 0.0
     assert diagnostic["segment_score_to_allocation_pearson"] > 0.8
+    assert diagnostic["segment_score_to_length_support_pearson"] < 0.0
     assert (
         diagnostic["trajectory_top_length_support_extra_capture"][
             "top3_length_support_extra_count_histogram"
         ]["0"]
         == 1
+    )
+
+
+def test_segment_allocation_alignment_diagnostic_flags_score_length_conflict() -> None:
+    segment_scores = [10.0, 9.0, 1.0, 1.0, 4.0, 3.0, 2.0, 1.0, 0.0, 0.0]
+    length_support_scores = [1.0, 1.0, 10.0, 9.0, 4.0, 3.0, 2.0, 1.0, 0.0, 0.0]
+    allocation_counts = [5, 4, 3, 3, 2, 2, 1, 1, 1, 1]
+    segment_rows = [
+        {
+            "trajectory_id": 0,
+            "start": int(index * 8),
+            "end": int((index + 1) * 8),
+            "score": float(score),
+            "length_support_score": float(length_support_scores[index]),
+            "allocation_weight": float(score),
+        }
+        for index, score in enumerate(segment_scores)
+    ]
+
+    diagnostic = _segment_allocation_alignment_diagnostics(
+        segment_rows=segment_rows,
+        segment_allocations={
+            index: allocation_count
+            for index, allocation_count in enumerate(allocation_counts)
+        },
+    )
+
+    assert diagnostic["available"] is True
+    assert diagnostic["component_diagnosis"] == "score_dominated_length_support_conflict"
+    assert diagnostic["length_support_to_allocation_pearson"] > 0.20
+    assert diagnostic["segment_score_to_allocation_pearson"] > 0.80
+    assert diagnostic["segment_score_to_length_support_pearson"] < 0.0
+    assert (
+        diagnostic["top_groups"]["top_20_percent"][
+            "length_support_segment_score_overlap_fraction"
+        ]
+        == 0.0
     )

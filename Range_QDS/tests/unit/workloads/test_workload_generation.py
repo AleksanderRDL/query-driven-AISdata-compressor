@@ -15,6 +15,7 @@ from workloads.coverage_estimator import (
     estimate_range_coverage,
     sample_trajectories_by_stride,
 )
+from workloads.generation import generator as generator_module
 from workloads.generation.coverage import point_coverage_mask_for_query
 from workloads.generation.generator import (
     _dataset_bounds,
@@ -112,15 +113,15 @@ def test_coverage_generation_profile_calibrated_mode_keeps_requested_query_floor
         n_queries=48,
         workload_map={"range": 1.0},
         seed=1818,
-        target_coverage=0.05,
+        target_coverage=0.30,
         max_queries=300,
         workload_profile_id="range_query_mix",
-        range_max_coverage_overshoot=0.0075,
+        range_max_coverage_overshoot=0.020,
         range_acceptance_max_attempts=6000,
     )
 
     assert workload.coverage_fraction is not None
-    assert workload.coverage_fraction >= 0.05
+    assert workload.coverage_fraction >= 0.30
     assert workload.generation_diagnostics is not None
     generation = workload.generation_diagnostics["query_generation"]
     assert generation["mode"] == "target_coverage"
@@ -132,6 +133,7 @@ def test_coverage_generation_profile_calibrated_mode_keeps_requested_query_floor
     assert generation["coverage_at_target_reached"] is not None
     assert generation["final_query_count"] >= generation["minimum_queries"]
     assert generation["extra_queries_after_target_reached"] >= 0
+    assert generation["max_queries"] == 300
     assert generation["profile_query_plan"]["requested_queries"] == 300
     assert len(workload.typed_queries) == generation["final_query_count"]
 
@@ -267,6 +269,63 @@ def test_anchor_day_time_domain_clamps_queries_to_anchor_day() -> None:
     assert dataset_params["t_end"] == 172_800.0
     assert anchor_day_params["t_start"] == 86_400.0
     assert anchor_day_params["t_end"] == 172_800.0
+
+
+def test_profile_point_hit_bands_feed_proposal_calibration(monkeypatch) -> None:
+    trajectories = [
+        torch.tensor([[0.0, 0.0, 0.0, 1.0]], dtype=torch.float32),
+        torch.tensor([[0.0, 0.0010, 0.0010, 1.0]], dtype=torch.float32),
+        torch.tensor([[0.0, 0.00135, 0.00135, 1.0]], dtype=torch.float32),
+        torch.tensor([[0.0, 0.0100, 0.0100, 1.0]], dtype=torch.float32),
+        torch.tensor([[0.0, 0.0200, 0.0200, 1.0]], dtype=torch.float32),
+    ]
+
+    def fake_anchor_weights_for_family(
+        points: torch.Tensor,
+        _family: str,
+    ) -> tuple[torch.Tensor, float]:
+        weights = torch.zeros(points.shape[0], dtype=torch.float32, device=points.device)
+        weights[0] = 1.0
+        return weights, 1.0
+
+    def fake_profile_query_settings(*_args, **_kwargs) -> dict[str, object]:
+        return {
+            "anchor_family": "density",
+            "footprint_family": "medium_operational",
+            "range_spatial_km": 0.08,
+            "range_time_hours": 1.0,
+            "elongation_allowed": False,
+            "min_point_hit_fraction": 0.40,
+            "max_point_hit_fraction": 1.0,
+        }
+
+    monkeypatch.setattr(
+        generator_module, "_anchor_weights_for_family", fake_anchor_weights_for_family
+    )
+    monkeypatch.setattr(generator_module, "_profile_query_settings", fake_profile_query_settings)
+
+    workload = generator_module.generate_typed_query_workload(
+        trajectories=trajectories,
+        n_queries=1,
+        workload_map={"range": 1.0},
+        seed=13,
+        target_coverage=0.01,
+        max_queries=1,
+        workload_profile_id="range_query_mix",
+        coverage_calibration_mode="profile_sampled_query_count",
+        range_footprint_jitter=0.0,
+        range_max_point_hit_fraction=1.0,
+        range_max_coverage_overshoot=1.0,
+        range_duplicate_iou_threshold=1.0,
+    )
+
+    assert len(workload.typed_queries) == 1
+    query = workload.typed_queries[0]
+    metadata = query["_metadata"]
+    points = torch.cat(trajectories, dim=0)
+    hit_count = int(point_coverage_mask_for_query(points, query).sum().item())
+    assert hit_count >= 3
+    assert metadata["point_hit_band_calibration_scale"] > 1.0
 
 
 def test_generated_anchor_day_workload_records_time_domain_mode() -> None:

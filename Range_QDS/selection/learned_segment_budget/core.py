@@ -1,4 +1,4 @@
-"""learned_segment_budget_v1 selector public orchestration."""
+"""learned_segment_budget selector public orchestration."""
 
 from __future__ import annotations
 
@@ -49,8 +49,8 @@ __all__ = [
     "SEGMENT_TRANSFER_CALIBRATION_MODE_NONE",
     "blend_segment_support_scores",
     "learned_segment_budget_diagnostics",
-    "simplify_with_learned_segment_budget_v1",
-    "simplify_with_learned_segment_budget_v1_with_trace",
+    "simplify_with_learned_segment_budget",
+    "simplify_with_learned_segment_budget_with_trace",
 ]
 
 
@@ -76,7 +76,7 @@ def blend_segment_support_scores(
     return (1.0 - weight) * segment + weight * path_scores
 
 
-def simplify_with_learned_segment_budget_v1_with_trace(
+def simplify_with_learned_segment_budget_with_trace(
     scores: torch.Tensor,
     boundaries: list[tuple[int, int]],
     compression_ratio: float,
@@ -239,7 +239,7 @@ def simplify_with_learned_segment_budget_v1_with_trace(
     segment_score_source = (
         str(segment_score_source_label)
         if segment_score_source_label is not None
-        else "segment_budget_head_mean"
+        else "segment_budget_head_top20_mean"
         if segment_scores is not None
         else "point_score_top20_mean"
     )
@@ -433,7 +433,7 @@ def simplify_with_learned_segment_budget_v1_with_trace(
     return retained, trace
 
 
-def simplify_with_learned_segment_budget_v1(
+def simplify_with_learned_segment_budget(
     scores: torch.Tensor,
     boundaries: list[tuple[int, int]],
     compression_ratio: float,
@@ -455,7 +455,7 @@ def simplify_with_learned_segment_budget_v1(
     segment_score_source_label: str | None = None,
 ) -> torch.Tensor:
     """Retain a minimal skeleton, then allocate remaining budget by learned segment value."""
-    retained, _trace = simplify_with_learned_segment_budget_v1_with_trace(
+    retained, _trace = simplify_with_learned_segment_budget_with_trace(
         scores,
         boundaries,
         compression_ratio,

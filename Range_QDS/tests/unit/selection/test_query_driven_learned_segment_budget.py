@@ -41,8 +41,8 @@ from scoring.metrics import compute_length_preservation
 from scoring.query_cache import ScoringQueryCache
 from selection.learned_segment_budget import (
     blend_segment_support_scores,
-    simplify_with_learned_segment_budget_v1,
-    simplify_with_learned_segment_budget_v1_with_trace,
+    simplify_with_learned_segment_budget,
+    simplify_with_learned_segment_budget_with_trace,
 )
 from selection.model_score_conversion import simplify_mlqds_predictions
 from workloads.query_types import QUERY_TYPE_ID_RANGE
@@ -64,7 +64,7 @@ def test_learned_segment_budget_trace_exposes_fallback_dominance_regression() ->
     scores = torch.linspace(0.0, 1.0, steps=32)
     boundaries = [(0, 32)]
 
-    retained, trace = simplify_with_learned_segment_budget_v1_with_trace(
+    retained, trace = simplify_with_learned_segment_budget_with_trace(
         scores,
         boundaries,
         compression_ratio=0.20,
@@ -94,7 +94,7 @@ def test_learned_segment_budget_uses_geometry_gain_within_learned_budget() -> No
     scores = torch.ones((5,), dtype=torch.float32)
     boundaries = [(0, 5)]
 
-    retained = simplify_with_learned_segment_budget_v1(
+    retained = simplify_with_learned_segment_budget(
         scores,
         boundaries,
         compression_ratio=0.60,
@@ -319,13 +319,13 @@ def test_learned_segment_budget_trace_reports_geometry_diagnostics_without_chang
     scores = torch.ones((5,), dtype=torch.float32)
     boundaries = [(0, 5)]
 
-    retained, trace = simplify_with_learned_segment_budget_v1_with_trace(
+    retained, trace = simplify_with_learned_segment_budget_with_trace(
         scores,
         boundaries,
         compression_ratio=0.60,
         points=points,
     )
-    without_trace = simplify_with_learned_segment_budget_v1(
+    without_trace = simplify_with_learned_segment_budget(
         scores,
         boundaries,
         compression_ratio=0.60,
@@ -368,7 +368,7 @@ def test_learned_segment_budget_trace_separates_allocation_from_point_selection(
     scores = torch.tensor([0.0, 10.0, 9.0, 0.1, 0.1, 8.0, 7.0, 0.0], dtype=torch.float32)
     boundaries = [(0, 8)]
 
-    retained, trace = simplify_with_learned_segment_budget_v1_with_trace(
+    retained, trace = simplify_with_learned_segment_budget_with_trace(
         scores,
         boundaries,
         compression_ratio=0.625,
@@ -376,7 +376,7 @@ def test_learned_segment_budget_trace_separates_allocation_from_point_selection(
         points=points,
         geometry_gain_weight=0.0,
     )
-    without_trace = simplify_with_learned_segment_budget_v1(
+    without_trace = simplify_with_learned_segment_budget(
         scores,
         boundaries,
         compression_ratio=0.625,
@@ -414,7 +414,7 @@ def test_learned_segment_budget_length_repair_swaps_learned_slots_for_path_gain(
     scores[14:19] = torch.tensor([5.0, 6.0, 7.0, 6.0, 5.0])
     boundaries = [(0, 32)]
 
-    retained, trace = simplify_with_learned_segment_budget_v1_with_trace(
+    retained, trace = simplify_with_learned_segment_budget_with_trace(
         scores,
         boundaries,
         compression_ratio=0.20,
@@ -422,7 +422,7 @@ def test_learned_segment_budget_length_repair_swaps_learned_slots_for_path_gain(
         geometry_gain_weight=0.0,
         length_repair_fraction=0.0,
     )
-    repaired, repaired_trace = simplify_with_learned_segment_budget_v1_with_trace(
+    repaired, repaired_trace = simplify_with_learned_segment_budget_with_trace(
         scores,
         boundaries,
         compression_ratio=0.20,
@@ -468,15 +468,15 @@ def test_learned_segment_budget_trace_accepts_explicit_segment_score_source_labe
     scores = torch.linspace(0.0, 1.0, steps=16)
     segment_scores = torch.linspace(1.0, 0.0, steps=16)
 
-    _retained, trace = simplify_with_learned_segment_budget_v1_with_trace(
+    _retained, trace = simplify_with_learned_segment_budget_with_trace(
         scores,
         [(0, 16)],
         compression_ratio=0.25,
         segment_scores=segment_scores,
-        segment_score_source_label="path_length_support_head_mean",
+        segment_score_source_label="path_length_support_head_top20_mean",
     )
 
-    assert trace["segment_score_source"] == "path_length_support_head_mean"
+    assert trace["segment_score_source"] == "path_length_support_head_top20_mean"
 
 
 def test_learned_segment_budget_geometry_gain_uses_trajectory_retained_anchors() -> None:
@@ -497,7 +497,7 @@ def test_learned_segment_budget_geometry_gain_uses_trajectory_retained_anchors()
     segment_scores[2:4] = 10.0
     boundaries = [(0, 7)]
 
-    retained, trace = simplify_with_learned_segment_budget_v1_with_trace(
+    retained, trace = simplify_with_learned_segment_budget_with_trace(
         scores,
         boundaries,
         compression_ratio=0.40,
@@ -519,14 +519,14 @@ def test_no_segment_budget_head_ablation_uses_neutral_segment_scores() -> None:
     learned_segment_scores[24:32] = 5.0
 
     neutral_segment_scores = neutral_segment_scores_for_ablation(learned_segment_scores)
-    learned_retained, learned_trace = simplify_with_learned_segment_budget_v1_with_trace(
+    learned_retained, learned_trace = simplify_with_learned_segment_budget_with_trace(
         scores,
         boundaries,
         compression_ratio=0.15,
         segment_size=8,
         segment_scores=learned_segment_scores,
     )
-    ablated_retained, ablated_trace = simplify_with_learned_segment_budget_v1_with_trace(
+    ablated_retained, ablated_trace = simplify_with_learned_segment_budget_with_trace(
         scores,
         boundaries,
         compression_ratio=0.15,
@@ -535,8 +535,8 @@ def test_no_segment_budget_head_ablation_uses_neutral_segment_scores() -> None:
     )
 
     assert torch.count_nonzero(neutral_segment_scores).item() == 0
-    assert learned_trace["segment_score_source"] == "segment_budget_head_mean"
-    assert ablated_trace["segment_score_source"] == "segment_budget_head_mean"
+    assert learned_trace["segment_score_source"] == "segment_budget_head_top20_mean"
+    assert ablated_trace["segment_score_source"] == "segment_budget_head_top20_mean"
     assert bool(learned_retained[27].item()) is True
     assert bool(ablated_retained[27].item()) is False
     assert not torch.equal(learned_retained, ablated_retained)
@@ -549,7 +549,7 @@ def test_learned_segment_budget_can_split_allocation_and_point_segment_scores() 
     point_segment_scores = torch.zeros_like(scores)
     point_segment_scores[5] = 10.0
 
-    retained, trace = simplify_with_learned_segment_budget_v1_with_trace(
+    retained, trace = simplify_with_learned_segment_budget_with_trace(
         scores,
         [(0, 8)],
         compression_ratio=0.375,
@@ -583,7 +583,7 @@ def test_learned_segment_budget_transfer_calibration_is_guarded_non_default() ->
         dtype=torch.float32,
     )
 
-    _default_retained, default_trace = simplify_with_learned_segment_budget_v1_with_trace(
+    _default_retained, default_trace = simplify_with_learned_segment_budget_with_trace(
         scores,
         [(0, 16)],
         compression_ratio=0.50,
@@ -593,7 +593,7 @@ def test_learned_segment_budget_transfer_calibration_is_guarded_non_default() ->
         segment_length_support_weight=0.50,
         geometry_gain_weight=0.0,
     )
-    _calibrated_retained, calibrated_trace = simplify_with_learned_segment_budget_v1_with_trace(
+    _calibrated_retained, calibrated_trace = simplify_with_learned_segment_budget_with_trace(
         scores,
         [(0, 16)],
         compression_ratio=0.50,
@@ -618,7 +618,7 @@ def test_learned_segment_budget_transfer_calibration_is_guarded_non_default() ->
     assert calibrated_trace["segment_length_support_weight"] == pytest.approx(0.0)
     assert (
         calibrated_trace["segment_score_source"]
-        == "segment_budget_head_mean+segment_score_allocation_weight_zblend"
+        == "segment_budget_head_top20_mean+segment_score_allocation_weight_zblend"
     )
     rows = calibrated_trace["segment_source_attribution"]["rows"]
     assert rows
@@ -644,7 +644,7 @@ def test_mlqds_scoring_passes_segment_point_scores_to_learned_selector() -> None
         compression_ratio=0.0625,
         temporal_fraction=0.0,
         diversity_bonus=0.0,
-        selector_type="learned_segment_budget_v1",
+        selector_type="learned_segment_budget",
         score_mode="raw",
         segment_scores=allocation_scores,
         segment_point_scores=point_segment_scores,
@@ -799,14 +799,14 @@ def test_learned_segment_allocation_guarantees_one_slot_per_trajectory_when_poss
     segment_scores[12:] = 0.1
 
     boundaries = [(0, 12), (12, 24)]
-    retained = simplify_with_learned_segment_budget_v1(
+    retained = simplify_with_learned_segment_budget(
         scores,
         boundaries,
         compression_ratio=0.30,
         segment_size=4,
         segment_scores=segment_scores,
     )
-    _, trace = simplify_with_learned_segment_budget_v1_with_trace(
+    _, trace = simplify_with_learned_segment_budget_with_trace(
         scores,
         boundaries,
         compression_ratio=0.30,
@@ -831,7 +831,7 @@ def test_learned_segment_trace_reports_query_free_segment_source_attribution() -
     segment_scores[8:12] = 5.0
     segment_scores[20:24] = 4.0
 
-    retained, trace = simplify_with_learned_segment_budget_v1_with_trace(
+    retained, trace = simplify_with_learned_segment_budget_with_trace(
         scores,
         [(0, 12), (12, 24)],
         compression_ratio=0.30,
@@ -896,7 +896,7 @@ def test_learned_segment_trace_reports_pre_repair_source_attribution() -> None:
     points[:, 1] = torch.linspace(0.0, 0.1, steps=32)
     points[:, 2] = torch.sin(torch.linspace(0.0, 12.56, steps=32)) * 0.05
 
-    _, trace = simplify_with_learned_segment_budget_v1_with_trace(
+    _, trace = simplify_with_learned_segment_budget_with_trace(
         scores,
         [(0, 32)],
         compression_ratio=0.25,
@@ -1423,7 +1423,7 @@ def test_segment_source_attribution_uses_canonical_segment_index_after_score_sor
     segment_scores[4:8] = 2.0
     segment_scores[12:16] = 3.0
 
-    _, trace = simplify_with_learned_segment_budget_v1_with_trace(
+    _, trace = simplify_with_learned_segment_budget_with_trace(
         scores,
         [(0, 16)],
         compression_ratio=0.50,

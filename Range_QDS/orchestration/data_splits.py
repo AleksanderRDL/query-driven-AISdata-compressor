@@ -114,6 +114,47 @@ def _fallback_validation_indices(
     )
 
 
+def _source_stratified_single_dataset_indices(
+    *,
+    source_ids: list[int] | None,
+    train_fraction: float,
+    val_fraction: float,
+    generator: torch.Generator,
+) -> tuple[list[int], list[int], list[int]]:
+    """Return train/validation/eval indices stratified by source id."""
+    if source_ids is None:
+        raise ValueError(
+            "validation_split_mode='source_stratified' requires train trajectory source ids."
+        )
+    grouped: dict[int, list[int]] = {}
+    for trajectory_idx, source_id in enumerate(source_ids):
+        grouped.setdefault(int(source_id), []).append(trajectory_idx)
+    train_indices: list[int] = []
+    val_indices: list[int] = []
+    eval_indices: list[int] = []
+    for source_id in sorted(grouped):
+        indices = grouped[source_id]
+        permutation = torch.randperm(len(indices), generator=generator).tolist()
+        ordered = [indices[position] for position in permutation]
+        train_count = max(1, int(len(ordered) * train_fraction))
+        val_count = (
+            max(1, int(len(ordered) * val_fraction))
+            if val_fraction > 0.0 and len(ordered) - train_count > 1
+            else 0
+        )
+        if train_count + val_count >= len(ordered):
+            val_count = max(0, len(ordered) - train_count - 1)
+        train_indices.extend(ordered[:train_count])
+        val_indices.extend(ordered[train_count : train_count + val_count])
+        eval_indices.extend(ordered[train_count + val_count :])
+    if not train_indices or not eval_indices:
+        raise ValueError(
+            "validation_split_mode='source_stratified' could not create non-empty "
+            "train and eval splits. Use more trajectories per source or random splitting."
+        )
+    return train_indices, val_indices, eval_indices
+
+
 def _single_dataset_split_fractions(config: RunConfig) -> tuple[float, float]:
     """Return validated train/validation fractions for single-dataset splits."""
     train_fraction = float(config.data.train_fraction)
@@ -156,32 +197,58 @@ def prepare_run_split(
     if eval_trajectories is None:
         trajectory_count = len(trajectories)
         generator = torch.Generator().manual_seed(int(seeds.split_seed))
-        permutation = torch.randperm(trajectory_count, generator=generator).tolist()
         train_fraction, val_fraction = _single_dataset_split_fractions(config)
-        train_count = max(1, int(trajectory_count * train_fraction))
-        val_count = (
-            max(1, int(trajectory_count * val_fraction))
-            if val_fraction > 0.0 and trajectory_count - train_count > 1
-            else 0
-        )
-        train_traj = [trajectories[i] for i in permutation[:train_count]]
-        val_traj = [trajectories[i] for i in permutation[train_count : train_count + val_count]]
-        test_traj = [trajectories[i] for i in permutation[train_count + val_count :]]
+        split_mode = str(config.data.validation_split_mode).strip().lower()
+        if split_mode == "source_stratified":
+            train_indices, val_indices, test_indices = _source_stratified_single_dataset_indices(
+                source_ids=trajectory_source_ids,
+                train_fraction=train_fraction,
+                val_fraction=val_fraction,
+                generator=generator,
+            )
+            validation_split_mode_effective = "source_stratified"
+        elif split_mode == "random":
+            permutation = torch.randperm(trajectory_count, generator=generator).tolist()
+            train_count = max(1, int(trajectory_count * train_fraction))
+            val_count = (
+                max(1, int(trajectory_count * val_fraction))
+                if val_fraction > 0.0 and trajectory_count - train_count > 1
+                else 0
+            )
+            train_indices = permutation[:train_count]
+            val_indices = permutation[train_count : train_count + val_count]
+            test_indices = permutation[train_count + val_count :]
+            validation_split_mode_effective = "random"
+        else:
+            raise ValueError(
+                "validation_split_mode must be 'random' or 'source_stratified'; "
+                f"got {config.data.validation_split_mode!r}."
+            )
+        train_traj = [trajectories[i] for i in train_indices]
+        val_traj = [trajectories[i] for i in val_indices]
+        test_traj = [trajectories[i] for i in test_indices]
         if not test_traj:
             test_traj = val_traj if val_traj else train_traj
+            test_indices = val_indices if val_indices else train_indices
         selection_traj = val_traj if needs_validation_score and val_traj else None
         if trajectory_mmsis is not None and len(trajectory_mmsis) == trajectory_count:
-            train_mmsis = [trajectory_mmsis[i] for i in permutation[:train_count]]
-            test_mmsis = [trajectory_mmsis[i] for i in permutation[train_count + val_count :]]
-            if not test_mmsis:
-                test_mmsis = [
-                    trajectory_mmsis[i] for i in permutation[train_count : train_count + val_count]
-                ] or [trajectory_mmsis[i] for i in permutation[:train_count]]
+            train_mmsis = [trajectory_mmsis[i] for i in train_indices]
+            test_mmsis = [trajectory_mmsis[i] for i in test_indices]
         else:
             train_mmsis = None
             test_mmsis = None
         train_source_ids = (
-            [int(trajectory_source_ids[i]) for i in permutation[:train_count]]
+            [int(trajectory_source_ids[i]) for i in train_indices]
+            if trajectory_source_ids is not None
+            else None
+        )
+        selection_source_ids = (
+            [int(trajectory_source_ids[i]) for i in val_indices]
+            if trajectory_source_ids is not None and selection_traj
+            else None
+        )
+        eval_source_ids = (
+            [int(trajectory_source_ids[i]) for i in test_indices]
             if trajectory_source_ids is not None
             else None
         )
@@ -189,10 +256,13 @@ def prepare_run_split(
             {
                 "mode": "single_dataset",
                 "selection_source": "single_dataset_fraction" if selection_traj else "none",
+                "validation_split_mode_effective": validation_split_mode_effective,
                 "train_trajectory_count": len(train_traj),
                 "selection_trajectory_count": len(selection_traj or []),
                 "eval_trajectory_count": len(test_traj),
                 "train_source_counts": _source_counts(train_source_ids),
+                "selection_source_counts": _source_counts(selection_source_ids),
+                "eval_source_counts": _source_counts(eval_source_ids),
             }
         )
         print(

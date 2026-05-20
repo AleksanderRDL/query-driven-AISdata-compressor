@@ -8,7 +8,7 @@ from typing import Any
 
 import torch
 
-from learning.model_features import transform_workload_blind_range_v2_prior_features
+from learning.model_features import transform_workload_blind_range_prior_features
 from learning.query_prior_fields import QUERY_PRIOR_FIELD_NAMES, sample_query_prior_fields
 from learning.targets.query_local_utility import (
     QUERY_LOCAL_UTILITY_HEAD_NAMES,
@@ -29,7 +29,7 @@ from selection.learned_segment_budget import (
     SEGMENT_SCORE_POINT_BLEND_WEIGHT,
     SEGMENT_TRANSFER_CALIBRATION_MODE_NONE,
     blend_segment_support_scores,
-    simplify_with_learned_segment_budget_v1,
+    simplify_with_learned_segment_budget,
 )
 
 
@@ -87,7 +87,7 @@ def query_prior_component_vectors_for_points(
     if not isinstance(query_prior_field, dict):
         return {}, {}
     sampled = sample_query_prior_fields(points, query_prior_field).detach().cpu().float()
-    model_prior = transform_workload_blind_range_v2_prior_features(sampled).detach().cpu().float()
+    model_prior = transform_workload_blind_range_prior_features(sampled).detach().cpu().float()
     sampled_vectors = {
         str(name): sampled[:, field_idx].contiguous()
         for field_idx, name in enumerate(QUERY_PRIOR_FIELD_NAMES)
@@ -167,7 +167,7 @@ def learned_segment_frozen_method(
     selector_segment_point_scores = (
         None if segment_point_scores is None else segment_point_scores.detach().cpu().float()
     )
-    retained_mask = simplify_with_learned_segment_budget_v1(
+    retained_mask = simplify_with_learned_segment_budget(
         scores.detach().cpu().float(),
         boundaries,
         compression_ratio,
@@ -236,11 +236,11 @@ def selector_segment_score_source_label(
     """Return an honest selector trace label for segment allocation scores."""
     weight = max(0.0, min(1.0, float(length_support_blend_weight)))
     if path_length_support_scores is not None and weight >= 1.0 - 1e-12:
-        return "path_length_support_head_mean"
+        return "path_length_support_head_top20_mean"
     if path_length_support_scores is not None and weight > 0.0:
-        return "segment_budget_path_length_support_blend_mean"
+        return "segment_budget_path_length_support_blend_top20_mean"
     if segment_scores is not None:
-        return "segment_budget_head_mean"
+        return "segment_budget_head_top20_mean"
     return "point_score_top20_mean"
 
 

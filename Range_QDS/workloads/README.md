@@ -16,7 +16,7 @@ the supported training, scoring, or benchmark contract.
 | `generation/anchors.py` | Anchor priors and weighted point sampling. |
 | `generation/profile_query_plan.py` | Deterministic profile family quota planning and per-query settings. |
 | `generation/coverage.py` | Point coverage masks, target normalization, and range acceptance filters. |
-| `generation/workload_profiles.py` | Versioned product workload profiles, including `range_query_mix`. |
+| `generation/workload_profiles.py` | Product workload profile definitions, including `range_query_mix`. |
 | `generation/signatures.py` | Range workload signature payload construction. |
 | `query_executor.py` | Range query execution. |
 | `range_geometry.py` | Shared range-box and geographic distance helpers. |
@@ -78,6 +78,25 @@ Active `range_query_mix` family weights:
 | Footprint | `medium_operational` | `0.6923076923076923` |
 | Footprint | `large_context` | `0.3076923076923077` |
 
+Active footprint acceptance bands:
+
+| Footprint | Point-hit fraction band |
+| --- | --- |
+| `medium_operational` | `[0.006, 0.030]` |
+| `large_context` | `[0.010, 0.045]` |
+
+Profiled range proposals target a deterministic low-discrepancy point-hit
+fraction inside the lower 25% of the selected footprint band's interval before
+the ordinary acceptance gates run. The target is a proposal aid, not a relaxed
+gate: min/max point-hit, duplicate, trajectory-hit, and coverage guards still
+decide whether the query is accepted.
+
+Workload signatures include accepted `anchor_family`,
+`footprint_family`, and `anchor_footprint_pair` labels per query. Range
+acceptance diagnostics also attribute rejection reasons by anchor family,
+footprint family, and anchor/footprint pair so coverage-pressure failures can
+be localized before changing scoring or model code.
+
 The `range_query_mix_*` variants share those family weights and differ only in
 target coverage and overshoot defaults:
 
@@ -88,10 +107,8 @@ target coverage and overshoot defaults:
 | `range_query_mix_operational` | `0.15` | `0.010` |
 | `range_query_mix` | `0.30` | `0.020` |
 
-Removed profile families such as `small_local`, `density_route`,
-`boundary_entry_exit`, `crossing_turn_change`, `port_or_approach_zone`, and
-`route_corridor_like` are historical or diagnostic references only unless a
-future checkpoint deliberately reintroduces them with new evidence.
+Removed anchor and footprint families from older profiles are historical only
+unless a future checkpoint deliberately reintroduces one with new evidence.
 
 ## Execution
 

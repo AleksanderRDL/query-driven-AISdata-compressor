@@ -19,7 +19,7 @@ Turns per-point scores into retained-point masks.
 | `length_repair.py` | Geometry-aware point selection and length-repair swaps. |
 | `diagnostics.py` | Query-free selector geometry, attribution, and counterfactual diagnostics. |
 | `trace.py` | JSON-serializable selector trace payload construction. |
-| `constants.py` | Selector schema versions and default weights. |
+| `constants.py` | Selector artifact schema metadata and default weights. |
 
 ## Rules
 
@@ -28,6 +28,6 @@ Turns per-point scores into retained-point masks.
 - Equal scores get deterministic pseudo-random jitter to avoid positional bias.
 - Supported MLQDS score modes include `rank`, `rank_tie`, `raw`, `sigmoid`,
   `temperature_sigmoid`, `zscore_sigmoid`, and `rank_confidence`.
-- `learned_segment_budget_v1` must report skeleton, learned, fallback, and
+- `learned_segment_budget` must report skeleton, learned, fallback, and
   length-repair attribution so causality diagnostics can distinguish genuine
   learned control from scaffolding.

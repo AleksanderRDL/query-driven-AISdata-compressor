@@ -42,7 +42,7 @@ from learning.model_factory import build_qds_model, require_historical_prior_mod
 from learning.model_features import (
     HISTORICAL_PRIOR_MODEL_TYPES,
     NONPARAMETRIC_HISTORICAL_PRIOR_MODEL_TYPES,
-    WORKLOAD_BLIND_RANGE_V2_MODEL_TYPE,
+    WORKLOAD_BLIND_RANGE_MODEL_TYPE,
     build_model_point_features,
 )
 from learning.model_setup import (
@@ -112,9 +112,9 @@ def _historical_prior_support_mask(
 def _fit_scaler_for_model(
     points: torch.Tensor, queries: torch.Tensor, model_type: str
 ) -> FeatureScaler:
-    """Fit feature scaling, preserving semantic zero for v2 query-prior channels."""
+    """Fit feature scaling, preserving semantic zero for query-prior channels."""
     scaler = FeatureScaler.fit(points, queries)
-    if str(model_type).lower() == WORKLOAD_BLIND_RANGE_V2_MODEL_TYPE:
+    if str(model_type).lower() == WORKLOAD_BLIND_RANGE_MODEL_TYPE:
         prior_dim = len(QUERY_PRIOR_FIELD_NAMES)
         if int(scaler.point_min.numel()) >= prior_dim:
             prior_slice = slice(-prior_dim, None)
@@ -282,7 +282,7 @@ def train_model(
             )
 
     query_prior_field: dict[str, Any] | None = None
-    if str(model_config.model_type).lower() == WORKLOAD_BLIND_RANGE_V2_MODEL_TYPE:
+    if str(model_config.model_type).lower() == WORKLOAD_BLIND_RANGE_MODEL_TYPE:
         prior_seed = None
         if query_prior_workload_seeds:
             prior_seed = int(query_prior_workload_seeds[0])
@@ -459,8 +459,8 @@ def train_model(
         )
 
     scaler = _fit_scaler_for_model(points, workload.query_features, model_config.model_type)
-    if str(model_config.model_type).lower() == WORKLOAD_BLIND_RANGE_V2_MODEL_TYPE:
-        target_diagnostics["range_v2_prior_feature_scaling"] = {
+    if str(model_config.model_type).lower() == WORKLOAD_BLIND_RANGE_MODEL_TYPE:
+        target_diagnostics["workload_blind_range_prior_feature_scaling"] = {
             "semantic_zero_preserved": True,
             "prior_feature_names": list(QUERY_PRIOR_FIELD_NAMES),
             "point_min": scaler.point_min[-len(QUERY_PRIOR_FIELD_NAMES) :].detach().cpu().tolist(),

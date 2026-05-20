@@ -2,19 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 import torch
 
 from orchestration.diagnostics.family_transfer_path_diagnostic import (
     build_family_transfer_path_diagnostic,
-)
-from orchestration.diagnostics.query_ship_local_heads_failure_diagnostic import (
-    build_query_ship_local_heads_failure_diagnostic,
-)
-from orchestration.diagnostics.query_ship_max_pool_transfer_diagnostic import (
-    build_query_ship_max_pool_transfer_diagnostic,
 )
 from orchestration.diagnostics.selection_eval_segment_teacher_transfer_diagnostic import (
     build_selection_eval_segment_teacher_transfer_diagnostic,
@@ -171,410 +163,6 @@ def test_workload_component_compatibility_diagnostic_finds_blocking_families() -
     assert blocker_outcome["unresolved_blocker_family_count"] == 1
 
 
-def test_query_ship_max_pool_transfer_diagnostic_flags_historical_small_local_transfer_gap() -> None:
-    def artifact(
-        *,
-        mode: str,
-        mlqds_score: float,
-        segment_target_ship: float,
-        segment_fit_ship: float,
-        no_segment_delta: float,
-        failed_checks: list[str],
-    ) -> dict[str, Any]:
-        return {
-            "matched": {
-                "MLQDS": {
-                    "query_local_utility_score": mlqds_score,
-                    "range_usefulness_score": 0.15,
-                },
-                "uniform": {"query_local_utility_score": 0.14},
-                "DouglasPeucker": {
-                    "query_local_utility_score": 0.167,
-                    "range_usefulness_score": 0.151,
-                },
-            },
-            "final_claim_summary": {"final_success_allowed": False},
-            "workload_stability_gate": {"gate_pass": True},
-            "support_overlap_gate": {"gate_pass": True},
-            "target_diffusion_gate": {"gate_pass": True},
-            "global_sanity_gate": {"gate_pass": True},
-            "workload_distribution_comparison": {
-                "workload_signature_gate": {"all_pass": True}
-            },
-            "predictability_audit": {
-                "gate_pass": False,
-                "gate_checks": {"spearman_min": False},
-                "prior_predictive_alignment_gate": {"gate_pass": True},
-                "metrics": {
-                    "spearman": 0.11,
-                    "pr_auc_lift_over_base_rate": 1.23,
-                    "lift_at_5_percent": 1.2,
-                },
-            },
-            "learning_causality_summary": {
-                "learning_causality_gate_pass": False,
-                "learning_causality_failed_checks": failed_checks,
-                "learning_causality_delta_gate": {
-                    "thresholds": {
-                        "without_segment_budget_head_should_lose": 0.005,
-                        "without_behavior_utility_head_should_lose": 0.005,
-                    }
-                },
-                "no_segment_budget_head_ablation_delta": no_segment_delta,
-                "no_behavior_head_ablation_delta": 0.003,
-            },
-            "training_target_diagnostics": {
-                "query_local_utility_factorized": {
-                    "target_mode": mode,
-                    "segment_budget_target_variant": "query_ship_blend_max_pool",
-                    "segment_budget_target_aggregation": "max_pool",
-                    "family_conditioned_target_trainability": {
-                        "group_by": {
-                            "footprint_family": {
-                                HISTORICAL_SMALL_LOCAL_FAMILY: {
-                                    "query_count": 4,
-                                    "valid_hit_point_count": 12,
-                                    "target_trainability_status": (
-                                        "weak_active_target_signal"
-                                    ),
-                                    "weak_ship_evidence_rankers": ["final_score"],
-                                    "ranker_alignment": {
-                                        "segment_budget_target": {
-                                            "spearman_with_ship_query_evidence": (
-                                                segment_target_ship
-                                            ),
-                                            "topk_ship_query_evidence_mass_recall": 0.5,
-                                        }
-                                    },
-                                    "target_shapes": {
-                                        "segment_budget_target": {
-                                            "target_std": 0.2,
-                                            "target_mean": 0.3,
-                                        }
-                                    },
-                                }
-                            }
-                        }
-                    },
-                    "family_local_target_candidate_alignment": {
-                        "group_by": {
-                            "footprint_family": {
-                                HISTORICAL_SMALL_LOCAL_FAMILY: {
-                                    "best_segment_candidate_two_stage_ship_query_pair_coverage": 0.4,
-                                    "best_segment_candidate_two_stage_ship_query_evidence_mass_recall": 0.8,
-                                }
-                            }
-                        }
-                    },
-                }
-            },
-            "training_fit_diagnostics": {
-                "family_conditioned_head_trainability": {
-                    "group_by": {
-                        "footprint_family": {
-                            HISTORICAL_SMALL_LOCAL_FAMILY: {
-                                "query_count": 4,
-                                "valid_hit_point_count": 12,
-                                "head_trainability_status": "weak_family_head_signal",
-                                "weak_ship_evidence_heads": [
-                                    "segment_budget_target",
-                                    "factorized_composed_score",
-                                ],
-                                "head_fit": {
-                                    "segment_budget_target": {
-                                        "spearman_with_family_ship_query_evidence": (
-                                            segment_fit_ship
-                                        ),
-                                        "topk_family_ship_query_evidence_mass_recall": 0.2,
-                                        "kendall_tau_with_head_target": 0.3,
-                                        "prediction_std": 0.05,
-                                        "target_std": 0.2,
-                                    }
-                                },
-                                "factorized_composed_score_fit": {
-                                    "spearman_with_family_ship_query_evidence": -0.07,
-                                    "topk_family_ship_query_evidence_mass_recall": 0.2,
-                                },
-                            }
-                        }
-                    }
-                }
-            },
-            "selector_trace_diagnostics": {
-                "eval_primary": {
-                    "retained_decision_marginal_query_local_utility_alignment": {
-                        "available": True,
-                        "candidate_count": 2,
-                        "overall": {
-                            "selector_score": {
-                                "spearman": -0.01,
-                                "top_minus_bottom_marginal": 0.0,
-                            }
-                        },
-                    }
-                }
-            },
-        }
-
-    diagnostic = build_query_ship_max_pool_transfer_diagnostic(
-        [
-            (
-                "checkpoint85",
-                artifact(
-                    mode="query_local_utility_factorized",
-                    mlqds_score=0.166,
-                    segment_target_ship=-0.34,
-                    segment_fit_ship=-0.09,
-                    no_segment_delta=0.003,
-                    failed_checks=[
-                        "without_segment_budget_head_should_lose",
-                        "without_behavior_utility_head_should_lose",
-                    ],
-                ),
-            ),
-            (
-                "checkpoint86",
-                artifact(
-                    mode="query_local_utility_factorized_segment_budget_query_ship_max_pool",
-                    mlqds_score=0.1673,
-                    segment_target_ship=0.12,
-                    segment_fit_ship=-0.08,
-                    no_segment_delta=0.006,
-                    failed_checks=["without_behavior_utility_head_should_lose"],
-                ),
-            ),
-        ]
-    )
-
-    comparison = diagnostic["summary"]["comparison"]
-    assert comparison["causality_changes"]["newly_passing_child_gates"] == [
-        "without_segment_budget_head_should_lose"
-    ]
-    transfer_rows = comparison["families_with_positive_target_negative_fit"]
-    assert transfer_rows[0]["family"] == HISTORICAL_SMALL_LOCAL_FAMILY
-    assert transfer_rows[0]["segment_budget_transfer_status"] == (
-        "target_positive_fit_negative"
-    )
-    assert comparison["decision"] == "continue_with_family_transfer_diagnosis_not_promotion"
-    assert diagnostic["summary"]["candidate_final_success_allowed"] is False
-
-
-def test_query_ship_local_heads_failure_diagnostic_rejects_broad_head_target() -> None:
-    def artifact(
-        *,
-        mlqds_score: float,
-        target_diffusion_gate_pass: bool,
-        prior_gate_pass: bool,
-        qhit_target_ship: float,
-        behavior_target_ship: float,
-        segment_target_ship: float,
-        qhit_fit_ship: float,
-        behavior_fit_ship: float,
-        segment_fit_ship: float,
-    ) -> dict[str, Any]:
-        return {
-            "matched": {
-                "MLQDS": {"query_local_utility_score": mlqds_score},
-                "uniform": {"query_local_utility_score": 0.14},
-                "DouglasPeucker": {"query_local_utility_score": 0.167},
-            },
-            "final_claim_summary": {"final_success_allowed": False},
-            "workload_stability_gate": {"gate_pass": True},
-            "support_overlap_gate": {"gate_pass": True},
-            "target_diffusion_gate": {
-                "gate_pass": target_diffusion_gate_pass,
-                "failed_checks": (
-                    ["conditional_behavior_utility:support_fraction_above_max"]
-                    if not target_diffusion_gate_pass
-                    else []
-                ),
-                "final_label_support_fraction": 0.32,
-                "max_support_fraction": 0.5,
-                "head_rows": [
-                    {
-                        "head": "conditional_behavior_utility",
-                        "blocking": True,
-                        "support_fraction": 0.94,
-                        "top5_label_mass_fraction": 0.13,
-                        "failed_checks": (
-                            ["support_fraction_above_max"]
-                            if not target_diffusion_gate_pass
-                            else []
-                        ),
-                    }
-                ],
-            },
-            "global_sanity_gate": {"gate_pass": True},
-            "workload_distribution_comparison": {
-                "workload_signature_gate": {"all_pass": True}
-            },
-            "predictability_audit": {
-                "gate_pass": False,
-                "prior_predictive_alignment_gate": {
-                    "gate_pass": prior_gate_pass,
-                    "failed_checks": (
-                        ["query_hit_spearman_below_min"] if not prior_gate_pass else []
-                    ),
-                    "positive_spearman_head_count": 5,
-                },
-                "metrics": {
-                    "spearman": 0.11,
-                    "positive_target_spearman": -0.02,
-                    "pr_auc_lift_over_base_rate": 1.23,
-                    "lift_at_5_percent": 1.30,
-                },
-            },
-            "learning_causality_summary": {
-                "learning_causality_gate_pass": False,
-                "learning_causality_failed_checks": [
-                    "shuffled_scores_should_lose",
-                    "without_segment_budget_head_should_lose",
-                ],
-                "learning_causality_delta_gate": {
-                    "thresholds": {
-                        "shuffled_scores_should_lose": 0.012,
-                        "without_segment_budget_head_should_lose": 0.005,
-                    }
-                },
-                "shuffled_score_ablation_delta": 0.006,
-                "no_segment_budget_head_ablation_delta": 0.0005,
-            },
-            "training_target_diagnostics": {
-                "query_local_utility_factorized": {
-                    "target_mode": "query_local_utility_factorized_query_ship_local_heads",
-                    "query_hit_target_variant": "query_ship_local_presence_utility",
-                    "conditional_behavior_target_variant": (
-                        "query_ship_local_behavior_utility"
-                    ),
-                    "final_label_variant": "query_ship_local_heads_composed_score",
-                    "segment_budget_target_variant": "query_ship_local_heads_max_pool",
-                    "segment_budget_target_aggregation": "max_pool",
-                    "final_success_allowed": False,
-                    "family_conditioned_target_trainability": {
-                        "group_by": {
-                            "footprint_family": {
-                                HISTORICAL_SMALL_LOCAL_FAMILY: {
-                                    "weak_ship_evidence_rankers": [],
-                                    "ranker_alignment": {
-                                        "query_hit_probability": {
-                                            "spearman_with_ship_query_evidence": (
-                                                qhit_target_ship
-                                            )
-                                        },
-                                        "conditional_behavior_utility": {
-                                            "spearman_with_ship_query_evidence": (
-                                                behavior_target_ship
-                                            )
-                                        },
-                                        "segment_budget_target": {
-                                            "spearman_with_ship_query_evidence": (
-                                                segment_target_ship
-                                            )
-                                        },
-                                        "final_score": {
-                                            "spearman_with_ship_query_evidence": 0.25
-                                        },
-                                    },
-                                }
-                            }
-                        }
-                    },
-                }
-            },
-            "training_fit_diagnostics": {
-                "family_conditioned_head_trainability": {
-                    "group_by": {
-                        "footprint_family": {
-                            HISTORICAL_SMALL_LOCAL_FAMILY: {
-                                "weak_ship_evidence_heads": [
-                                    "query_hit_probability",
-                                    "conditional_behavior_utility",
-                                    "segment_budget_target",
-                                    "factorized_composed_score",
-                                ],
-                                "head_fit": {
-                                    "query_hit_probability": {
-                                        "spearman_with_family_ship_query_evidence": (
-                                            qhit_fit_ship
-                                        )
-                                    },
-                                    "conditional_behavior_utility": {
-                                        "spearman_with_family_ship_query_evidence": (
-                                            behavior_fit_ship
-                                        )
-                                    },
-                                    "segment_budget_target": {
-                                        "spearman_with_family_ship_query_evidence": (
-                                            segment_fit_ship
-                                        )
-                                    },
-                                },
-                                "factorized_composed_score_fit": {
-                                    "spearman_with_family_ship_query_evidence": -0.07
-                                },
-                            }
-                        }
-                    }
-                }
-            },
-        }
-
-    diagnostic = build_query_ship_local_heads_failure_diagnostic(
-        [
-            (
-                "checkpoint86",
-                artifact(
-                    mlqds_score=0.1673,
-                    target_diffusion_gate_pass=True,
-                    prior_gate_pass=True,
-                    qhit_target_ship=-0.1,
-                    behavior_target_ship=-0.1,
-                    segment_target_ship=0.12,
-                    qhit_fit_ship=-0.08,
-                    behavior_fit_ship=-0.08,
-                    segment_fit_ship=-0.08,
-                ),
-            ),
-            (
-                "checkpoint90",
-                artifact(
-                    mlqds_score=0.1632,
-                    target_diffusion_gate_pass=False,
-                    prior_gate_pass=False,
-                    qhit_target_ship=0.20,
-                    behavior_target_ship=0.30,
-                    segment_target_ship=0.12,
-                    qhit_fit_ship=-0.07,
-                    behavior_fit_ship=-0.08,
-                    segment_fit_ship=-0.07,
-                ),
-            ),
-        ]
-    )
-
-    comparison = diagnostic["summary"]["comparison"]
-    assert comparison["decision"] == (
-        "reject_broad_local_heads_preserve_diffusion_before_next_transfer_probe"
-    )
-    assert comparison["score_delta"]["primary_query_local_utility"] == pytest.approx(-0.0041)
-    assert "target_diffusion" in comparison["gate_regressions"]
-    assert comparison["target_diffusion_failure"]["failed_checks"] == [
-        "conditional_behavior_utility:support_fraction_above_max"
-    ]
-    historical_small_local = next(
-        row
-        for row in comparison["family_failure_rows"]
-        if row["family"] == HISTORICAL_SMALL_LOCAL_FAMILY
-    )
-    assert historical_small_local["family"] == HISTORICAL_SMALL_LOCAL_FAMILY
-    assert historical_small_local["candidate_positive_target_negative_fit_heads"] == [
-        "query_hit_probability",
-        "conditional_behavior_utility",
-        "segment_budget_target",
-    ]
-    assert diagnostic["summary"]["candidate_label"] == "checkpoint90"
-
-
 def test_family_transfer_path_diagnostic_flags_missing_family_prior_surface() -> None:
     artifact = {
         "matched": {
@@ -650,6 +238,28 @@ def test_family_transfer_path_diagnostic_flags_missing_family_prior_surface() ->
         "learning_causality_summary": {
             "learning_causality_gate_pass": False,
             "selection_causality_diagnostics": {"available": True},
+            "causality_ablation_component_deltas": {
+                "MLQDS_without_behavior_utility_head": {
+                    "available": True,
+                    "query_local_utility_delta": -0.0004,
+                    "component_weighted_delta_sum": -0.0004,
+                    "component_delta_residual": 0.0,
+                    "top_positive_weighted_component_deltas": [
+                        {
+                            "component": "query_point_recall",
+                            "component_delta": 0.001,
+                            "weighted_delta": 0.0005,
+                        }
+                    ],
+                    "top_negative_weighted_component_deltas": [
+                        {
+                            "component": "query_local_turn_change_coverage",
+                            "component_delta": -0.004,
+                            "weighted_delta": -0.0006,
+                        }
+                    ],
+                }
+            },
         },
         "training_target_diagnostics": {
             "query_local_utility_factorized": {
@@ -658,6 +268,22 @@ def test_family_transfer_path_diagnostic_flags_missing_family_prior_surface() ->
                 ),
                 "segment_budget_target_variant": "query_ship_blend_max_pool",
                 "segment_budget_target_aggregation": "max_pool",
+                "conditional_behavior_target_variant": "active_local_behavior_change",
+                "conditional_behavior_target_base_source": (
+                    "query_hit_conditioned_trajectory_change"
+                ),
+                "conditional_behavior_utility_training": "masked_to_query_hit_points",
+                "behavior_change_highpass_quantile": 0.70,
+                "conditional_behavior_target_alignment": {
+                    "spearman_with_final_score": 0.32,
+                    "spearman_with_query_hit_probability": 0.11,
+                    "spearman_with_replacement_representative_value": 0.55,
+                    "spearman_with_segment_budget_target": 0.03,
+                    "spearman_with_path_length_support_target": 0.20,
+                    "spearman_with_ship_query_evidence": -0.04,
+                    "topk_replacement_representative_value_mass_recall_ranked_by_behavior": 0.80,
+                    "topk_segment_budget_target_mass_recall_ranked_by_behavior": 0.40,
+                },
                 "final_success_allowed": False,
                 "family_conditioned_target_trainability": {
                     "group_by": {
@@ -682,6 +308,14 @@ def test_family_transfer_path_diagnostic_flags_missing_family_prior_surface() ->
             }
         },
         "training_fit_diagnostics": {
+            "factorized_head_fit": {
+                "conditional_behavior_utility": {
+                    "kendall_tau": 0.04,
+                    "topk_mass_recall_at_5_percent": 0.12,
+                    "prediction_std": 0.002,
+                    "target_std": 0.20,
+                }
+            },
             "family_conditioned_head_trainability": {
                 "group_by": {
                     "footprint_family": {
@@ -718,13 +352,29 @@ def test_family_transfer_path_diagnostic_flags_missing_family_prior_surface() ->
                             "spearman": -0.06,
                             "top_minus_bottom_marginal": 0.00001,
                         },
+                        "score_component_alignment": {
+                            "head_probability_conditional_behavior_utility": {
+                                "spearman": 0.25,
+                                "top_minus_bottom_marginal": 0.0005,
+                            },
+                            "head_probability_query_hit_probability": {
+                                "spearman": 0.35,
+                                "top_minus_bottom_marginal": 0.0007,
+                            },
+                        },
                     },
                     "by_decision": {
                         "retained_removal_loss": {
                             "selector_score": {
                                 "spearman": -0.03,
                                 "top_minus_bottom_marginal": -0.00006,
-                            }
+                            },
+                            "score_component_alignment": {
+                                "head_probability_conditional_behavior_utility": {
+                                    "spearman": -0.31,
+                                    "top_minus_bottom_marginal": -0.0004,
+                                }
+                            },
                         }
                     },
                 }
@@ -748,10 +398,128 @@ def test_family_transfer_path_diagnostic_flags_missing_family_prior_surface() ->
     assert blocked[0]["transfer_status"] == "fits_target_but_misorders_ship_evidence"
     retained = diagnostic["artifacts"][0]["retained_marginal_alignment"]
     assert retained["deprecated_learning_causality_layout_present"] is False
+    active_alignment = retained["active_metric_score_component_alignment"]
+    assert active_alignment["source_layout"] == (
+        "selector_trace_diagnostics.eval_primary."
+        "retained_decision_marginal_query_local_utility_alignment."
+        "overall.score_component_alignment"
+    )
+    assert active_alignment["overall"]["conditional_behavior_utility"][
+        "artifact_field"
+    ] == "head_probability_conditional_behavior_utility"
+    assert active_alignment["retained_removal_loss"]["conditional_behavior_utility"][
+        "spearman"
+    ] == pytest.approx(-0.31)
+    assert summary["behavior_head_active_metric_alignment"][
+        "retained_removal_spearman"
+    ] == pytest.approx(-0.31)
+    assert summary["current_metric_behavior_head_status"] == (
+        "behavior_head_hurts_active_metric_ablation"
+    )
+    assert summary["without_behavior_head_query_local_utility_delta"] == pytest.approx(
+        -0.0004
+    )
+    assert summary["without_behavior_head_top_negative_weighted_component_deltas"][0][
+        "component"
+    ] == "query_local_turn_change_coverage"
+    semantics = diagnostic["artifacts"][0]["behavior_head_semantic_alignment"]
+    assert semantics["target_reference_alignment"]["replacement_representative_value"][
+        "spearman"
+    ] == pytest.approx(0.55)
+    assert semantics["strongest_target_reference_by_spearman"][
+        "reference"
+    ] == "replacement_representative_value"
+    assert semantics["strongest_target_reference_by_spearman"][
+        "spearman"
+    ] == pytest.approx(0.55)
+    assert semantics["no_behavior_head_component_tradeoff"][
+        "delta_convention"
+    ] == "primary_minus_ablation"
+    assert "fitted_behavior_head_low_contrast" in semantics["semantic_statuses"]
+    assert "behavior_target_weak_segment_budget_alignment" in summary[
+        "behavior_head_semantic_statuses"
+    ]
     prior = diagnostic["artifacts"][0]["predictability"][
         "aggregate_best_prior_channel_by_head"
     ]
     assert prior["segment_budget_target"]["best_spearman"] == pytest.approx(0.149)
+
+
+def test_family_transfer_path_diagnostic_uses_artifact_focus_families_when_present() -> None:
+    artifact = {
+        "matched": {
+            "MLQDS": {"query_local_utility_score": 0.14},
+            "uniform": {"query_local_utility_score": 0.12},
+            "DouglasPeucker": {"query_local_utility_score": 0.11},
+        },
+        "final_claim_summary": {"final_success_allowed": False},
+        "workload_stability_gate": {"gate_pass": True},
+        "support_overlap_gate": {"gate_pass": True},
+        "target_diffusion_gate": {"gate_pass": True},
+        "global_sanity_gate": {"gate_pass": True},
+        "workload_distribution_comparison": {"workload_signature_gate": {"all_pass": True}},
+        "query_generation_diagnostics": {
+            "train": {
+                "workload_profile": {
+                    "anchor_family_weights": {"density": 0.8},
+                    "footprint_family_weights": {
+                        "medium_operational": 0.7,
+                        "large_context": 0.3,
+                    },
+                },
+                "workload_signature": {
+                    "anchor_family_counts": {"density": 32},
+                    "footprint_family_counts": {
+                        "medium_operational": 28,
+                        "large_context": 12,
+                    },
+                },
+            }
+        },
+        "predictability_audit": {
+            "gate_pass": True,
+            "prior_predictive_alignment_gate": {"gate_pass": True, "failed_checks": []},
+            "metrics": {},
+        },
+        "learning_causality_summary": {"learning_causality_gate_pass": False},
+        "training_target_diagnostics": {
+            "query_local_utility_factorized": {
+                "target_mode": "query_local_utility_factorized",
+                "family_conditioned_target_trainability": {
+                    "focus_families": {
+                        "anchor_family": ["density"],
+                        "footprint_family": ["medium_operational"],
+                    },
+                    "group_by": {
+                        "anchor_family": {"density": {}},
+                        "footprint_family": {"medium_operational": {}},
+                    },
+                },
+            }
+        },
+        "training_fit_diagnostics": {
+            "family_conditioned_head_trainability": {
+                "group_by": {
+                    "anchor_family": {"density": {}},
+                    "footprint_family": {"medium_operational": {}},
+                }
+            }
+        },
+    }
+
+    diagnostic = build_family_transfer_path_diagnostic([("current", artifact)])
+
+    focus_pairs = {
+        (row["group_key"], row["family"])
+        for row in diagnostic["artifacts"][0]["focus_family_rows"]
+    }
+    assert focus_pairs == {
+        ("anchor_family", "density"),
+        ("footprint_family", "medium_operational"),
+    }
+    pressure = diagnostic["artifacts"][0]["workload_family_pressure"]
+    assert set(pressure["footprint_family_weights"]) == {"medium_operational"}
+    assert HISTORICAL_SMALL_LOCAL_FAMILY not in pressure["footprint_family_weights"]
 
 
 def test_selector_marginal_calibration_diagnostic_separates_score_and_segment_failures() -> None:
@@ -1115,11 +883,15 @@ def test_selection_marginal_segment_calibration_diagnostic_flags_split_transfer_
     assert summary["decision"] == (
         "diagnose_selection_marginal_segment_transfer_before_training_semantics"
     )
+    assert summary["decision_scope"] == "primary_artifact_last_input"
     assert summary["selection_layout"] == (
         "selector_trace_diagnostics.selection_primary."
         "retained_decision_marginal_query_local_utility_alignment"
     )
     result = diagnostic["artifacts"][0]
+    assert result["decision"] == (
+        "diagnose_selection_marginal_segment_transfer_before_training_semantics"
+    )
     selection = result["selection_teacher"]
     assert selection["candidate_for_train_side_teacher"] is True
     assert selection["top_segment_low_selector_score_count"] == 2
@@ -1224,6 +996,11 @@ def test_selection_eval_segment_teacher_transfer_diagnostic_blocks_direct_probe_
         "global_sanity_gate": {"gate_pass": True},
         "final_claim_summary": {"final_success_allowed": False},
         "selector_trace_diagnostics": {
+            "train_primary": _trace(
+                split="train",
+                candidate=True,
+                target_segments=(1, 2),
+            ),
             "selection_primary": _trace(
                 split="checkpoint_selection",
                 candidate=True,
@@ -1245,7 +1022,11 @@ def test_selection_eval_segment_teacher_transfer_diagnostic_blocks_direct_probe_
     assert summary["decision"] == (
         "diagnose_transfer_features_before_guarded_calibration_probe"
     )
+    assert summary["decision_scope"] == "primary_artifact_last_input"
     result = diagnostic["artifacts"][0]
+    assert result["decision"] == (
+        "diagnose_transfer_features_before_guarded_calibration_probe"
+    )
     overlap = result["target_overlap"]
     assert overlap["positive_overlap_count"] == 0
     assert overlap["top_0.1_overlap_fraction_of_selection"] == 0.0
@@ -1258,6 +1039,18 @@ def test_selection_eval_segment_teacher_transfer_diagnostic_blocks_direct_probe_
     assert eval_features["segment_score"]["spearman_with_segment_teacher_target"] < 0.0
     transfer = result["feature_transfer_summary"]
     assert transfer["contradictory_feature_count"] > 0
+
+    train_source_diagnostic = build_selection_eval_segment_teacher_transfer_diagnostic(
+        [("checkpoint93", artifact)],
+        source_trace_name="train_primary",
+    )
+    assert (
+        train_source_diagnostic["summary"]["selection_layout"]
+        == "selector_trace_diagnostics.train_primary.retained_decision_marginal_query_local_utility_alignment"
+    )
+    assert train_source_diagnostic["artifacts"][0]["selection_teacher"][
+        "teacher_usage_split"
+    ] == "train"
 
 
 def test_selection_segment_transfer_feature_admissibility_rejects_post_selection_signal() -> None:
@@ -1366,4 +1159,3 @@ def test_selection_segment_transfer_feature_admissibility_rejects_post_selection
     assert "segment_score" in result["feature_coupling_summary"][
         "admissible_candidate_names"
     ]
-

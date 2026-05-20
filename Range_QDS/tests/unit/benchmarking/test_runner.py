@@ -1795,7 +1795,7 @@ def test_profile_args_support_workload_blind_profiles() -> None:
         "--eval_csv_path",
         "../AISDATA/cleaned/day3.csv",
     ]
-    assert profile_args[profile_args.index("--model_type") + 1] == "workload_blind_range"
+    assert profile_args[profile_args.index("--model_type") + 1] == "scalar_workload_blind_range"
     assert (
         profile_args[profile_args.index("--range_training_target_mode") + 1] == "retained_frequency"
     )
