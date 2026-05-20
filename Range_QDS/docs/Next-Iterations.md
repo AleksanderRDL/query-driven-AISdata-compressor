@@ -32,65 +32,40 @@ phase it is a reported guardrail rather than the first hard blocker ahead of
 local query behavior and learning causality.
 
 The latest current-default strict training artifact is the source-stratified
-Level 3 train-marginal replay at the healthy 64-ship/256-point/40-requested
-query shape:
-`artifacts/results/query_driven_train_marginal_scale64_query40_level3_range_query_mix_seed2527/example_run.json`.
-The associated train/eval transfer diagnostic is:
-`artifacts/results/query_driven_train_marginal_scale64_query40_level3_range_query_mix_seed2527/train_eval_segment_teacher_transfer_diagnostic.json`.
-The associated current-focus family/head transfer diagnostic is:
-`artifacts/results/query_driven_train_marginal_scale64_query40_level3_range_query_mix_seed2527/family_transfer_path_diagnostic.json`.
-
-That strict artifact predates the active multiplicative
-`query_segment_local_behavior_utility` target change. Use it as the old
-behavior-head failure baseline, not as evidence that the new behavior target
-learns. The new target has only Level 0 tests and a Level 1 wiring smoke:
-`artifacts/results/query_driven_behavior_segment_target_mult_level1_smoke_seed2531/example_run.json`.
-The smoke proves the target path runs and target diffusion passes at tiny scale;
-it is not training-coherence or final-success evidence. An additive
-segment-query variant was immediately rejected because it made
-`conditional_behavior_utility` positive on all train points and failed target
-diffusion.
+Level 3 replay of the active multiplicative
+`query_segment_local_behavior_utility` target at the 64-ship/256-point/40-query
+shape:
+`artifacts/results/query_driven_behavior_segment_target_mult_level3_scale64_query40_seed2527/example_run.json`.
 
 This replay is the current blocker-localizing reference. MLQDS beats uniform
-and Douglas-Peucker on QueryLocalUtility (`0.1394788551` versus `0.1247681518`
+and Douglas-Peucker on QueryLocalUtility (`0.1431090566` versus `0.1247681518`
 and `0.1153266238`). It passes workload stability, support overlap, target
 diffusion, workload signature, predictability, prior-predictive alignment, and
 global sanity. It still fails learning causality and the final grid requirement.
 Do not make final success claims from it.
 
-The remaining failure is specific. Shuffled scores, untrained control,
-prior-field-only, and no-segment-budget controls now lose as expected. The
-failed children are query-prior and behavior-head dependence:
+The smaller active-target diagnostics remain useful scale context:
+`artifacts/results/query_driven_behavior_segment_target_mult_level2_seed2532/example_run.json`
+failed workload stability and workload signature at 32/192/24-query scale.
+`artifacts/results/query_driven_behavior_segment_target_mult_scale48_query32_seed2533/example_run.json`
+fixed workload stability at 48/192/32-query scale but still failed workload
+signature, predictability, prior alignment, and learning causality. Treat those
+runs as blocker localization, not learning evidence.
+
+The remaining Level 3 failure is specific. Shuffled scores, untrained control,
+prior-field-only, and no-segment-budget controls lose as expected. The failed
+children are query-prior and behavior-head dependence:
 `shuffled_prior_fields_should_lose`, `without_query_prior_features_should_lose`,
 and `without_behavior_utility_head_should_lose`. Shuffled-prior and
-no-query-prior deltas are both `-0.0000086480` and change only 4 retained
-decisions. No-behavior-head is also wrong-way at `-0.0003343468`.
+no-query-prior deltas are both `0.0`. No-behavior-head loses by only
+`0.0014985765`, below the `0.005` materiality gate.
 
-Segment allocation remains high-entropy and score-dominated:
-`score_dominated_length_support_conflict`, segment-score/allocation Spearman
-`0.8664`, length-support/allocation Spearman `0.1639`,
-segment-score/length-support Spearman `0.0472`, and top-20%
-score/length-support overlap `0.2105`. The train-side exact marginal teacher is
-non-leaky and shape-viable, but transfer is not acceptable:
-`diagnose_transfer_features_before_guarded_calibration_probe`, selection/eval
-target Spearman `-0.6151`, and top-k teacher overlap zero through top `10%`.
-The current-focus family/head transfer diagnostic now reads focus families from
-the artifact rather than the historical `small_local` list. It blocks on
-`conditional_behavior_utility` for `density` and `medium_operational` under the
-legacy ship-evidence proxy, but the diagnostic now also surfaces active-metric
-alignment from
-`selector_trace_diagnostics.eval_primary.retained_decision_marginal_query_local_utility_alignment.overall.score_component_alignment`.
-Use the active fields for current `QueryLocalUtility` conclusions. In the
-current replay the behavior head has weak overall exact-marginal alignment
-(`0.0577` Spearman), negative retained-removal alignment (`-0.3817` Spearman),
-and no-behavior ablation is still wrong-way (`-0.0003343468`), dominated by
-the primary model's deficit versus no-behavior on
-`query_local_turn_change_coverage`. The behavior semantic diagnostic now shows
-the target is most aligned with `replacement_representative_value` (`0.5531`
-Spearman), weakly aligned with `segment_budget_target` (`0.0230` Spearman), and
-the fitted behavior head has only about `1.5%` of target std. Treat the next
-behavior-head change as a target/transfer fix, not a generic loss-weight,
-selector-blend, or scalar-prior-scale fix.
+Selector alignment is mixed. Exact retained-marginal raw-score Spearman is
+`0.2779` and selector-score Spearman is `0.2881`, but segment-score Spearman is
+`-0.0812` and behavior-component Spearman is `-0.0486`. The fitted behavior
+head still has only about `1.6%` of target std and Kendall tau `0.0251`.
+Treat the next behavior-head change as a target/transfer/coupling fix, not a
+generic loss-weight, selector-blend, or scalar-prior-scale fix.
 
 Older seed `2524` strict artifacts remain useful historical diagnostics for
 segment-score/length-support conflict, uniform-no-length-support contrast, and
