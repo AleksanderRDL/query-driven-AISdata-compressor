@@ -1,9 +1,10 @@
-"""Versioned range workload profiles.
+"""Range workload profile definitions.
 
 The query-driven implementation treats the range-query distribution as a
-versioned product object, not as loose benchmark knobs.  ``range_query_mix`` is
-the default in-distribution profile for final candidates.  Runs without an
-explicit profile remain legacy diagnostics.
+named profile with explicit anchor, footprint, coverage, and acceptance policy.
+``range_query_mix`` is the current in-distribution profile for final
+candidates. Runs without an explicit profile remain diagnostics over raw
+generator settings.
 """
 
 from __future__ import annotations
@@ -15,7 +16,6 @@ from typing import Any
 @dataclass(frozen=True)
 class RangeWorkloadProfile:
     profile_id: str
-    version: int
     anchor_family_weights: dict[str, float]
     footprint_family_weights: dict[str, float]
     footprint_families: dict[str, dict[str, Any]]
@@ -48,7 +48,6 @@ RANGE_QUERY_MIX_FINAL_PROFILE_IDS = (
 
 LEGACY_GENERATOR_PROFILE = RangeWorkloadProfile(
     profile_id="legacy_generator",
-    version=0,
     anchor_family_weights={},
     footprint_family_weights={},
     footprint_families={},
@@ -77,7 +76,6 @@ def _range_query_mix_profile(
     """Build one named query-local range mix profile variant."""
     return RangeWorkloadProfile(
         profile_id=profile_id,
-        version=1,
         anchor_family_weights={
             "density": 0.80,
             "sparse_background_control": 0.20,
@@ -189,7 +187,6 @@ def workload_profile_metadata(profile: RangeWorkloadProfile) -> dict[str, Any]:
     """Return JSON-safe profile metadata for artifacts."""
     return {
         "profile_id": profile.profile_id,
-        "version": int(profile.version),
         "anchor_family_weights": dict(profile.anchor_family_weights),
         "footprint_family_weights": dict(profile.footprint_family_weights),
         "footprint_families": {

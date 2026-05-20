@@ -32,7 +32,7 @@ from benchmarking.inputs import (
 )
 from benchmarking.profiles import (
     PROFILE_CHOICES,
-    RANGE_QUERY_MIX_WORKLOAD_BLIND_V2_PROFILE,
+    RANGE_QUERY_MIX_WORKLOAD_BLIND_PROFILE,
 )
 from benchmarking.report import (
     build_benchmark_report_artifact,
@@ -52,7 +52,7 @@ QDS_ARTIFACTS_DIR = Path(__file__).resolve().parents[1] / "artifacts"
 DEFAULT_RESULTS_DIR = (
     QDS_ARTIFACTS_DIR
     / "benchmarks"
-    / "query_driven_workload_blind_v2"
+    / "query_driven_workload_blind"
     / "runs"
     / "manual_benchmark"
 )
@@ -153,7 +153,7 @@ def _build_parser() -> argparse.ArgumentParser:
         description="Run a range-focused AIS-QDS benchmark and write compact comparison tables.",
     )
     parser.add_argument(
-        "--profile", choices=PROFILE_CHOICES, default=RANGE_QUERY_MIX_WORKLOAD_BLIND_V2_PROFILE
+        "--profile", choices=PROFILE_CHOICES, default=RANGE_QUERY_MIX_WORKLOAD_BLIND_PROFILE
     )
     parser.add_argument("--workloads", type=str, default=",".join(DEFAULT_WORKLOADS))
     parser.add_argument(

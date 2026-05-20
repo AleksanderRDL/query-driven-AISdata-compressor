@@ -624,7 +624,6 @@ def generate_typed_query_workload(
         query_generation = {
             "mode": "target_coverage",
             "workload_profile_id": profile.profile_id,
-            "workload_profile_version": int(profile.version),
             "query_count_mode": profile.query_count_mode,
             "coverage_calibration_mode": coverage_mode,
             "minimum_queries": int(requested_queries),
@@ -698,7 +697,6 @@ def generate_typed_query_workload(
             "query_generation": {
                 "mode": "fixed_count",
                 "workload_profile_id": profile.profile_id,
-                "workload_profile_version": int(profile.version),
                 "query_count_mode": profile.query_count_mode,
                 "coverage_calibration_mode": coverage_mode,
                 "minimum_queries": requested_queries,

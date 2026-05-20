@@ -14,9 +14,9 @@ from learning.model_features import (
     RANGE_PRIOR_CLOCK_DENSITY_POINT_DIM,
     SUPPORTED_MODEL_TYPES,
     WORKLOAD_BLIND_POINT_DIM,
-    WORKLOAD_BLIND_RANGE_V2_ABSOLUTE_DIM,
-    WORKLOAD_BLIND_RANGE_V2_POINT_DIM,
-    WORKLOAD_BLIND_RANGE_V2_PRIOR_DIM,
+    WORKLOAD_BLIND_RANGE_ABSOLUTE_DIM,
+    WORKLOAD_BLIND_RANGE_POINT_DIM,
+    WORKLOAD_BLIND_RANGE_PRIOR_DIM,
     build_model_point_features,
     build_model_point_features_for_dim,
     build_query_free_point_features_for_dim,
@@ -27,7 +27,7 @@ from models.historical_prior_qds_model import (
     HistoricalPriorStudentRangeQDSModel,
 )
 from models.workload_blind_qds_model import SegmentContextRangeQDSModel
-from models.workload_blind_range_v2 import WorkloadBlindRangeV2Model
+from models.workload_blind_range import WorkloadBlindRangeModel
 from workloads.query_types import pad_query_features
 from workloads.typed_workload import TypedQueryWorkload
 
@@ -76,8 +76,8 @@ def test_model_feature_modes_keep_expected_base_dimensions() -> None:
     covered_model_types = {
         "baseline",
         "range_aware",
+        "scalar_workload_blind_range",
         "workload_blind_range",
-        "workload_blind_range_v2",
         "range_prior",
         "range_prior_clock_density",
         "segment_context_range",
@@ -87,13 +87,13 @@ def test_model_feature_modes_keep_expected_base_dimensions() -> None:
     }
 
     assert build_model_point_features(points, workload, "baseline").shape == (2, 7)
-    assert build_model_point_features(points, workload, "workload_blind_range").shape == (
+    assert build_model_point_features(points, workload, "scalar_workload_blind_range").shape == (
         2,
         WORKLOAD_BLIND_POINT_DIM,
     )
-    assert build_model_point_features(points, workload, "workload_blind_range_v2").shape == (
+    assert build_model_point_features(points, workload, "workload_blind_range").shape == (
         2,
-        WORKLOAD_BLIND_RANGE_V2_POINT_DIM,
+        WORKLOAD_BLIND_RANGE_POINT_DIM,
     )
     assert build_model_point_features(points, workload, "range_prior").shape == (
         2,
@@ -136,7 +136,7 @@ def test_workload_blind_features_include_query_free_continuity_context() -> None
         dtype=torch.float32,
     )
 
-    features = build_model_point_features(points, workload, "workload_blind_range")
+    features = build_model_point_features(points, workload, "scalar_workload_blind_range")
     extras = features[:, 8:]
 
     assert features.shape == (3, WORKLOAD_BLIND_POINT_DIM)
@@ -163,15 +163,15 @@ def test_workload_blind_features_do_not_encode_absolute_day_time() -> None:
     shifted = points.clone()
     shifted[:, 0] += 2 * 86_400.0
 
-    features = build_model_point_features(points, workload, "workload_blind_range")
-    shifted_features = build_model_point_features(shifted, workload, "workload_blind_range")
+    features = build_model_point_features(points, workload, "scalar_workload_blind_range")
+    shifted_features = build_model_point_features(shifted, workload, "scalar_workload_blind_range")
 
     assert torch.allclose(features, shifted_features)
     assert features[0, 0].item() == pytest.approx(0.0)
     assert features[-1, 0].item() == pytest.approx(1.0)
 
 
-def test_workload_blind_range_v2_absolute_features_without_prior_are_day_invariant() -> None:
+def test_workload_blind_range_absolute_features_without_prior_are_day_invariant() -> None:
     workload = _range_workload()
     points = torch.tensor(
         [
@@ -184,16 +184,16 @@ def test_workload_blind_range_v2_absolute_features_without_prior_are_day_invaria
     shifted[:, 0] += 172_800.0
 
     absolute_start = CONTEXT_WORKLOAD_BLIND_POINT_DIM
-    absolute_end = absolute_start + WORKLOAD_BLIND_RANGE_V2_ABSOLUTE_DIM
+    absolute_end = absolute_start + WORKLOAD_BLIND_RANGE_ABSOLUTE_DIM
 
-    features = build_model_point_features(points, workload, "workload_blind_range_v2")
-    shifted_features = build_model_point_features(shifted, workload, "workload_blind_range_v2")
+    features = build_model_point_features(points, workload, "workload_blind_range")
+    shifted_features = build_model_point_features(shifted, workload, "workload_blind_range")
 
     assert torch.allclose(
         features[:, absolute_start:absolute_end], shifted_features[:, absolute_start:absolute_end]
     )
     prior_start = absolute_end
-    prior_end = prior_start + WORKLOAD_BLIND_RANGE_V2_PRIOR_DIM
+    prior_end = prior_start + WORKLOAD_BLIND_RANGE_PRIOR_DIM
     assert torch.allclose(
         features[:, prior_start:prior_end], shifted_features[:, prior_start:prior_end]
     )
@@ -336,9 +336,9 @@ def test_segment_context_model_ignores_queries_and_round_trips_checkpoint(tmp_pa
     assert torch.allclose(scores_a, loaded_scores)
 
 
-def test_workload_blind_range_v2_checkpoint_accepts_missing_prior_feature_encoder(tmp_path) -> None:
-    model = WorkloadBlindRangeV2Model(
-        point_dim=WORKLOAD_BLIND_RANGE_V2_POINT_DIM,
+def test_workload_blind_range_checkpoint_accepts_missing_prior_feature_encoder(tmp_path) -> None:
+    model = WorkloadBlindRangeModel(
+        point_dim=WORKLOAD_BLIND_RANGE_POINT_DIM,
         query_dim=12,
         embed_dim=16,
         num_heads=2,
@@ -346,19 +346,19 @@ def test_workload_blind_range_v2_checkpoint_accepts_missing_prior_feature_encode
         dropout=0.0,
     )
     cfg = build_run_config(
-        model_type="workload_blind_range_v2",
+        model_type="workload_blind_range",
         embed_dim=16,
         num_heads=2,
         num_layers=0,
         dropout=0.0,
     )
     scaler = FeatureScaler(
-        point_min=torch.zeros((WORKLOAD_BLIND_RANGE_V2_POINT_DIM,), dtype=torch.float32),
-        point_max=torch.ones((WORKLOAD_BLIND_RANGE_V2_POINT_DIM,), dtype=torch.float32),
+        point_min=torch.zeros((WORKLOAD_BLIND_RANGE_POINT_DIM,), dtype=torch.float32),
+        point_max=torch.ones((WORKLOAD_BLIND_RANGE_POINT_DIM,), dtype=torch.float32),
         query_min=torch.zeros((12,), dtype=torch.float32),
         query_max=torch.ones((12,), dtype=torch.float32),
     )
-    checkpoint = tmp_path / "range_v2_missing_prior_encoder.pt"
+    checkpoint = tmp_path / "workload_blind_range_missing_prior_encoder.pt"
     save_checkpoint(str(checkpoint), ModelArtifacts(model=model, scaler=scaler, config=cfg))
     payload = torch.load(checkpoint, map_location="cpu")
     payload["model_state"] = {
@@ -370,9 +370,9 @@ def test_workload_blind_range_v2_checkpoint_accepts_missing_prior_feature_encode
 
     loaded = load_checkpoint(str(checkpoint))
 
-    assert isinstance(loaded.model, WorkloadBlindRangeV2Model)
+    assert isinstance(loaded.model, WorkloadBlindRangeModel)
     assert loaded.model.prior_feature_dim == 6
-    assert loaded.config.model.model_type == "workload_blind_range_v2"
+    assert loaded.config.model.model_type == "workload_blind_range"
 
 
 def test_load_checkpoint_rejects_unknown_model_type(tmp_path) -> None:

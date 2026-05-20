@@ -16,7 +16,7 @@ the supported training, scoring, or benchmark contract.
 | `generation/anchors.py` | Anchor priors and weighted point sampling. |
 | `generation/profile_query_plan.py` | Deterministic profile family quota planning and per-query settings. |
 | `generation/coverage.py` | Point coverage masks, target normalization, and range acceptance filters. |
-| `generation/workload_profiles.py` | Versioned product workload profiles, including `range_query_mix`. |
+| `generation/workload_profiles.py` | Product workload profile definitions, including `range_query_mix`. |
 | `generation/signatures.py` | Range workload signature payload construction. |
 | `query_executor.py` | Range query execution. |
 | `range_geometry.py` | Shared range-box and geographic distance helpers. |
@@ -107,10 +107,8 @@ target coverage and overshoot defaults:
 | `range_query_mix_operational` | `0.15` | `0.010` |
 | `range_query_mix` | `0.30` | `0.020` |
 
-Removed profile families such as `small_local`, `density_route`,
-`boundary_entry_exit`, `crossing_turn_change`, `port_or_approach_zone`, and
-`route_corridor_like` are historical or diagnostic references only unless a
-future checkpoint deliberately reintroduces them with new evidence.
+Removed anchor and footprint families from older profiles are historical only
+unless a future checkpoint deliberately reintroduces one with new evidence.
 
 ## Execution
 

@@ -15,7 +15,7 @@ from benchmarking.profiles import (
     BLIND_TEACHER_DISTILL_PROFILE,
     DEFAULT_PROFILE,
     PROFILE_CHOICES,
-    RANGE_QUERY_MIX_WORKLOAD_BLIND_V2_PROFILE,
+    RANGE_QUERY_MIX_WORKLOAD_BLIND_PROFILE,
     benchmark_profile,
     benchmark_profile_args,
     benchmark_profile_settings,
@@ -123,15 +123,15 @@ def test_advertised_benchmark_profiles_are_implemented() -> None:
         assert settings["profile_note"]
 
 
-def test_query_driven_v2_profile_is_final_candidate() -> None:
-    profile = benchmark_profile(RANGE_QUERY_MIX_WORKLOAD_BLIND_V2_PROFILE)
-    settings = benchmark_profile_settings(RANGE_QUERY_MIX_WORKLOAD_BLIND_V2_PROFILE)
-    args = benchmark_profile_args(RANGE_QUERY_MIX_WORKLOAD_BLIND_V2_PROFILE)
+def test_query_driven_workload_blind_profile_is_final_candidate() -> None:
+    profile = benchmark_profile(RANGE_QUERY_MIX_WORKLOAD_BLIND_PROFILE)
+    settings = benchmark_profile_settings(RANGE_QUERY_MIX_WORKLOAD_BLIND_PROFILE)
+    args = benchmark_profile_args(RANGE_QUERY_MIX_WORKLOAD_BLIND_PROFILE)
 
-    assert profile.model_type == "workload_blind_range_v2"
+    assert profile.model_type == "workload_blind_range"
     assert profile.range_training_target_mode == "query_local_utility_factorized"
     assert profile.workload_profile_id == "range_query_mix"
-    assert profile.selector_type == "learned_segment_budget_v1"
+    assert profile.selector_type == "learned_segment_budget"
     assert profile.range_train_workload_replicates == 4
     assert profile.query_coverage is None
     assert profile.range_max_coverage_overshoot is None

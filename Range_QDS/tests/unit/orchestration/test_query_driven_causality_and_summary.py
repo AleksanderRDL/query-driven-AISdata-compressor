@@ -9,10 +9,10 @@ import pytest
 import torch
 
 from learning.model_features import (
-    WORKLOAD_BLIND_RANGE_V2_MODEL_DISABLED_PRIOR_FIELDS,
-    WORKLOAD_BLIND_RANGE_V2_MODEL_PRIOR_TRANSFORM,
-    WORKLOAD_BLIND_RANGE_V2_POINT_DIM,
-    build_workload_blind_range_v2_point_features,
+    WORKLOAD_BLIND_RANGE_MODEL_DISABLED_PRIOR_FIELDS,
+    WORKLOAD_BLIND_RANGE_MODEL_PRIOR_TRANSFORM,
+    WORKLOAD_BLIND_RANGE_POINT_DIM,
+    build_workload_blind_range_point_features,
 )
 from learning.model_training import (
     _fit_scaler_for_model,
@@ -148,7 +148,7 @@ def test_selection_causality_diagnostics_reports_unavailable_preconditions() -> 
     assert missing_split == {"available": False, "reason": "missing_selection_split"}
     assert wrong_selector == {
         "available": False,
-        "reason": "requires_learned_segment_budget_v1",
+        "reason": "requires_learned_segment_budget",
     }
 
 
@@ -167,9 +167,9 @@ def _final_summary_config(
             workload_stability_gate_mode="final",
         ),
         model=SimpleNamespace(
-            model_type="workload_blind_range_v2",
+            model_type="workload_blind_range",
             range_training_target_mode=range_training_target_mode,
-            selector_type="learned_segment_budget_v1",
+            selector_type="learned_segment_budget",
             compression_ratio=0.10,
             learned_segment_geometry_gain_weight=0.0,
             learned_segment_score_blend_weight=0.05,
@@ -480,7 +480,7 @@ def test_final_run_summaries_reject_non_final_candidate_profile() -> None:
         "final_success_allowed": False,
         "reason": (
             "Requires range_query_mix, QueryLocalUtility factorized target, "
-            "workload_blind_range_v2, and learned_segment_budget_v1."
+            "workload_blind_range, and learned_segment_budget."
         ),
     }
 
@@ -930,8 +930,8 @@ def test_model_prior_feature_sensitivity_reports_post_builder_and_scaler_changes
     )
     zeroed = zero_query_prior_field_like(prior)
     queries = torch.zeros((1, 12), dtype=torch.float32)
-    model_points = build_workload_blind_range_v2_point_features(points, prior)
-    scaler = _fit_scaler_for_model(model_points, queries, "workload_blind_range_v2")
+    model_points = build_workload_blind_range_point_features(points, prior)
+    scaler = _fit_scaler_for_model(model_points, queries, "workload_blind_range")
 
     raw_sampled = sample_query_prior_fields(points, prior)
     route_density_idx = QUERY_PRIOR_FIELD_NAMES.index("route_density_prior")
@@ -939,7 +939,7 @@ def test_model_prior_feature_sensitivity_reports_post_builder_and_scaler_changes
 
     diagnostics = model_prior_feature_sensitivity(
         points=points,
-        point_dim=WORKLOAD_BLIND_RANGE_V2_POINT_DIM,
+        point_dim=WORKLOAD_BLIND_RANGE_POINT_DIM,
         scaler=scaler,
         primary_prior_field=prior,
         ablation_prior_field=zeroed,
@@ -948,11 +948,11 @@ def test_model_prior_feature_sensitivity_reports_post_builder_and_scaler_changes
 
     assert diagnostics["available"] is True
     assert diagnostics["disabled_prior_fields"] == list(
-        WORKLOAD_BLIND_RANGE_V2_MODEL_DISABLED_PRIOR_FIELDS
+        WORKLOAD_BLIND_RANGE_MODEL_DISABLED_PRIOR_FIELDS
     )
     assert (
         diagnostics["model_prior_feature_transform"]
-        == WORKLOAD_BLIND_RANGE_V2_MODEL_PRIOR_TRANSFORM
+        == WORKLOAD_BLIND_RANGE_MODEL_PRIOR_TRANSFORM
     )
     model_input = diagnostics["model_input_prior_features"]
     normalized = diagnostics["normalized_model_prior_features"]

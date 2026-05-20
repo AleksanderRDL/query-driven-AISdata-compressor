@@ -125,9 +125,11 @@ def test_range_query_mix_records_profile_signature() -> None:
     generation = diagnostics["query_generation"]
 
     assert profile["profile_id"] == "range_query_mix"
+    assert "version" not in profile
     assert generation["range_time_domain_mode"] == "anchor_day"
+    assert "workload_profile_version" not in generation
     assert signature["profile_id"] == "range_query_mix"
-    assert signature["workload_profile_version"] == profile["version"]
+    assert "workload_profile_version" not in signature
     assert signature["target_coverage"] == profile["target_coverage"]
     assert signature["query_count_mode"] == profile["query_count_mode"]
     assert signature["coverage_calibration_mode"] == profile["coverage_calibration_mode"]

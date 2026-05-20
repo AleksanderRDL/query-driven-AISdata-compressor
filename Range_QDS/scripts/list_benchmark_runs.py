@@ -8,7 +8,7 @@ import csv
 from pathlib import Path
 
 QDS_ARTIFACTS_DIR = Path(__file__).resolve().parents[1] / "artifacts"
-DEFAULT_FAMILY = QDS_ARTIFACTS_DIR / "benchmarks" / "query_driven_workload_blind_v2"
+DEFAULT_FAMILY = QDS_ARTIFACTS_DIR / "benchmarks" / "query_driven_workload_blind"
 
 
 def _short(value: str | None, width: int) -> str:

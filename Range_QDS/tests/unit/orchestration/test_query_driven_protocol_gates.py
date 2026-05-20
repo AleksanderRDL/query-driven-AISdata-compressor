@@ -9,9 +9,9 @@ import torch
 
 from data_preparation.ais_loader import generate_synthetic_ais_data
 from learning.model_features import (
-    WORKLOAD_BLIND_RANGE_V2_MODEL_DISABLED_PRIOR_FIELDS,
-    WORKLOAD_BLIND_RANGE_V2_POINT_DIM,
-    build_workload_blind_range_v2_point_features,
+    WORKLOAD_BLIND_RANGE_MODEL_DISABLED_PRIOR_FIELDS,
+    WORKLOAD_BLIND_RANGE_POINT_DIM,
+    build_workload_blind_range_point_features,
 )
 from learning.model_training import (
     _fit_scaler_for_model,
@@ -28,7 +28,7 @@ from learning.targets.query_local_utility import (
     QUERY_LOCAL_UTILITY_HEAD_NAMES,
     query_local_utility_point_score,
 )
-from models.workload_blind_range_v2 import WorkloadBlindRangeV2Model
+from models.workload_blind_range import WorkloadBlindRangeModel
 from orchestration.gates import (
     evaluate_support_overlap_gate,
     evaluate_target_diffusion_gate,
@@ -37,8 +37,8 @@ from orchestration.model_ablations import reset_module_parameters
 from orchestration.range_diagnostics import range_workload_distribution_comparison
 from selection.learned_segment_budget import (
     learned_segment_budget_diagnostics,
-    simplify_with_learned_segment_budget_v1,
-    simplify_with_learned_segment_budget_v1_with_trace,
+    simplify_with_learned_segment_budget,
+    simplify_with_learned_segment_budget_with_trace,
 )
 from workloads.query_types import QUERY_TYPE_ID_RANGE
 
@@ -137,7 +137,7 @@ def test_prior_behavior_field_uses_behavior_values_not_hit_probability() -> None
         grid_bins=4,
         smoothing_passes=0,
     )
-    features = build_workload_blind_range_v2_point_features(points, prior)
+    features = build_workload_blind_range_point_features(points, prior)
 
     spatial_query_hit_probability = features[:, -6]
     behavior_utility_prior = features[:, -2]
@@ -148,8 +148,8 @@ def test_prior_behavior_field_uses_behavior_values_not_hit_probability() -> None
     assert not torch.allclose(behavior_utility_prior, spatial_query_hit_probability)
 
 
-def test_range_v2_scaler_preserves_semantic_zero_for_prior_ablation() -> None:
-    points = torch.zeros((3, WORKLOAD_BLIND_RANGE_V2_POINT_DIM), dtype=torch.float32)
+def test_workload_blind_range_scaler_preserves_semantic_zero_for_prior_ablation() -> None:
+    points = torch.zeros((3, WORKLOAD_BLIND_RANGE_POINT_DIM), dtype=torch.float32)
     points[:, -6:] = torch.tensor(
         [
             [0.20, 0.10, 0.01, 0.02, 0.30, 0.50],
@@ -160,7 +160,7 @@ def test_range_v2_scaler_preserves_semantic_zero_for_prior_ablation() -> None:
     )
     queries = torch.zeros((1, 12), dtype=torch.float32)
 
-    scaler = _fit_scaler_for_model(points, queries, "workload_blind_range_v2")
+    scaler = _fit_scaler_for_model(points, queries, "workload_blind_range")
     zero_prior_points = points.clone()
     zero_prior_points[:, -6:] = 0.0
     transformed = scaler.transform_points(zero_prior_points)
@@ -339,9 +339,9 @@ def test_no_query_prior_ablation_preserves_train_extent() -> None:
     )
     zeroed = zero_query_prior_field_like(prior)
 
-    with_prior = build_workload_blind_range_v2_point_features(eval_points, prior)
-    no_prior = build_workload_blind_range_v2_point_features(eval_points, zeroed)
-    without_field = build_workload_blind_range_v2_point_features(eval_points, None)
+    with_prior = build_workload_blind_range_point_features(eval_points, prior)
+    no_prior = build_workload_blind_range_point_features(eval_points, zeroed)
+    without_field = build_workload_blind_range_point_features(eval_points, None)
 
     assert with_prior.shape == no_prior.shape == without_field.shape
     assert torch.allclose(with_prior[:, :-6], no_prior[:, :-6])
@@ -349,7 +349,7 @@ def test_no_query_prior_ablation_preserves_train_extent() -> None:
     assert torch.count_nonzero(no_prior[:, -6:]).item() == 0
 
 
-def test_workload_blind_range_v2_excludes_route_density_from_model_features() -> None:
+def test_workload_blind_range_excludes_route_density_from_model_features() -> None:
     train_points = torch.tensor([[0.0, 0.0, 0.0], [1.0, 10.0, 10.0]], dtype=torch.float32)
     eval_points = train_points.clone()
     query = {
@@ -375,9 +375,9 @@ def test_workload_blind_range_v2_excludes_route_density_from_model_features() ->
     route_idx = list(QUERY_PRIOR_FIELD_NAMES).index("route_density_prior")
 
     sampled = sample_query_prior_fields(eval_points, prior)
-    features = build_workload_blind_range_v2_point_features(eval_points, prior)
+    features = build_workload_blind_range_point_features(eval_points, prior)
 
-    assert WORKLOAD_BLIND_RANGE_V2_MODEL_DISABLED_PRIOR_FIELDS == ("route_density_prior",)
+    assert WORKLOAD_BLIND_RANGE_MODEL_DISABLED_PRIOR_FIELDS == ("route_density_prior",)
     assert torch.count_nonzero(sampled[:, route_idx]).item() > 0
     prior_start = -len(QUERY_PRIOR_FIELD_NAMES)
     assert torch.count_nonzero(features[:, prior_start + route_idx]).item() == 0
@@ -692,13 +692,13 @@ def test_workload_signature_gate_reports_normalized_hit_distribution_diagnostics
     assert metrics["eval_total_trajectories"] == 5
 
 
-def test_workload_blind_range_v2_features_and_selector_are_query_free() -> None:
+def test_workload_blind_range_features_and_selector_are_query_free() -> None:
     trajectories = generate_synthetic_ais_data(n_ships=3, n_points_per_ship=40, seed=83)
     points = torch.cat(trajectories, dim=0)
     boundaries = _boundaries(trajectories)
-    features = build_workload_blind_range_v2_point_features(points)
-    model = WorkloadBlindRangeV2Model(
-        point_dim=WORKLOAD_BLIND_RANGE_V2_POINT_DIM,
+    features = build_workload_blind_range_point_features(points)
+    model = WorkloadBlindRangeModel(
+        point_dim=WORKLOAD_BLIND_RANGE_POINT_DIM,
         query_dim=12,
         embed_dim=32,
         num_heads=2,
@@ -711,13 +711,13 @@ def test_workload_blind_range_v2_features_and_selector_are_query_free() -> None:
         disabled_head_names=("conditional_behavior_utility",),
     )
     segment_scores = head_logits.squeeze(0)[:, 4]
-    retained = simplify_with_learned_segment_budget_v1(
+    retained = simplify_with_learned_segment_budget(
         pred.squeeze(0),
         boundaries,
         compression_ratio=0.10,
         segment_scores=segment_scores,
     )
-    retained_with_trace, trace = simplify_with_learned_segment_budget_v1_with_trace(
+    retained_with_trace, trace = simplify_with_learned_segment_budget_with_trace(
         pred.squeeze(0),
         boundaries,
         compression_ratio=0.10,
@@ -739,21 +739,21 @@ def test_workload_blind_range_v2_features_and_selector_are_query_free() -> None:
     assert trace["trajectories_with_at_least_one_learned_decision"] >= 0
     assert 0.0 <= trace["segment_budget_entropy_normalized"] <= 1.0
     assert trace["segment_score_source"] == "segment_budget_head_top20_mean"
-    assert diagnostics["selector_type"] == "learned_segment_budget_v1"
+    assert diagnostics["selector_type"] == "learned_segment_budget"
     assert diagnostics["budget_rows"][0]["no_fixed_85_percent_temporal_scaffold"] is True
 
 
-def test_workload_blind_range_v2_has_dedicated_prior_feature_encoder() -> None:
+def test_workload_blind_range_has_dedicated_prior_feature_encoder() -> None:
     torch.manual_seed(17)
-    model = WorkloadBlindRangeV2Model(
-        point_dim=WORKLOAD_BLIND_RANGE_V2_POINT_DIM,
+    model = WorkloadBlindRangeModel(
+        point_dim=WORKLOAD_BLIND_RANGE_POINT_DIM,
         query_dim=12,
         embed_dim=32,
         num_heads=2,
         num_layers=0,
         dropout=0.0,
     )
-    base = torch.zeros((1, 4, WORKLOAD_BLIND_RANGE_V2_POINT_DIM), dtype=torch.float32)
+    base = torch.zeros((1, 4, WORKLOAD_BLIND_RANGE_POINT_DIM), dtype=torch.float32)
     with_prior = base.clone()
     with_prior[..., -6:] = torch.tensor([1.0, 0.5, 0.25, 0.0, 0.75, 1.0], dtype=torch.float32)
 
@@ -774,9 +774,9 @@ def test_workload_blind_range_v2_has_dedicated_prior_feature_encoder() -> None:
     assert float((base_heads - prior_heads).abs().mean().item()) > 1e-4
 
 
-def test_range_v2_untrained_reset_restores_standalone_parameters() -> None:
-    model = WorkloadBlindRangeV2Model(
-        point_dim=WORKLOAD_BLIND_RANGE_V2_POINT_DIM,
+def test_workload_blind_range_untrained_reset_restores_standalone_parameters() -> None:
+    model = WorkloadBlindRangeModel(
+        point_dim=WORKLOAD_BLIND_RANGE_POINT_DIM,
         query_dim=12,
         embed_dim=32,
         num_heads=2,
@@ -785,15 +785,15 @@ def test_range_v2_untrained_reset_restores_standalone_parameters() -> None:
     )
     model.prior_feature_scale.data.fill_(3.0)
 
-    reset_model = cast(WorkloadBlindRangeV2Model, reset_module_parameters(model, seed=101))
+    reset_model = cast(WorkloadBlindRangeModel, reset_module_parameters(model, seed=101))
 
     assert torch.allclose(reset_model.prior_feature_scale.detach(), torch.tensor(0.25))
     assert torch.allclose(model.prior_feature_scale.detach(), torch.tensor(3.0))
 
 
 def test_factorized_head_ablation_uses_neutral_multiplicative_heads() -> None:
-    model = WorkloadBlindRangeV2Model(
-        point_dim=WORKLOAD_BLIND_RANGE_V2_POINT_DIM,
+    model = WorkloadBlindRangeModel(
+        point_dim=WORKLOAD_BLIND_RANGE_POINT_DIM,
         query_dim=12,
         embed_dim=32,
         num_heads=2,
@@ -837,9 +837,9 @@ def test_factorized_head_ablation_uses_neutral_multiplicative_heads() -> None:
     assert all(not parameter.requires_grad for parameter in model.calibration_head.parameters())
 
 
-def test_range_v2_final_score_composition_matches_query_local_utility_target_formula() -> None:
-    model = WorkloadBlindRangeV2Model(
-        point_dim=WORKLOAD_BLIND_RANGE_V2_POINT_DIM,
+def test_workload_blind_range_final_score_composition_matches_query_local_utility_target_formula() -> None:
+    model = WorkloadBlindRangeModel(
+        point_dim=WORKLOAD_BLIND_RANGE_POINT_DIM,
         query_dim=12,
         embed_dim=32,
         num_heads=2,

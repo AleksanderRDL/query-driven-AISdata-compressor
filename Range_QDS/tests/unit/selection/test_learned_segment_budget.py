@@ -12,8 +12,8 @@ from selection.learned_segment_budget import (
     LEARNED_SEGMENT_BUDGET_SCHEMA_VERSION,
     LEARNED_SEGMENT_BUDGET_TRACE_SCHEMA_VERSION,
     learned_segment_budget_diagnostics,
-    simplify_with_learned_segment_budget_v1,
-    simplify_with_learned_segment_budget_v1_with_trace,
+    simplify_with_learned_segment_budget,
+    simplify_with_learned_segment_budget_with_trace,
 )
 from selection.learned_segment_budget.allocation import _allocate_segment_budgets
 from selection.learned_segment_budget.diagnostics import (
@@ -26,13 +26,13 @@ def test_learned_segment_budget_public_api_and_trace_accounting() -> None:
     scores = torch.linspace(0.0, 1.0, steps=24, dtype=torch.float32)
     boundaries = [(0, 12), (12, 24)]
 
-    retained, trace = simplify_with_learned_segment_budget_v1_with_trace(
+    retained, trace = simplify_with_learned_segment_budget_with_trace(
         scores,
         boundaries,
         compression_ratio=0.30,
         segment_size=4,
     )
-    without_trace = simplify_with_learned_segment_budget_v1(
+    without_trace = simplify_with_learned_segment_budget(
         scores,
         boundaries,
         compression_ratio=0.30,
@@ -48,14 +48,14 @@ def test_learned_segment_budget_public_api_and_trace_accounting() -> None:
 
     assert torch.equal(retained, without_trace)
     assert trace["schema_version"] == LEARNED_SEGMENT_BUDGET_TRACE_SCHEMA_VERSION
-    assert trace["selector_type"] == "learned_segment_budget_v1"
+    assert trace["selector_type"] == "learned_segment_budget"
     assert source_count == int(retained.sum().item())
     assert diagnostics["schema_version"] == LEARNED_SEGMENT_BUDGET_SCHEMA_VERSION
     assert diagnostics["budget_rows"][0]["no_fixed_85_percent_temporal_scaffold"] is True
 
 
 def test_learned_segment_budget_public_api_uses_trajectory_budget_keyword() -> None:
-    signature = inspect.signature(simplify_with_learned_segment_budget_v1)
+    signature = inspect.signature(simplify_with_learned_segment_budget)
 
     assert "max_budget_share_per_trajectory" in signature.parameters
     assert "max_budget_share_per_ship" not in signature.parameters
@@ -75,7 +75,7 @@ def test_learned_segment_budget_length_repair_preserves_budget_and_reports_attri
     scores[14:19] = torch.tensor([5.0, 6.0, 7.0, 6.0, 5.0])
     boundaries = [(0, 32)]
 
-    retained, trace = simplify_with_learned_segment_budget_v1_with_trace(
+    retained, trace = simplify_with_learned_segment_budget_with_trace(
         scores,
         boundaries,
         compression_ratio=0.20,
@@ -83,7 +83,7 @@ def test_learned_segment_budget_length_repair_preserves_budget_and_reports_attri
         geometry_gain_weight=0.0,
         length_repair_fraction=0.0,
     )
-    repaired, repaired_trace = simplify_with_learned_segment_budget_v1_with_trace(
+    repaired, repaired_trace = simplify_with_learned_segment_budget_with_trace(
         scores,
         boundaries,
         compression_ratio=0.20,
@@ -122,7 +122,7 @@ def test_learned_segment_budget_length_repair_can_protect_top_scores() -> None:
     scores[14:19] = torch.tensor([5.0, 6.0, 7.0, 6.0, 5.0])
     boundaries = [(0, 32)]
 
-    retained, _trace = simplify_with_learned_segment_budget_v1_with_trace(
+    retained, _trace = simplify_with_learned_segment_budget_with_trace(
         scores,
         boundaries,
         compression_ratio=0.20,
@@ -130,7 +130,7 @@ def test_learned_segment_budget_length_repair_can_protect_top_scores() -> None:
         geometry_gain_weight=0.0,
         length_repair_fraction=0.0,
     )
-    repaired, repaired_trace = simplify_with_learned_segment_budget_v1_with_trace(
+    repaired, repaired_trace = simplify_with_learned_segment_budget_with_trace(
         scores,
         boundaries,
         compression_ratio=0.20,
@@ -380,7 +380,7 @@ def test_learned_segment_budget_separates_allocation_length_support_from_geometr
     segment_scores = torch.zeros_like(scores)
     segment_scores[:16] = 10.0
 
-    _retained_score, score_trace = simplify_with_learned_segment_budget_v1_with_trace(
+    _retained_score, score_trace = simplify_with_learned_segment_budget_with_trace(
         scores,
         [(0, 32)],
         compression_ratio=0.20,
@@ -390,7 +390,7 @@ def test_learned_segment_budget_separates_allocation_length_support_from_geometr
         geometry_gain_weight=0.0,
         segment_length_support_weight=0.0,
     )
-    _retained_support, support_trace = simplify_with_learned_segment_budget_v1_with_trace(
+    _retained_support, support_trace = simplify_with_learned_segment_budget_with_trace(
         scores,
         [(0, 32)],
         compression_ratio=0.20,
@@ -431,7 +431,7 @@ def test_learned_segment_budget_reports_length_support_allocation_counterfactual
     segment_scores = torch.zeros_like(scores)
     segment_scores[:16] = 10.0
 
-    _retained, trace = simplify_with_learned_segment_budget_v1_with_trace(
+    _retained, trace = simplify_with_learned_segment_budget_with_trace(
         scores,
         [(0, 32)],
         compression_ratio=0.25,
@@ -465,7 +465,7 @@ def test_learned_segment_budget_reports_query_free_segment_source_attribution() 
     segment_scores[8:12] = 5.0
     segment_scores[20:24] = 4.0
 
-    retained, trace = simplify_with_learned_segment_budget_v1_with_trace(
+    retained, trace = simplify_with_learned_segment_budget_with_trace(
         scores,
         [(0, 12), (12, 24)],
         compression_ratio=0.30,

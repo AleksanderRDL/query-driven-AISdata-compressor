@@ -44,7 +44,7 @@ from scoring.metrics import MethodScore
 from scoring.query_cache import ScoringQueryCache
 from selection.learned_segment_budget import (
     blend_segment_support_scores,
-    simplify_with_learned_segment_budget_v1_with_trace,
+    simplify_with_learned_segment_budget_with_trace,
 )
 from selection.selector_types import LEARNED_SEGMENT_BUDGET_SELECTOR_TYPE
 from workloads.query_types import single_workload_type
@@ -125,7 +125,7 @@ def build_selection_causality_diagnostics(
         str(getattr(config.model, "selector_type", "")).lower()
         != LEARNED_SEGMENT_BUDGET_SELECTOR_TYPE
     ):
-        return {"available": False, "reason": "requires_learned_segment_budget_v1"}
+        return {"available": False, "reason": "requires_learned_segment_budget"}
 
     split_name = str(diagnostic_split)
     split_slug = split_name.replace("-", "_")
@@ -228,7 +228,7 @@ def build_selection_causality_diagnostics(
     }
     if isinstance(primary_scores, torch.Tensor):
         try:
-            trace_mask, trace = simplify_with_learned_segment_budget_v1_with_trace(
+            trace_mask, trace = simplify_with_learned_segment_budget_with_trace(
                 primary_scores,
                 selection_boundaries,
                 float(config.model.compression_ratio),

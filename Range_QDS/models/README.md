@@ -6,7 +6,7 @@ trainable workload-blind range scorers.
 Important caveat: query-conditioned models are workload-aware because points
 attend to query embeddings during prediction. They are useful diagnostics and
 teacher candidates, but final range compression must use a query-free scoring
-path such as `workload_blind_range_v2`.
+path such as `workload_blind_range`.
 
 ## Files
 
@@ -16,7 +16,7 @@ path such as `workload_blind_range_v2`.
 | `trajectory_qds_model.py` | Base transformer and normalization helper. |
 | `workload_blind_qds_model.py` | Query-free range scorer used by workload-blind students. |
 | `historical_prior_qds_model.py` | Query-free KNN historical-prior diagnostic model and prior-assisted student. |
-| `workload_blind_range_v2.py` | Trainable factorized query-driven workload-blind model with prior-field and local/segment context encoders. |
+| `workload_blind_range.py` | Trainable factorized query-driven workload-blind model with prior-field and local/segment context encoders. |
 | `../learning/model_features.py` | Baseline, range-aware, and workload-blind point features. |
 
 ## Rules
@@ -25,7 +25,7 @@ path such as `workload_blind_range_v2`.
   query tensors and query type IDs.
 - Query-conditioned attention is diagnostic only for final workload-blind
   claims.
-- `workload_blind_range_v2` is the active trainable candidate, but acceptance
+- `workload_blind_range` is the active trainable candidate, but acceptance
   still depends on the gates in
   `../docs/query-driven-implementation-research-guide.md`.
 - Historical-prior models are KNN diagnostics or prior-assisted students. They
@@ -38,7 +38,7 @@ path such as `workload_blind_range_v2`.
 
 ## Checkpoint Compatibility
 
-`workload_blind_range_v2.calibration_head` is retained only as frozen
+`workload_blind_range.calibration_head` is retained only as frozen
 checkpoint-state compatibility. It is not part of final score composition, and
 changing its weights must not affect factorized final scores. Removing it
 requires an explicit checkpoint-loading migration or allowed-unexpected-key

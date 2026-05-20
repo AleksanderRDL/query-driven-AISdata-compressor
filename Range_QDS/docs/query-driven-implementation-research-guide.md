@@ -12,7 +12,6 @@ Current default implementation stack:
 
 ```yaml
 primary_metric: QueryLocalUtility
-query_local_utility_schema: 5
 score_group_weights:
   query_point_mass: 0.50
   query_local_behavior: 0.45
@@ -37,15 +36,18 @@ footprint_point_hit_fraction_bands:
   large_context: [0.010, 0.045]
 range_training_target_mode: query_local_utility_factorized
 conditional_behavior_target_variant: query_segment_local_behavior_utility
-model_type: workload_blind_range_v2
-selector_type: learned_segment_budget_v1
+model_type: workload_blind_range
+selector_type: learned_segment_budget
 checkpoint_score_variant: query_local_utility
 ```
 
-`QueryUsefulV1`, `query_useful_v1`, `range_workload_v1`, `density_route`,
-`small_local`, `boundary_entry_exit`, `crossing_turn_change`,
-`port_or_approach_zone`, and `route_corridor_like` are historical or
-diagnostic references unless a later checkpoint explicitly reintroduces them.
+Internal `schema_version` fields remain in artifacts and regression snapshots
+as compatibility metadata. They are not active product names and should not be
+used to name current implementations.
+
+Older metric/profile names and removed workload families are historical only.
+Do not use them for new checkpoints unless a later checkpoint explicitly
+reintroduces one with evidence.
 
 ---
 
@@ -88,10 +90,10 @@ Current status:
 
 ```text
 project_status: active, not accepted
-current_metric: QueryLocalUtility schema 5
+current_metric: QueryLocalUtility
 current_workload_profile: range_query_mix
 current_profile_footprints: medium_operational, large_context
-strict_schema5_two_footprint_rerun: performed before the active segment-aware behavior target change; workload gates passed at generator Level 3 and 64/256/40 training replay
+strict_current_two_footprint_rerun: performed before the active segment-aware behavior target change; workload gates passed at generator Level 3 and 64/256/40 training replay
 active_behavior_target_level: Level 0 tests plus Level 1 wiring smoke only
 current_blockers: learning causality, especially query-prior and behavior-head dependence
 global_sanity: reported guardrail during initial local-query-learning phase
@@ -99,10 +101,10 @@ final_grid: not run
 final_success_allowed: false
 ```
 
-The current evidence boundary starts at the schema `5`, two-footprint
-`range_query_mix` strict single-cell reruns recorded in the progress log. Older
-strict-cell evidence is useful for diagnosis, but it predates the current metric
-and workload defaults. Do not compare old scores as if they were current-metric
+The current evidence boundary starts at the two-footprint `range_query_mix`
+strict single-cell reruns recorded in the progress log. Older strict-cell
+evidence is useful for diagnosis, but it predates the current metric and
+workload defaults. Do not compare old scores as if they were current-metric
 acceptance evidence.
 
 The next admissible evidence must start with the smaller strict levels in this
@@ -115,7 +117,7 @@ learning-causality checks before any final-grid run.
 The implementation contract connects five components:
 
 ```text
-1. versioned future-query workload profile
+1. future-query workload profile
 2. query-local metric
 3. factorized train labels and train-only priors
 4. trainable workload-blind model
@@ -409,7 +411,7 @@ Keep it for comparability and diagnostics. Do not use it as the final product me
 
 ### Current metric caveat
 
-`QueryLocalUtility` schema `5` uses group weights of point mass `0.50`,
+`QueryLocalUtility` uses group weights of point mass `0.50`,
 query-local behavior `0.45`, and global sanity `0.05`. Point mass is the direct
 `query_point_recall` component; it must not be sourced from the legacy
 `range_point_f1` aggregate. Query-local behavior is limited to direct
@@ -567,7 +569,7 @@ If `segment_budget_target` works but query-hit fails, the selector may preserve 
 Active model:
 
 ```text
-workload_blind_range_v2
+workload_blind_range
 ```
 
 The model must:
@@ -623,7 +625,7 @@ guardrail during the current local-query-learning phase.
 Active selector:
 
 ```text
-learned_segment_budget_v1
+learned_segment_budget
 ```
 
 The selector should:
@@ -1408,7 +1410,7 @@ Keep:
 
 ```text
 mlqds_temporal_fraction = 0.0
-selector_type = learned_segment_budget_v1
+selector_type = learned_segment_budget
 ```
 
 Do not reintroduce high temporal scaffolding to improve scores. Use query-free sanity constraints and ablations instead.
@@ -1417,7 +1419,10 @@ Do not reintroduce high temporal scaffolding to improve scores. Use query-free s
 
 Use `QueryLocalUtility` as primary. Use `RangeUsefulLegacy` only as diagnostic.
 
-If QueryLocalUtility rewards behavior that conflicts with the actual product goal, improve the metric explicitly and bump/report the schema version. Do not silently change interpretation.
+If `QueryLocalUtility` rewards behavior that conflicts with the actual product
+goal, improve the metric explicitly and record artifact/report schema metadata
+only when payload semantics actually change. Do not silently change
+interpretation or name current implementations by schema number.
 
 ---
 
@@ -1664,9 +1669,9 @@ uv run --group dev -- python -m orchestration.train_and_score \
   --workload_profile_id range_query_mix \
   --coverage_calibration_mode profile_sampled_query_count \
   --workload_stability_gate_mode final \
-  --model_type workload_blind_range_v2 \
+  --model_type workload_blind_range \
   --range_training_target_mode query_local_utility_factorized \
-  --selector_type learned_segment_budget_v1 \
+  --selector_type learned_segment_budget \
   --checkpoint_score_variant query_local_utility \
   --checkpoint_selection_metric uniform_gap \
   --validation_score_every 1 \

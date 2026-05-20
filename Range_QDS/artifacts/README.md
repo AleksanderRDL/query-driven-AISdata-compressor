@@ -15,7 +15,7 @@ like current evidence.
 ```text
 Range_QDS/artifacts/
   benchmarks/
-    query_driven_workload_blind_v2/
+    query_driven_workload_blind/
       latest_run.txt
       latest_queue.txt
       runs_index.csv
@@ -23,7 +23,7 @@ Range_QDS/artifacts/
       runs/<run_id>/
       queues/<queue_id>/
   cache/
-    query_driven_workload_blind_v2/
+    query_driven_workload_blind/
   manual/
   results/
 ```
@@ -50,7 +50,7 @@ make clean-smoke-artifacts CONFIRM=1
 Use descriptive run IDs for comparable runs:
 
 ```bash
-ATTACH=0 BENCHMARK_RUN_ID=query_driven_v2_seed42_a make range-benchmark-tmux
+ATTACH=0 BENCHMARK_RUN_ID=query_driven_seed42_a make range-benchmark-tmux
 ```
 
 ## Cleanup

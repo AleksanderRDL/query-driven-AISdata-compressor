@@ -10,7 +10,7 @@ from selection.learned_segment_budget import (
     SEGMENT_LENGTH_SUPPORT_ALLOCATION_WEIGHT,
     SEGMENT_SCORE_POINT_BLEND_WEIGHT,
     SEGMENT_TRANSFER_CALIBRATION_MODE_NONE,
-    simplify_with_learned_segment_budget_v1,
+    simplify_with_learned_segment_budget,
 )
 from selection.retained_mask_selectors import simplify_with_temporal_score_hybrid
 from selection.selector_types import (
@@ -221,7 +221,7 @@ def simplify_mlqds_predictions(
         range_geometry_blend=range_geometry_blend,
     )
     if str(selector_type).lower() == LEARNED_SEGMENT_BUDGET_SELECTOR_TYPE:
-        return simplify_with_learned_segment_budget_v1(
+        return simplify_with_learned_segment_budget(
             scores,
             boundaries,
             compression_ratio,

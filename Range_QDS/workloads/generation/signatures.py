@@ -83,15 +83,12 @@ def _range_workload_signature(
         }
 
     profile_id = "legacy_generator"
-    profile_version: int | None = None
     target_coverage: float | None = None
     max_coverage_overshoot: float | None = None
     query_count_mode: str | None = None
     coverage_calibration_mode: str | None = None
     if profile_metadata is not None:
         profile_id = str(profile_metadata.get("profile_id", profile_id))
-        version_value = profile_metadata.get("version")
-        profile_version = int(version_value) if isinstance(version_value, (int, float)) else None
         target_value = profile_metadata.get("target_coverage")
         target_coverage = float(target_value) if isinstance(target_value, (int, float)) else None
         overshoot_value = profile_metadata.get("max_coverage_overshoot")
@@ -106,7 +103,6 @@ def _range_workload_signature(
         )
     return {
         "profile_id": profile_id,
-        "workload_profile_version": profile_version,
         "target_coverage": target_coverage,
         "max_coverage_overshoot": max_coverage_overshoot,
         "query_count_mode": query_count_mode,

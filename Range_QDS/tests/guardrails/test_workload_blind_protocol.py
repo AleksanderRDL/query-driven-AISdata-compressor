@@ -5,7 +5,7 @@ from config.run_config import build_run_config
 from learning.checkpoint_validation import _validation_query_score
 from learning.outputs import TrainingOutputs
 from learning.scaler import FeatureScaler
-from models.workload_blind_qds_model import WorkloadBlindRangeQDSModel
+from models.workload_blind_qds_model import ScalarWorkloadBlindRangeQDSModel
 from scoring.methods import MLQDSMethod
 from workloads.query_types import NUM_QUERY_TYPES, pad_query_features
 from workloads.typed_workload import TypedQueryWorkload
@@ -45,7 +45,7 @@ def _workload_with_query_features(query_features: torch.Tensor) -> TypedQueryWor
 
 
 def _trained_blind(points: torch.Tensor) -> TrainingOutputs:
-    model = WorkloadBlindRangeQDSModel(
+    model = ScalarWorkloadBlindRangeQDSModel(
         point_dim=8,
         query_dim=12,
         embed_dim=16,
@@ -64,7 +64,7 @@ def _trained_blind(points: torch.Tensor) -> TrainingOutputs:
 
 
 def test_workload_blind_model_supports_mlp_only_mode() -> None:
-    model = WorkloadBlindRangeQDSModel(
+    model = ScalarWorkloadBlindRangeQDSModel(
         point_dim=8,
         query_dim=12,
         embed_dim=16,
@@ -142,7 +142,7 @@ def test_workload_blind_validation_scoring_does_not_read_validation_query_featur
     trained = _trained_blind(points)
     bad_validation_features = torch.full((1, 12), float("nan"), dtype=torch.float32)
     cfg = build_run_config(
-        model_type="workload_blind_range",
+        model_type="scalar_workload_blind_range",
         compression_ratio=0.4,
         checkpoint_score_variant="range_usefulness",
     )

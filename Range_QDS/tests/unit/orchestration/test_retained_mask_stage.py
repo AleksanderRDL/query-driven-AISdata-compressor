@@ -139,7 +139,7 @@ def test_retained_mask_freezing_captures_primary_caches_and_audit_masks() -> Non
         workload_blind_eval=True,
         audit_ratios=[0.50, 0.25],
         config=build_run_config(
-            model_type="workload_blind_range_v2",
+            model_type="workload_blind_range",
             selector_type="temporal_hybrid",
             compression_ratio=0.50,
         ),
@@ -211,8 +211,8 @@ def test_retained_mask_freezing_captures_learned_selector_trace() -> None:
         workload_blind_eval=True,
         audit_ratios=[],
         config=build_run_config(
-            model_type="workload_blind_range_v2",
-            selector_type="learned_segment_budget_v1",
+            model_type="workload_blind_range",
+            selector_type="learned_segment_budget",
             compression_ratio=0.50,
         ),
         trained=_trained_stub(),
@@ -346,8 +346,8 @@ def test_retained_mask_ablations_freeze_pre_repair_and_shuffled_scores() -> None
 
     outputs = freeze_retained_mask_ablations(
         config=build_run_config(
-            model_type="workload_blind_range_v2",
-            selector_type="learned_segment_budget_v1",
+            model_type="workload_blind_range",
+            selector_type="learned_segment_budget",
             compression_ratio=0.50,
         ),
         trained=_trained_stub(),
@@ -401,8 +401,8 @@ def test_retained_mask_ablations_include_behavior_segment_score_diagnostics() ->
 
     outputs = freeze_retained_mask_ablations(
         config=build_run_config(
-            model_type="workload_blind_range_v2",
-            selector_type="learned_segment_budget_v1",
+            model_type="workload_blind_range",
+            selector_type="learned_segment_budget",
             compression_ratio=0.50,
         ),
         trained=_trained_stub(),

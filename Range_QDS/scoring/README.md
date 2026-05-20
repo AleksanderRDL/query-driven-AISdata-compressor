@@ -37,7 +37,7 @@ Current range diagnostics:
   combines direct query-point recall, query-local interpolation/turn/continuity
   behavior, and light guardrails such as length preservation.
 
-`QueryLocalUtility` schema `5` group weights:
+Current `QueryLocalUtility` group weights:
 
 | Group | Weight |
 | --- | --- |
@@ -45,7 +45,7 @@ Current range diagnostics:
 | `query_local_behavior` | `0.45` |
 | `global_sanity` | `0.05` |
 
-Schema `5` component weights:
+Current `QueryLocalUtility` component weights:
 
 | Component | Weight |
 | --- | --- |
@@ -57,7 +57,7 @@ Schema `5` component weights:
 | `global_shape_guardrail_score` | `0.02` |
 | `length_preservation_guardrail` | `0.01` |
 
-Schema `5` uses direct audit fields only: `query_point_recall`,
+`QueryLocalUtility` uses direct audit fields only: `query_point_recall`,
 `range_query_local_interpolation_fidelity`, `range_turn_coverage`, and
 `range_gap_min_coverage`. It must not source point mass from legacy
 `range_point_f1`, and it must not fill missing behavior from older shape,
@@ -78,7 +78,7 @@ Range audit components:
 | `TurnCov` | Route-change support. |
 | `ShapeScore` | Range-local route fidelity. |
 
-`RangeUsefulLegacy` remains count-gap based for schema 7. New runs also emit
+`RangeUsefulLegacy` remains count-gap based for its compatibility payload. New runs also emit
 diagnostic aggregate variants that replace only the gap term:
 `range_usefulness_gap_time_score`, `range_usefulness_gap_distance_score`, and
 `range_usefulness_gap_min_score`.

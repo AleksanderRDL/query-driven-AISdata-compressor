@@ -21,9 +21,9 @@ uv run --group dev -- python -m benchmarking.runner --help
 uv run --group dev -- python -m benchmarking.runtime_benchmark --help
 ```
 
-Default Make targets use the active `range_query_mix_workload_blind_v2`
-profile and write under `Range_QDS/artifacts/benchmarks/query_driven_workload_blind_v2`
-and `Range_QDS/artifacts/cache/query_driven_workload_blind_v2`. Set
+Default Make targets use the active `range_query_mix_workload_blind`
+profile and write under `Range_QDS/artifacts/benchmarks/query_driven_workload_blind`
+and `Range_QDS/artifacts/cache/query_driven_workload_blind`. Set
 `BENCHMARK_PROFILE`, `BENCHMARK_FAMILY`, and `BENCHMARK_CACHE` only for a
 diagnostic profile or a separate artifact family.
 
@@ -48,9 +48,9 @@ diagnostic profile or a separate artifact family.
 
 Current query-driven candidate profile:
 
-- `range_query_mix_workload_blind_v2`
+- `range_query_mix_workload_blind`
 
-This is the active workload-blind path. It uses `QueryLocalUtility` schema `5`,
+This is the active workload-blind path. It uses `QueryLocalUtility`,
 `query_local_utility_factorized`, and the active `range_query_mix` workload
 family weights: `density=0.80`, `sparse_background_control=0.20`,
 `medium_operational=0.6923076923076923`, and
@@ -68,7 +68,7 @@ For workload-profile grid checks, use:
 
 ```bash
 uv run --group dev -- python -m benchmarking.runner \
-  --profile range_query_mix_workload_blind_v2 \
+  --profile range_query_mix_workload_blind \
   --workloads range \
   --workload_profile_ids range_query_mix_focused,range_query_mix_local,range_query_mix_operational,range_query_mix
 ```

@@ -49,7 +49,7 @@ def _toy_workload() -> TypedQueryWorkload:
 
 def test_build_range_teacher_config_uses_query_aware_loss_selected_teacher() -> None:
     student = ModelConfig(
-        model_type="workload_blind_range",
+        model_type="scalar_workload_blind_range",
         range_teacher_distillation_mode="retained_frequency",
         range_teacher_epochs=3,
         checkpoint_selection_metric="uniform_gap",

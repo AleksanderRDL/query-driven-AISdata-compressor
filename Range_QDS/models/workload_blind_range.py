@@ -12,13 +12,13 @@ from learning.targets.query_local_utility import (
 )
 from models.positional_encoding import CachedSinusoidalPositionalEncodingMixin
 
-WORKLOAD_BLIND_RANGE_V2_SCHEMA_VERSION = 6
-WORKLOAD_BLIND_RANGE_V2_PRIOR_FEATURE_DIM = len(QUERY_PRIOR_FIELD_NAMES)
+WORKLOAD_BLIND_RANGE_SCHEMA_VERSION = 6
+WORKLOAD_BLIND_RANGE_PRIOR_FEATURE_DIM = len(QUERY_PRIOR_FIELD_NAMES)
 _LEGACY_CALIBRATION_HEAD_INPUT_DIM = 5
 _PRIOR_FEATURE_SCALE_INIT = 0.25
 
 
-class WorkloadBlindRangeV2Model(CachedSinusoidalPositionalEncodingMixin, nn.Module):
+class WorkloadBlindRangeModel(CachedSinusoidalPositionalEncodingMixin, nn.Module):
     """Small trainable factorized scorer for query-driven blind simplification."""
 
     workload_blind = True
@@ -42,7 +42,7 @@ class WorkloadBlindRangeV2Model(CachedSinusoidalPositionalEncodingMixin, nn.Modu
         self.embed_dim = int(embed_dim)
         self.query_chunk_size = int(query_chunk_size)
         self.num_layers = max(0, int(num_layers))
-        self.prior_feature_dim = min(WORKLOAD_BLIND_RANGE_V2_PRIOR_FEATURE_DIM, self.point_dim)
+        self.prior_feature_dim = min(WORKLOAD_BLIND_RANGE_PRIOR_FEATURE_DIM, self.point_dim)
         self.head_names = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES)
         self.register_buffer("_positional_encoding_cache", torch.empty(0), persistent=False)
 
@@ -172,7 +172,7 @@ class WorkloadBlindRangeV2Model(CachedSinusoidalPositionalEncodingMixin, nn.Modu
         return self.prior_encoder(h + segment)
 
     def _prior_features(self, points: torch.Tensor) -> torch.Tensor:
-        """Return normalized query-prior feature channels from the v2 point tensor."""
+        """Return normalized query-prior feature channels from the point tensor."""
         return points[..., -self.prior_feature_dim :].float()
 
     def forward_with_heads(

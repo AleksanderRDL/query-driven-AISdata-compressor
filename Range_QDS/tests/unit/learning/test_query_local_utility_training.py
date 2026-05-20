@@ -14,7 +14,7 @@ from learning.factorized_head_diagnostics import (
 )
 from learning.fit_diagnostics import _training_target_diagnostics
 from learning.model_features import (
-    WORKLOAD_BLIND_RANGE_V2_POINT_DIM,
+    WORKLOAD_BLIND_RANGE_POINT_DIM,
 )
 from learning.model_training import (
     _scalar_training_target_for_mode,
@@ -31,7 +31,7 @@ from learning.targets.query_local_utility import (
     QUERY_LOCAL_UTILITY_HEAD_NAMES,
     query_local_utility_point_score,
 )
-from models.workload_blind_range_v2 import WorkloadBlindRangeV2Model
+from models.workload_blind_range import WorkloadBlindRangeModel
 
 HISTORICAL_SMALL_LOCAL_FAMILY = "small_local"
 
@@ -424,8 +424,8 @@ def test_factorized_scalar_training_target_keeps_raw_query_local_utility_scale()
 
 
 def test_factorized_head_bias_initialization_uses_training_base_rates() -> None:
-    model = WorkloadBlindRangeV2Model(
-        point_dim=WORKLOAD_BLIND_RANGE_V2_POINT_DIM,
+    model = WorkloadBlindRangeModel(
+        point_dim=WORKLOAD_BLIND_RANGE_POINT_DIM,
         query_dim=0,
         embed_dim=16,
         num_heads=2,

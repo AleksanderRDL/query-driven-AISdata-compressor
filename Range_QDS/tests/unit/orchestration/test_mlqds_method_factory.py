@@ -56,7 +56,7 @@ def test_build_mlqds_method_carries_selector_scoring_and_runtime_config() -> Non
         mlqds_hybrid_mode="fill",
         mlqds_stratified_center_weight=0.13,
         mlqds_min_learned_swaps=3,
-        selector_type="learned_segment_budget_v1",
+        selector_type="learned_segment_budget",
         learned_segment_geometry_gain_weight=0.19,
         learned_segment_allocation_length_support_weight=0.23,
         learned_segment_allocation_weight_floor=0.41,
@@ -97,7 +97,7 @@ def test_build_mlqds_method_carries_selector_scoring_and_runtime_config() -> Non
     assert method.hybrid_mode == "fill"
     assert method.stratified_center_weight == 0.13
     assert method.min_learned_swaps == 3
-    assert method.selector_type == "learned_segment_budget_v1"
+    assert method.selector_type == "learned_segment_budget"
     assert method.learned_segment_geometry_gain_weight == 0.19
     assert method.learned_segment_allocation_length_support_weight == 0.23
     assert method.learned_segment_allocation_weight_floor == 0.41

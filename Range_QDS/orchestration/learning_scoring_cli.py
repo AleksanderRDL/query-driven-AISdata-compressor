@@ -396,9 +396,9 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         choices=WORKLOAD_PROFILE_CHOICES,
         help=(
-            "Versioned range workload profile. range_query_mix is the default final "
-            "candidate profile and owns a 30%% target coverage. The default legacy_generator "
-            "keeps old benchmark behavior."
+            "Named range workload profile. range_query_mix is the current final "
+            "candidate profile and owns a 30%% target coverage. Omitting this "
+            "uses raw generator settings for diagnostics."
         ),
     )
     parser.add_argument(
@@ -806,7 +806,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=TEMPORAL_HYBRID_SELECTOR_TYPE,
         choices=SELECTOR_TYPE_CHOICES,
         help=(
-            "Retained-mask selector. Use learned_segment_budget_v1 for query-driven final-candidate runs; "
+            "Retained-mask selector. Use learned_segment_budget for query-driven final-candidate runs; "
             "temporal_hybrid is diagnostic-only selector behavior."
         ),
     )
@@ -815,7 +815,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=DEFAULT_LEARNED_SEGMENT_GEOMETRY_GAIN_WEIGHT,
         help=(
-            "Geometry-gain tie-breaker weight for learned_segment_budget_v1. "
+            "Geometry-gain tie-breaker weight for learned_segment_budget. "
             "This is query-free selector structure for within-segment point choice "
             "and is reported for causality audits."
         ),
@@ -825,7 +825,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=DEFAULT_LEARNED_SEGMENT_ALLOCATION_LENGTH_SUPPORT_WEIGHT,
         help=(
-            "Query-free path-length support blend weight for learned_segment_budget_v1 "
+            "Query-free path-length support blend weight for learned_segment_budget "
             "segment allocation. This is separate from the within-segment "
             "geometry-gain tie-breaker."
         ),
@@ -835,7 +835,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=DEFAULT_LEARNED_SEGMENT_ALLOCATION_WEIGHT_FLOOR,
         help=(
-            "Base positive floor added to normalized learned_segment_budget_v1 "
+            "Base positive floor added to normalized learned_segment_budget "
             "segment allocation weights. Lower values increase score contrast; "
             "the default preserves current selector behavior."
         ),
@@ -846,7 +846,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_LEARNED_SEGMENT_SCORE_BLEND_WEIGHT,
         help=(
             "Within-segment blend weight for the segment-budget head in "
-            "learned_segment_budget_v1. Exposed so it cannot silently mask weak heads."
+            "learned_segment_budget. Exposed so it cannot silently mask weak heads."
         ),
     )
     parser.add_argument(
@@ -856,7 +856,7 @@ def build_parser() -> argparse.ArgumentParser:
         choices=SEGMENT_TRANSFER_CALIBRATION_MODE_CHOICES,
         help=(
             "Guarded non-default pre-selection segment transfer calibration for "
-            "learned_segment_budget_v1. 'none' preserves current behavior; "
+            "learned_segment_budget. 'none' preserves current behavior; "
             "segment_score_allocation_weight_zblend is diagnostic until unchanged "
             "strict gates justify it."
         ),
@@ -873,7 +873,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=0.0,
         help=(
-            "Optional query-free learned-slot repair fraction for learned_segment_budget_v1. "
+            "Optional query-free learned-slot repair fraction for learned_segment_budget. "
             "0.0 leaves selected learned slots unchanged; values above 0 swap a bounded share "
             "toward path-length gain and are experimental until strict gates pass."
         ),

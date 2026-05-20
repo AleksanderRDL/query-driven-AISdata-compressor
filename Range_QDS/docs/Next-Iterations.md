@@ -7,7 +7,7 @@ for the condensed evidence boundary.
 
 ## Current Defaults
 
-- primary metric: `QueryLocalUtility` schema `5`
+- primary metric: `QueryLocalUtility`
 - workload profile: `range_query_mix`
 - active anchors: `density=0.80`, `sparse_background_control=0.20`
 - active footprints: `medium_operational=0.6923076923076923`,
@@ -17,7 +17,7 @@ for the condensed evidence boundary.
 - proposal calibration: deterministic low-band point-hit target inside the
   lower `25%` of each footprint band, followed by unchanged acceptance gates
 - target/model/selector: `query_local_utility_factorized`,
-  `workload_blind_range_v2`, `learned_segment_budget_v1`
+  `workload_blind_range`, `learned_segment_budget`
 - target detail: `conditional_behavior_target_variant=query_segment_local_behavior_utility`,
   `replacement_representative_keep_fraction=0.35`,
   `segment_budget_target_aggregation=top20_mean`
@@ -96,9 +96,9 @@ Older seed `2524` strict artifacts remain useful historical diagnostics for
 segment-score/length-support conflict, uniform-no-length-support contrast, and
 semantic-alignment checks. They are no longer the front-door evidence boundary
 for the current-default path:
-`artifacts/results/query_driven_schema5_segment_length_conflict_diag_level3_range_query_mix_seed2524/example_run.json`;
-`artifacts/results/query_driven_schema5_uniform_segment_allocation_diag_level3_range_query_mix_seed2524/example_run.json`;
-`artifacts/results/query_driven_schema5_segment_budget_top20_level3_range_query_mix_seed2524/example_run.json`.
+`artifacts/results/query_driven_segment_length_conflict_diag_level3_range_query_mix_seed2524/example_run.json`;
+`artifacts/results/query_driven_uniform_segment_allocation_diag_level3_range_query_mix_seed2524/example_run.json`;
+`artifacts/results/query_driven_segment_budget_top20_level3_range_query_mix_seed2524/example_run.json`.
 
 Generator-only evidence remains useful background: source-stratified Level 3
 probes with `range_query_mix`, `n_queries=48`, `max_queries=384`, and seeds
@@ -111,7 +111,7 @@ new defaults. A `large_context=3.6km/7.25h` and max point-hit fraction `0.050`
 variant passed the known Level 2 seed, but failed adjacent Level 2 seeds and
 Level 3 generator probes. Do not promote it without stronger evidence.
 
-A guarded `workload_blind_range_v2` prior-feature-scale replay was rejected as
+A guarded `workload_blind_range` prior-feature-scale replay was rejected as
 a default. It made prior ablations material, but at Level 3 the effect was
 anti-causal: shuffled/zeroed prior fields and prior-field-only score did not
 lose as required, retained-marginal alignment stayed negative, and global
@@ -119,21 +119,21 @@ sanity still failed. Do not continue by simply increasing prior scale.
 
 The previous generator-fixed strict replay remains useful as historical
 pre-alignment comparison:
-`artifacts/results/query_driven_schema5_generator_fixed_level3_range_query_mix_seed2524/example_run.json`.
+`artifacts/results/query_driven_generator_fixed_level3_range_query_mix_seed2524/example_run.json`.
 The segment-budget top-20% fix made the target/selector contract honest, but it
 did not fix causality in that older cell: no-segment-budget still beat primary,
 query-prior ablations barely moved the retained mask, and the family/head
 diagnostic blocked on `conditional_behavior_utility`.
 
 A composite query-local behavior target was also rejected as an active default:
-`artifacts/results/query_driven_schema5_query_local_behavior_level3_range_query_mix_seed2524/example_run.json`.
+`artifacts/results/query_driven_query_local_behavior_level3_range_query_mix_seed2524/example_run.json`.
 It made predictability pass, but target diffusion failed, QueryLocalUtility
 dropped, shuffled/untrained/no-behavior/no-segment ablations all beat primary,
 and prior ablations still barely moved the retained mask. Do not continue by
 stuffing more query-presence mass into `conditional_behavior_utility`.
 
 A selector allocation-floor contrast replay was rejected as an active default:
-`artifacts/results/query_driven_schema5_allocation_floor0_level3_range_query_mix_seed2524/example_run.json`.
+`artifacts/results/query_driven_allocation_floor0_level3_range_query_mix_seed2524/example_run.json`.
 It raised MLQDS QueryLocalUtility to `0.1516471003`, but predictability and
 learning causality still failed, no-segment-budget and untrained controls beat
 primary by more, segment-score retained-marginal alignment turned negative, and
@@ -141,9 +141,9 @@ segment allocation entropy stayed high. Do not keep tuning selector floor until
 head/segment transfer is directionally correct.
 
 Behavior-head segment authority was rejected as an active default:
-`artifacts/results/query_driven_schema5_behavior_segment_diagnostic_level3_range_query_mix_seed2524/example_run.json`
+`artifacts/results/query_driven_behavior_segment_diagnostic_level3_range_query_mix_seed2524/example_run.json`
 and
-`artifacts/results/query_driven_schema5_behavior_rank015_segment_diagnostic_level3_range_query_mix_seed2524/example_run.json`.
+`artifacts/results/query_driven_behavior_rank015_segment_diagnostic_level3_range_query_mix_seed2524/example_run.json`.
 Default behavior-head-as-segment scored `0.13933` and behavior allocation-only
 `0.14187`, both below primary `0.14239`. With behavior-rank loss, primary rose
 to `0.14377`, but behavior-head-as-segment stayed low at `0.13943` and
@@ -153,7 +153,7 @@ with `conditional_behavior_utility`.
 
 Uniform/fair segment allocation without length support was rejected as an
 explanation for the older seed `2524` no-segment win:
-`artifacts/results/query_driven_schema5_uniform_segment_allocation_diag_level3_range_query_mix_seed2524/example_run.json`.
+`artifacts/results/query_driven_uniform_segment_allocation_diag_level3_range_query_mix_seed2524/example_run.json`.
 It scored only `0.12412`, far below primary `0.14239`. Active learned segment
 allocation without length support scored `0.13836`, also below primary. In that
 older cell, the winning no-segment variants were specifically the
@@ -172,7 +172,7 @@ allocation contract explain why learned segment scores should preserve
 query-local regions directly.
 
 A guarded segment transfer calibration was rejected as an active default:
-`artifacts/results/query_driven_schema5_segment_transfer_zblend_level3_range_query_mix_seed2524/example_run.json`.
+`artifacts/results/query_driven_segment_transfer_zblend_level3_range_query_mix_seed2524/example_run.json`.
 The derived admissibility diagnostics allowed the
 `segment_score_allocation_weight_zblend` probe because it used pre-selection
 signals and avoided post-selection attribution. The strict replay still reduced
@@ -184,7 +184,7 @@ selector transfer calibration in isolation.
 
 A model-facing `route_density_prior` exposure probe was rejected as an active
 default:
-`artifacts/results/query_driven_schema5_route_density_prior_enabled_level3_range_query_mix_seed2524/example_run.json`.
+`artifacts/results/query_driven_route_density_prior_enabled_level3_range_query_mix_seed2524/example_run.json`.
 The channel was genuinely visible when enabled: shuffled-prior route-density
 model-input delta was `0.4901`, and removing only route density changed 16
 retained decisions. The direction was still wrong. Primary QueryLocalUtility
@@ -195,7 +195,7 @@ workload/scoring redesign changes the evidence.
 
 A selector allocation length-support probe was also rejected as an active
 default:
-`artifacts/results/query_driven_schema5_length_support_weight035_level3_range_query_mix_seed2524/example_run.json`.
+`artifacts/results/query_driven_length_support_weight035_level3_range_query_mix_seed2524/example_run.json`.
 Raising `learned_segment_allocation_length_support_weight` to `0.35` improved
 MLQDS QueryLocalUtility to `0.1449775496`, made global sanity pass, and made
 the untrained ablation lose. It still failed predictability and learning
@@ -208,7 +208,7 @@ query-local success.
 An earlier selector-to-eval segment teacher transfer diagnostic compared the
 seed `2524` current-default artifact and the rejected length-support `0.35`
 artifact:
-`artifacts/results/query_driven_schema5_length_support_weight035_level3_range_query_mix_seed2524/selection_eval_segment_teacher_transfer_diagnostic.json`.
+`artifacts/results/query_driven_length_support_weight035_level3_range_query_mix_seed2524/selection_eval_segment_teacher_transfer_diagnostic.json`.
 In that older comparison, the seed `2524` current-default artifact was weakly
 admissible for a guarded selection-side segment-marginal teacher: its
 per-artifact decision was

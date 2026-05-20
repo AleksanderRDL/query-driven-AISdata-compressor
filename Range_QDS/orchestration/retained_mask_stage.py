@@ -26,7 +26,7 @@ from orchestration.selector_diagnostics import (
 )
 from scoring.methods import FrozenMaskMethod, Method
 from selection.learned_segment_budget import (
-    simplify_with_learned_segment_budget_v1_with_trace,
+    simplify_with_learned_segment_budget_with_trace,
 )
 from selection.selector_types import LEARNED_SEGMENT_BUDGET_SELECTOR_TYPE
 from workloads.typed_workload import TypedQueryWorkload
@@ -166,7 +166,7 @@ def freeze_workload_blind_retained_masks(
                     "MLQDS"
                 )
                 trace_started_at = time.perf_counter()
-                trace_mask, trace = simplify_with_learned_segment_budget_v1_with_trace(
+                trace_mask, trace = simplify_with_learned_segment_budget_with_trace(
                     primary_scores,
                     test_boundaries,
                     float(config.model.compression_ratio),

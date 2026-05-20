@@ -837,7 +837,7 @@ def test_validation_selection_passes_segment_head_to_learned_selector(
         workload="range",
         checkpoint_score_variant="answer",
     )
-    cfg.model.selector_type = "learned_segment_budget_v1"
+    cfg.model.selector_type = "learned_segment_budget"
     predictions = torch.zeros((points.shape[0],), dtype=torch.float32)
     head_logits = torch.zeros((points.shape[0], 5), dtype=torch.float32)
     head_logits[:, 4] = torch.linspace(-2.0, 2.0, steps=points.shape[0])
@@ -902,7 +902,7 @@ def test_validation_selection_can_blend_length_support_head_for_learned_selector
         checkpoint_score_variant="answer",
         learned_segment_length_support_blend_weight=1.0,
     )
-    cfg.model.selector_type = "learned_segment_budget_v1"
+    cfg.model.selector_type = "learned_segment_budget"
     predictions = torch.zeros((points.shape[0],), dtype=torch.float32)
     head_logits = torch.zeros(
         (points.shape[0], len(QUERY_LOCAL_UTILITY_HEAD_NAMES)), dtype=torch.float32
@@ -984,7 +984,7 @@ def test_validation_checkpoint_scores_report_factorized_causality_deltas(
         checkpoint_score_variant="query_local_utility",
         validation_global_sanity_penalty_enabled=False,
     )
-    cfg.model.selector_type = "learned_segment_budget_v1"
+    cfg.model.selector_type = "learned_segment_budget"
     predictions = torch.ones((points.shape[0],), dtype=torch.float32)
     head_logits = torch.ones(
         (points.shape[0], len(QUERY_LOCAL_UTILITY_HEAD_NAMES)), dtype=torch.float32

@@ -17,8 +17,8 @@ WORKLOAD_BLIND_POINT_DIM = 8 + WORKLOAD_BLIND_EXTRA_DIM
 CONTEXT_WORKLOAD_BLIND_EXTRA_DIM = 16
 CONTEXT_WORKLOAD_BLIND_POINT_DIM = 8 + CONTEXT_WORKLOAD_BLIND_EXTRA_DIM
 RANGE_PRIOR_CLOCK_DENSITY_POINT_DIM = CONTEXT_WORKLOAD_BLIND_POINT_DIM + 4
-WORKLOAD_BLIND_RANGE_V2_ABSOLUTE_DIM = 5
-WORKLOAD_BLIND_RANGE_V2_ABSOLUTE_EXTENT_FALLBACK = {
+WORKLOAD_BLIND_RANGE_ABSOLUTE_DIM = 5
+WORKLOAD_BLIND_RANGE_ABSOLUTE_EXTENT_FALLBACK = {
     "t_min": 0.0,
     "t_max": 86_400.0,
     "lat_min": -90.0,
@@ -26,14 +26,14 @@ WORKLOAD_BLIND_RANGE_V2_ABSOLUTE_EXTENT_FALLBACK = {
     "lon_min": -180.0,
     "lon_max": 180.0,
 }
-WORKLOAD_BLIND_RANGE_V2_PRIOR_DIM = len(QUERY_PRIOR_FIELD_NAMES)
-WORKLOAD_BLIND_RANGE_V2_POINT_DIM = (
+WORKLOAD_BLIND_RANGE_PRIOR_DIM = len(QUERY_PRIOR_FIELD_NAMES)
+WORKLOAD_BLIND_RANGE_POINT_DIM = (
     CONTEXT_WORKLOAD_BLIND_POINT_DIM
-    + WORKLOAD_BLIND_RANGE_V2_ABSOLUTE_DIM
-    + WORKLOAD_BLIND_RANGE_V2_PRIOR_DIM
+    + WORKLOAD_BLIND_RANGE_ABSOLUTE_DIM
+    + WORKLOAD_BLIND_RANGE_PRIOR_DIM
 )
-WORKLOAD_BLIND_RANGE_V2_MODEL_DISABLED_PRIOR_FIELDS = ("route_density_prior",)
-WORKLOAD_BLIND_RANGE_V2_MODEL_PRIOR_TRANSFORM = "identity_probability"
+WORKLOAD_BLIND_RANGE_MODEL_DISABLED_PRIOR_FIELDS = ("route_density_prior",)
+WORKLOAD_BLIND_RANGE_MODEL_PRIOR_TRANSFORM = "identity_probability"
 HISTORICAL_PRIOR_ROUTE_CONTEXT_FEATURE_INDICES = (
     0,
     1,
@@ -73,17 +73,17 @@ HISTORICAL_PRIOR_MMSI_POINT_DIM = (
     + HISTORICAL_PRIOR_CLOCK_DIM
     + HISTORICAL_PRIOR_DENSITY_DIM
 )
-WORKLOAD_BLIND_RANGE_V2_MODEL_TYPE = "workload_blind_range_v2"
+WORKLOAD_BLIND_RANGE_MODEL_TYPE = "workload_blind_range"
 QUERY_AWARE_MODEL_TYPES = ("baseline", "range_aware")
 WORKLOAD_BLIND_MODEL_TYPE_CHOICES = (
-    "workload_blind_range",
+    "scalar_workload_blind_range",
     "range_prior",
     "range_prior_clock_density",
     "segment_context_range",
     "historical_prior",
     "historical_prior_mmsi",
     "historical_prior_student",
-    WORKLOAD_BLIND_RANGE_V2_MODEL_TYPE,
+    WORKLOAD_BLIND_RANGE_MODEL_TYPE,
 )
 SUPPORTED_MODEL_TYPES = QUERY_AWARE_MODEL_TYPES + WORKLOAD_BLIND_MODEL_TYPE_CHOICES
 WORKLOAD_BLIND_MODEL_TYPES = frozenset(WORKLOAD_BLIND_MODEL_TYPE_CHOICES)
@@ -104,7 +104,7 @@ MODEL_TYPE_METADATA: dict[str, dict[str, object]] = {
         "trainable_final_candidate": False,
         "final_success_allowed": False,
     },
-    "workload_blind_range": {
+    "scalar_workload_blind_range": {
         "model_family": "legacy_workload_blind_scalar_scorer",
         "trainable_final_candidate": False,
         "final_success_allowed": False,
@@ -140,7 +140,7 @@ MODEL_TYPE_METADATA: dict[str, dict[str, object]] = {
         "requires_ablation_against_standalone_knn": True,
         "final_success_allowed": False,
     },
-    WORKLOAD_BLIND_RANGE_V2_MODEL_TYPE: {
+    WORKLOAD_BLIND_RANGE_MODEL_TYPE: {
         "model_family": "query_driven_factorized_workload_blind",
         "trainable_final_candidate": True,
         "requires_query_local_utility": True,
@@ -552,9 +552,9 @@ def _extent_for_absolute_features(
     if query_prior_field is not None and isinstance(query_prior_field.get("extent"), dict):
         return dict(query_prior_field["extent"])
     if query_prior_field is None:
-        return dict(WORKLOAD_BLIND_RANGE_V2_ABSOLUTE_EXTENT_FALLBACK)
+        return dict(WORKLOAD_BLIND_RANGE_ABSOLUTE_EXTENT_FALLBACK)
     if int(points.numel()) == 0:
-        return dict(WORKLOAD_BLIND_RANGE_V2_ABSOLUTE_EXTENT_FALLBACK)
+        return dict(WORKLOAD_BLIND_RANGE_ABSOLUTE_EXTENT_FALLBACK)
     return {
         "t_min": float(points[:, 0].min().item()),
         "t_max": float(points[:, 0].max().item()),
@@ -565,14 +565,14 @@ def _extent_for_absolute_features(
     }
 
 
-def _absolute_range_v2_features(
+def _absolute_range_features(
     points: torch.Tensor, query_prior_field: dict[str, Any] | None
 ) -> torch.Tensor:
-    """Return fixed-extent absolute time and geo features for v2."""
+    """Return fixed-extent absolute time and geo features for the range model."""
     n_points = int(points.shape[0])
     if n_points == 0:
         return torch.empty(
-            (0, WORKLOAD_BLIND_RANGE_V2_ABSOLUTE_DIM), dtype=torch.float32, device=points.device
+            (0, WORKLOAD_BLIND_RANGE_ABSOLUTE_DIM), dtype=torch.float32, device=points.device
         )
     extent = _extent_for_absolute_features(points, query_prior_field)
     has_training_extent = query_prior_field is not None and isinstance(
@@ -594,25 +594,25 @@ def _absolute_range_v2_features(
     return torch.stack([t_norm, lat_norm, lon_norm, torch.sin(angle), torch.cos(angle)], dim=1)
 
 
-def build_workload_blind_range_v2_point_features(
+def build_workload_blind_range_point_features(
     points: torch.Tensor,
     query_prior_field: dict[str, Any] | None = None,
 ) -> torch.Tensor:
-    """Build query-free v2 features with absolute geo and train-derived priors."""
+    """Build query-free range-model features with absolute geo and train-derived priors."""
     context = build_workload_blind_point_features_for_dim(points, CONTEXT_WORKLOAD_BLIND_POINT_DIM)
-    absolute = _absolute_range_v2_features(points, query_prior_field)
-    priors = transform_workload_blind_range_v2_prior_features(
+    absolute = _absolute_range_features(points, query_prior_field)
+    priors = transform_workload_blind_range_prior_features(
         sample_query_prior_fields(points, query_prior_field)
     )
     return torch.cat([context, absolute, priors], dim=1)
 
 
-def transform_workload_blind_range_v2_prior_features(priors: torch.Tensor) -> torch.Tensor:
-    """Return the v2 model-facing representation of train-derived query priors."""
+def transform_workload_blind_range_prior_features(priors: torch.Tensor) -> torch.Tensor:
+    """Return the model-facing representation of train-derived query priors."""
     if int(priors.numel()) <= 0:
         return priors.float()
     transformed = priors.float().clamp(0.0, 1.0).clone()
-    for field_name in WORKLOAD_BLIND_RANGE_V2_MODEL_DISABLED_PRIOR_FIELDS:
+    for field_name in WORKLOAD_BLIND_RANGE_MODEL_DISABLED_PRIOR_FIELDS:
         try:
             field_idx = QUERY_PRIOR_FIELD_NAMES.index(field_name)
         except ValueError:
@@ -634,14 +634,14 @@ def build_model_point_features(
     normalized_type = str(model_type).lower()
     if normalized_type == "baseline":
         return points[:, :7].float()
-    if normalized_type == "workload_blind_range":
+    if normalized_type == "scalar_workload_blind_range":
         return build_workload_blind_point_features(points)
     if normalized_type == "range_prior":
         return build_workload_blind_point_features_for_dim(points, CONTEXT_WORKLOAD_BLIND_POINT_DIM)
     if normalized_type in {"range_prior_clock_density", "segment_context_range"}:
         return build_range_prior_clock_density_point_features(points)
-    if normalized_type == WORKLOAD_BLIND_RANGE_V2_MODEL_TYPE:
-        return build_workload_blind_range_v2_point_features(
+    if normalized_type == WORKLOAD_BLIND_RANGE_MODEL_TYPE:
+        return build_workload_blind_range_point_features(
             points, query_prior_field=query_prior_field
         )
     if normalized_type in {"historical_prior", "historical_prior_student"}:
@@ -717,8 +717,8 @@ def _build_query_free_point_features_for_dim(
         return build_historical_prior_point_features(points)
     if point_dim_int == HISTORICAL_PRIOR_MMSI_POINT_DIM:
         return build_historical_prior_mmsi_point_features(points, boundaries, trajectory_mmsis)
-    if point_dim_int == WORKLOAD_BLIND_RANGE_V2_POINT_DIM:
-        return build_workload_blind_range_v2_point_features(
+    if point_dim_int == WORKLOAD_BLIND_RANGE_POINT_DIM:
+        return build_workload_blind_range_point_features(
             points, query_prior_field=query_prior_field
         )
     raise ValueError(f"Unsupported workload-blind saved model point_dim={point_dim}.")

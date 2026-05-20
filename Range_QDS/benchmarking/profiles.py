@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from learning.model_features import (
-    WORKLOAD_BLIND_RANGE_V2_MODEL_TYPE,
+    WORKLOAD_BLIND_RANGE_MODEL_TYPE,
     is_workload_blind_model_type,
 )
 from learning.targets.query_local_utility import QUERY_LOCAL_UTILITY_FACTORIZED_TARGET_MODE
@@ -26,13 +26,13 @@ BLIND_TEACHER_DISTILL_PROFILE = "range_workload_blind_teacher_distill"
 LEGACY_DIAGNOSTIC_PROFILE_NOTE = (
     "Old RangeUseful/scalar-target diagnostic path. Not valid for QueryLocalUtility final acceptance."
 )
-RANGE_QUERY_MIX_WORKLOAD_BLIND_V2_PROFILE = "range_query_mix_workload_blind_v2"
+RANGE_QUERY_MIX_WORKLOAD_BLIND_PROFILE = "range_query_mix_workload_blind"
 PROFILE_CHOICES = (
     DEFAULT_PROFILE,
     BLIND_EXPECTED_USEFULNESS_PROFILE,
     BLIND_RETAINED_FREQUENCY_PROFILE,
     BLIND_TEACHER_DISTILL_PROFILE,
-    RANGE_QUERY_MIX_WORKLOAD_BLIND_V2_PROFILE,
+    RANGE_QUERY_MIX_WORKLOAD_BLIND_PROFILE,
 )
 ProfileSetting = int | float | str | bool | list[float] | list[str] | None
 RANGE_WORKLOAD_PROFILE_SWEEP_IDS = RANGE_QUERY_MIX_FINAL_PROFILE_IDS
@@ -199,7 +199,7 @@ RANGE_WORKLOAD_BLIND_EXPECTED_USEFULNESS_PROFILE = BenchmarkProfile(
     query_chunk_size=2048,
     train_batch_size=64,
     inference_batch_size=64,
-    model_type="workload_blind_range",
+    model_type="scalar_workload_blind_range",
     compression_ratio=0.05,
     epochs=10,
     early_stopping_patience=5,
@@ -261,7 +261,7 @@ RANGE_WORKLOAD_BLIND_RETAINED_FREQUENCY_PROFILE = BenchmarkProfile(
     query_chunk_size=2048,
     train_batch_size=64,
     inference_batch_size=64,
-    model_type="workload_blind_range",
+    model_type="scalar_workload_blind_range",
     compression_ratio=0.05,
     epochs=10,
     early_stopping_patience=5,
@@ -323,7 +323,7 @@ RANGE_WORKLOAD_BLIND_TEACHER_DISTILL_PROFILE = BenchmarkProfile(
     query_chunk_size=2048,
     train_batch_size=64,
     inference_batch_size=64,
-    model_type="workload_blind_range",
+    model_type="scalar_workload_blind_range",
     compression_ratio=0.05,
     epochs=10,
     early_stopping_patience=5,
@@ -366,8 +366,8 @@ RANGE_WORKLOAD_BLIND_TEACHER_DISTILL_PROFILE = BenchmarkProfile(
     range_teacher_epochs=4,
 )
 
-RANGE_QUERY_MIX_WORKLOAD_BLIND_V2_BENCHMARK_PROFILE = BenchmarkProfile(
-    name=RANGE_QUERY_MIX_WORKLOAD_BLIND_V2_PROFILE,
+RANGE_QUERY_MIX_WORKLOAD_BLIND_BENCHMARK_PROFILE = BenchmarkProfile(
+    name=RANGE_QUERY_MIX_WORKLOAD_BLIND_PROFILE,
     n_queries=RANGE_BLIND_COVERAGE_MIN_QUERY_FLOOR,
     query_coverage=None,
     range_spatial_fraction=0.0165,
@@ -385,7 +385,7 @@ RANGE_QUERY_MIX_WORKLOAD_BLIND_V2_BENCHMARK_PROFILE = BenchmarkProfile(
     query_chunk_size=2048,
     train_batch_size=64,
     inference_batch_size=64,
-    model_type=WORKLOAD_BLIND_RANGE_V2_MODEL_TYPE,
+    model_type=WORKLOAD_BLIND_RANGE_MODEL_TYPE,
     compression_ratio=0.05,
     epochs=10,
     early_stopping_patience=5,
@@ -438,7 +438,7 @@ _PROFILES = {
     RANGE_WORKLOAD_BLIND_EXPECTED_USEFULNESS_PROFILE.name: RANGE_WORKLOAD_BLIND_EXPECTED_USEFULNESS_PROFILE,
     RANGE_WORKLOAD_BLIND_RETAINED_FREQUENCY_PROFILE.name: RANGE_WORKLOAD_BLIND_RETAINED_FREQUENCY_PROFILE,
     RANGE_WORKLOAD_BLIND_TEACHER_DISTILL_PROFILE.name: RANGE_WORKLOAD_BLIND_TEACHER_DISTILL_PROFILE,
-    RANGE_QUERY_MIX_WORKLOAD_BLIND_V2_BENCHMARK_PROFILE.name: RANGE_QUERY_MIX_WORKLOAD_BLIND_V2_BENCHMARK_PROFILE,
+    RANGE_QUERY_MIX_WORKLOAD_BLIND_BENCHMARK_PROFILE.name: RANGE_QUERY_MIX_WORKLOAD_BLIND_BENCHMARK_PROFILE,
 }
 
 
@@ -611,7 +611,7 @@ def benchmark_profile_settings(name: str) -> dict[str, ProfileSetting]:
         else None
     )
     profile_role = (
-        "query_driven_workload_blind_v2"
+        "query_driven_workload_blind"
         if profile.range_training_target_mode == QUERY_LOCAL_UTILITY_FACTORIZED_TARGET_MODE
         else "workload_blind_teacher_distill"
         if profile.range_teacher_distillation_mode != "none"
@@ -638,7 +638,7 @@ def benchmark_profile_settings(name: str) -> dict[str, ProfileSetting]:
             "Requires full held-out workload-profile/compression grid and learning-causality ablations."
             if final_candidate
             else (
-                "Diagnostic-only profile. Use the query-driven workload-blind v2 "
+                "Diagnostic-only profile. Use the query-driven workload-blind "
                 "QueryLocalUtility profile and required evidence levels for final claims."
             )
         ),

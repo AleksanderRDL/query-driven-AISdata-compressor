@@ -76,7 +76,7 @@ def query_local_utility_point_score(
     boundary: torch.Tensor,
     replacement: torch.Tensor,
 ) -> torch.Tensor:
-    """Return the scalar QueryLocalUtility point score used by labels and v2 logits."""
+    """Return the scalar QueryLocalUtility point score used by labels and model logits."""
     q_hit = q_hit.float().clamp(0.0, 1.0)
     behavior = behavior.float().clamp(0.0, 1.0)
     boundary = boundary.float().clamp(0.0, 1.0)

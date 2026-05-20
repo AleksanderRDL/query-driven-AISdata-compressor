@@ -9,7 +9,7 @@ import torch.nn.functional as F
 from models.positional_encoding import CachedSinusoidalPositionalEncodingMixin
 
 
-class WorkloadBlindRangeQDSModel(CachedSinusoidalPositionalEncodingMixin, nn.Module):
+class ScalarWorkloadBlindRangeQDSModel(CachedSinusoidalPositionalEncodingMixin, nn.Module):
     """Point-only transformer scorer.
 
     Training may use query-derived labels, but forward inference deliberately

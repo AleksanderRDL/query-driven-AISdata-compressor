@@ -10,7 +10,7 @@ Status: active, not complete.
 
 Current default stack:
 
-- primary metric: `QueryLocalUtility` schema `5`
+- primary metric: `QueryLocalUtility`
 - score groups: `query_point_mass=0.50`, `query_local_behavior=0.45`,
   `global_sanity=0.05`
 - score components: `query_point_recall=0.50`,
@@ -27,7 +27,7 @@ Current default stack:
 - footprint point-hit fraction bands: `medium_operational=[0.006,0.030]`,
   `large_context=[0.010,0.045]`
 - target/model/selector: `query_local_utility_factorized`,
-  `workload_blind_range_v2`, `learned_segment_budget_v1`
+  `workload_blind_range`, `learned_segment_budget`
 - target detail:
   `conditional_behavior_target_variant=query_segment_local_behavior_utility`,
   `replacement_representative_keep_fraction=0.35`,
@@ -35,7 +35,7 @@ Current default stack:
 
 Evidence boundary:
 
-- A current-default strict train-marginal replay has been run under schema `5`
+- A current-default strict train-marginal replay has been run under current QueryLocalUtility
   and the two-footprint `range_query_mix` profile at the healthy
   64-ship/256-point/40-requested-query diagnostic shape. It is evidence of
   old behavior-head blocker location, not evidence of final success. It
@@ -140,7 +140,7 @@ Latest rejected prior-transform diagnostic:
   `artifacts/results/query_driven_prior_sqrt_level3_scale64_query40_seed2527/train_eval_segment_teacher_transfer_diagnostic.json`
 - scale: same strict 64/256/40 seed `2527` cell as the current-default replay;
   diagnostic-only with model-facing query-prior probabilities transformed by
-  square root before the v2 model
+  square root before the range model
 - result: rejected; production default restored to identity prior probabilities
 - MLQDS QueryLocalUtility improved only slightly to `0.1396786660`, but
   learning causality still failed
@@ -161,7 +161,7 @@ Latest rejected prior-transform diagnostic:
 Earlier current-default strict diagnostic:
 
 - artifact:
-  `artifacts/results/query_driven_schema5_segment_length_conflict_diag_level3_range_query_mix_seed2524/example_run.json`
+  `artifacts/results/query_driven_segment_length_conflict_diag_level3_range_query_mix_seed2524/example_run.json`
 - scale: Level 3 source-stratified strict training replay; blocker-localizing
   only
 - MLQDS QueryLocalUtility: `0.1423908599`
@@ -184,7 +184,7 @@ Earlier current-default strict diagnostic:
 Latest rejected non-default loss diagnostic:
 
 - artifact:
-  `artifacts/results/query_driven_schema5_behavior_rank015_segment_diagnostic_level3_range_query_mix_seed2524/example_run.json`
+  `artifacts/results/query_driven_behavior_rank015_segment_diagnostic_level3_range_query_mix_seed2524/example_run.json`
 - scale: Level 3 source-stratified strict training replay with unchanged gates
   and `query_local_utility_behavior_rank_loss_weight=0.15`
 - result: diagnostic-only rejection; no active default changed
@@ -201,7 +201,7 @@ Latest rejected non-default loss diagnostic:
 Latest rejected non-default selector diagnostic:
 
 - artifact:
-  `artifacts/results/query_driven_schema5_allocation_floor0_level3_range_query_mix_seed2524/example_run.json`
+  `artifacts/results/query_driven_allocation_floor0_level3_range_query_mix_seed2524/example_run.json`
 - scale: Level 3 source-stratified strict training replay with unchanged gates
   and `learned_segment_allocation_weight_floor=0.0`
 - result: diagnostic-only rejection; no active default changed
@@ -221,7 +221,7 @@ Latest rejected non-default selector diagnostic:
 Latest rejected selector transfer-calibration diagnostic:
 
 - artifact:
-  `artifacts/results/query_driven_schema5_segment_transfer_zblend_level3_range_query_mix_seed2524/example_run.json`
+  `artifacts/results/query_driven_segment_transfer_zblend_level3_range_query_mix_seed2524/example_run.json`
 - scale: Level 3 source-stratified strict training replay with unchanged gates
   and
   `learned_segment_transfer_calibration_mode=segment_score_allocation_weight_zblend`
@@ -243,9 +243,9 @@ Latest rejected selector transfer-calibration diagnostic:
 Latest rejected model-facing prior-channel diagnostic:
 
 - artifact:
-  `artifacts/results/query_driven_schema5_route_density_prior_enabled_level3_range_query_mix_seed2524/example_run.json`
+  `artifacts/results/query_driven_route_density_prior_enabled_level3_range_query_mix_seed2524/example_run.json`
 - scale: Level 3 source-stratified strict training replay with unchanged gates
-  and `route_density_prior` exposed to `workload_blind_range_v2`
+  and `route_density_prior` exposed to `workload_blind_range`
 - result: diagnostic-only rejection; production default restored with
   `route_density_prior` still disabled in the model-facing prior vector
 - MLQDS QueryLocalUtility dropped to `0.1421144423` from the current default
@@ -262,7 +262,7 @@ Latest rejected model-facing prior-channel diagnostic:
 Latest rejected selector-allocation semantic diagnostic:
 
 - artifact:
-  `artifacts/results/query_driven_schema5_length_support_weight035_level3_range_query_mix_seed2524/example_run.json`
+  `artifacts/results/query_driven_length_support_weight035_level3_range_query_mix_seed2524/example_run.json`
 - scale: Level 3 source-stratified strict training replay with unchanged gates
   and `learned_segment_allocation_length_support_weight=0.35`
 - result: diagnostic-only rejection; no active default changed
@@ -280,11 +280,11 @@ Latest rejected selector-allocation semantic diagnostic:
 Earlier derived selector-to-eval segment-marginal transfer diagnostic:
 
 - artifact:
-  `artifacts/results/query_driven_schema5_length_support_weight035_level3_range_query_mix_seed2524/selection_eval_segment_teacher_transfer_diagnostic.json`
+  `artifacts/results/query_driven_length_support_weight035_level3_range_query_mix_seed2524/selection_eval_segment_teacher_transfer_diagnostic.json`
 - compared artifacts: current default
-  `query_driven_schema5_segment_length_conflict_diag_level3_range_query_mix_seed2524`
+  `query_driven_segment_length_conflict_diag_level3_range_query_mix_seed2524`
   versus rejected length-support `0.35`
-  `query_driven_schema5_length_support_weight035_level3_range_query_mix_seed2524`
+  `query_driven_length_support_weight035_level3_range_query_mix_seed2524`
 - result: diagnostic-only; no active default changed
 - seed `2524` current default: per-artifact decision
   `guarded_selection_segment_calibration_probe_admissible`; selection-side
@@ -367,7 +367,7 @@ Latest workload/profile localization:
 
 Historical pre-simplification strict-cell reference:
 
-- artifact retention: raw pre-simplification v2 artifacts were pruned during
+- artifact retention: raw pre-simplification artifacts were pruned during
   Checkpoint Group 35; summary retained here for context only
 - MLQDS QueryLocalUtility: `0.1662115143`
 - uniform QueryLocalUtility: `0.1421296610`
@@ -518,7 +518,7 @@ Tests:
 
 Artifact retention:
 
-- Raw v2 artifacts were pruned during Checkpoint Group 35. Keep the summary
+- Raw pre-canonical artifacts were pruned during Checkpoint Group 35. Keep the summary
   below as the current reference for this historical foundation.
 
 Key results:
@@ -560,7 +560,7 @@ Tests:
 
 Artifact retention:
 
-- Raw v2 artifacts were pruned during Checkpoint Group 35. Keep the summary
+- Raw pre-canonical artifacts were pruned during Checkpoint Group 35. Keep the summary
   below as the current reference for these rejected variants.
 
 Key results:
@@ -601,7 +601,7 @@ Tests:
 
 Artifact retention:
 
-- Raw v2 artifacts were pruned during Checkpoint Group 35. Keep the summary
+- Raw pre-canonical artifacts were pruned during Checkpoint Group 35. Keep the summary
   below as the current reference for this historical diagnosis.
 
 Key results:
@@ -646,7 +646,7 @@ Tests:
 
 Artifact retention:
 
-- Raw v2 artifacts were pruned during Checkpoint Group 35. Keep the summary
+- Raw pre-canonical artifacts were pruned during Checkpoint Group 35. Keep the summary
   below as the current reference for these pre-simplification diagnostics.
 
 Key results:
@@ -688,7 +688,7 @@ Changes:
 - Renamed the active workload profile to `range_query_mix`, renamed
   `density_route` to `density`, and removed old anchor/footprint families from
   the active profile.
-- Made schema `5` use direct `query_point_recall`, direct query-local
+- Made QueryLocalUtility use direct `query_point_recall`, direct query-local
   interpolation fidelity, turn coverage, and min-gap continuity. It stopped
   sourcing point mass from `range_point_f1` and stopped using fallback behavior
   components.
@@ -712,13 +712,13 @@ Key results:
 - Current code defaults now match the stack in `Current State`.
 - This is implementation evidence only. No strict retraining,
   workload-health, or learning-coherence rerun has been performed under
-  schema `5` and the two-footprint profile.
+  QueryLocalUtility and the two-footprint profile.
 
 Decision:
 
-- Use schema `5` and the two-footprint `range_query_mix` profile for all new
+- Use QueryLocalUtility and the two-footprint `range_query_mix` profile for all new
   checkpoints.
-- Do not compare schema `5` scores against old schema scores as if they are the
+- Do not compare current QueryLocalUtility scores against old metric scores as if they are the
   same metric.
 
 ## Checkpoint Group 6 - Documentation And Guide Cleanup
@@ -831,7 +831,7 @@ Status: completed / blocker-localizing evidence only.
 
 Goal:
 
-- Start the evidence boundary from schema `5` and the simplified
+- Start the evidence boundary from QueryLocalUtility and the simplified
   `range_query_mix` workload instead of relying on old pre-simplification
   strict-cell results.
 
@@ -846,14 +846,14 @@ Hypotheses:
 
 Changes:
 
-- Ran a fresh Level 3 strict diagnostic under schema `5`, `range_query_mix`,
-  `query_local_utility_factorized`, `workload_blind_range_v2`,
-  `learned_segment_budget_v1`, and `mlqds_temporal_fraction=0.0`.
+- Ran a fresh Level 3 strict diagnostic under QueryLocalUtility, `range_query_mix`,
+  `query_local_utility_factorized`, `workload_blind_range`,
+  `learned_segment_budget`, and `mlqds_temporal_fraction=0.0`.
 - Changed the active replacement representative keep fraction from `0.50` to
   `0.35` and recorded it in target diagnostics.
 - Rejected a trial segment-budget highpass because it broke prior
   predictability.
-- Temporarily raised `workload_blind_range_v2` prior-feature residual
+- Temporarily raised `workload_blind_range` prior-feature residual
   initialization from `0.25` to `1.0`, then reverted it after strict evidence
   showed wrong-direction causality.
 
@@ -867,7 +867,7 @@ Tests:
 
 Artifact retention:
 
-- Early schema-5 raw artifacts were pruned during Checkpoint Group 35. Keep the
+- Early early QueryLocalUtility raw artifacts were pruned during Checkpoint Group 35. Keep the
   summary below as the current reference for these rejected startup variants.
 
 Key results:
@@ -902,7 +902,7 @@ Status: completed / partial generator-profile fix, still blocked.
 Goal:
 
 - Calibrate workload-signature diagnostics and generation around the current
-  schema `5` metric/profile pair, not around old range-audit assumptions.
+  QueryLocalUtility metric/profile pair, not around old range-audit assumptions.
 
 Hypothesis:
 
@@ -940,9 +940,9 @@ Tests:
 Experiment artifacts:
 
 - family-diagnostic probe:
-  `artifacts/results/query_driven_schema5_signature_family_diag_level2_range_query_mix_seed2524/example_run.json`
+  `artifacts/results/query_driven_signature_family_diag_level2_range_query_mix_seed2524/example_run.json`
 - current-metric point-fraction-band diagnostic:
-  `artifacts/results/query_driven_schema5_profile_point_fraction_bands_level2_range_query_mix_seed2524/example_run.json`
+  `artifacts/results/query_driven_profile_point_fraction_bands_level2_range_query_mix_seed2524/example_run.json`
 
 Key results:
 
@@ -1009,7 +1009,7 @@ Experiment artifact:
 
 - path: none
 - command shape: generator-only Level 2 reproduction of
-  `query_driven_schema5_profile_point_fraction_bands_level2_range_query_mix_seed2524`
+  `query_driven_profile_point_fraction_bands_level2_range_query_mix_seed2524`
   using the current worktree.
 
 Key results:
@@ -1043,7 +1043,7 @@ Status: completed / diagnostic rejection, no accepted default change.
 
 Goal:
 
-- Re-check workload health from the current schema `5` defaults instead of
+- Re-check workload health from the current QueryLocalUtility defaults instead of
   carrying forward a one-seed `large_context` explanation.
 
 Hypothesis:
@@ -1267,19 +1267,19 @@ Tests:
 - `uv run --group dev -- python -m orchestration.train_and_score ...` with
   `validation_split_mode=source_stratified`, `n_queries=48`,
   `max_queries=384`, 4 train workload replicates, `range_query_mix`,
-  `query_local_utility_factorized`, `workload_blind_range_v2`,
-  `learned_segment_budget_v1`, and unchanged final gates.
+  `query_local_utility_factorized`, `workload_blind_range`,
+  `learned_segment_budget`, and unchanged final gates.
 - `uv run --group dev -- python -m orchestration.diagnostics.family_transfer_path_diagnostic ...`
 - `uv run --group dev -- python -m orchestration.diagnostics.query_ship_local_heads_failure_diagnostic ...`
 
 Experiment artifacts:
 
 - strict replay:
-  `artifacts/results/query_driven_schema5_generator_fixed_level3_range_query_mix_seed2524/example_run.json`
+  `artifacts/results/query_driven_generator_fixed_level3_range_query_mix_seed2524/example_run.json`
 - family/head diagnostic:
-  `artifacts/results/query_driven_schema5_generator_fixed_level3_range_query_mix_seed2524/family_transfer_path_diagnostic.json`
+  `artifacts/results/query_driven_generator_fixed_level3_range_query_mix_seed2524/family_transfer_path_diagnostic.json`
 - local-head diagnostic:
-  `artifacts/results/query_driven_schema5_generator_fixed_level3_range_query_mix_seed2524/query_ship_local_heads_failure_diagnostic.json`
+  `artifacts/results/query_driven_generator_fixed_level3_range_query_mix_seed2524/query_ship_local_heads_failure_diagnostic.json`
 
 Key results:
 
@@ -1321,7 +1321,7 @@ Status: completed / blocker-localizing evidence only.
 Goal:
 
 - Remove the known mismatch where the active segment-budget target used segment
-  summed point mass while `learned_segment_budget_v1` allocated segments from a
+  summed point mass while `learned_segment_budget` allocated segments from a
   top-20% segment summary.
 
 Hypothesis:
@@ -1356,9 +1356,9 @@ Tests:
 Experiment artifacts:
 
 - strict replay:
-  `artifacts/results/query_driven_schema5_segment_budget_top20_level3_range_query_mix_seed2524/example_run.json`
+  `artifacts/results/query_driven_segment_budget_top20_level3_range_query_mix_seed2524/example_run.json`
 - family/head diagnostic:
-  `artifacts/results/query_driven_schema5_segment_budget_top20_level3_range_query_mix_seed2524/family_transfer_path_diagnostic.json`
+  `artifacts/results/query_driven_segment_budget_top20_level3_range_query_mix_seed2524/family_transfer_path_diagnostic.json`
 
 Key results:
 
@@ -1434,7 +1434,7 @@ Tests:
 Experiment artifact:
 
 - rejected strict replay:
-  `artifacts/results/query_driven_schema5_query_local_behavior_level3_range_query_mix_seed2524/example_run.json`
+  `artifacts/results/query_driven_query_local_behavior_level3_range_query_mix_seed2524/example_run.json`
 
 Key results:
 
@@ -1492,15 +1492,15 @@ Tests:
 - `uv run --group dev -- python -m orchestration.train_and_score ...` with
   `validation_split_mode=source_stratified`, `n_queries=48`,
   `max_queries=384`, 4 train workload replicates, `range_query_mix`,
-  `query_local_utility_factorized`, `workload_blind_range_v2`,
-  `learned_segment_budget_v1`, `learned_segment_allocation_weight_floor=0.0`,
+  `query_local_utility_factorized`, `workload_blind_range`,
+  `learned_segment_budget`, `learned_segment_allocation_weight_floor=0.0`,
   and unchanged final gates.
 - `git diff --check`
 
 Experiment artifact:
 
 - rejected strict replay:
-  `artifacts/results/query_driven_schema5_allocation_floor0_level3_range_query_mix_seed2524/example_run.json`
+  `artifacts/results/query_driven_allocation_floor0_level3_range_query_mix_seed2524/example_run.json`
 
 Key results:
 
@@ -1578,9 +1578,9 @@ Tests:
 Experiment artifacts:
 
 - current-default strict diagnostic:
-  `artifacts/results/query_driven_schema5_behavior_segment_diagnostic_level3_range_query_mix_seed2524/example_run.json`
+  `artifacts/results/query_driven_behavior_segment_diagnostic_level3_range_query_mix_seed2524/example_run.json`
 - behavior-rank-loss strict diagnostic:
-  `artifacts/results/query_driven_schema5_behavior_rank015_segment_diagnostic_level3_range_query_mix_seed2524/example_run.json`
+  `artifacts/results/query_driven_behavior_rank015_segment_diagnostic_level3_range_query_mix_seed2524/example_run.json`
 
 Key results:
 
@@ -1646,7 +1646,7 @@ Tests:
 
 Experiment artifact:
 
-- `artifacts/results/query_driven_schema5_uniform_segment_allocation_diag_level3_range_query_mix_seed2524/example_run.json`
+- `artifacts/results/query_driven_uniform_segment_allocation_diag_level3_range_query_mix_seed2524/example_run.json`
 
 Key results:
 
@@ -1718,7 +1718,7 @@ Tests:
 
 Experiment artifact:
 
-- `artifacts/results/query_driven_schema5_segment_length_conflict_diag_level3_range_query_mix_seed2524/example_run.json`
+- `artifacts/results/query_driven_segment_length_conflict_diag_level3_range_query_mix_seed2524/example_run.json`
 
 Key results:
 
@@ -1786,7 +1786,7 @@ Tests:
 
 Experiment artifact:
 
-- `artifacts/results/query_driven_schema5_segment_transfer_zblend_level3_range_query_mix_seed2524/example_run.json`
+- `artifacts/results/query_driven_segment_transfer_zblend_level3_range_query_mix_seed2524/example_run.json`
 
 Key results:
 
@@ -1837,12 +1837,12 @@ Hypothesis:
 
 - Because the active workload mostly samples dense-route anchors, suppressing
   `route_density_prior` might hide a useful train-derived support signal from
-  `workload_blind_range_v2` and weaken retained-mask causality.
+  `workload_blind_range` and weaken retained-mask causality.
 
 Changes:
 
 - Temporarily exposed `route_density_prior` in the local model-facing
-  `workload_blind_range_v2` prior vector for the strict replay.
+  `workload_blind_range` prior vector for the strict replay.
 - Reverted the source change after the replay because the evidence rejected it.
 - No production default changed.
 
@@ -1856,7 +1856,7 @@ Tests:
 
 Experiment artifact:
 
-- `artifacts/results/query_driven_schema5_route_density_prior_enabled_level3_range_query_mix_seed2524/example_run.json`
+- `artifacts/results/query_driven_route_density_prior_enabled_level3_range_query_mix_seed2524/example_run.json`
 
 Key results:
 
@@ -1924,11 +1924,11 @@ Tests:
 Experiment artifacts:
 
 - strict replay:
-  `artifacts/results/query_driven_schema5_length_support_weight035_level3_range_query_mix_seed2524/example_run.json`
+  `artifacts/results/query_driven_length_support_weight035_level3_range_query_mix_seed2524/example_run.json`
 - derived diagnostics:
-  `artifacts/results/query_driven_schema5_length_support_weight035_level3_range_query_mix_seed2524/family_transfer_path_diagnostic.json`
-  `artifacts/results/query_driven_schema5_length_support_weight035_level3_range_query_mix_seed2524/selector_marginal_calibration_diagnostic.json`
-  `artifacts/results/query_driven_schema5_length_support_weight035_level3_range_query_mix_seed2524/selection_marginal_segment_calibration_diagnostic.json`
+  `artifacts/results/query_driven_length_support_weight035_level3_range_query_mix_seed2524/family_transfer_path_diagnostic.json`
+  `artifacts/results/query_driven_length_support_weight035_level3_range_query_mix_seed2524/selector_marginal_calibration_diagnostic.json`
+  `artifacts/results/query_driven_length_support_weight035_level3_range_query_mix_seed2524/selection_marginal_segment_calibration_diagnostic.json`
 
 Key results:
 
@@ -2004,7 +2004,7 @@ Tests:
 
 Experiment artifact:
 
-- `artifacts/results/query_driven_schema5_length_support_weight035_level3_range_query_mix_seed2524/selection_eval_segment_teacher_transfer_diagnostic.json`
+- `artifacts/results/query_driven_length_support_weight035_level3_range_query_mix_seed2524/selection_eval_segment_teacher_transfer_diagnostic.json`
 
 Key results:
 
@@ -2478,7 +2478,7 @@ Hypothesis:
 
 Expected files changed:
 
-- `learning/model_features.py`, `models/workload_blind_range_v2.py`, focused
+- `learning/model_features.py`, `models/workload_blind_range.py`, focused
   tests, and docs/progress during the diagnostic. Production code should be
   restored unless the causality children pass under unchanged gates.
 
@@ -2490,7 +2490,7 @@ Stop condition:
 
 Changes:
 
-- Temporarily changed the v2 model-facing prior transform from identity
+- Temporarily changed the range-model prior transform from identity
   probabilities to square-root probabilities, keeping `route_density_prior`
   disabled.
 - Added focused test coverage for the temporary transform.
@@ -2501,7 +2501,7 @@ Changes:
 
 Tests:
 
-- `python3 -m py_compile Range_QDS/learning/model_features.py Range_QDS/models/workload_blind_range_v2.py Range_QDS/tests/unit/orchestration/test_query_driven_protocol_gates.py`
+- `python3 -m py_compile Range_QDS/learning/model_features.py Range_QDS/models/workload_blind_range.py Range_QDS/tests/unit/orchestration/test_query_driven_protocol_gates.py`
 - `uv run --group dev -- pytest Range_QDS/tests/unit/orchestration/test_query_driven_protocol_gates.py Range_QDS/tests/unit/orchestration/test_query_driven_causality_and_summary.py`
 - `uv run --group dev -- python -m orchestration.train_and_score ...`
 - `uv run --group dev -- python -m orchestration.diagnostics.selection_eval_segment_teacher_transfer_diagnostic ...`
@@ -2538,7 +2538,7 @@ Key results:
 Decision:
 
 - Reject square-root prior transformation as an active default.
-- Keep the production v2 model schema at `6` and model-facing prior transform
+- Keep the production range model checkpoint schema at `6` and model-facing prior transform
   at identity probability, with `route_density_prior` still disabled.
 - The next checkpoint should treat prior-scaling as insufficient evidence.
   Focus on semantic directionality: workload/scoring compatibility,
@@ -2890,7 +2890,7 @@ Status: completed / repository hygiene.
 
 Hypothesis:
 
-- The accumulated `artifacts/` tree contains old v2 sweeps, early schema-5
+- The accumulated `artifacts/` tree contains old pre-canonical sweeps, early QueryLocalUtility
   startup variants, caches, and manual reports that are no longer part of the
   current evidence boundary. Retaining them makes stale runs look more relevant
   than they are.
@@ -2915,7 +2915,7 @@ Changes:
   `artifacts/manual/`.
 - Retained `26` result directories tied to current evidence or still-relevant
   diagnostic lessons.
-- Replaced stale pre-simplification v2 and early schema-5 artifact path
+- Replaced stale pre-simplification and early QueryLocalUtility artifact path
   references with summary-only retention notes.
 - Changed example output paths in docs to placeholders so examples do not look
   like retained evidence.
@@ -2933,14 +2933,240 @@ Decision:
 
 - Treat historical raw run directories as disposable once the progress log
   captures the numbers and decision.
-- Do not retain old v2 sweep artifacts or early rejected schema-5 startup
+- Do not retain old pre-canonical sweep artifacts or early rejected QueryLocalUtility startup
   variants unless a future checkpoint explicitly depends on re-inspecting their
   raw payloads.
+
+## Checkpoint Group 36 - Canonical Naming Cleanup
+
+Status: completed / naming cleanup.
+
+Hypothesis:
+
+- Chronological names such as `workload_blind_range_v2`,
+  `learned_segment_budget_v1`, `range_query_mix_workload_blind_v2`, and
+  active-doc `schema 5` wording are no longer useful distinctions. The current
+  implementations should own canonical names, while older still-available
+  diagnostic paths should use semantic names.
+
+Expected files changed:
+
+- Model/feature registries, model module names, selector public API,
+  benchmark profile defaults/scripts, focused tests, maintained docs, retained
+  artifact directory names, and this progress log.
+
+Stop condition:
+
+- The current model is addressed as `workload_blind_range`, the old scalar
+  scorer is addressed as `scalar_workload_blind_range`, the current selector is
+  addressed as `learned_segment_budget`, maintained docs do not present
+  chronological names as active defaults, retained artifact references resolve,
+  and remaining version/schema fields are limited to artifact compatibility
+  metadata or historical notes.
+
+Changes:
+
+- Renamed active model type from `workload_blind_range_v2` to
+  `workload_blind_range`.
+- Renamed the old scalar scorer model type from `workload_blind_range` to
+  `scalar_workload_blind_range` so the active trainable model owns the
+  canonical name.
+- Renamed the old scalar scorer class from `WorkloadBlindRangeQDSModel` to
+  `ScalarWorkloadBlindRangeQDSModel` to avoid confusion with the active
+  `WorkloadBlindRangeModel`.
+- Renamed `models/workload_blind_range_v2.py` and
+  `WorkloadBlindRangeV2Model` to `models/workload_blind_range.py` and
+  `WorkloadBlindRangeModel`.
+- Renamed active model feature helpers and constants to remove the `V2` suffix.
+- Renamed selector type and public helpers from `learned_segment_budget_v1` to
+  `learned_segment_budget`.
+- Renamed the active benchmark profile and default benchmark artifact/cache
+  family from `range_query_mix_workload_blind_v2` /
+  `query_driven_workload_blind_v2` to `range_query_mix_workload_blind` /
+  `query_driven_workload_blind`.
+- Removed active-doc phrasing that used `QueryLocalUtility schema 5` as the
+  current metric name. `schema_version` fields remain documented as payload
+  compatibility metadata.
+- Renamed retained local result directories that used the old `schema5` run-id
+  prefix and updated maintained references.
+
+Validation:
+
+- `python3 -m py_compile` on changed Python files.
+- `uv run --group dev -- ruff check` on touched implementation and focused
+  test files.
+- `uv run --group dev -- pyright` on touched implementation surfaces.
+- Focused pytest set covering model factory/features, QueryLocalUtility
+  training, learned segment-budget selector, protocol/causality gates, retained
+  masks, learning target stage, benchmark profile/report regressions, and
+  scoring metrics: `259 passed`.
+- Stale-name scan found no remaining old names outside this checkpoint's
+  rename summary.
+- Maintained artifact-reference scan found `26` referenced result directories,
+  `26` retained result directories, and `0` missing references.
+
+Decision:
+
+- Keep canonical names for the current path: `QueryLocalUtility`,
+  `workload_blind_range`, `learned_segment_budget`, and
+  `range_query_mix_workload_blind`.
+- Keep `schema_version` fields only as artifact/report compatibility metadata.
+- Use semantic variation names for still-available diagnostic paths, such as
+  `scalar_workload_blind_range`; do not introduce chronological suffixes for
+  ordinary implementation changes.
+
+## Checkpoint Group 37 - Maintained Documentation Cleanup
+
+Status: completed / docs cleanup.
+
+Hypothesis:
+
+- After the canonical naming cleanup, maintained docs still contain a small
+  amount of wording that can make old versioned names, old profile families, or
+  pre-cleanup artifact pressure look like current guidance.
+
+Expected files changed:
+
+- Maintained Markdown only: root/module READMEs, the implementation/research
+  guide, code-layout notes, artifact policy, and this progress log.
+
+Stop condition:
+
+- Maintained docs describe `QueryLocalUtility`, `workload_blind_range`,
+  `learned_segment_budget`, `range_query_mix`, and artifact policy as the
+  current defaults. Old names remain only in explicit next-iteration guardrails
+  or progress-history entries.
+
+Changes:
+
+- Replaced root and guide old-name lists with a shorter rule: older
+  metric/profile names and removed workload families are historical only unless
+  a later checkpoint deliberately reintroduces one with evidence.
+- Removed remaining active-doc `versioned` wording around the workload profile
+  contract.
+- Updated `selection/README.md` to describe selector schema constants as
+  artifact metadata, not active versioned product naming.
+- Updated `workloads/README.md` so workload profiles are described as current
+  product definitions, and removed the explicit stale family-name list from the
+  module README.
+- Replaced the stale benchmark run-id example
+  `query_driven_v2_seed42_a` with `query_driven_seed42_a`.
+- Updated `CODE_LAYOUT.md` to describe artifact growth as an ongoing pruning
+  risk instead of claiming the current tree is dominated by artifacts.
+- Clarified that `QueryLocalUtility` changes should record artifact/report
+  schema metadata only when payload semantics actually change, and should not
+  name current implementations by schema number.
+
+Validation:
+
+- `git diff --check`
+- Targeted stale-name and old-link scan over active maintained Markdown,
+  excluding progress history and next-iteration guardrails.
+- Targeted stale-phrasing scan over active maintained Markdown, excluding
+  progress history.
+- Maintained artifact-reference scan found no missing retained result
+  directories.
+
+Decision:
+
+- Keep historical names in `Next-Iterations.md` only where they prevent
+  reintroducing known-bad families or explain the current diagnostic boundary.
+- Keep historical names in the progress log as history, not active guidance.
+
+## Checkpoint Group 38 - Stale Code Cleanup
+
+Status: completed / code cleanup.
+
+Hypothesis:
+
+- After canonical naming and docs cleanup, stale code is concentrated in
+  residual chronological diagnostic names, old profile-version payload fields,
+  generated bytecode caches, and obsolete derived diagnostics that still center
+  `small_local` and ship-evidence proxy semantics.
+
+Expected files changed:
+
+- Focused workload-generation metadata code, CLI help text, active training
+  diagnostics, focused tests, removal of obsolete diagnostic modules, and this
+  progress log.
+
+Stop condition:
+
+- Non-doc code no longer references the removed query-ship diagnostic modules,
+  old active model/selector names, or old `range_v2` naming; current workload
+  profile artifacts no longer emit a chronological profile-version field; and
+  focused tests pass.
+
+Changes:
+
+- Removed obsolete derived artifact analyzers
+  `query_ship_local_heads_failure_diagnostic.py` and
+  `query_ship_max_pool_transfer_diagnostic.py`. Their logic hardcoded the old
+  `small_local` / ship-evidence proxy path and is no longer a current
+  diagnostic surface.
+- Removed the tests that preserved those obsolete diagnostic modules.
+- Removed chronological workload-profile `version` metadata from
+  `RangeWorkloadProfile`, `workload_profile_metadata`, query-generation
+  diagnostics, and workload signatures.
+- Updated workload-profile tests to assert that current artifacts do not emit
+  `version` / `workload_profile_version`.
+- Renamed active model diagnostic payload
+  `range_v2_prior_feature_scaling` to
+  `workload_blind_range_prior_feature_scaling`.
+- Renamed remaining stale `range_v2` / `query_driven_v2` test names and local
+  checkpoint filenames to current `workload_blind_range` /
+  `query_driven_workload_blind` wording.
+- Updated stale workload-profile CLI help text from versioned/default-legacy
+  wording to named-profile/current-candidate wording.
+- Removed generated `__pycache__` directories from `Range_QDS`.
+
+Validation:
+
+- `python3 -m py_compile` on touched source and test files.
+- `uv run --group dev -- ruff check` on touched source and test files.
+- `uv run --group dev -- pytest` on focused workload-profile, diagnostics,
+  guardrail, protocol-gate, and model-feature suites: `80 passed`.
+- `git diff --check`
+- Targeted non-doc scans found no references to the removed diagnostic modules,
+  old active model/selector symbols, or old `range_v2`/`query_driven_v2`
+  naming. Remaining profile-version strings are test assertions that the field
+  is absent plus unrelated scoring schema metadata.
+
+Decision:
+
+- Do not keep old derived diagnostic modules just because progress history
+  references the commands. The progress log preserves the historical result;
+  active code should not preserve a misleading diagnostic surface.
+- Keep scoring schema metadata because it is artifact/report compatibility, not
+  active product naming.
 
 ## Validation
 
 Latest focused validation:
 
+- `python3 -m py_compile` on touched source and test files after Checkpoint
+  Group 38.
+- `uv run --group dev -- ruff check` on touched source and test files after
+  Checkpoint Group 38.
+- `uv run --group dev -- pytest` on focused workload-profile, diagnostics,
+  guardrail, protocol-gate, and model-feature suites after Checkpoint Group 38
+  (`80 passed`).
+- `git diff --check` after Checkpoint Group 38.
+- Targeted non-doc stale-code scans after Checkpoint Group 38.
+- `git diff --check` after Checkpoint Group 37.
+- Active maintained-doc stale-name scan after Checkpoint Group 37 found no hits
+  outside progress history and next-iteration guardrails.
+- Active maintained-doc stale-phrasing scan after Checkpoint Group 37 found no
+  hits for the removed active-doc wording.
+- Maintained artifact-reference scan after Checkpoint Group 37 found no missing
+  retained result directories.
+- `python3 -m py_compile` on changed Python files after Checkpoint Group 36.
+- `uv run --group dev -- ruff check` on renamed model/selector/benchmark
+  implementation and focused test files after Checkpoint Group 36.
+- `uv run --group dev -- pyright` on renamed model/selector/benchmark
+  implementation surfaces after Checkpoint Group 36.
+- `uv run --group dev -- pytest` focused model/selector/orchestration/
+  benchmark/scoring suites after Checkpoint Group 36 (`259 passed`).
 - Artifact cleanup inventory and retained-reference scan after Checkpoint Group
   35.
 - `python3 -m py_compile Range_QDS/learning/targets/query_local_utility.py Range_QDS/tests/unit/learning/test_query_local_utility_targets.py`
@@ -2968,7 +3194,7 @@ Previous focused validation:
 Earlier focused validation:
 
 - `git diff --check`
-- `python3 -m py_compile Range_QDS/learning/model_features.py Range_QDS/models/workload_blind_range_v2.py Range_QDS/tests/unit/orchestration/test_query_driven_protocol_gates.py`
+- `python3 -m py_compile Range_QDS/learning/model_features.py Range_QDS/models/workload_blind_range.py Range_QDS/tests/unit/orchestration/test_query_driven_protocol_gates.py`
 - `uv run --group dev -- pytest Range_QDS/tests/unit/orchestration/test_query_driven_protocol_gates.py Range_QDS/tests/unit/orchestration/test_query_driven_causality_and_summary.py`
   (`43 passed`)
 

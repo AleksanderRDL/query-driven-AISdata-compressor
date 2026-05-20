@@ -14,8 +14,8 @@ from selection.learned_segment_budget.constants import (
 from selection.learned_segment_budget.core import (
     blend_segment_support_scores,
     learned_segment_budget_diagnostics,
-    simplify_with_learned_segment_budget_v1,
-    simplify_with_learned_segment_budget_v1_with_trace,
+    simplify_with_learned_segment_budget,
+    simplify_with_learned_segment_budget_with_trace,
 )
 
 __all__ = [
@@ -30,6 +30,6 @@ __all__ = [
     "SEGMENT_TRANSFER_CALIBRATION_MODE_SCORE_ALLOCATION_ZBLEND",
     "blend_segment_support_scores",
     "learned_segment_budget_diagnostics",
-    "simplify_with_learned_segment_budget_v1",
-    "simplify_with_learned_segment_budget_v1_with_trace",
+    "simplify_with_learned_segment_budget",
+    "simplify_with_learned_segment_budget_with_trace",
 ]

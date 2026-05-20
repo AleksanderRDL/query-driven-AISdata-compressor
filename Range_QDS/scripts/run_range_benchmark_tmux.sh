@@ -5,7 +5,7 @@ usage() {
   cat <<'EOF'
 Usage: scripts/run_range_benchmark_tmux.sh [launcher options] [runner args...]
 
-Launch the query-driven workload-blind v2 range benchmark in tmux with a second pane
+Launch the query-driven workload-blind range benchmark in tmux with a second pane
 logging lightweight system/GPU telemetry.
 
 Launcher options:
@@ -16,11 +16,11 @@ Launcher options:
 Environment overrides:
   UV                           uv executable. Default: uv.
   UV_GROUP                     uv dependency group. Default: dev.
-  PROFILE                      runner profile. Default: range_query_mix_workload_blind_v2.
+  PROFILE                      runner profile. Default: range_query_mix_workload_blind.
   CSV_PATH                     Cleaned CSV file/directory. Default: ../AISDATA/cleaned.
   CACHE_DIR                    Cache directory, relative to Range_QDS when not absolute.
   ARTIFACT_ROOT                Benchmark family directory. Default:
-                               artifacts/benchmarks/query_driven_workload_blind_v2 relative to Range_QDS.
+                               artifacts/benchmarks/query_driven_workload_blind relative to Range_QDS.
   RUN_ID                       Run directory name. Default: timestamped slug.
   RESULTS_DIR                  Exact benchmark run directory. Overrides
                                ARTIFACT_ROOT/RUN_ID when set.
@@ -52,16 +52,16 @@ display_path() {
 QDS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 UV="${UV:-uv}"
 UV_GROUP="${UV_GROUP:-dev}"
-PROFILE="${PROFILE:-range_query_mix_workload_blind_v2}"
+PROFILE="${PROFILE:-range_query_mix_workload_blind}"
 CSV_PATH="${CSV_PATH:-../AISDATA/cleaned}"
-CACHE_DIR="${CACHE_DIR:-artifacts/cache/query_driven_workload_blind_v2}"
+CACHE_DIR="${CACHE_DIR:-artifacts/cache/query_driven_workload_blind}"
 MAX_POINTS_PER_SEGMENT="${MAX_POINTS_PER_SEGMENT:-}"
 MAX_SEGMENTS="${MAX_SEGMENTS:-}"
 MAX_TRAJECTORIES="${MAX_TRAJECTORIES:-}"
 MONITOR_INTERVAL="${MONITOR_INTERVAL:-10}"
 SESSION="${SESSION:-qds-range-benchmark}"
 ATTACH="${ATTACH:-1}"
-ARTIFACT_ROOT="${ARTIFACT_ROOT:-artifacts/benchmarks/query_driven_workload_blind_v2}"
+ARTIFACT_ROOT="${ARTIFACT_ROOT:-artifacts/benchmarks/query_driven_workload_blind}"
 RUN_ID="${RUN_ID:-$(date +%Y%m%d-%H%M%S)_range_${PROFILE}_3day_full}"
 RESULTS_DIR="${RESULTS_DIR:-$ARTIFACT_ROOT/runs/$RUN_ID}"
 

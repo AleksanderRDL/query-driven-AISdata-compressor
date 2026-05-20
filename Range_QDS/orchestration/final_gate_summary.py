@@ -12,7 +12,7 @@ from config.run_config import (
     DEFAULT_LEARNED_SEGMENT_ALLOCATION_WEIGHT_FLOOR,
     RunConfig,
 )
-from learning.model_features import WORKLOAD_BLIND_RANGE_V2_MODEL_TYPE
+from learning.model_features import WORKLOAD_BLIND_RANGE_MODEL_TYPE
 from learning.outputs import TrainingOutputs
 from learning.targets.query_local_utility import QUERY_LOCAL_UTILITY_FACTORIZED_TARGET_MODE
 from orchestration.causality import (
@@ -112,7 +112,7 @@ def build_final_run_summaries(
     target_diffusion_gate_pass = bool(target_diffusion_gate.get("gate_pass", False))
     final_candidate = (
         str(config.query.workload_profile_id or "").lower() in RANGE_QUERY_MIX_FINAL_PROFILE_IDS
-        and str(config.model.model_type).lower() == WORKLOAD_BLIND_RANGE_V2_MODEL_TYPE
+        and str(config.model.model_type).lower() == WORKLOAD_BLIND_RANGE_MODEL_TYPE
         and str(config.model.range_training_target_mode).lower()
         == QUERY_LOCAL_UTILITY_FACTORIZED_TARGET_MODE
         and str(getattr(config.model, "selector_type", "")).lower()
@@ -451,7 +451,7 @@ def build_final_run_summaries(
             "primary_metric": None,
             "status": "not_final_query_driven_candidate",
             "final_success_allowed": False,
-            "reason": "Requires range_query_mix, QueryLocalUtility factorized target, workload_blind_range_v2, and learned_segment_budget_v1.",
+            "reason": "Requires range_query_mix, QueryLocalUtility factorized target, workload_blind_range, and learned_segment_budget.",
         }
     learning_causality_summary["final_success_allowed"] = bool(
         final_candidate and not blocking_gates
