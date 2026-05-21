@@ -1,66 +1,48 @@
 # Range_QDS Query-Driven Implementation and Research Guide
 
-This is the operating guide for continuing the `Range_QDS` query-driven AIS
-trajectory compression work. It is written for a new engineer or implementation
-agent starting from the current repository state.
-
-Use this document for protocol, defaults, gates, and admissible next work. Use
-`docs/query-driven-implementation-progress.md` for the short evidence boundary
-and checkpoint log. Use `Range_QDS/artifacts/results/` for raw run outputs.
+This is the operating guide for work on the query-driven AIS dataset/trajectory compression. It is written for a new engineer or agent starting dev-work from the on the repository.
 
 ---
 
-## 0. Current state in one page
+## 0. End-state objective
+
+The desired final system is a query-driven, workload-blind AIS compressor.
+
+At deployment/eval time, the system receives trajectories and train-derived
+artifacts only. It must produce retained masks before future range queries are
+known. Future queries are scored only after those masks are frozen.
+
+The final system must satisfy four requirements:
+
+1. **Workload-blind compression**
+   - No evaluation (thosed used in the very final benchmarking stage): 
+        1. query boxes,  
+        2. query tensors, evaluation 
+        3. query/point containment labels,
+        4. query boundary distances, or eval-query-derived features before mask freeze.
+
+2. **Query-driven learned behavior**
+   - The model learns from generated or historical training workloads.
+   - It learns stable workload priors and query-local behavior value.
+   - Learned scores, priors, and heads materially affect retained masks.
+
+3. **Future-query usefulness**
+   - Compressed trajectories preserve likely in-query point mass.
+   - Within likely query ranges, retained points preserve enough local evidence
+     for interpolation, turns/behavior changes, continuity, and movement
+     reconstruction.
+
+4. **Sensible global trajectories**
+   - Global geometry is not the primary objective, but retained trajectories
+     must remain plausible.
+   - Endpoint sanity, rough length preservation, and bounded shape distortion
+     remain guardrails.
+
+---
+
+## 1. Current state in one page
 
 Project status: **active, not accepted**.
-
-The implementation now targets a query-driven, workload-blind AIS compressor. It
-is no longer treated as a “rework” of the legacy code path. Historical metric,
-profile, and model names are diagnostic only unless explicitly reintroduced by a
-new checkpoint with evidence.
-
-### Active default stack
-
-| Surface | Default |
-| --- | --- |
-| Primary metric | `QueryLocalUtility` |
-| Score groups | `query_point_mass=0.50`, `query_local_behavior=0.45`, `global_sanity=0.05` |
-| Workload profile | `range_query_mix` |
-| Training target | `query_local_utility_factorized` |
-| Model | `workload_blind_range` |
-| Selector | `learned_segment_budget` |
-| Checkpoint score | `query_local_utility` |
-| Checkpoint selection | `uniform_gap` |
-
-### Active `QueryLocalUtility` components
-
-| Component | Weight | Source |
-| --- | ---: | --- |
-| `query_point_recall` | `0.50` | direct query-local point recall |
-| `query_local_interpolation_fidelity` | `0.20` | direct query-local interpolation fidelity |
-| `query_local_turn_change_coverage` | `0.15` | direct query-local turn/change coverage |
-| `query_local_continuity` | `0.10` | direct query-local min gap coverage |
-| `endpoint_or_skeleton_sanity` | `0.02` | light global/skeleton sanity |
-| `global_shape_guardrail_score` | `0.02` | light SED-derived guardrail |
-| `length_preservation_guardrail` | `0.01` | light length guardrail |
-
-`QueryLocalUtility` must not source point mass from legacy `range_point_f1`, and
-must not fill missing behavior from older ship, boundary, shape, temporal, gap,
-or replacement fallback components. If a required direct component is missing,
-it is zero. This is intentional.
-
-### Active `range_query_mix` profile
-
-| Family | Weight / parameters |
-| --- | --- |
-| Anchor `density` | `0.80` |
-| Anchor `sparse_background_control` | `0.20` |
-| Footprint `medium_operational` | weight `0.6923076923076923`, `2.2 km`, `5.0 h`, no elongation, point-hit fraction band `[0.006, 0.030]` |
-| Footprint `large_context` | weight `0.3076923076923077`, `4.0 km`, `8.0 h`, no elongation, point-hit fraction band `[0.010, 0.045]` |
-
-Profile variants for sweeps remain `range_query_mix_focused`,
-`range_query_mix_local`, `range_query_mix_operational`, and `range_query_mix`.
-The current evidence boundary uses the two-footprint `range_query_mix` path.
 
 ### Current evidence boundary
 
@@ -274,42 +256,6 @@ score, target, model, prior, metric, workload, or production loss semantics.
 It cannot claim final success, and it cannot proceed to Level 2, Level 3, or
 final grid.
 
-## 1. End-state objective
-
-The desired final system is a query-driven, workload-blind AIS compressor.
-
-At deployment/eval time, the system receives trajectories and train-derived
-artifacts only. It must produce retained masks before future range queries are
-known. Future queries are scored only after those masks are frozen.
-
-The final system must satisfy four requirements:
-
-1. **Workload-blind compression**
-   - No eval query boxes, query tensors, query/point containment labels,
-     eval-query boundary distances, or eval-query-derived features before mask
-     freeze.
-
-2. **Query-driven learned behavior**
-   - The model learns from generated or historical training workloads.
-   - It learns stable workload priors and query-local behavior value.
-   - Learned scores, priors, and heads materially affect retained masks.
-
-3. **Future-query usefulness**
-   - Compressed trajectories preserve likely in-query point mass.
-   - Within likely query ranges, retained points preserve enough local evidence
-     for interpolation, turns/behavior changes, continuity, and movement
-     reconstruction.
-
-4. **Sensible global trajectories**
-   - Global geometry is not the primary objective, but retained trajectories
-     must remain plausible.
-   - Endpoint sanity, rough length preservation, and bounded shape distortion
-     remain guardrails.
-
-A result caused mainly by query-conditioned inference, checkpoint leakage,
-historical KNN lookup, a large temporal scaffold, or selector tricks is not a
-valid final result.
-
 ---
 
 ## 2. Design contract
@@ -385,7 +331,7 @@ Any run that violates these rules is diagnostic only.
 
 ## 4. Evidence levels and promotion rules
 
-Use the smallest evidence level that can answer the checkpoint question.
+Use the evidence level that can answer the checkpoint question.
 
 | Level | Purpose | May change acceptance state? |
 | --- | --- | --- |
@@ -395,18 +341,6 @@ Use the smallest evidence level that can answer the checkpoint question.
 | Level 2 minimum strict | Early gate localization | No final claim; may justify a targeted next probe |
 | Level 3 strict single-cell | Main current evidence level | Can define current blocker boundary |
 | Final grid | Multi-profile/compression/seed evidence | Required for final claim |
-
-Promotion rules:
-
-- Do not promote a variant from Level 1 smoke.
-- Do not promote a Level 2 run that fails workload health, signature, target
-  diffusion, support overlap, or predictability unless the checkpoint was only
-  intended to localize that gate failure.
-- Do not promote a Level 3 run that improves surface score while failing
-  learning causality.
-- If metric/profile/target semantics change, restart at smaller strict levels
-  before treating a Level 3 comparison as current evidence.
-- The final grid is blocked until strict smaller evidence passes required gates.
 
 ---
 
@@ -451,38 +385,29 @@ earlier gate is unhealthy.
 
 ---
 
-## 6. Active metric requirements
+## 6. Active scoring-profile
 
-`QueryLocalUtility` is the active primary metric.
+`QueryLocalUtility` is the active primary metric
 
-Rules:
+```yaml
+Point mass:
+  query_point_recall: 0.50
 
-- Direct query-local fields only.
-- No fallback from legacy `range_point_f1` into point mass.
-- No fallback from old shape, temporal, average-gap, ship, boundary, crossing,
-  or replacement fields into query-local behavior.
-- Keep `RangeUsefulLegacy` and `RangePointF1` as diagnostic/compatibility
-  outputs only.
-- Final claims must use `QueryLocalUtility` protocol summaries, not legacy
-  RangeUseful summaries.
+Query-local behavior:
+  query_local_interpolation_fidelity: 0.20
+  query_local_turn_change_coverage: 0.15
+  query_local_continuity: 0.10
 
-Rationale:
-
-The old aggregate mixed too many proxies. The current metric intentionally asks a
-narrower question: are the retained points directly useful for local range-query
-point mass and local movement evidence?
-
----
-
-## 7. Active workload-profile requirements
-
-Active profile:
-
-```text
-workload_profile_id = range_query_mix
+Global sanity:
+  endpoint_or_skeleton_sanity: 0.02
+  global_shape_guardrail_score: 0.02
+  length_preservation_guardrail: 0.01
 ```
 
-Required default properties:
+
+## 7. Active workload-profile
+
+`range_query_mix` is the active primary workload profile
 
 ```yaml
 anchor_family_weights:
@@ -506,13 +431,13 @@ large_context:
   point_hit_fraction_band: [0.010, 0.045]
 ```
 
-Coverage/profile rules:
+Coverage/profile:
 
 ```text
 coverage_calibration_mode = profile_sampled_query_count
 workload_stability_gate_mode = final
-default final profile target coverage = 0.30
-default final profile max coverage overshoot = 0.020
+final profile target coverage = 0.30
+final profile max coverage overshoot = 0.020
 ```
 
 Final-profile query generation should fail if:
@@ -528,103 +453,9 @@ profile id mismatch
 coverage calibration mode not profile_sampled_query_count
 ```
 
-Practical current scale notes:
-
-- Current Level 3 evidence uses 40 requested queries and passes workload health.
-- Generator-only Level 3 probes support `n_queries=48` at the current profile.
-- A 64-query floor has shown coverage-overshoot pressure under the current
-  `target_coverage=0.30` and `max_coverage_overshoot=0.020` envelope.
-- Do not change model code to compensate for unhealthy query generation.
-
 ---
 
-## 8. Active target/model/selector requirements
-
-### Target
-
-Active target mode:
-
-```text
-query_local_utility_factorized
-```
-
-Active heads:
-
-```text
-query_hit_probability
-conditional_behavior_utility
-boundary_event_utility
-replacement_representative_value
-segment_budget_target
-path_length_support_target
-```
-
-Active target details:
-
-```text
-query_hit_target_variant = raw_query_hit_ship_evidence_multiplier
-query_hit_target_base_source = raw_query_hit_probability_times_0.65_plus_0.35_positive_mean_normalized_ship_query_evidence
-conditional_behavior_target_variant = query_segment_local_behavior_utility
-replacement_representative_keep_fraction = 0.35
-segment_budget_target_aggregation = top20_mean
-```
-
-Behavior supervision remains masked to query-hit points. Do not widen it to
-all-point zero supervision; that makes the behavior head relearn query-hit
-support instead of query-local behavior value.
-
-The query-hit head now uses a raw-q-hit-scale-preserving ship-evidence
-multiplier. Ship/family query evidence may re-rank points inside raw q-hit
-support, but it must not normalize sparse hit support into a broad gate.
-
-The rejected Phase 36 broad gate, `query_evidence_gate_hit_ship_blend`, failed
-strict Level 2 target diffusion: `final_label_support_fraction_above_max`, with
-final support `0.705853` above the `0.5` gate. The narrowed Phase 38 target
-passed Level 1 wiring target diffusion with final support `0.217014`, then
-passed strict Level 2 target diffusion with final support `0.088790`. This is
-historical context, not the current boundary. The current boundary uses the
-additive q-hit / behavior score composition, which passed strict Level 2 target
-diffusion with final support `0.235119` but still failed learning causality and
-global sanity. The failed child gates have now been localized: priors remain
-mask-immaterial, the behavior head remains weak despite material ablation, and
-the segment-budget head is a compressed non-causal allocation signal.
-
-### Model
-
-Active final-candidate model:
-
-```text
-workload_blind_range
-```
-
-Rules:
-
-- The model must ignore eval query tensors at compression time.
-- It may consume query-free context features and train-derived prior fields.
-- Query-conditioned `baseline` and `range_aware` models are diagnostic/teacher
-  paths only.
-- Historical-prior models are diagnostic unless they beat and explain their
-  non-learned controls.
-
-### Selector
-
-Active selector:
-
-```text
-learned_segment_budget
-```
-
-Rules:
-
-- Retained masks must be frozen before eval query scoring.
-- The selector must preserve attribution for skeleton, learned, fallback, and
-  length-repair decisions.
-- Learned control must remain material; do not hide weak learning behind a large
-  temporal scaffold or broad geometry override.
-
----
-
-## 9. Current blocker and what comes next
+## 8. Current blocker and what comes next
 
 The current code path passed strict Level 2 target diffusion under the additive
 q-hit / behavior composition, but is still blocked by learning causality and
@@ -663,73 +494,16 @@ Next admissible work:
      route-density exposure, prior adapter, or prior-only loss from this
      evidence.
 
-Recommended next checkpoint shape:
-
-```text
-checkpoint: segment_rank_loss_gradient_path_diagnostic
-scope: diagnostic only; quantify segment-rank loss magnitude and gradient
-contribution against point BCE, pooled segment BCE, existing pairwise segment
-loss, auxiliary-loss scaling, and the primary budget loss
-reference artifacts:
-artifacts/results/additive_qhit_behavior_score_composition_level2_seed2539/example_run.json
-artifacts/results/additive_qhit_behavior_score_composition_level2_seed2539/semantic_diagnostic.json
-artifacts/results/additive_level2_child_gate_root_localization/diagnostic.json
-artifacts/results/pooled_point_score_segment_allocation_level1_smoke/example_run.json
-artifacts/results/pooled_point_score_segment_allocation_level1_smoke/semantic_diagnostic.json
-artifacts/results/pooled_point_score_segment_allocation_level1_smoke/rejection_diagnostic.json
-artifacts/results/pooled_point_score_allocation_failure_diagnosis/diagnostic.json
-artifacts/results/segment_allocation_mask_delta_diagnostic/diagnostic.json
-artifacts/results/segment_budget_head_compression_root_diagnostic/diagnostic.json
-artifacts/results/segment_budget_head_topk_rank_loss_level1_wiring/example_run.json
-artifacts/results/segment_budget_head_topk_rank_loss_level1_wiring/semantic_diagnostic.json
-artifacts/results/segment_budget_head_topk_rank_loss_level1_wiring/rejection_diagnostic.json
-derive first, instrument only if fields are missing
-no Level 2
-no final grid
-no metric/profile changes
-no selector-floor, raw-coverage, length-scaffold, path-length allocation,
-behavior-rank, larger segment-rank scalar, prior-scale, generic residual, or
-historical-default sweep
-```
-
 ---
 
-## 10. Explicitly rejected paths
-
-Do not repeat these without a new hypothesis that explains why prior evidence no
-longer applies:
-
-- generic post-context prior residuals;
-- scalar prior amplification or route-density-prior exposure as a standalone fix;
-- behavior-rank-only weight sweeps;
-- all-point zero behavior supervision;
-- low-floor behavior formula changes;
-- sparse-head BCE normalization as a default;
-- direct turn/continuity behavior-label rewrites;
-- component-local head target rewrites that fail promotion gates;
-- coverage-shrink generator patches that change query geometry while preserving
-  stale footprint metadata;
-- selector allocation-floor tuning as a substitute for head/target semantics;
-- length-support weighting as proof of learned query-local behavior;
-- final-grid runs while learning causality fails.
-
----
-
-## 11. Documentation and artifact hygiene
+## 9. Documentation and artifact hygiene
 
 When adding a checkpoint:
 
 1. Keep `query-driven-implementation-progress.md` short.
 2. Record only:
    - hypothesis,
-   - artifact path,
    - scale/seed,
    - gate state,
    - key numbers,
    - blocker interpretation,
-   - decision.
-3. Keep raw stdout and full metrics in `artifacts/results/`.
-4. Do not rename defaults casually. Naming changes must be semantic and guarded.
-5. Do not keep old chronological names as active product names.
-6. Do not compare old `RangeUsefulLegacy` / `QueryUsefulV1` scores as acceptance
-   evidence for current `QueryLocalUtility` defaults.
