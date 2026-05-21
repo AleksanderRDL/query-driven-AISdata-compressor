@@ -3,15 +3,15 @@
     "benchmarking",
     "config",
     "data_preparation",
-    "scoring",
+    "learning",
     "models",
     "orchestration",
-    "workloads",
     "runtime",
-    "selection",
-    "training",
+    "scoring",
     "scripts",
-    "tests"
+    "selection",
+    "tests",
+    "workloads"
   ],
   "extraPaths": [
     "."
