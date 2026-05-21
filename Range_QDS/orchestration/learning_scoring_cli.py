@@ -13,6 +13,7 @@ from config.run_config import (
     DEFAULT_LEARNED_SEGMENT_GEOMETRY_GAIN_WEIGHT,
     DEFAULT_LEARNED_SEGMENT_SCORE_BLEND_WEIGHT,
     DEFAULT_LEARNED_SEGMENT_TRANSFER_CALIBRATION_MODE,
+    DEFAULT_QUERY_LOCAL_UTILITY_BEHAVIOR_RANK_LOSS_WEIGHT,
     DEFAULT_VALIDATION_ENDPOINT_PENALTY_WEIGHT,
     DEFAULT_VALIDATION_GLOBAL_SANITY_PENALTY_WEIGHT,
     DEFAULT_VALIDATION_LENGTH_PRESERVATION_MIN,
@@ -506,11 +507,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--query_local_utility_behavior_rank_loss_weight",
         type=float,
-        default=0.0,
+        default=DEFAULT_QUERY_LOCAL_UTILITY_BEHAVIOR_RANK_LOSS_WEIGHT,
         help=(
-            "Optional listwise behavior-head ranking loss weight inside the QueryLocalUtility "
-            "auxiliary loss. Default 0.0 keeps the rejected Checkpoint 5.28 behavior-rank "
-            "candidate disabled unless explicitly requested."
+            "Listwise behavior-head ranking loss weight inside the QueryLocalUtility auxiliary "
+            "loss. Set to 0.0 only for explicit behavior-head ablations."
         ),
     )
     parser.add_argument(

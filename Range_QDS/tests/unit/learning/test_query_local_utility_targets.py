@@ -26,6 +26,7 @@ from learning.targets.query_local_utility import (
     QUERY_LOCAL_UTILITY_FINAL_LABEL_FORMULA,
     QUERY_LOCAL_UTILITY_HEAD_NAMES,
     build_query_local_utility_targets,
+    query_local_utility_point_score,
 )
 from scoring.geometry_thresholds import (
     max_sed_ratio_for_compression,
@@ -144,6 +145,54 @@ def test_validation_query_local_utility_penalizes_bad_global_sanity() -> None:
     assert _validation_query_local_utility_selection_score(0.50, bad, cast(Any, cfg)) < (
         _validation_query_local_utility_selection_score(0.50, good, cast(Any, cfg)) - 0.10
     )
+
+
+def test_query_local_utility_point_score_uses_additive_qhit_behavior_branches() -> None:
+    q_hit = torch.tensor([0.20], dtype=torch.float32)
+    behavior = torch.tensor([0.40], dtype=torch.float32)
+    replacement = torch.tensor([0.60], dtype=torch.float32)
+    boundary = torch.tensor([0.30], dtype=torch.float32)
+
+    score = query_local_utility_point_score(
+        q_hit=q_hit,
+        behavior=behavior,
+        replacement=replacement,
+        boundary=boundary,
+    )
+
+    expected = (0.50 * q_hit + 0.45 * behavior) * (0.75 + 0.25 * replacement) + (
+        0.05 * boundary
+    )
+    assert torch.allclose(score, expected)
+
+
+def test_query_local_utility_behavior_branch_not_multiplied_by_tiny_qhit() -> None:
+    q_hit = torch.tensor([0.02], dtype=torch.float32)
+    replacement = torch.tensor([1.0], dtype=torch.float32)
+    boundary = torch.tensor([0.0], dtype=torch.float32)
+
+    no_behavior = query_local_utility_point_score(
+        q_hit=q_hit,
+        behavior=torch.tensor([0.0], dtype=torch.float32),
+        replacement=replacement,
+        boundary=boundary,
+    )
+    with_behavior = query_local_utility_point_score(
+        q_hit=q_hit,
+        behavior=torch.tensor([0.60], dtype=torch.float32),
+        replacement=replacement,
+        boundary=boundary,
+    )
+    qhit_increment = query_local_utility_point_score(
+        q_hit=q_hit + 0.01,
+        behavior=torch.tensor([0.60], dtype=torch.float32),
+        replacement=replacement,
+        boundary=boundary,
+    ) - with_behavior
+
+    assert no_behavior.item() == pytest.approx(0.01)
+    assert (with_behavior - no_behavior).item() == pytest.approx(0.27)
+    assert qhit_increment.item() == pytest.approx(0.005)
 
 
 def test_validation_factorized_target_fit_metrics_are_diagnostic_only() -> None:
@@ -270,6 +319,66 @@ def test_factorized_replacement_target_is_query_local_and_final_label_keeps_quer
     )
 
 
+def test_query_hit_head_target_uses_ship_query_evidence_multiplier() -> None:
+    points = torch.zeros((8, 8), dtype=torch.float32)
+    points[:, 0] = torch.arange(8, dtype=torch.float32)
+    points[:6, 1] = 0.0
+    points[6:, 1] = 10.0
+    points[:, 2] = 0.0
+    points[:, 7] = 1.0
+    long_ship_query = {
+        "type": "range",
+        "params": {
+            "t_start": -1.0,
+            "t_end": 6.0,
+            "lat_min": -1.0,
+            "lat_max": 1.0,
+            "lon_min": -1.0,
+            "lon_max": 1.0,
+        },
+        "_metadata": {
+            "anchor_family": "density",
+            "footprint_family": "medium_operational",
+        },
+    }
+    short_ship_query = {
+        "type": "range",
+        "params": {
+            "t_start": 5.5,
+            "t_end": 8.5,
+            "lat_min": 9.0,
+            "lat_max": 11.0,
+            "lon_min": -1.0,
+            "lon_max": 1.0,
+        },
+        "_metadata": {
+            "anchor_family": "sparse_background_control",
+            "footprint_family": "medium_operational",
+        },
+    }
+
+    targets = build_query_local_utility_targets(
+        points=points,
+        boundaries=[(0, 6), (6, 8)],
+        typed_queries=[long_ship_query, short_ship_query],
+        segment_size=2,
+    )
+    query_hit_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("query_hit_probability")
+    q_hit_gate = targets.head_targets[:, query_hit_idx]
+
+    assert targets.diagnostics["query_hit_target_variant"] == (
+        "raw_query_hit_ship_evidence_multiplier"
+    )
+    assert targets.diagnostics["query_hit_target_semantics"] == (
+        "raw_query_hit_scale_preserving_ship_evidence_ranker"
+    )
+    assert targets.diagnostics["query_hit_target_family_conditioned"] is True
+    assert q_hit_gate[6] > q_hit_gate[0]
+    assert q_hit_gate[6] == pytest.approx(0.5)
+    assert float(q_hit_gate.max().item()) <= 0.5 + 1e-6
+    assert q_hit_gate[0] < 0.5
+
+
 def test_conditional_behavior_target_is_masked_to_query_hits() -> None:
     points = torch.zeros((6, 8), dtype=torch.float32)
     points[:, 0] = torch.arange(6, dtype=torch.float32)
@@ -349,7 +458,7 @@ def test_conditional_behavior_target_includes_segment_query_support() -> None:
         "query_segment_local_behavior_utility"
     )
     assert (
-        "segment_query_hit_support"
+        "segment_raw_query_hit_evidence_multiplier_support"
         in targets.diagnostics["conditional_behavior_target_base_source"]
     )
     assert int(hit_mask.sum().item()) == 4
@@ -535,7 +644,11 @@ def test_conditional_behavior_target_alignment_diagnostics_report_final_mass_rec
     family_candidates = targets.diagnostics["family_local_target_candidate_alignment"]
     assert family_candidates["available"] is True
     assert family_candidates["diagnostic_only"] is True
-    assert family_candidates["active_training_target_unchanged"] is True
+    assert family_candidates["active_training_target_unchanged"] is False
+    assert family_candidates["candidate_usage"] == (
+        "active_query_hit_target_uses_raw_query_hit_ship_evidence_multiplier; "
+        "remaining_family_candidates_diagnostic_only"
+    )
     candidate_row = family_candidates["group_by"]["footprint_family"]["medium_operational"]
     assert candidate_row["focus_family"] is True
     assert set(candidate_row["candidate_alignment"]) == {
@@ -601,7 +714,7 @@ def test_ship_presence_segment_budget_candidate_improves_ship_evidence_alignment
     ]
 
 
-def test_family_local_target_candidate_improves_medium_operational_ship_evidence_signal() -> None:
+def test_family_local_target_candidate_reports_active_evidence_gate_semantics() -> None:
     points = torch.zeros((8, 8), dtype=torch.float32)
     points[:, 0] = torch.arange(8, dtype=torch.float32)
     points[:, 1] = torch.arange(8, dtype=torch.float32) * 0.01
@@ -646,17 +759,13 @@ def test_family_local_target_candidate_improves_medium_operational_ship_evidence
     segment_sum = medium_operational["candidate_alignment"]["family_local_segment_budget_candidate"]
 
     assert family_candidates["candidate_usage"] == (
-        "diagnostic_only_family_local_not_training_semantics"
+        "active_query_hit_target_uses_raw_query_hit_ship_evidence_multiplier; "
+        "remaining_family_candidates_diagnostic_only"
     )
-    assert medium_operational["candidate_signal_status"] == (
-        "diagnostic_candidate_improves_family_ship_signal"
-    )
-    assert query_hit_candidate["spearman_with_ship_query_evidence"] > active_final[
-        "spearman_with_ship_query_evidence"
-    ]
-    assert composed_candidate["spearman_with_ship_query_evidence"] > active_final[
-        "spearman_with_ship_query_evidence"
-    ]
+    assert family_candidates["active_training_target_unchanged"] is False
+    assert query_hit_candidate["spearman_with_ship_query_evidence"] is not None
+    assert composed_candidate["spearman_with_ship_query_evidence"] is not None
+    assert active_final["spearman_with_ship_query_evidence"] is not None
     assert "topk_active_final_score_mass_recall" in composed_candidate
     assert segment_top20["two_stage_ship_query_pair_coverage"] >= segment_sum[
         "two_stage_ship_query_pair_coverage"

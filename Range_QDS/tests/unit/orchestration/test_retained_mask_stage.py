@@ -54,6 +54,7 @@ class _CachingMethod:
         self._segment_score_cache = base + 0.3
         self._path_length_support_score_cache = base + 0.4
         self._selector_segment_score_cache = base + 0.5
+        self._selector_segment_score_source_cache = "point_score_top20_mean"
         return mask
 
 
@@ -213,7 +214,7 @@ def test_retained_mask_freezing_captures_learned_selector_trace() -> None:
         config=build_run_config(
             model_type="workload_blind_range",
             selector_type="learned_segment_budget",
-            compression_ratio=0.50,
+            compression_ratio=0.75,
         ),
         trained=_trained_stub(),
         eval_workload=_workload(),
@@ -227,7 +228,8 @@ def test_retained_mask_freezing_captures_learned_selector_trace() -> None:
 
     assert outputs.primary_selector_trace is not None
     assert isinstance(outputs.primary_selector_trace["retained_mask_matches_frozen_primary"], bool)
-    assert outputs.primary_selector_trace["frozen_primary_retained_count"] == 2
+    assert outputs.primary_selector_trace["frozen_primary_retained_count"] == 3
+    assert outputs.primary_selector_trace["segment_score_source"] == "point_score_top20_mean"
     timing = outputs.primary_selector_trace["retained_mask_freeze_timing"]
     assert timing["available"] is True
     assert timing["primary_method_simplify_seconds"]["MLQDS"] >= 0.0
@@ -248,7 +250,7 @@ def test_retained_mask_freezing_captures_learned_selector_trace() -> None:
     assert marginal["query_cache_created"] is True
     assert marginal["query_cache_provided"] is False
     assert marginal["masks_frozen_before_query_scoring_required"] is True
-    assert marginal["retained_count"] == 2
+    assert marginal["retained_count"] == 3
     assert marginal["score_fields_available"] == {
         "raw_score": True,
         "selector_score": True,
@@ -267,10 +269,10 @@ def test_retained_mask_freezing_captures_learned_selector_trace() -> None:
         "query_free_endpoint_support": True,
         "query_free_path_length_support_target": True,
     }
-    assert marginal["context_fields_available"]["selector_segment_context"] is False
+    assert marginal["context_fields_available"]["selector_segment_context"] is True
     assert marginal["query_free_teacher_proxy_guard_coupling_summary"]["available"] is True
     assert marginal["rows"][0]["score_components"]["factorized_composed_score"] >= 0.0
-    assert all(row["selector_segment_context"] is None for row in marginal["rows"])
+    assert any(row["selector_segment_context"] is not None for row in marginal["rows"])
     assert marginal["candidate_count"] > 0
     assert outputs.causality_ablation_methods
 
@@ -287,10 +289,12 @@ def test_factorized_score_component_vectors_from_logits_reports_score_terms() ->
     components = factorized_score_component_vectors_from_logits(logits)
 
     assert sorted(components) == [
-        "factorized_behavior_multiplier",
+        "factorized_behavior_branch",
         "factorized_boundary_bonus",
         "factorized_composed_score",
-        "factorized_q_behavior_replacement_term",
+        "factorized_pre_replacement_score",
+        "factorized_query_hit_branch",
+        "factorized_replacement_modulated_score",
         "factorized_replacement_multiplier",
         "head_logit_boundary_event_utility",
         "head_logit_conditional_behavior_utility",

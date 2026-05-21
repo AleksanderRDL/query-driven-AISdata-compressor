@@ -12,6 +12,7 @@ from learning.model_features import transform_workload_blind_range_prior_feature
 from learning.query_prior_fields import QUERY_PRIOR_FIELD_NAMES, sample_query_prior_fields
 from learning.targets.query_local_utility import (
     QUERY_LOCAL_UTILITY_HEAD_NAMES,
+    build_query_local_utility_targets,
     query_local_utility_path_length_support_targets,
     query_local_utility_point_score,
 )
@@ -31,6 +32,8 @@ from selection.learned_segment_budget import (
     blend_segment_support_scores,
     simplify_with_learned_segment_budget,
 )
+from workloads.query_types import QUERY_TYPE_ID_RANGE
+from workloads.range_geometry import points_in_range_box
 
 
 def factorized_score_component_vectors_from_logits(
@@ -57,10 +60,12 @@ def factorized_score_component_vectors_from_logits(
     behavior = probabilities[:, 1].float().clamp(0.0, 1.0)
     boundary = probabilities[:, 2].float().clamp(0.0, 1.0)
     replacement = probabilities[:, 3].float().clamp(0.0, 1.0)
-    behavior_multiplier = 0.5 + behavior
+    query_hit_branch = 0.50 * q_hit
+    behavior_branch = 0.45 * behavior
+    pre_replacement_score = query_hit_branch + behavior_branch
     replacement_multiplier = 0.75 + 0.25 * replacement
-    q_behavior_replacement = q_hit * behavior_multiplier * replacement_multiplier
-    boundary_bonus = 0.25 * boundary
+    replacement_modulated_score = pre_replacement_score * replacement_multiplier
+    boundary_bonus = 0.05 * boundary
     composed_score = query_local_utility_point_score(
         q_hit=q_hit,
         behavior=behavior,
@@ -69,9 +74,11 @@ def factorized_score_component_vectors_from_logits(
     )
     out.update(
         {
-            "factorized_behavior_multiplier": behavior_multiplier.contiguous(),
+            "factorized_query_hit_branch": query_hit_branch.contiguous(),
+            "factorized_behavior_branch": behavior_branch.contiguous(),
+            "factorized_pre_replacement_score": pre_replacement_score.contiguous(),
             "factorized_replacement_multiplier": replacement_multiplier.contiguous(),
-            "factorized_q_behavior_replacement_term": q_behavior_replacement.contiguous(),
+            "factorized_replacement_modulated_score": replacement_modulated_score.contiguous(),
             "factorized_boundary_bonus": boundary_bonus.contiguous(),
             "factorized_composed_score": composed_score.contiguous(),
         }
@@ -232,16 +239,22 @@ def selector_segment_score_source_label(
     segment_scores: torch.Tensor | None,
     path_length_support_scores: torch.Tensor | None,
     length_support_blend_weight: float,
+    base_segment_score_source: str = "segment_budget_head_top20_mean",
 ) -> str:
     """Return an honest selector trace label for segment allocation scores."""
     weight = max(0.0, min(1.0, float(length_support_blend_weight)))
     if path_length_support_scores is not None and weight >= 1.0 - 1e-12:
         return "path_length_support_head_top20_mean"
+    base_source = (
+        str(base_segment_score_source)
+        if segment_scores is not None
+        else "point_score_top20_mean"
+    )
     if path_length_support_scores is not None and weight > 0.0:
-        return "segment_budget_path_length_support_blend_top20_mean"
-    if segment_scores is not None:
-        return "segment_budget_head_top20_mean"
-    return "point_score_top20_mean"
+        if base_source == "segment_budget_head_top20_mean":
+            return "segment_budget_path_length_support_blend_top20_mean"
+        return f"{base_source}_path_length_support_blend_top20_mean"
+    return base_source
 
 
 def neutral_segment_scores_for_ablation(segment_scores: torch.Tensor) -> torch.Tensor:
@@ -592,14 +605,14 @@ def _bounded_candidate_indices(
     return [int(idx) for idx in selected.unique(sorted=True).tolist()]
 
 
-def _query_local_utility_score_for_mask(
+def _query_local_utility_payload_for_mask(
     *,
     points: torch.Tensor,
     boundaries: list[tuple[int, int]],
     typed_queries: list[dict[str, Any]],
     retained_mask: torch.Tensor,
     query_cache: ScoringQueryCache | None,
-) -> float:
+) -> tuple[float, dict[str, float]]:
     range_audit = score_range_usefulness(
         points=points,
         boundaries=boundaries,
@@ -617,7 +630,222 @@ def _query_local_utility_score_for_mask(
         endpoint_sanity=endpoint_sanity,
     )
     score = query_local_utility.get("query_local_utility_score", 0.0)
-    return float(score) if isinstance(score, (int, float)) and not isinstance(score, bool) else 0.0
+    components_payload = query_local_utility.get("query_local_utility_components", {})
+    components = {
+        str(name): float(value)
+        for name, value in (
+            components_payload.items() if isinstance(components_payload, dict) else []
+        )
+        if isinstance(value, (int, float)) and not isinstance(value, bool)
+    }
+    return (
+        float(score)
+        if isinstance(score, (int, float)) and not isinstance(score, bool)
+        else 0.0,
+        components,
+    )
+
+
+def _query_local_utility_score_for_mask(
+    *,
+    points: torch.Tensor,
+    boundaries: list[tuple[int, int]],
+    typed_queries: list[dict[str, Any]],
+    retained_mask: torch.Tensor,
+    query_cache: ScoringQueryCache | None,
+) -> float:
+    score, _components = _query_local_utility_payload_for_mask(
+        points=points,
+        boundaries=boundaries,
+        typed_queries=typed_queries,
+        retained_mask=retained_mask,
+        query_cache=query_cache,
+    )
+    return float(score)
+
+
+def _component_delta(
+    left: dict[str, float],
+    right: dict[str, float],
+) -> dict[str, float]:
+    keys = sorted(set(left) | set(right))
+    return {key: float(left.get(key, 0.0) - right.get(key, 0.0)) for key in keys}
+
+
+def _target_component_vectors(
+    *,
+    points: torch.Tensor,
+    boundaries: list[tuple[int, int]],
+    typed_queries: list[dict[str, Any]],
+) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor], torch.Tensor | None, str | None]:
+    try:
+        bundle = build_query_local_utility_targets(
+            points=points.detach().cpu().float(),
+            boundaries=boundaries,
+            typed_queries=typed_queries,
+        )
+    except Exception as exc:  # pragma: no cover - diagnostic must not break scoring.
+        return {}, {}, None, str(exc)
+    head_targets = bundle.head_targets.detach().cpu().float()
+    head_mask = bundle.head_mask.detach().cpu().bool()
+    target_vectors = {
+        str(name): head_targets[:, head_idx].contiguous()
+        for head_idx, name in enumerate(QUERY_LOCAL_UTILITY_HEAD_NAMES)
+        if head_idx < int(head_targets.shape[1])
+    }
+    target_masks = {
+        str(name): head_mask[:, head_idx].contiguous()
+        for head_idx, name in enumerate(QUERY_LOCAL_UTILITY_HEAD_NAMES)
+        if head_idx < int(head_mask.shape[1])
+    }
+    scalar_target = (
+        bundle.labels[:, QUERY_TYPE_ID_RANGE].detach().cpu().float().contiguous()
+        if int(bundle.labels.shape[1]) > QUERY_TYPE_ID_RANGE
+        else None
+    )
+    return target_vectors, target_masks, scalar_target, None
+
+
+def _query_family_records(
+    points: torch.Tensor,
+    typed_queries: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    points_cpu = points.detach().cpu().float()
+    records: list[dict[str, Any]] = []
+    for query_index, query in enumerate(typed_queries):
+        if str(query.get("type", "")).lower() != "range":
+            continue
+        params = query.get("params")
+        if not isinstance(params, dict):
+            continue
+        try:
+            mask = points_in_range_box(points_cpu, params).detach().cpu().bool().flatten()
+        except Exception:
+            continue
+        metadata = query.get("_metadata")
+        metadata_dict = metadata if isinstance(metadata, dict) else {}
+        anchor_family = str(metadata_dict.get("anchor_family", "unspecified"))
+        footprint_family = str(metadata_dict.get("footprint_family", "unspecified"))
+        records.append(
+            {
+                "query_index": int(query_index),
+                "mask": mask,
+                "anchor_family": anchor_family,
+                "footprint_family": footprint_family,
+                "anchor_footprint_family": f"{anchor_family}|{footprint_family}",
+            }
+        )
+    return records
+
+
+def _trajectory_context_for_point(
+    index: int, boundaries: list[tuple[int, int]]
+) -> tuple[int | None, int, int]:
+    for trajectory_index, (start, end) in enumerate(boundaries):
+        if int(start) <= int(index) < int(end):
+            return int(trajectory_index), int(start), int(end)
+    return None, 0, 0
+
+
+def _query_hit_run_id(
+    *,
+    index: int,
+    mask: torch.Tensor,
+    boundaries: list[tuple[int, int]],
+    query_index: int,
+) -> str | None:
+    if int(index) < 0 or int(index) >= int(mask.numel()) or not bool(mask[int(index)].item()):
+        return None
+    trajectory_index, start, end = _trajectory_context_for_point(index, boundaries)
+    if trajectory_index is None:
+        return None
+    left = int(index)
+    while left > int(start) and bool(mask[left - 1].item()):
+        left -= 1
+    right = int(index) + 1
+    while right < int(end) and bool(mask[right].item()):
+        right += 1
+    return f"q{int(query_index)}:traj{trajectory_index}:points{left}-{right}"
+
+
+def _dominant_label(counts: dict[str, int]) -> str | None:
+    if not counts:
+        return None
+    return sorted(counts.items(), key=lambda item: (-int(item[1]), str(item[0])))[0][0]
+
+
+def _query_hit_context_for_point(
+    *,
+    index: int,
+    records: list[dict[str, Any]],
+    boundaries: list[tuple[int, int]],
+) -> dict[str, Any]:
+    anchor_counts: dict[str, int] = {}
+    footprint_counts: dict[str, int] = {}
+    pair_counts: dict[str, int] = {}
+    query_indices: list[int] = []
+    run_ids: list[str] = []
+    for record in records:
+        mask = record.get("mask")
+        if not isinstance(mask, torch.Tensor):
+            continue
+        if int(index) < 0 or int(index) >= int(mask.numel()) or not bool(mask[int(index)].item()):
+            continue
+        query_index = int(record.get("query_index", -1))
+        query_indices.append(query_index)
+        anchor = str(record.get("anchor_family", "unspecified"))
+        footprint = str(record.get("footprint_family", "unspecified"))
+        pair = str(record.get("anchor_footprint_family", f"{anchor}|{footprint}"))
+        anchor_counts[anchor] = int(anchor_counts.get(anchor, 0)) + 1
+        footprint_counts[footprint] = int(footprint_counts.get(footprint, 0)) + 1
+        pair_counts[pair] = int(pair_counts.get(pair, 0)) + 1
+        run_id = _query_hit_run_id(
+            index=index,
+            mask=mask,
+            boundaries=boundaries,
+            query_index=query_index,
+        )
+        if run_id is not None:
+            run_ids.append(run_id)
+    return {
+        "query_hit_count": len(query_indices),
+        "range_query_count": len(records),
+        "query_hit_fraction": (
+            float(len(query_indices) / len(records)) if len(records) > 0 else None
+        ),
+        "anchor_family": _dominant_label(anchor_counts),
+        "footprint_family": _dominant_label(footprint_counts),
+        "anchor_footprint_family": _dominant_label(pair_counts),
+        "anchor_family_counts": anchor_counts,
+        "footprint_family_counts": footprint_counts,
+        "anchor_footprint_family_counts": pair_counts,
+        "query_indices": query_indices,
+        "query_hit_run_ids": run_ids,
+    }
+
+
+def _row_target_values(
+    vectors: dict[str, torch.Tensor],
+    *,
+    index: int,
+) -> dict[str, float]:
+    return {
+        name: float(vector[int(index)].item())
+        for name, vector in vectors.items()
+        if int(index) < int(vector.numel())
+    }
+
+
+def _row_target_masks(
+    vectors: dict[str, torch.Tensor],
+    *,
+    index: int,
+) -> dict[str, bool]:
+    return {
+        name: bool(vector[int(index)].item())
+        for name, vector in vectors.items()
+        if int(index) < int(vector.numel())
+    }
 
 
 def retained_decision_marginal_query_local_utility_diagnostics(
@@ -694,6 +922,14 @@ def retained_decision_marginal_query_local_utility_diagnostics(
     )
     sampled_prior_component_vectors = _score_component_vectors(sampled_prior_vectors, point_count)
     model_prior_component_vectors = _score_component_vectors(model_prior_vectors, point_count)
+    target_component_vectors, target_component_masks, scalar_target_vector, target_error = (
+        _target_component_vectors(
+            points=points,
+            boundaries=boundaries,
+            typed_queries=typed_queries,
+        )
+    )
+    query_family_records = _query_family_records(points, typed_queries)
     trace_mask_state = selector_trace_payloads.trace_mask_state_from_selector_trace(
         selector_trace=selector_trace, point_count=point_count
     )
@@ -714,7 +950,7 @@ def retained_decision_marginal_query_local_utility_diagnostics(
         effective_query_cache = ScoringQueryCache.for_workload(points, boundaries, typed_queries)
         query_cache_created = True
 
-    primary_score = _query_local_utility_score_for_mask(
+    primary_score, primary_components = _query_local_utility_payload_for_mask(
         points=points,
         boundaries=boundaries,
         typed_queries=typed_queries,
@@ -730,7 +966,19 @@ def retained_decision_marginal_query_local_utility_diagnostics(
         source: str,
         decision: str,
         marginal: float,
+        component_delta: dict[str, float],
+        candidate_components: dict[str, float],
     ) -> dict[str, Any]:
+        query_hit_context = _query_hit_context_for_point(
+            index=int(index),
+            records=query_family_records,
+            boundaries=boundaries,
+        )
+        scalar_target = (
+            None
+            if scalar_target_vector is None or int(index) >= int(scalar_target_vector.numel())
+            else float(scalar_target_vector[int(index)].item())
+        )
         return {
             "point_index": int(index),
             "source": source,
@@ -751,6 +999,9 @@ def retained_decision_marginal_query_local_utility_diagnostics(
                 index=int(index),
                 segment_rows=selector_segment_context_rows,
             ),
+            "query_local_utility_target": scalar_target,
+            "head_targets": _row_target_values(target_component_vectors, index=int(index)),
+            "head_target_masks": _row_target_masks(target_component_masks, index=int(index)),
             "head_probabilities": _prefixed_row_values(
                 vectors=component_vectors,
                 prefix="head_probability_",
@@ -773,10 +1024,18 @@ def retained_decision_marginal_query_local_utility_diagnostics(
                 vectors=component_vectors,
                 index=int(index),
             ),
+            "primary_query_local_utility_components": dict(primary_components),
+            "candidate_query_local_utility_components": dict(candidate_components),
+            "query_local_utility_component_delta": dict(component_delta),
             "query_free_teacher_proxies": {
                 name: float(vector[int(index)].item())
                 for name, vector in query_free_proxy_vectors.items()
             },
+            "query_family_hit_context": query_hit_context,
+            "anchor_family": query_hit_context.get("anchor_family"),
+            "footprint_family": query_hit_context.get("footprint_family"),
+            "anchor_footprint_family": query_hit_context.get("anchor_footprint_family"),
+            "query_hit_run_ids": list(query_hit_context.get("query_hit_run_ids") or []),
             "score_components": {
                 name: float(vector[int(index)].item()) for name, vector in component_vectors.items()
             },
@@ -791,7 +1050,7 @@ def retained_decision_marginal_query_local_utility_diagnostics(
         ):
             candidate = primary_mask.clone()
             candidate[int(index)] = False
-            score = _query_local_utility_score_for_mask(
+            score, candidate_components = _query_local_utility_payload_for_mask(
                 points=points,
                 boundaries=boundaries,
                 typed_queries=typed_queries,
@@ -804,6 +1063,8 @@ def retained_decision_marginal_query_local_utility_diagnostics(
                     source=source,
                     decision="retained_removal_loss",
                     marginal=float(primary_score - score),
+                    component_delta=_component_delta(primary_components, candidate_components),
+                    candidate_components=candidate_components,
                 )
             )
 
@@ -815,7 +1076,7 @@ def retained_decision_marginal_query_local_utility_diagnostics(
     ):
         candidate = primary_mask.clone()
         candidate[int(index)] = True
-        score = _query_local_utility_score_for_mask(
+        score, candidate_components = _query_local_utility_payload_for_mask(
             points=points,
             boundaries=boundaries,
             typed_queries=typed_queries,
@@ -828,6 +1089,8 @@ def retained_decision_marginal_query_local_utility_diagnostics(
                 source="removed",
                 decision="removed_addition_gain",
                 marginal=float(score - primary_score),
+                component_delta=_component_delta(candidate_components, primary_components),
+                candidate_components=candidate_components,
             )
         )
 
@@ -911,6 +1174,15 @@ def retained_decision_marginal_query_local_utility_diagnostics(
             "selector_stage_state": {name: True for name in sorted(trace_mask_state.keys())},
             "selector_segment_context": bool(selector_segment_context_rows),
             "trajectory_index": True,
+            "query_local_utility_target": scalar_target_vector is not None,
+            "head_targets": {name: True for name in sorted(target_component_vectors.keys())},
+            "head_target_masks": {name: True for name in sorted(target_component_masks.keys())},
+            "target_diagnostic_error": target_error,
+            "query_local_utility_component_delta": True,
+            "primary_query_local_utility_components": True,
+            "candidate_query_local_utility_components": True,
+            "query_family_hit_context": bool(query_family_records),
+            "query_hit_run_ids": bool(query_family_records),
         },
         "candidate_count": len(rows),
         "overall": selector_marginal_alignment.score_alignment_summary(rows),

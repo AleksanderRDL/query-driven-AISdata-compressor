@@ -40,9 +40,11 @@ QUERY_LOCAL_UTILITY_HEAD_NAMES = (
     "path_length_support_target",
 )
 QUERY_LOCAL_UTILITY_FINAL_LABEL_FORMULA = (
-    "query_hit_times_behavior_with_conditional_replacement_modulation_plus_boundary"
+    "additive_raw_query_hit_and_behavior_with_conditional_replacement_modulation_plus_boundary"
 )
 QUERY_LOCAL_UTILITY_REPLACEMENT_KEEP_FRACTION = 0.35
+QUERY_LOCAL_UTILITY_QUERY_EVIDENCE_BASE_WEIGHT = 0.65
+QUERY_LOCAL_UTILITY_QUERY_EVIDENCE_SHIP_MULTIPLIER_WEIGHT = 0.35
 
 
 @dataclass
@@ -68,9 +70,10 @@ def query_local_utility_point_score(
     behavior = behavior.float().clamp(0.0, 1.0)
     boundary = boundary.float().clamp(0.0, 1.0)
     replacement = replacement.float().clamp(0.0, 1.0)
-    return (q_hit * (0.5 + behavior) * (0.75 + 0.25 * replacement) + 0.25 * boundary).clamp(
-        0.0, 1.0
-    )
+    query_local = 0.50 * q_hit + 0.45 * behavior
+    replacement_multiplier = 0.75 + 0.25 * replacement
+    boundary_bonus = 0.05 * boundary
+    return (query_local * replacement_multiplier + boundary_bonus).clamp(0.0, 1.0)
 
 
 def _query_segment_local_behavior_signal(
@@ -119,6 +122,66 @@ def _normalize_0_1(values: torch.Tensor, mask: torch.Tensor | None = None) -> to
     if max_value <= 1e-12:
         return torch.zeros_like(out)
     return (out / max_value).clamp(0.0, 1.0)
+
+
+def _query_evidence_multiplier_candidate(
+    *,
+    ship_query_evidence: torch.Tensor,
+    valid: torch.Tensor,
+) -> torch.Tensor:
+    """Return a bounded ship-evidence multiplier on supported query-hit points."""
+    valid = valid.to(dtype=torch.bool)
+    zero = torch.zeros_like(ship_query_evidence, dtype=torch.float32)
+    if not bool(valid.any().item()):
+        return zero
+    normalized_ship = _normalize_0_1(ship_query_evidence, valid)
+    return torch.where(valid, normalized_ship, zero)
+
+
+def _query_evidence_gate_target(
+    *,
+    q_hit: torch.Tensor,
+    ship_query_evidence: torch.Tensor,
+    hit_positive: torch.Tensor,
+    family_evidence: dict[str, dict[str, dict[str, Any]]],
+) -> torch.Tensor:
+    """Return a raw-q-hit-scale-preserving query-evidence head target."""
+    q_hit = q_hit.float().clamp(0.0, 1.0)
+    hit_positive = hit_positive.to(dtype=torch.bool)
+    multiplier_candidates = [
+        _query_evidence_multiplier_candidate(
+            ship_query_evidence=ship_query_evidence,
+            valid=hit_positive,
+        )
+    ]
+    for family_rows in family_evidence.values():
+        for evidence in family_rows.values():
+            family_q_hit = evidence.get("query_hit_probability")
+            family_ship = evidence.get("ship_query_evidence")
+            if not isinstance(family_q_hit, torch.Tensor):
+                continue
+            if not isinstance(family_ship, torch.Tensor):
+                continue
+            if family_q_hit.shape != q_hit.shape or family_ship.shape != q_hit.shape:
+                continue
+            family_valid = (family_q_hit > 0.0) & hit_positive
+            multiplier = _query_evidence_multiplier_candidate(
+                ship_query_evidence=family_ship.float().clamp(0.0, 1.0),
+                valid=family_valid,
+            )
+            if bool((multiplier > 0.0).any().item()):
+                multiplier_candidates.append(multiplier)
+    stacked = torch.stack(multiplier_candidates, dim=0)
+    positive = stacked > 0.0
+    positive_count = positive.sum(dim=0).clamp(min=1)
+    evidence_multiplier = (stacked.sum(dim=0) / positive_count.to(dtype=stacked.dtype)).clamp(
+        0.0, 1.0
+    )
+    query_evidence_gate = (
+        QUERY_LOCAL_UTILITY_QUERY_EVIDENCE_BASE_WEIGHT
+        + QUERY_LOCAL_UTILITY_QUERY_EVIDENCE_SHIP_MULTIPLIER_WEIGHT * evidence_multiplier
+    ).clamp(0.0, 1.0)
+    return torch.where(hit_positive, q_hit * query_evidence_gate, torch.zeros_like(q_hit))
 
 
 def _trajectory_change_weights(
@@ -845,7 +908,7 @@ def _family_local_target_candidate_alignment(
     segment_size: int,
     ratio: float = 0.05,
 ) -> dict[str, Any]:
-    """Compare simple family-local target candidates without changing labels."""
+    """Compare family-local target candidates against active evidence-gate semantics."""
     required_rankers = {
         "final_score",
         "query_hit_probability",
@@ -858,8 +921,11 @@ def _family_local_target_candidate_alignment(
     out: dict[str, Any] = {
         "available": bool(family_evidence) and not missing,
         "diagnostic_only": True,
-        "active_training_target_unchanged": True,
-        "candidate_usage": "diagnostic_only_family_local_not_training_semantics",
+        "active_training_target_unchanged": False,
+        "candidate_usage": (
+            "active_query_hit_target_uses_raw_query_hit_ship_evidence_multiplier; "
+            "remaining_family_candidates_diagnostic_only"
+        ),
         "segment_size_points": int(segment_size),
         "topk_ratio": float(ratio),
         "reference": "family_ship_query_evidence",
@@ -1230,7 +1296,17 @@ def build_query_local_utility_targets(
         replacement_mass[hit_positive] / query_hit_count[hit_positive].clamp(min=1.0)
     ).clamp(0.0, 1.0)
     ship_query_evidence = (ship_query_evidence_mass / query_count).clamp(0.0, 1.0)
-    target_q_hit = q_hit
+    family_evidence = _range_query_family_evidence(
+        points=points,
+        boundaries=boundaries,
+        range_queries=range_queries,
+    )
+    target_q_hit = _query_evidence_gate_target(
+        q_hit=q_hit,
+        ship_query_evidence=ship_query_evidence,
+        hit_positive=hit_positive,
+        family_evidence=family_evidence,
+    )
     target_behavior = _query_segment_local_behavior_signal(
         behavior=behavior,
         q_hit=target_q_hit,
@@ -1239,14 +1315,30 @@ def build_query_local_utility_targets(
         segment_size=segment_size,
     )
     head_variant_diagnostics: dict[str, Any] = {
-        "query_hit_target_variant": "active_query_hit_probability",
-        "query_hit_target_base_source": "range_query_point_hit_probability",
+        "query_hit_target_variant": "raw_query_hit_ship_evidence_multiplier",
+        "query_hit_target_base_source": (
+            "raw_query_hit_probability_times_0.65_plus_"
+            "0.35_positive_mean_normalized_ship_query_evidence"
+        ),
+        "query_hit_target_semantics": (
+            "raw_query_hit_scale_preserving_ship_evidence_ranker"
+        ),
+        "query_hit_target_raw_query_hit_base_weight": (
+            QUERY_LOCAL_UTILITY_QUERY_EVIDENCE_BASE_WEIGHT
+        ),
+        "query_hit_target_ship_query_evidence_multiplier_weight": (
+            QUERY_LOCAL_UTILITY_QUERY_EVIDENCE_SHIP_MULTIPLIER_WEIGHT
+        ),
+        "query_hit_target_family_conditioned": True,
         "conditional_behavior_target_variant": "query_segment_local_behavior_utility",
         "conditional_behavior_target_base_source": (
             "normalized_query_hit_conditioned_trajectory_change_times_"
-            "0.45_plus_0.35_segment_behavior_support_plus_0.20_segment_query_hit_support"
+            "0.45_plus_0.35_segment_behavior_support_plus_"
+            "0.20_segment_raw_query_hit_evidence_multiplier_support"
         ),
-        "final_label_variant": "active_query_local_utility_point_score",
+        "final_label_variant": (
+            "additive_raw_query_hit_behavior_query_local_utility_point_score"
+        ),
     }
     final_score = query_local_utility_point_score(
         q_hit=target_q_hit,
@@ -1292,11 +1384,6 @@ def build_query_local_utility_targets(
         points,
         boundaries,
         segment_size=segment_size,
-    )
-    family_evidence = _range_query_family_evidence(
-        points=points,
-        boundaries=boundaries,
-        range_queries=range_queries,
     )
     head_targets[:, 0] = target_q_hit
     head_targets[:, 1] = target_behavior

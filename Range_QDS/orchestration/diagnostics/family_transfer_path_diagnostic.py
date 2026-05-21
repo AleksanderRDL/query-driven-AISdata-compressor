@@ -28,7 +28,7 @@ ACTIVE_METRIC_ALIGNMENT_FIELDS = {
     "path_length_support_target": "head_probability_path_length_support_target",
     "replacement_representative_value": "head_probability_replacement_representative_value",
     "boundary_event_utility": "head_probability_boundary_event_utility",
-    "factorized_behavior_multiplier": "factorized_behavior_multiplier",
+    "factorized_behavior_branch": "factorized_behavior_branch",
     "factorized_replacement_multiplier": "factorized_replacement_multiplier",
     "factorized_composed_score": "factorized_composed_score",
 }

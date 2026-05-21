@@ -185,6 +185,11 @@ def build_selection_causality_diagnostics(
         primary_method, "_path_length_support_score_cache", None
     )
     primary_selector_segment_scores = getattr(primary_method, "_selector_segment_score_cache", None)
+    primary_selector_segment_score_source = getattr(
+        primary_method,
+        "_selector_segment_score_source_cache",
+        None,
+    )
     if isinstance(primary_scores, torch.Tensor):
         primary_scores = primary_scores.detach().cpu().float()
     if isinstance(primary_raw_preds, torch.Tensor):
@@ -264,14 +269,19 @@ def build_selection_causality_diagnostics(
                     config.model.learned_segment_length_repair_score_protection_fraction
                 ),
                 segment_score_source_label=selector_segment_score_source_label(
-                    segment_scores=primary_segment_scores
-                    if isinstance(primary_segment_scores, torch.Tensor)
+                    segment_scores=primary_selector_segment_scores
+                    if isinstance(primary_selector_segment_scores, torch.Tensor)
                     else None,
                     path_length_support_scores=primary_path_length_support_scores
                     if isinstance(primary_path_length_support_scores, torch.Tensor)
                     else None,
                     length_support_blend_weight=float(
                         config.model.learned_segment_length_support_blend_weight
+                    ),
+                    base_segment_score_source=(
+                        str(primary_selector_segment_score_source)
+                        if primary_selector_segment_score_source is not None
+                        else "segment_budget_head_top20_mean"
                     ),
                 ),
             )

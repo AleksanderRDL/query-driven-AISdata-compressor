@@ -1050,6 +1050,11 @@ def freeze_retained_mask_ablations(
             shuffled_prior_scores = getattr(shuffled_prior_method, "_score_cache", None)
             shuffled_prior_raw_preds = getattr(shuffled_prior_method, "_raw_pred_cache", None)
             shuffled_prior_head_logits = getattr(shuffled_prior_method, "_head_logit_cache", None)
+            shuffled_prior_selector_segment_scores = getattr(
+                shuffled_prior_method,
+                "_selector_segment_score_cache",
+                None,
+            )
             prior_sensitivity_diagnostics["shuffled_prior_fields"] = (
                 prior_ablation_sensitivity_from_tensors(
                     sampled_prior_features=shuffled_prior_feature_sensitivity,
@@ -1068,6 +1073,11 @@ def freeze_retained_mask_ablations(
                     else None,
                     primary_mask=frozen_primary_masks.get("MLQDS"),
                     ablation_mask=shuffled_prior_mask,
+                    selector_trace=trace,
+                    primary_segment_scores=primary_selector_segment_scores,
+                    ablation_segment_scores=shuffled_prior_selector_segment_scores
+                    if isinstance(shuffled_prior_selector_segment_scores, torch.Tensor)
+                    else None,
                 )
             )
             causality_ablation_methods.append(
@@ -1118,6 +1128,11 @@ def freeze_retained_mask_ablations(
             zero_prior_scores = getattr(zero_prior_method, "_score_cache", None)
             zero_prior_raw_preds = getattr(zero_prior_method, "_raw_pred_cache", None)
             zero_prior_head_logits = getattr(zero_prior_method, "_head_logit_cache", None)
+            zero_prior_selector_segment_scores = getattr(
+                zero_prior_method,
+                "_selector_segment_score_cache",
+                None,
+            )
             prior_sensitivity_diagnostics["without_query_prior_features"] = (
                 prior_ablation_sensitivity_from_tensors(
                     sampled_prior_features=zero_prior_feature_sensitivity,
@@ -1136,6 +1151,11 @@ def freeze_retained_mask_ablations(
                     else None,
                     primary_mask=frozen_primary_masks.get("MLQDS"),
                     ablation_mask=zero_prior_mask,
+                    selector_trace=trace,
+                    primary_segment_scores=primary_selector_segment_scores,
+                    ablation_segment_scores=zero_prior_selector_segment_scores
+                    if isinstance(zero_prior_selector_segment_scores, torch.Tensor)
+                    else None,
                 )
             )
             causality_ablation_methods.append(
@@ -1192,6 +1212,11 @@ def freeze_retained_mask_ablations(
                 channel_scores = getattr(channel_method, "_score_cache", None)
                 channel_raw_preds = getattr(channel_method, "_raw_pred_cache", None)
                 channel_head_logits = getattr(channel_method, "_head_logit_cache", None)
+                channel_selector_segment_scores = getattr(
+                    channel_method,
+                    "_selector_segment_score_cache",
+                    None,
+                )
                 channel_sensitivity = prior_ablation_sensitivity_from_tensors(
                     sampled_prior_features=channel_feature_sensitivity,
                     model_prior_features=channel_model_prior_sensitivity,
@@ -1209,6 +1234,11 @@ def freeze_retained_mask_ablations(
                     else None,
                     primary_mask=frozen_primary_masks.get("MLQDS"),
                     ablation_mask=channel_mask,
+                    selector_trace=trace,
+                    primary_segment_scores=primary_selector_segment_scores,
+                    ablation_segment_scores=channel_selector_segment_scores
+                    if isinstance(channel_selector_segment_scores, torch.Tensor)
+                    else None,
                 )
                 prior_channel_ablation_diagnostics[prior_channel_name] = {
                     **channel_sensitivity,

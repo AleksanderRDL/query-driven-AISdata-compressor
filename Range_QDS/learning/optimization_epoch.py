@@ -11,7 +11,10 @@ from typing import Any, Protocol, cast
 import torch
 import torch.nn.functional as F
 
-from config.run_config import ModelConfig
+from config.run_config import (
+    DEFAULT_QUERY_LOCAL_UTILITY_BEHAVIOR_RANK_LOSS_WEIGHT,
+    ModelConfig,
+)
 from learning.losses import (
     _balanced_pointwise_loss_rows,
     _budget_stratified_recall_loss_rows,
@@ -63,7 +66,7 @@ def _factorized_query_local_utility_loss(
     segment_size: int = 32,
     segment_budget_head_weight: float = 0.10,
     segment_level_loss_weight: float = 0.25,
-    behavior_rank_loss_weight: float = 0.0,
+    behavior_rank_loss_weight: float = DEFAULT_QUERY_LOCAL_UTILITY_BEHAVIOR_RANK_LOSS_WEIGHT,
     sparse_head_rank_loss_weight: float = 0.0,
     sparse_head_bce_target_mode: str = "raw",
 ) -> torch.Tensor:
@@ -382,6 +385,7 @@ def _train_one_epoch(
         forward_t0 = time.perf_counter()
         with torch_autocast_context(device, amp_mode):
             forward_with_heads = getattr(model, "forward_with_heads", None)
+            forward_with_heads_fn: Callable[..., tuple[torch.Tensor, torch.Tensor]] | None = None
             if factorized_targets_dev is not None and callable(forward_with_heads):
                 forward_with_heads_fn = cast(
                     Callable[..., tuple[torch.Tensor, torch.Tensor]], forward_with_heads
@@ -442,7 +446,11 @@ def _train_one_epoch(
                     getattr(model_config, "query_local_utility_segment_level_loss_weight", 0.25)
                 ),
                 behavior_rank_loss_weight=float(
-                    getattr(model_config, "query_local_utility_behavior_rank_loss_weight", 0.0)
+                    getattr(
+                        model_config,
+                        "query_local_utility_behavior_rank_loss_weight",
+                        DEFAULT_QUERY_LOCAL_UTILITY_BEHAVIOR_RANK_LOSS_WEIGHT,
+                    )
                 ),
                 sparse_head_rank_loss_weight=float(
                     getattr(model_config, "query_local_utility_sparse_head_rank_loss_weight", 0.0)
