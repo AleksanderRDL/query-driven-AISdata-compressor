@@ -1,9 +1,6 @@
-# Next Iterations
+# Next Iteration(s)
 
-Use this file as the immediate handoff for the next person or agent. Use
-`query-driven-implementation-research-guide.md` for the full protocol, gates,
-evidence levels, and default stack. Use
-`query-driven-implementation-progress.md` for the short checkpoint log.
+Use this file as the handoff for the next individual task or tasks to be worked on in the project.
 
 ---
 
@@ -276,45 +273,7 @@ promotion, path-length allocation, or any selector allocation-source patch.
 
 ---
 
-## 1. Current defaults to preserve unless the checkpoint explicitly changes them
-
-```yaml
-primary_metric: QueryLocalUtility
-score_group_weights:
-  query_point_mass: 0.50
-  query_local_behavior: 0.45
-  global_sanity: 0.05
-workload_profile_id: range_query_mix
-anchor_family_weights:
-  density: 0.80
-  sparse_background_control: 0.20
-footprint_family_weights:
-  medium_operational: 0.6923076923076923
-  large_context: 0.3076923076923077
-footprint_point_hit_fraction_bands:
-  medium_operational: [0.006, 0.030]
-  large_context: [0.010, 0.045]
-range_training_target_mode: query_local_utility_factorized
-query_hit_target_variant: raw_query_hit_ship_evidence_multiplier  # additive score composition is current Level 2 boundary; not accepted
-conditional_behavior_target_variant: query_segment_local_behavior_utility
-replacement_representative_keep_fraction: 0.35
-segment_budget_target_aggregation: top20_mean
-model_type: workload_blind_range
-selector_type: learned_segment_budget
-checkpoint_score_variant: query_local_utility
-checkpoint_selection_metric: uniform_gap
-```
-
-These defaults are not permanent doctrine. The q-hit target variant is the
-current code path, and the additive score composition passed strict Level 2
-target diffusion. It is not accepted, because learning causality and global
-sanity still fail. Do not change metric weights, workload profile, model
-architecture, prior semantics, and selector allocation semantics in the same
-checkpoint.
-
----
-
-## 2. Current blocker
+## 1. Current blocker
 
 For the current code path, the immediate blockers are **learning causality** and
 **global sanity**. The additive score composition cleared strict Level 2 target
@@ -407,7 +366,7 @@ compression and wrong-way retained-boundary ranking, not selector allocation.
 
 ---
 
-## 3. Immediate next checkpoint
+## 2. Immediate next checkpoint
 
 Recommended checkpoint name:
 
@@ -476,34 +435,7 @@ no final grid
 
 ---
 
-## 4. Likely files for the segment-rank gradient diagnostic
-
-Touch only docs and a derived diagnostic artifact unless instrumentation is
-strictly required. Likely files:
-
-```text
-docs/Next-Iterations.md
-docs/query-driven-implementation-progress.md
-docs/query-driven-implementation-research-guide.md
-artifacts/results/segment_rank_loss_gradient_path_diagnostic/diagnostic.json
-```
-
-Avoid touching these in the diagnostic checkpoint unless instrumentation proves
-necessary:
-
-```text
-selection/learned_segment_budget/*.py
-scoring/query_local_utility.py
-workloads/generation/workload_profiles.py
-models/workload_blind_range.py
-learning/targets/query_local_utility.py
-scoring/methods.py
-orchestration/retained_mask_ablation_stage.py
-```
-
----
-
-## 5. Validation for the next checkpoint
+## 3. Validation for the next checkpoint
 
 For the next checkpoint:
 
@@ -540,36 +472,7 @@ For later replay only after a new root fix is justified:
 
 ---
 
-## 6. Do not do next
-
-Do not:
-
-- run the final grid;
-- loosen gates;
-- change `QueryLocalUtility` weights and target semantics in the same checkpoint;
-- reintroduce legacy `range_point_f1` fallback into the active metric;
-- add generic prior residuals or scalar prior amplification without a prior-flow
-  localization result;
-- repeat prior-only auxiliary learning pressure;
-- repeat prior-conditioned head-input projection;
-- repeat primary-minus-zero-prior contrastive-loss replay;
-- repeat final-head cosine/decision-surface alignment loss without a new
-  target/prior covariance diagnosis;
-- repeat channel-factorized prior encoding plus generic point-encoder prior
-  masking;
-- repeat behavior-rank-only sweeps;
-- widen behavior supervision to all-point zero negatives;
-- replace the segment-budget head with the behavior head;
-- tune selector allocation floor or length-support weight as a substitute for
-  causal head/target semantics;
-- promote a variant that only improves aggregate score while failing child
-  causality gates;
-- compare old `QueryUsefulV1` or `RangeUsefulLegacy` artifacts as current
-  acceptance evidence.
-
----
-
-## 7. Decision matrix for interpreting the next diagnostic
+## 4. Decision matrix for interpreting the next diagnostic
 
 | Observation | Interpretation | Next action |
 | --- | --- | --- |
@@ -583,136 +486,3 @@ Do not:
 | Priors change scores but not masks | Selector insensitivity | Diagnose score-to-mask boundary and allocation |
 | Segment head ranks marginal utility negatively | Segment head learning or target calibration issue | Do not tune allocation weights; fix the head learning path or target semantics |
 | Pooled point score ranks segments better in a counterfactual but fails as primary path | Diagnostic/production mismatch or length-selection interaction | Explain the mismatch before changing selector semantics |
-
----
-
-## 8. Minimal agent handoff prompt
-
-Use this when starting a new agent:
-
-```text
-Continue the Range_QDS query-driven workload-blind compressor implementation.
-Read docs/query-driven-implementation-research-guide.md, docs/Next-Iterations.md, and docs/query-driven-implementation-progress.md first.
-
-Current default stack:
-- primary metric: QueryLocalUtility
-- workload profile: range_query_mix
-- target mode: query_local_utility_factorized
-- model: workload_blind_range
-- selector: learned_segment_budget
-- checkpoint score variant: query_local_utility
-
-Current status: active, not accepted. Do not run Level 3 or final grid.
-
-Latest strict Level 2 current-code artifact:
-- artifacts/results/additive_qhit_behavior_score_composition_level2_seed2539/example_run.json
-- artifacts/results/additive_qhit_behavior_score_composition_level2_seed2539/semantic_diagnostic.json
-
-Latest blocker-localization artifact:
-- artifacts/results/additive_level2_child_gate_root_localization/diagnostic.json
-
-Latest rejected wiring artifact:
-- artifacts/results/pooled_point_score_segment_allocation_level1_smoke/example_run.json
-- artifacts/results/pooled_point_score_segment_allocation_level1_smoke/semantic_diagnostic.json
-- artifacts/results/pooled_point_score_segment_allocation_level1_smoke/rejection_diagnostic.json
-
-Latest failure-diagnosis artifact:
-- artifacts/results/pooled_point_score_allocation_failure_diagnosis/diagnostic.json
-
-Latest mask-delta diagnostic artifact:
-- artifacts/results/segment_allocation_mask_delta_diagnostic/diagnostic.json
-
-Latest segment-head compression diagnostic artifact:
-- artifacts/results/segment_budget_head_compression_root_diagnostic/diagnostic.json
-
-Latest rejected rank-loss wiring artifact:
-- artifacts/results/segment_budget_head_topk_rank_loss_level1_wiring/example_run.json
-- artifacts/results/segment_budget_head_topk_rank_loss_level1_wiring/semantic_diagnostic.json
-- artifacts/results/segment_budget_head_topk_rank_loss_level1_wiring/rejection_diagnostic.json
-
-Current formula:
-- additive_raw_query_hit_and_behavior_with_conditional_replacement_modulation_plus_boundary
-
-Strict Level 2 summary:
-- target diffusion passed, final support gt_0.01 = 0.2351190476
-- MLQDS QueryLocalUtility = 0.0995482993
-- uniform QueryLocalUtility = 0.0992909061
-- Douglas-Peucker QueryLocalUtility = 0.1182249577
-- learning causality failed
-- global sanity failed, length preservation = 0.703978 < 0.75
-- workload signature failed with the known point-hit-fraction KS recurrence
-
-Learning-causality child readout:
-- shuffled score delta = 0.00638639
-- untrained model delta = 0.0110130
-- without behavior head delta = 0.00622185
-- shuffled prior fields delta = 0.0
-- without query-prior fields delta = 0.0
-- without segment-budget head delta = -0.000488398
-- prior-field-only score delta = 0.00177562
-
-Phase 48 localization:
-- Prior fields are predictive and reach the model, but they do not move retained masks. Retained-mask Jaccard stays 1.0, mean abs head-probability delta is about 2.9e-05, and high-marginal score-output delta is 0.0. Do not repeat scalar prior boosts, generic residuals, route-density exposure, prior adapters, prior-only auxiliary loss, primary-minus-zero-prior contrastive loss, final-head alignment loss, or channel-factorized prior masking.
-- Behavior is now material by ablation, but conditional_behavior_utility remains weak: tau = 0.040724 and prediction std / target std is about 0.103.
-- Segment-budget target is oracle-aligned, but the learned segment head is compressed and non-causal. Pooled final point-score segment allocation scores 0.114785381, +0.015237081 above primary in the strict Level 2 diagnostic. Neutral segment score also beats primary by +0.000488398.
-- Length remains below gate. Length-only allocation can clear the length floor counterfactually, but pure path-length allocation scores only 0.0858993835, so do not add a length scaffold or weaken the guardrail.
-- Phase 49 tested pooled point-score allocation as the Level 1 primary path and rejected it. Same-seed MLQDS QueryLocalUtility dropped from 0.1064832750 to 0.0856186098, and length dropped from 0.5402177987 to 0.5340749041. Production selector semantics were reverted.
-- Phase 50 diagnosed the rejection as counterfactual-to-production score-to-mask mismatch. The QLU loss is dominated by query point recall (-0.0115942029 weighted), local interpolation (-0.0042138399), and turn coverage (-0.0049234360), not by the 0.01-weighted length term (-0.0000614289). Pooled allocation spread retained points across 9 segments instead of 6.
-- Phase 51 mapped the exact mask delta. Pooled swapped additive learned points [82,178,274] for [61,157,253]. Removed raw marginal QLU sum was 0.0210543920 with 2 query hits; added raw marginal QLU sum was 0.0001858789 with 0 query hits. The net estimate (-0.0208685131) matches the observed QLU drop (-0.0208646652).
-- Phase 52 classified the segment-head root cause as broad soft target plus underpowered rank pressure. The segment target is oracle-aligned (spearman 0.8431893688 vs oracle mass), but it is diffuse (positive fraction 0.9444444444; gt_0.01 support 0.9126984127; top-5%-mass recall 0.1433802217). The learned head is compressed (prediction std / target std 0.0509125787), and on learned retained-boundary rows its segment score is wrong-way (spearman -0.5381231672) while raw, q-hit, and behavior branches are positive-aligned.
-- Phase 53 tested a narrow top-k rank-loss patch at same-seed Level 1 and rejected it. Target diffusion still passed, but MLQDS QueryLocalUtility and length were identical to the additive reference (`0.1064832750` and `0.5402177987`), segment prediction std / target std barely moved (`0.0259016158 -> 0.0265600364`), Kendall tau got slightly worse (`0.1532986111 -> 0.1497829861`), and learned-boundary segment_score_spearman weakened (`0.4014447884 -> 0.3808049536`). The production loss patch was reverted.
-
-Next admissible checkpoint:
-- segment_rank_loss_gradient_path_diagnostic
-
-Scope:
-- Diagnostic only. Quantify segment-rank loss magnitude and gradient
-  contribution against point BCE, pooled segment BCE, existing pairwise segment
-  loss, auxiliary-loss scaling, and the primary budget loss.
-- Do not add another loss term or larger scalar until the gradient path is
-  measured.
-- Do not change metric/profile/target/model/prior/selector semantics.
-
-Required evidence order:
-- derived diagnostic from existing code/artifacts where possible;
-- instrumentation-only tiny probe only if required fields are missing;
-- no Level 1 replay unless the diagnostic identifies a materially new root fix.
-
-Do not run Level 2, Level 3, or final grid from this checkpoint. Do not add selector floors, raw coverage overrides, generic behavior-rank weights, larger segment-rank scalars, prior boosts/residuals, route-density exposure, large temporal scaffolds, length scaffolds, or weaker guardrails. Do not rerun pooled point-score promotion, path-length allocation, or selector allocation-source patches.
-
-```
-
----
-
-## 9. Progress-log update format
-
-When a checkpoint finishes, append only this shape to
-`query-driven-implementation-progress.md`:
-
-```markdown
-## Checkpoint Phase N - <short name>
-
-Status: completed / rejected / accepted-as-new-boundary / implementation-only.
-
-Hypothesis:
-- <one or two bullets>
-
-Artifact:
-- `<path>`
-
-Scale:
-- <static/unit/Level 1/Level 2/Level 3/final-grid>
-- <seed and key dimensions if run>
-
-Key results:
-- <scores and gate state if run>
-- <diagnostic numbers if derived>
-
-Decision:
-- <what this proves>
-- <what not to do next>
-- <next admissible step>
-```
-
-Keep raw command output and detailed metrics in artifacts, not in the progress
-log.
