@@ -22,6 +22,7 @@ from config.run_config import (
     DEFAULT_LEARNED_SEGMENT_ALLOCATION_WEIGHT_FLOOR,
     DEFAULT_LEARNED_SEGMENT_GEOMETRY_GAIN_WEIGHT,
     DEFAULT_LEARNED_SEGMENT_SCORE_BLEND_WEIGHT,
+    DEFAULT_QUERY_LOCAL_UTILITY_BEHAVIOR_RANK_LOSS_WEIGHT,
     DEFAULT_VALIDATION_ENDPOINT_PENALTY_WEIGHT,
     DEFAULT_VALIDATION_GLOBAL_SANITY_PENALTY_WEIGHT,
     DEFAULT_VALIDATION_LENGTH_PRESERVATION_MIN,
@@ -734,7 +735,9 @@ def test_validation_score_config_uses_current_names() -> None:
     assert restored.model.learned_segment_length_support_blend_weight == pytest.approx(0.75)
     assert restored.model.query_prior_grid_bins == 128
     assert restored.model.query_prior_smoothing_passes == 0
-    assert restored.model.query_local_utility_behavior_rank_loss_weight == 0.0
+    assert restored.model.query_local_utility_behavior_rank_loss_weight == pytest.approx(
+        DEFAULT_QUERY_LOCAL_UTILITY_BEHAVIOR_RANK_LOSS_WEIGHT
+    )
     assert restored.model.query_local_utility_sparse_head_rank_loss_weight == 0.0
     assert restored.model.query_local_utility_sparse_head_bce_target_mode == "raw"
     assert restored.model.temporal_residual_label_mode == "none"
@@ -758,7 +761,9 @@ def test_direct_config_and_cli_default_to_non_residual_training() -> None:
     args = build_parser().parse_args([])
 
     assert cfg.model.temporal_residual_label_mode == "none"
-    assert cfg.model.query_local_utility_behavior_rank_loss_weight == 0.0
+    assert cfg.model.query_local_utility_behavior_rank_loss_weight == pytest.approx(
+        DEFAULT_QUERY_LOCAL_UTILITY_BEHAVIOR_RANK_LOSS_WEIGHT
+    )
     assert cfg.model.query_local_utility_sparse_head_rank_loss_weight == 0.0
     assert cfg.model.query_local_utility_sparse_head_bce_target_mode == "raw"
     assert cfg.model.learned_segment_geometry_gain_weight == pytest.approx(
@@ -787,7 +792,9 @@ def test_direct_config_and_cli_default_to_non_residual_training() -> None:
         DEFAULT_VALIDATION_LENGTH_PRESERVATION_MIN
     )
     assert args.temporal_residual_label_mode == "none"
-    assert args.query_local_utility_behavior_rank_loss_weight == 0.0
+    assert args.query_local_utility_behavior_rank_loss_weight == pytest.approx(
+        DEFAULT_QUERY_LOCAL_UTILITY_BEHAVIOR_RANK_LOSS_WEIGHT
+    )
     assert args.query_local_utility_sparse_head_rank_loss_weight == 0.0
     assert args.query_local_utility_sparse_head_bce_target_mode == "raw"
     assert args.learned_segment_geometry_gain_weight == pytest.approx(

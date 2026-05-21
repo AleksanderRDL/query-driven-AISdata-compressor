@@ -29,6 +29,7 @@ DEFAULT_VALIDATION_GLOBAL_SANITY_PENALTY_WEIGHT = 0.10
 DEFAULT_VALIDATION_SED_PENALTY_WEIGHT = 0.05
 DEFAULT_VALIDATION_ENDPOINT_PENALTY_WEIGHT = 0.10
 DEFAULT_VALIDATION_LENGTH_PRESERVATION_MIN = FINAL_LENGTH_PRESERVATION_MIN
+DEFAULT_QUERY_LOCAL_UTILITY_BEHAVIOR_RANK_LOSS_WEIGHT = 0.25
 VALIDATION_SPLIT_MODES = ("random", "source_stratified")
 
 
@@ -163,7 +164,9 @@ class ModelConfig:
     query_local_utility_aux_loss_weight: float = 0.50
     query_local_utility_segment_budget_head_weight: float = 0.10
     query_local_utility_segment_level_loss_weight: float = 0.25
-    query_local_utility_behavior_rank_loss_weight: float = 0.0
+    query_local_utility_behavior_rank_loss_weight: float = (
+        DEFAULT_QUERY_LOCAL_UTILITY_BEHAVIOR_RANK_LOSS_WEIGHT
+    )
     query_local_utility_sparse_head_rank_loss_weight: float = 0.0
     query_local_utility_sparse_head_bce_target_mode: str = "raw"
     query_local_utility_train_marginal_diagnostics: bool = False
@@ -366,7 +369,9 @@ def build_run_config(
     query_local_utility_aux_loss_weight: float = 0.50,
     query_local_utility_segment_budget_head_weight: float = 0.10,
     query_local_utility_segment_level_loss_weight: float = 0.25,
-    query_local_utility_behavior_rank_loss_weight: float = 0.0,
+    query_local_utility_behavior_rank_loss_weight: float = (
+        DEFAULT_QUERY_LOCAL_UTILITY_BEHAVIOR_RANK_LOSS_WEIGHT
+    ),
     query_local_utility_sparse_head_rank_loss_weight: float = 0.0,
     query_local_utility_sparse_head_bce_target_mode: str = "raw",
     query_local_utility_train_marginal_diagnostics: bool = False,

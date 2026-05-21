@@ -64,87 +64,215 @@ The current evidence boundary uses the two-footprint `range_query_mix` path.
 
 ### Current evidence boundary
 
-Latest current-default strict reference artifact:
+Latest current-code strict reference artifact:
 
 ```text
-artifacts/results/query_driven_behavior_segment_target_mult_level3_scale64_query40_seed2527/example_run.json
+artifacts/results/additive_qhit_behavior_score_composition_level2_seed2539/example_run.json
+artifacts/results/additive_qhit_behavior_score_composition_level2_seed2539/semantic_diagnostic.json
+```
+
+Latest blocker-localization artifact:
+
+```text
+artifacts/results/additive_level2_child_gate_root_localization/diagnostic.json
+```
+
+Latest rejected wiring artifact:
+
+```text
+artifacts/results/pooled_point_score_segment_allocation_level1_smoke/example_run.json
+artifacts/results/pooled_point_score_segment_allocation_level1_smoke/semantic_diagnostic.json
+artifacts/results/pooled_point_score_segment_allocation_level1_smoke/rejection_diagnostic.json
+```
+
+Latest failure-diagnosis artifact:
+
+```text
+artifacts/results/pooled_point_score_allocation_failure_diagnosis/diagnostic.json
+```
+
+Latest mask-delta diagnostic artifact:
+
+```text
+artifacts/results/segment_allocation_mask_delta_diagnostic/diagnostic.json
+```
+
+Latest segment-head compression diagnostic artifact:
+
+```text
+artifacts/results/segment_budget_head_compression_root_diagnostic/diagnostic.json
+```
+
+Latest rejected rank-loss wiring artifact:
+
+```text
+artifacts/results/segment_budget_head_topk_rank_loss_level1_wiring/example_run.json
+artifacts/results/segment_budget_head_topk_rank_loss_level1_wiring/semantic_diagnostic.json
+artifacts/results/segment_budget_head_topk_rank_loss_level1_wiring/rejection_diagnostic.json
 ```
 
 Configuration summary:
 
 ```text
-level: Level 3 source-stratified strict synthetic replay
-seed: 2527
-ships: 64
-points per ship: 256
-requested queries: 40
-epochs: 5
+level: strict Level 2 source-stratified synthetic replay
+seed: 2539
+ships: 32
+points per ship: 192
+requested queries: 24
+epochs: 4
 train workload replicates: 4
 train-side marginal diagnostics: enabled
+query_hit_target_variant: raw_query_hit_ship_evidence_multiplier
+score formula: additive_raw_query_hit_and_behavior_with_conditional_replacement_modulation_plus_boundary
 ```
 
 Key scores:
 
 ```text
-MLQDS QueryLocalUtility:           0.1431090566
-uniform QueryLocalUtility:         0.1247681518
-Douglas-Peucker QueryLocalUtility: 0.1153266238
+MLQDS QueryLocalUtility:           0.0995482993
+uniform QueryLocalUtility:         0.0992909061
+Douglas-Peucker QueryLocalUtility: 0.1182249577
+MLQDS - uniform:                   +0.0002573932
+MLQDS - Douglas-Peucker:           -0.0186766584
 ```
 
-Gate state:
+Current gate state:
 
 ```text
 passed:
   workload stability
   support overlap
-  target diffusion
-  workload signature
+  target diffusion  # final support gt_0.01 = 0.2351190476
   predictability
   prior-predictive alignment
-  global sanity
 
 failed:
+  workload signature  # known point-hit-fraction KS recurrence at Level 2
   learning causality
-  final grid
+  global sanity       # length preservation 0.703978 < 0.75
+  final grid          # not admissible
 ```
 
-Important causality details:
+Learning-causality child state:
 
 ```text
-material positive controls:
-  shuffled scores lose by:       0.0241102168
-  untrained loses by:            0.0177732905
-  no segment-budget loses by:    0.0099825888
-  prior-field-only loses by:     0.0319842784
+passed at threshold but not sufficient for final success:
+  shuffled_scores_should_lose:       0.00638639
+  untrained_model_should_lose:       0.0110130
+  without_behavior_head_should_lose: 0.00622185
 
-failed child gates:
-  shuffled_prior_fields_should_lose:       0.0
+failed:
+  shuffled_prior_fields_should_lose:        0.0
   without_query_prior_features_should_lose: 0.0
-  without_behavior_utility_head_should_lose: 0.0014985765 < 0.005
+  without_segment_budget_head_should_lose: -0.000488398
 ```
 
-Selector and head diagnostics:
+Blocker localization from the derived diagnostic:
 
 ```text
-retained-marginal raw-score Spearman:       0.2779
-retained-marginal selector-score Spearman:  0.2881
-retained-marginal segment-score Spearman:  -0.0812
-retained-marginal behavior-component Spearman: -0.0486
-conditional-behavior prediction std:        0.002631
-target std:                                 0.166493
-conditional-behavior Kendall tau:           0.0251
+prior:   priors are predictive and reach the model, but retained masks do not move
+behavior: behavior ablation is material, but conditional_behavior_utility remains weak
+segment: segment-budget head is compressed/non-causal; pooled point-score allocation looked better counterfactually
+length:  length floor fails; pure length allocation hurts QueryLocalUtility
 ```
 
-Interpretation:
+Rejected Phase 49 wiring checkpoint:
 
-- The current stack is coherent enough to beat uniform and Douglas-Peucker in a
-  healthy strict cell.
-- It is not accepted because learned causality still fails.
-- The remaining front-door blocker is semantic: query-prior features do not
-  materially affect retained masks, and the behavior head is nearly flat and
-  not causal.
+```text
+same-seed additive Level 1 MLQDS QueryLocalUtility:    0.1064832750
+same-seed pooled point-score MLQDS QueryLocalUtility: 0.0856186098
+delta:                                                 -0.0208646652
+same-seed additive Level 1 length preservation:        0.5402177987
+same-seed pooled point-score length preservation:      0.5340749041
+delta:                                                 -0.0061428946
+selector trace source:                                point_score_top20_mean
+target diffusion:                                     passed, final support gt_0.01 = 0.234375
+```
 
----
+Phase 50 failure diagnosis:
+
+```text
+classification: counterfactual_to_production_score_to_mask_mismatch
+direct QLU-loss source: point-level/local components, not length-score term
+additive retained-segment counts: [3,0,2,3,0,2,3,0,2]
+pooled retained-segment counts:   [3,1,1,3,1,1,3,1,1]
+additive allocation diagnosis:    length_support_materially_influences_allocation
+pooled allocation diagnosis:      score_dominated_length_support_conflict
+```
+
+Phase 51 mask-delta diagnosis:
+
+```text
+classification: learned_slot_spreading_swapped_query_hit_points_for_zero_hit_coverage
+retained-mask Jaccard: 0.6666666667
+removed learned points: [82,178,274]
+added learned points:   [61,157,253]
+removed raw marginal QLU sum: 0.0210543920
+added raw marginal QLU sum:   0.0001858789
+net estimate:                 -0.0208685131
+observed QLU delta:            -0.0208646652
+removed query-hit count: 2
+added query-hit count:   0
+```
+
+Phase 52 segment-head compression root diagnostic:
+
+```text
+classification: broad_soft_target_plus_underpowered_rank_pressure_causes_compressed_wrong_way_segment_head
+segment target positive fraction: 0.9444444444
+segment target support gt_0.01: 0.9126984127
+segment target top-5%-mass recall: 0.1433802217
+target segment oracle alignment:
+  spearman vs oracle mass: 0.8431893688
+  top-25% oracle mass recall: 0.4900304343
+learned segment fit:
+  target std: 0.2152189165
+  prediction std: 0.0109573500
+  prediction std / target std: 0.0509125787
+  Kendall tau: 0.2148176732
+selector allocation:
+  segment_score_to_allocation_spearman: 0.8771587805
+learned retained boundary:
+  raw_score_spearman: 0.7192082111
+  query_hit_branch_spearman: 0.7441348974
+  behavior_branch_spearman: 0.7111436950
+  segment_score_spearman: -0.5381231672
+```
+
+Phase 53 segment top-k rank-loss Level 1 wiring:
+
+```text
+status: rejected; production loss patch reverted
+target diffusion: passed, final support gt_0.01 = 0.234375
+same-seed reference MLQDS QueryLocalUtility: 0.1064832750
+candidate MLQDS QueryLocalUtility:           0.1064832750
+candidate - reference:                       0.0
+same-seed reference length:                  0.5402177987
+candidate length:                            0.5402177987
+candidate - reference length:                0.0
+segment fit:
+  reference prediction std / target std: 0.0259016158
+  candidate prediction std / target std: 0.0265600364
+  reference Kendall tau: 0.1532986111
+  candidate Kendall tau: 0.1497829861
+learned retained boundary:
+  reference segment_score_spearman: 0.4014447884
+  candidate segment_score_spearman: 0.3808049536
+```
+
+Next admissible checkpoint:
+
+```text
+segment_rank_loss_gradient_path_diagnostic
+```
+
+This checkpoint is diagnostic only. It must quantify the actual segment-rank
+loss magnitude and gradient contribution against point BCE, pooled segment BCE,
+existing pairwise segment loss, auxiliary-loss scaling, and the primary budget
+loss before adding another loss term or scalar. It must not change selector,
+score, target, model, prior, metric, workload, or production loss semantics.
+It cannot claim final success, and it cannot proceed to Level 2, Level 3, or
+final grid.
 
 ## 1. End-state objective
 
@@ -434,6 +562,8 @@ path_length_support_target
 Active target details:
 
 ```text
+query_hit_target_variant = raw_query_hit_ship_evidence_multiplier
+query_hit_target_base_source = raw_query_hit_probability_times_0.65_plus_0.35_positive_mean_normalized_ship_query_evidence
 conditional_behavior_target_variant = query_segment_local_behavior_utility
 replacement_representative_keep_fraction = 0.35
 segment_budget_target_aggregation = top20_mean
@@ -442,6 +572,22 @@ segment_budget_target_aggregation = top20_mean
 Behavior supervision remains masked to query-hit points. Do not widen it to
 all-point zero supervision; that makes the behavior head relearn query-hit
 support instead of query-local behavior value.
+
+The query-hit head now uses a raw-q-hit-scale-preserving ship-evidence
+multiplier. Ship/family query evidence may re-rank points inside raw q-hit
+support, but it must not normalize sparse hit support into a broad gate.
+
+The rejected Phase 36 broad gate, `query_evidence_gate_hit_ship_blend`, failed
+strict Level 2 target diffusion: `final_label_support_fraction_above_max`, with
+final support `0.705853` above the `0.5` gate. The narrowed Phase 38 target
+passed Level 1 wiring target diffusion with final support `0.217014`, then
+passed strict Level 2 target diffusion with final support `0.088790`. This is
+historical context, not the current boundary. The current boundary uses the
+additive q-hit / behavior score composition, which passed strict Level 2 target
+diffusion with final support `0.235119` but still failed learning causality and
+global sanity. The failed child gates have now been localized: priors remain
+mask-immaterial, the behavior head remains weak despite material ablation, and
+the segment-budget head is a compressed non-causal allocation signal.
 
 ### Model
 
@@ -480,50 +626,70 @@ Rules:
 
 ## 9. Current blocker and what comes next
 
-The current front-door blocker is not workload generation, not metric naming, and
-not baseline comparison. The latest healthy Level 3 cell beats uniform and
-Douglas-Peucker and passes pre-causality gates.
+The current code path passed strict Level 2 target diffusion under the additive
+q-hit / behavior composition, but is still blocked by learning causality and
+global sanity. `Next-Iterations.md` remains the source of truth for the current
+evidence boundary.
 
-The blocker is semantic learning causality:
+The semantic blocker is:
 
 ```text
 query-prior fields are immaterial to retained masks
-conditional-behavior head is nearly flat and not causal
-segment-score retained-marginal alignment is negative
+behavior ablation is material, but the conditional-behavior head is still weak
+segment-budget head is compressed and not causal
+pooled point-score allocation looked better counterfactually but failed as primary path
+global length preservation is below the acceptance floor
 ```
 
 Next admissible work:
 
-1. **Behavior-head semantic diagnosis**
-   - Explain why `conditional_behavior_utility` prediction std is near zero
-     despite nontrivial target std.
-   - Compare behavior target, behavior logits/probabilities, replacement head,
-     segment-budget head, exact retained marginal utility, and retained source
-     stage.
-   - Diagnose by anchor family, footprint family, query-hit runs, and segment.
+1. **Segment-rank loss gradient-path diagnostic**
+   - Phase 53 rejected the top-k rank-loss patch because it did not materially
+     change the mask, score, segment-head compression, or retained-boundary
+     alignment.
+   - Measure actual segment-rank loss magnitude and gradient contribution before
+     adding another loss term, scalar, or target change.
+   - Do not change metric/profile/target/model/prior/selector semantics.
+   - Do not rerun pooled point-score promotion, path-length allocation, selector
+     allocation-source patches, selector floors, raw coverage overrides, or
+     larger segment-rank scalars.
 
-2. **Query-prior materiality diagnosis**
-   - Explain why shuffled-prior and no-query-prior retained-mask deltas are
-     exactly zero in the current reference cell.
-   - Trace sampled priors → model input priors → head logits → final score →
-     selector scores → retained masks.
-   - Do not add another generic prior residual or scalar amplification without a
-     localization result.
-
-3. **Segment-score calibration diagnosis**
-   - Explain why raw/selector scores have positive marginal alignment while
-     segment scores remain negative.
-   - Compare current segment head, neutral segment scores, pooled point-score
-     segment scores, and train-side marginal teachers as diagnostics only.
+2. **Query-prior materiality remains unresolved**
+   - The additive strict Level 2 localization shows priors are predictive and
+     reach head logits, but retained-mask Jaccard stays `1.0`, mean absolute
+     head-probability delta is about `2.9e-05`, and high-marginal score-output
+     delta is `0.0`.
+   - Do not add another scalar prior boost, generic prior residual,
+     route-density exposure, prior adapter, or prior-only loss from this
+     evidence.
 
 Recommended next checkpoint shape:
 
 ```text
-reference artifact: query_driven_behavior_segment_target_mult_level3_scale64_query40_seed2527
-scope: derived/artifact diagnostic first; code instrumentation only if required
+checkpoint: segment_rank_loss_gradient_path_diagnostic
+scope: diagnostic only; quantify segment-rank loss magnitude and gradient
+contribution against point BCE, pooled segment BCE, existing pairwise segment
+loss, auxiliary-loss scaling, and the primary budget loss
+reference artifacts:
+artifacts/results/additive_qhit_behavior_score_composition_level2_seed2539/example_run.json
+artifacts/results/additive_qhit_behavior_score_composition_level2_seed2539/semantic_diagnostic.json
+artifacts/results/additive_level2_child_gate_root_localization/diagnostic.json
+artifacts/results/pooled_point_score_segment_allocation_level1_smoke/example_run.json
+artifacts/results/pooled_point_score_segment_allocation_level1_smoke/semantic_diagnostic.json
+artifacts/results/pooled_point_score_segment_allocation_level1_smoke/rejection_diagnostic.json
+artifacts/results/pooled_point_score_allocation_failure_diagnosis/diagnostic.json
+artifacts/results/segment_allocation_mask_delta_diagnostic/diagnostic.json
+artifacts/results/segment_budget_head_compression_root_diagnostic/diagnostic.json
+artifacts/results/segment_budget_head_topk_rank_loss_level1_wiring/example_run.json
+artifacts/results/segment_budget_head_topk_rank_loss_level1_wiring/semantic_diagnostic.json
+artifacts/results/segment_budget_head_topk_rank_loss_level1_wiring/rejection_diagnostic.json
+derive first, instrument only if fields are missing
+no Level 2
 no final grid
 no metric/profile changes
-no superficial behavior-rank or prior-scale sweep
+no selector-floor, raw-coverage, length-scaffold, path-length allocation,
+behavior-rank, larger segment-rank scalar, prior-scale, generic residual, or
+historical-default sweep
 ```
 
 ---
@@ -567,4 +733,3 @@ When adding a checkpoint:
 5. Do not keep old chronological names as active product names.
 6. Do not compare old `RangeUsefulLegacy` / `QueryUsefulV1` scores as acceptance
    evidence for current `QueryLocalUtility` defaults.
-

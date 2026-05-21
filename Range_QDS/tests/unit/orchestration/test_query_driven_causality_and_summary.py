@@ -41,6 +41,7 @@ from orchestration.causality import (
     query_local_utility_component_delta_summary,
     retained_mask_comparison,
     score_ablation_sensitivity,
+    score_rank_margin_boundary_diagnostics,
     training_outputs_with_query_prior_field,
 )
 from orchestration.final_gate_summary import build_final_run_summaries
@@ -683,6 +684,61 @@ def test_score_ablation_sensitivity_reports_score_and_mask_changes() -> None:
     assert diagnostics["score_topk_jaccard_at_retained_count"] == 1.0 / 3.0
 
 
+def test_score_rank_margin_boundary_diagnostic_links_prior_delta_to_marginal_rows() -> None:
+    primary_scores = torch.tensor([1.0, 0.9, 0.2, 0.1], dtype=torch.float32)
+    ablation_scores = torch.tensor([0.99, 0.89, 0.15, 0.2], dtype=torch.float32)
+    primary_mask = torch.tensor([True, True, False, False])
+    selector_trace = {
+        "retained_decision_marginal_query_local_utility_alignment": {
+            "rows": [
+                {
+                    "point_index": 2,
+                    "decision": "removed_addition_gain",
+                    "source": "removed",
+                    "marginal_query_local_utility": 0.50,
+                    "marginal_query_local_utility_candidate_rank_fraction": 0.25,
+                    "selector_score_candidate_rank_fraction": 0.90,
+                    "failure_buckets": ["high_marginal_under_ranked_by_scores"],
+                },
+                {
+                    "point_index": 0,
+                    "decision": "retained_removal_loss",
+                    "source": "learned",
+                    "marginal_query_local_utility": 0.30,
+                    "marginal_query_local_utility_candidate_rank_fraction": 0.50,
+                },
+                {
+                    "point_index": 3,
+                    "decision": "removed_addition_gain",
+                    "source": "removed",
+                    "marginal_query_local_utility": 0.05,
+                    "marginal_query_local_utility_candidate_rank_fraction": 1.0,
+                },
+            ]
+        }
+    }
+
+    diagnostic = score_rank_margin_boundary_diagnostics(
+        primary_scores=primary_scores,
+        ablation_scores=ablation_scores,
+        primary_mask=primary_mask,
+        ablation_mask=primary_mask.clone(),
+        selector_trace=selector_trace,
+    )
+
+    assert diagnostic["available"] is True
+    assert diagnostic["classification"] == "prior_score_deltas_below_topk_rank_margin"
+    topk = diagnostic["topk_score_boundary"]
+    assert topk["topk_boundary_margin"] == pytest.approx(0.7)
+    assert topk["score_delta_crosses_topk_boundary"] is False
+    marginal = diagnostic["marginal_row_score_delta_alignment"]
+    assert marginal["missed_high_marginal_row_count"] == 1
+    assert marginal["missed_high_marginal_mean_score_delta"] == pytest.approx(0.05)
+    assert marginal["under_ranked_high_marginal_positive_score_delta_fraction"] == pytest.approx(
+        1.0
+    )
+
+
 def test_prior_ablation_sensitivity_payload_exposes_score_output_chain() -> None:
     score_output = {"available": True, "mean_abs_score_delta": 0.25}
 
@@ -701,6 +757,8 @@ def test_prior_ablation_sensitivity_payload_exposes_score_output_chain() -> None
     assert payload["score_output"]["mean_abs_score_delta"] == pytest.approx(0.25)
     assert payload["score_output"]["semantics"] == PRIOR_ABLATION_SCORE_OUTPUT_SEMANTICS
     assert payload["retained_mask"]["retained_mask_changed"] is True
+    assert payload["score_rank_margin_boundary"]["available"] is False
+    assert payload["marginal_row_delta_path"]["available"] is False
 
 
 def test_prior_ablation_sensitivity_from_tensors_builds_consistent_chain() -> None:
@@ -708,6 +766,8 @@ def test_prior_ablation_sensitivity_from_tensors_builds_consistent_chain() -> No
     ablation_scores = torch.tensor([0.1, 0.8, 0.9, 0.0], dtype=torch.float32)
     primary_raw = torch.tensor([3.0, 2.0, 1.0, 0.0], dtype=torch.float32)
     ablation_raw = torch.tensor([2.0, 2.0, 2.0, 0.0], dtype=torch.float32)
+    primary_segment = torch.tensor([0.7, 0.6, 0.1, 0.0], dtype=torch.float32)
+    ablation_segment = torch.tensor([0.2, 0.6, 0.2, 0.0], dtype=torch.float32)
     primary_heads = torch.tensor([[2.0, -1.0, 0.0, 0.5, 1.0, -0.5]], dtype=torch.float32)
     ablation_heads = primary_heads + 0.1
     primary_mask = torch.tensor([True, True, False, False])
@@ -724,6 +784,20 @@ def test_prior_ablation_sensitivity_from_tensors_builds_consistent_chain() -> No
         ablation_head_logits=ablation_heads,
         primary_mask=primary_mask,
         ablation_mask=ablation_mask,
+        primary_segment_scores=primary_segment,
+        ablation_segment_scores=ablation_segment,
+        selector_trace={
+            "retained_decision_marginal_query_local_utility_alignment": {
+                "rows": [
+                    {
+                        "point_index": 0,
+                        "decision": "retained_removal_loss",
+                        "source": "learned",
+                        "marginal_query_local_utility": 0.4,
+                    }
+                ]
+            }
+        },
     )
 
     assert "selector_score" not in payload
@@ -733,6 +807,26 @@ def test_prior_ablation_sensitivity_from_tensors_builds_consistent_chain() -> No
     assert payload["score_output"]["retained_mask_jaccard"] == pytest.approx(1.0 / 3.0)
     assert payload["raw_prediction"]["mean_abs_score_delta"] > 0.0
     assert payload["head_output"]["head_probabilities_changed"] is True
+    assert payload["score_rank_margin_boundary"]["available"] is True
+    row_path = payload["marginal_row_delta_path"]
+    assert row_path["available"] is True
+    assert row_path["stage_available"]["segment_score"] is True
+    assert row_path["top_marginal_rows"][0]["raw_prediction"]["delta"] == pytest.approx(1.0)
+    assert row_path["top_marginal_rows"][0]["segment_score"]["delta"] == pytest.approx(0.5)
+    assert row_path["top_marginal_rows"][0]["head_deltas"]["query_hit_probability"][
+        "logit_delta"
+    ] == pytest.approx(-0.1)
+    composition = row_path["top_marginal_rows"][0]["factorized_composition"]
+    assert composition["available"] is True
+    assert composition["composed_score"]["delta"] < 0.0
+    assert composition["contribution_deltas"]["query_hit_branch_shapley"] < 0.0
+    assert row_path["groups"]["top_marginal"]["factorized_composition_available"] is True
+    assert (
+        row_path["groups"]["top_marginal"]["factorized_most_negative_mean_contribution"][
+            "name"
+        ]
+        in composition["contribution_deltas"]
+    )
 
 
 def test_training_outputs_with_query_prior_field_keeps_metadata_aligned() -> None:

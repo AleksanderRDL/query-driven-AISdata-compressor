@@ -235,7 +235,6 @@ def simplify_with_learned_segment_budget_with_trace(
         segment_scores=segment_scores,
         points=points,
     )
-    segment_rows.sort(key=lambda row: (float(row["score"]), -int(row["start"])), reverse=True)
     segment_score_source = (
         str(segment_score_source_label)
         if segment_score_source_label is not None
@@ -243,6 +242,9 @@ def simplify_with_learned_segment_budget_with_trace(
         if segment_scores is not None
         else "point_score_top20_mean"
     )
+    for row in segment_rows:
+        row["score_source"] = segment_score_source
+    segment_rows.sort(key=lambda row: (float(row["score"]), -int(row["start"])), reverse=True)
     effective_segment_length_support_weight = (
         float(segment_length_support_weight) if points is not None else 0.0
     )

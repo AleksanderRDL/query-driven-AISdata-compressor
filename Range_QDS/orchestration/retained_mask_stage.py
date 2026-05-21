@@ -165,6 +165,15 @@ def freeze_workload_blind_retained_masks(
                 primary_selector_segment_scores = frozen_primary_selector_segment_scores.get(
                     "MLQDS"
                 )
+                primary_method = next(
+                    (method for method in methods if getattr(method, "name", "") == "MLQDS"),
+                    None,
+                )
+                primary_selector_segment_score_source = getattr(
+                    primary_method,
+                    "_selector_segment_score_source_cache",
+                    None,
+                )
                 trace_started_at = time.perf_counter()
                 trace_mask, trace = simplify_with_learned_segment_budget_with_trace(
                     primary_scores,
@@ -196,10 +205,15 @@ def freeze_workload_blind_retained_masks(
                         config.model.learned_segment_length_repair_score_protection_fraction
                     ),
                     segment_score_source_label=selector_segment_score_source_label(
-                        segment_scores=primary_segment_scores,
+                        segment_scores=primary_selector_segment_scores,
                         path_length_support_scores=primary_path_length_support_scores,
                         length_support_blend_weight=float(
                             config.model.learned_segment_length_support_blend_weight
+                        ),
+                        base_segment_score_source=(
+                            str(primary_selector_segment_score_source)
+                            if primary_selector_segment_score_source is not None
+                            else "segment_budget_head_top20_mean"
                         ),
                     ),
                 )

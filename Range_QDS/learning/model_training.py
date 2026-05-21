@@ -18,9 +18,11 @@ from learning.checkpoint_selection import (
 )
 from learning.checkpoint_validation import _validation_checkpoint_scores, _validation_uniform_score
 from learning.factorized_head_diagnostics import (
+    _behavior_head_training_signal_diagnostics,
     _factorized_final_score_composition_diagnostics,
     _factorized_head_fit_diagnostics,
     _initialize_factorized_head_output_biases_from_targets,
+    _prior_feature_learning_diagnostics,
     _segment_head_fit_diagnostics,
 )
 from learning.fit_diagnostics import (
@@ -1271,6 +1273,28 @@ def train_model(
             device=device,
             amp_mode=amp_mode,
         )
+        zero_prior_predictions: torch.Tensor | None = None
+        zero_prior_head_logits: torch.Tensor | None = None
+        if (
+            model_type == WORKLOAD_BLIND_RANGE_MODEL_TYPE
+            and int(norm_points.shape[1]) >= len(QUERY_PRIOR_FIELD_NAMES)
+        ):
+            zero_prior_norm_points = norm_points.clone()
+            zero_prior_norm_points[:, -len(QUERY_PRIOR_FIELD_NAMES) :] = 0.0
+            zero_prior_predictions, zero_prior_head_logits = windowed_predict_with_heads(
+                model=model,
+                norm_points=zero_prior_norm_points,
+                boundaries=train_boundaries,
+                queries=norm_queries,
+                query_type_ids=workload.type_ids,
+                window_length=model_config.window_length,
+                window_stride=model_config.window_stride,
+                batch_size=max(
+                    1, int(getattr(model_config, "inference_batch_size", train_batch_size))
+                ),
+                device=device,
+                amp_mode=amp_mode,
+            )
         fit_diagnostics = train_target_fit_diagnostics(
             predictions=train_predictions,
             target=training_target,
@@ -1309,6 +1333,51 @@ def train_model(
                 canonical_segment_ids=canonical_segment_ids,
                 seed=seed,
             )
+        )
+        fit_diagnostics["behavior_head_training_signal"] = (
+            _behavior_head_training_signal_diagnostics(
+                head_logits=train_head_logits,
+                factorized_targets=factorized_targets,
+                factorized_mask=factorized_mask,
+                boundaries=train_boundaries,
+                behavior_rank_loss_weight=float(
+                    getattr(model_config, "query_local_utility_behavior_rank_loss_weight", 0.0)
+                ),
+            )
+        )
+        fit_diagnostics["prior_feature_learning_signal"] = _prior_feature_learning_diagnostics(
+            model=model,
+            norm_points=norm_points,
+            primary_predictions=train_predictions,
+            zero_prior_predictions=zero_prior_predictions,
+            primary_head_logits=train_head_logits,
+            zero_prior_head_logits=zero_prior_head_logits,
+            factorized_targets=factorized_targets,
+            factorized_mask=factorized_mask,
+            scalar_target=training_target,
+            scalar_mask=training_labelled_mask,
+            raw_points=all_points,
+            boundaries=train_boundaries,
+            typed_queries=prior_queries,
+            window_length=model_config.window_length,
+            window_stride=model_config.window_stride,
+            batch_size=max(1, int(getattr(model_config, "inference_batch_size", train_batch_size))),
+            segment_budget_head_weight=float(
+                getattr(model_config, "query_local_utility_segment_budget_head_weight", 0.10)
+            ),
+            segment_level_loss_weight=float(
+                getattr(model_config, "query_local_utility_segment_level_loss_weight", 0.25)
+            ),
+            behavior_rank_loss_weight=float(
+                getattr(model_config, "query_local_utility_behavior_rank_loss_weight", 0.25)
+            ),
+            sparse_head_rank_loss_weight=float(
+                getattr(model_config, "query_local_utility_sparse_head_rank_loss_weight", 0.0)
+            ),
+            sparse_head_bce_target_mode=str(
+                getattr(model_config, "query_local_utility_sparse_head_bce_target_mode", "raw")
+            ),
+            seed=seed,
         )
         fit_diagnostics["seconds"] = float(time.perf_counter() - fit_t0)
         matched_delta = fit_diagnostics.get("matched_mlqds_vs_uniform_target_recall")

@@ -477,6 +477,10 @@ def test_learned_segment_budget_trace_accepts_explicit_segment_score_source_labe
     )
 
     assert trace["segment_score_source"] == "path_length_support_head_top20_mean"
+    rows = trace["pre_repair_segment_source_attribution"]["rows"]
+    assert {row["segment_score_source"] for row in rows} == {
+        "path_length_support_head_top20_mean"
+    }
 
 
 def test_learned_segment_budget_geometry_gain_uses_trajectory_retained_anchors() -> None:
@@ -992,6 +996,10 @@ def test_retained_decision_marginal_query_local_utility_diagnostic_scores_true_m
             "lon_min": 1.5,
             "lon_max": 3.5,
         },
+        "_metadata": {
+            "anchor_family": "density",
+            "footprint_family": "medium_operational",
+        },
     }
     source_masks = {
         "skeleton": torch.tensor([True, False, False, False, True]),
@@ -1110,6 +1118,19 @@ def test_retained_decision_marginal_query_local_utility_diagnostic_scores_true_m
         "pre_repair_retained": True,
     }
     assert diagnostics["context_fields_available"]["selector_segment_context"] is True
+    assert diagnostics["context_fields_available"]["query_local_utility_target"] is True
+    assert diagnostics["context_fields_available"]["head_targets"] == {
+        "boundary_event_utility": True,
+        "conditional_behavior_utility": True,
+        "path_length_support_target": True,
+        "query_hit_probability": True,
+        "replacement_representative_value": True,
+        "segment_budget_target": True,
+    }
+    assert diagnostics["context_fields_available"]["target_diagnostic_error"] is None
+    assert diagnostics["context_fields_available"]["query_family_hit_context"] is True
+    assert diagnostics["context_fields_available"]["query_hit_run_ids"] is True
+    assert diagnostics["context_fields_available"]["query_local_utility_component_delta"] is True
     assert diagnostics["top_marginal_miss_summary"]["available"] is True
     assert (
         diagnostics["top_marginal_miss_summary"]["top_marginal_rows_in_selector_trace_only"] is True
@@ -1132,6 +1153,20 @@ def test_retained_decision_marginal_query_local_utility_diagnostic_scores_true_m
     assert learned_removal["query_local_utility_score_components"]["factorized_composed_score"] == (
         pytest.approx(0.85)
     )
+    assert learned_removal["query_local_utility_target"] > 0.0
+    assert learned_removal["head_targets"]["query_hit_probability"] == pytest.approx(1.0)
+    assert "conditional_behavior_utility" in learned_removal["head_targets"]
+    assert learned_removal["head_targets"]["conditional_behavior_utility"] >= 0.0
+    assert learned_removal["head_target_masks"]["conditional_behavior_utility"] is True
+    assert "query_point_recall" in learned_removal["query_local_utility_component_delta"]
+    assert learned_removal["primary_query_local_utility_components"]["query_point_recall"] >= 0.0
+    assert (
+        learned_removal["candidate_query_local_utility_components"]["query_point_recall"] >= 0.0
+    )
+    assert learned_removal["anchor_family"] == "density"
+    assert learned_removal["footprint_family"] == "medium_operational"
+    assert learned_removal["query_family_hit_context"]["anchor_family_counts"] == {"density": 1}
+    assert learned_removal["query_hit_run_ids"] == ["q0:traj0:points2-4"]
     assert learned_removal["selector_stage_state"]["pre_repair_retained"] is True
     assert learned_removal["selector_stage_state"]["final_retained"] is True
     assert learned_removal["selector_segment_context"] == {

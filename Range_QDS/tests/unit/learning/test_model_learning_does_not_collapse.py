@@ -999,10 +999,16 @@ def test_validation_checkpoint_scores_report_factorized_causality_deltas(
         scores: torch.Tensor,
         *_args: object,
         segment_scores: torch.Tensor | None = None,
+        segment_point_scores: torch.Tensor | None = None,
         **_kwargs: object,
     ) -> torch.Tensor:
         keep = 5
-        if segment_scores is not None and int(torch.count_nonzero(segment_scores).item()) == 0:
+        if (
+            segment_point_scores is not None
+            and int(torch.count_nonzero(segment_point_scores).item()) == 0
+        ):
+            keep = 2
+        elif segment_scores is not None and int(torch.count_nonzero(segment_scores).item()) == 0:
             keep = 2
         elif float(scores.mean().item()) < 0.0:
             keep = 3
