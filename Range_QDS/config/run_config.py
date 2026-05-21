@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+from inspect import signature
 from typing import Any
 
 from scoring.geometry_thresholds import FINAL_LENGTH_PRESERVATION_MIN
@@ -653,6 +654,21 @@ def build_run_config(
             final_metrics_mode=final_metrics_mode,
         ),
     )
+
+
+RUN_CONFIG_NAMESPACE_ALIASES = {
+    "validation_global_sanity_penalty_enabled": "validation_global_sanity_penalty",
+}
+
+
+def build_run_config_from_namespace(args: Any) -> RunConfig:
+    """Build run config from a parsed CLI namespace using the canonical builder contract."""
+    kwargs: dict[str, Any] = {}
+    for name in signature(build_run_config).parameters:
+        source_name = RUN_CONFIG_NAMESPACE_ALIASES.get(name, name)
+        if hasattr(args, source_name):
+            kwargs[name] = getattr(args, source_name)
+    return build_run_config(**kwargs)
 
 
 def derive_seed_bundle(master_seed: int) -> SeedBundle:

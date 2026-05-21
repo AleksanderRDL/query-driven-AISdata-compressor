@@ -9,6 +9,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
+from orchestration.diagnostics.artifact_utils import load_json_dict as _load_json
 from orchestration.diagnostics.selection_eval_segment_teacher_transfer_diagnostic import (
     EVAL_TRACE_NAME,
     SELECTION_TRACE_NAME,
@@ -412,14 +413,6 @@ def build_selection_segment_transfer_feature_admissibility_diagnostic(
             ),
         },
     }
-
-
-def _load_json(path: Path) -> dict[str, Any]:
-    with path.open("r", encoding="utf-8") as handle:
-        payload = json.load(handle)
-    if not isinstance(payload, dict):
-        raise ValueError(f"Expected object JSON artifact: {path}")
-    return payload
 
 
 def _parse_labeled_artifact(value: str) -> tuple[str, Path]:

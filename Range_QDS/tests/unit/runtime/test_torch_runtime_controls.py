@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from argparse import Namespace
+from inspect import signature
 
 import pytest
 import torch
@@ -27,8 +28,10 @@ from config.run_config import (
     DEFAULT_VALIDATION_GLOBAL_SANITY_PENALTY_WEIGHT,
     DEFAULT_VALIDATION_LENGTH_PRESERVATION_MIN,
     DEFAULT_VALIDATION_SED_PENALTY_WEIGHT,
+    RUN_CONFIG_NAMESPACE_ALIASES,
     RunConfig,
     build_run_config,
+    build_run_config_from_namespace,
 )
 from learning.checkpoints import _checkpoint_config_payload
 from learning.model_features import SUPPORTED_MODEL_TYPES
@@ -820,6 +823,35 @@ def test_direct_config_and_cli_default_to_non_residual_training() -> None:
     assert args.validation_length_preservation_min == pytest.approx(
         DEFAULT_VALIDATION_LENGTH_PRESERVATION_MIN
     )
+
+
+def test_namespace_run_config_builder_uses_parser_contract_and_aliases() -> None:
+    args = build_parser().parse_args(
+        [
+            "--epochs",
+            "2",
+            "--range_train_anchor_modes",
+            "dense,sparse",
+            "--no-validation_global_sanity_penalty",
+        ]
+    )
+
+    cfg = build_run_config_from_namespace(args)
+
+    assert cfg.model.epochs == 2
+    assert cfg.query.range_train_anchor_modes == ["dense", "sparse"]
+    assert cfg.model.validation_global_sanity_penalty_enabled is False
+
+
+def test_cli_parser_covers_run_config_builder_contract() -> None:
+    args = build_parser().parse_args([])
+    missing = [
+        name
+        for name in signature(build_run_config).parameters
+        if not hasattr(args, RUN_CONFIG_NAMESPACE_ALIASES.get(name, name))
+    ]
+
+    assert missing == []
 
 
 def test_cli_model_type_choices_use_supported_model_registry() -> None:

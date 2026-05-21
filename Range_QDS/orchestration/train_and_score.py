@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from config.run_config import build_run_config
+from config.run_config import build_run_config_from_namespace
 from data_preparation.ais_loader import generate_synthetic_ais_data, load_ais_csv
 from data_preparation.trajectory_cache import load_or_build_ais_cache
 from orchestration.cli_utils import normalized_gap_arg, split_csv_path_list
@@ -146,157 +146,8 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
-    config = build_run_config(
-        n_ships=args.n_ships,
-        n_points=args.n_points,
-        synthetic_route_families=args.synthetic_route_families,
-        min_points_per_segment=args.min_points_per_segment,
-        max_points_per_segment=args.max_points_per_segment,
-        max_time_gap_seconds=normalized_gap_arg(args.max_time_gap_seconds),
-        max_segments=args.max_segments,
-        train_max_segments=args.train_max_segments,
-        validation_max_segments=args.validation_max_segments,
-        eval_max_segments=args.eval_max_segments,
-        max_trajectories=args.max_trajectories,
-        train_fraction=args.train_fraction,
-        val_fraction=args.val_fraction,
-        cache_dir=args.cache_dir,
-        refresh_cache=args.refresh_cache,
-        n_queries=args.n_queries,
-        query_coverage=args.query_coverage,
-        max_queries=args.max_queries,
-        range_spatial_fraction=args.range_spatial_fraction,
-        range_time_fraction=args.range_time_fraction,
-        range_spatial_km=args.range_spatial_km,
-        range_time_hours=args.range_time_hours,
-        range_footprint_jitter=args.range_footprint_jitter,
-        range_time_domain_mode=args.range_time_domain_mode,
-        range_anchor_mode=args.range_anchor_mode,
-        range_train_anchor_modes=args.range_train_anchor_modes,
-        range_train_footprints=args.range_train_footprints,
-        range_min_point_hits=args.range_min_point_hits,
-        range_max_point_hit_fraction=args.range_max_point_hit_fraction,
-        range_min_trajectory_hits=args.range_min_trajectory_hits,
-        range_max_trajectory_hit_fraction=args.range_max_trajectory_hit_fraction,
-        range_max_box_volume_fraction=args.range_max_box_volume_fraction,
-        range_duplicate_iou_threshold=args.range_duplicate_iou_threshold,
-        range_acceptance_max_attempts=args.range_acceptance_max_attempts,
-        range_max_coverage_overshoot=args.range_max_coverage_overshoot,
-        range_train_workload_replicates=args.range_train_workload_replicates,
-        workload_profile_id=args.workload_profile_id,
-        coverage_calibration_mode=args.coverage_calibration_mode,
-        workload_stability_gate_mode=args.workload_stability_gate_mode,
-        epochs=args.epochs,
-        lr=args.lr,
-        embed_dim=args.embed_dim,
-        num_heads=args.num_heads,
-        num_layers=args.num_layers,
-        dropout=args.dropout,
-        ranking_pairs_per_type=args.ranking_pairs_per_type,
-        ranking_top_quantile=args.ranking_top_quantile,
-        pointwise_loss_weight=args.pointwise_loss_weight,
-        loss_objective=args.loss_objective,
-        budget_loss_ratios=args.budget_loss_ratios,
-        budget_loss_temperature=args.budget_loss_temperature,
-        query_local_utility_aux_loss_weight=args.query_local_utility_aux_loss_weight,
-        query_local_utility_segment_budget_head_weight=args.query_local_utility_segment_budget_head_weight,
-        query_local_utility_segment_level_loss_weight=args.query_local_utility_segment_level_loss_weight,
-        query_local_utility_behavior_rank_loss_weight=args.query_local_utility_behavior_rank_loss_weight,
-        query_local_utility_sparse_head_rank_loss_weight=args.query_local_utility_sparse_head_rank_loss_weight,
-        query_local_utility_sparse_head_bce_target_mode=args.query_local_utility_sparse_head_bce_target_mode,
-        query_local_utility_train_marginal_diagnostics=(
-            args.query_local_utility_train_marginal_diagnostics
-        ),
-        temporal_distribution_loss_weight=args.temporal_distribution_loss_weight,
-        gradient_clip_norm=args.gradient_clip_norm,
-        compression_ratio=args.compression_ratio,
-        csv_path=args.csv_path,
-        train_csv_path=args.train_csv_path,
-        validation_csv_path=args.validation_csv_path,
-        eval_csv_path=args.eval_csv_path,
-        validation_split_mode=args.validation_split_mode,
-        model_type=args.model_type,
-        historical_prior_k=args.historical_prior_k,
-        historical_prior_clock_weight=args.historical_prior_clock_weight,
-        historical_prior_mmsi_weight=args.historical_prior_mmsi_weight,
-        historical_prior_density_weight=args.historical_prior_density_weight,
-        historical_prior_min_target=args.historical_prior_min_target,
-        historical_prior_support_ratio=args.historical_prior_support_ratio,
-        historical_prior_source_aggregation=args.historical_prior_source_aggregation,
-        workload=args.workload,
-        seed=args.seed,
-        range_diagnostics_mode=args.range_diagnostics_mode,
-        early_stopping_patience=args.early_stopping_patience,
-        train_batch_size=args.train_batch_size,
-        inference_batch_size=args.inference_batch_size,
-        query_chunk_size=args.query_chunk_size,
-        diagnostic_every=args.diagnostic_every,
-        diagnostic_window_fraction=args.diagnostic_window_fraction,
-        checkpoint_selection_metric=args.checkpoint_selection_metric,
-        validation_score_every=args.validation_score_every,
-        checkpoint_uniform_gap_weight=args.checkpoint_uniform_gap_weight,
-        checkpoint_type_penalty_weight=args.checkpoint_type_penalty_weight,
-        checkpoint_smoothing_window=args.checkpoint_smoothing_window,
-        checkpoint_full_score_every=args.checkpoint_full_score_every,
-        checkpoint_candidate_pool_size=args.checkpoint_candidate_pool_size,
-        checkpoint_score_variant=args.checkpoint_score_variant,
-        validation_global_sanity_penalty_enabled=args.validation_global_sanity_penalty,
-        validation_global_sanity_penalty_weight=args.validation_global_sanity_penalty_weight,
-        validation_sed_penalty_weight=args.validation_sed_penalty_weight,
-        validation_endpoint_penalty_weight=args.validation_endpoint_penalty_weight,
-        validation_length_preservation_min=args.validation_length_preservation_min,
-        mlqds_temporal_fraction=args.mlqds_temporal_fraction,
-        mlqds_diversity_bonus=args.mlqds_diversity_bonus,
-        mlqds_hybrid_mode=args.mlqds_hybrid_mode,
-        selector_type=args.selector_type,
-        learned_segment_geometry_gain_weight=args.learned_segment_geometry_gain_weight,
-        learned_segment_allocation_length_support_weight=(
-            args.learned_segment_allocation_length_support_weight
-        ),
-        learned_segment_allocation_weight_floor=args.learned_segment_allocation_weight_floor,
-        learned_segment_score_blend_weight=args.learned_segment_score_blend_weight,
-        learned_segment_transfer_calibration_mode=args.learned_segment_transfer_calibration_mode,
-        learned_segment_fairness_preallocation=args.learned_segment_fairness_preallocation,
-        learned_segment_length_repair_fraction=args.learned_segment_length_repair_fraction,
-        learned_segment_length_repair_score_protection_fraction=(
-            args.learned_segment_length_repair_score_protection_fraction
-        ),
-        learned_segment_length_support_blend_weight=args.learned_segment_length_support_blend_weight,
-        mlqds_stratified_center_weight=args.mlqds_stratified_center_weight,
-        mlqds_min_learned_swaps=args.mlqds_min_learned_swaps,
-        mlqds_score_mode=args.mlqds_score_mode,
-        mlqds_score_temperature=args.mlqds_score_temperature,
-        mlqds_rank_confidence_weight=args.mlqds_rank_confidence_weight,
-        mlqds_range_geometry_blend=args.mlqds_range_geometry_blend,
-        temporal_residual_label_mode=args.temporal_residual_label_mode,
-        range_label_mode=args.range_label_mode,
-        range_training_target_mode=args.range_training_target_mode,
-        range_target_balance_mode=args.range_target_balance_mode,
-        range_replicate_target_aggregation=args.range_replicate_target_aggregation,
-        range_component_target_blend=args.range_component_target_blend,
-        range_temporal_target_blend=args.range_temporal_target_blend,
-        range_structural_target_blend=args.range_structural_target_blend,
-        range_structural_target_source_mode=args.range_structural_target_source_mode,
-        range_target_budget_weight_power=args.range_target_budget_weight_power,
-        range_marginal_target_radius_scale=args.range_marginal_target_radius_scale,
-        range_query_spine_fraction=args.range_query_spine_fraction,
-        range_query_spine_mass_mode=args.range_query_spine_mass_mode,
-        range_query_residual_multiplier=args.range_query_residual_multiplier,
-        range_query_residual_mass_mode=args.range_query_residual_mass_mode,
-        range_set_utility_multiplier=args.range_set_utility_multiplier,
-        range_set_utility_candidate_limit=args.range_set_utility_candidate_limit,
-        range_set_utility_mass_mode=args.range_set_utility_mass_mode,
-        range_boundary_prior_weight=args.range_boundary_prior_weight,
-        range_teacher_distillation_mode=args.range_teacher_distillation_mode,
-        range_teacher_epochs=args.range_teacher_epochs,
-        range_audit_compression_ratios=args.range_audit_compression_ratios,
-        query_prior_grid_bins=args.query_prior_grid_bins,
-        query_prior_smoothing_passes=args.query_prior_smoothing_passes,
-        final_metrics_mode=args.final_metrics_mode,
-        float32_matmul_precision=args.float32_matmul_precision,
-        allow_tf32=args.allow_tf32,
-        amp_mode=args.amp_mode,
-    )
+    args.max_time_gap_seconds = normalized_gap_arg(args.max_time_gap_seconds)
+    config = build_run_config_from_namespace(args)
     runtime_settings = apply_torch_runtime_settings(
         float32_matmul_precision=config.model.float32_matmul_precision,
         allow_tf32=config.model.allow_tf32,
@@ -417,7 +268,7 @@ def main() -> None:
         f"query_prior_smoothing_passes={args.query_prior_smoothing_passes}  "
         f"min_points_per_segment={args.min_points_per_segment}  "
         f"max_points_per_segment={args.max_points_per_segment}  "
-        f"max_time_gap_seconds={normalized_gap_arg(args.max_time_gap_seconds)}  "
+        f"max_time_gap_seconds={args.max_time_gap_seconds}  "
         f"max_segments={args.max_segments}  "
         f"train_max_segments={args.train_max_segments}  "
         f"validation_max_segments={args.validation_max_segments}  "
@@ -440,7 +291,7 @@ def main() -> None:
     load_kwargs = {
         "min_points_per_segment": args.min_points_per_segment,
         "max_points_per_segment": args.max_points_per_segment,
-        "max_time_gap_seconds": normalized_gap_arg(args.max_time_gap_seconds),
+        "max_time_gap_seconds": args.max_time_gap_seconds,
         "max_segments": args.max_segments,
     }
     if args.train_csv_path or args.eval_csv_path or args.validation_csv_path:

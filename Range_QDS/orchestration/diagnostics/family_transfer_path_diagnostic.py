@@ -7,6 +7,28 @@ import json
 from pathlib import Path
 from typing import Any
 
+from orchestration.diagnostics.artifact_utils import (
+    as_bool as _as_bool,
+)
+from orchestration.diagnostics.artifact_utils import (
+    as_dict as _as_dict,
+)
+from orchestration.diagnostics.artifact_utils import (
+    as_float as _as_float,
+)
+from orchestration.diagnostics.artifact_utils import (
+    as_list as _as_list,
+)
+from orchestration.diagnostics.artifact_utils import (
+    delta as _delta,
+)
+from orchestration.diagnostics.artifact_utils import (
+    load_json_dict as _load_json,
+)
+from orchestration.diagnostics.artifact_utils import (
+    ratio as _ratio,
+)
+
 PRIMARY_METHOD = "MLQDS"
 BASELINE_METHOD = "DouglasPeucker"
 # Historical diagnostic focus from pre-simplification artifacts; not active
@@ -51,38 +73,6 @@ RETAINED_MARGINAL_ALIGNMENT_PATH = (
     "selector_trace_diagnostics.eval_primary."
     "retained_decision_marginal_query_local_utility_alignment"
 )
-
-
-def _as_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _as_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _as_float(value: Any) -> float | None:
-    if isinstance(value, bool):
-        return float(value)
-    if isinstance(value, int | float):
-        return float(value)
-    return None
-
-
-def _as_bool(value: Any) -> bool | None:
-    return value if isinstance(value, bool) else None
-
-
-def _delta(left: float | None, right: float | None) -> float | None:
-    if left is None or right is None:
-        return None
-    return float(left - right)
-
-
-def _ratio(numerator: float | None, denominator: float | None) -> float | None:
-    if numerator is None or denominator is None or abs(denominator) <= 1e-12:
-        return None
-    return float(numerator / denominator)
 
 
 def _score_summary(artifact: dict[str, Any]) -> dict[str, float | None]:
@@ -855,14 +845,6 @@ def build_family_transfer_path_diagnostic(
         "artifacts": summaries,
         "summary": _summary(summaries),
     }
-
-
-def _load_json(path: Path) -> dict[str, Any]:
-    with path.open("r", encoding="utf-8") as handle:
-        payload = json.load(handle)
-    if not isinstance(payload, dict):
-        raise ValueError(f"Expected object JSON artifact: {path}")
-    return payload
 
 
 def _parse_labeled_artifact(value: str) -> tuple[str, Path]:

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 import time
 from typing import Any, cast
 
@@ -18,21 +17,13 @@ from learning.checkpoint_selection import (
 )
 from learning.checkpoint_validation import _validation_checkpoint_scores, _validation_uniform_score
 from learning.factorized_head_diagnostics import (
-    _behavior_head_training_signal_diagnostics,
-    _factorized_final_score_composition_diagnostics,
-    _factorized_head_fit_diagnostics,
     _initialize_factorized_head_output_biases_from_targets,
-    _prior_feature_learning_diagnostics,
-    _segment_head_fit_diagnostics,
 )
 from learning.fit_diagnostics import (
     _discriminative_sample,
     _kendall_tau,
     _training_target_diagnostics,
-    train_target_fit_diagnostics,
 )
-from learning.importance_labels import compute_typed_importance_labels
-from learning.inference import windowed_predict_with_heads
 from learning.losses import (
     _budget_loss_ratios,
     _effective_budget_loss_ratios,
@@ -40,13 +31,8 @@ from learning.losses import (
     _safe_quantile,
     _temporal_base_masks_for_budget_ratios,
 )
-from learning.model_factory import build_qds_model, require_historical_prior_model
-from learning.model_features import (
-    HISTORICAL_PRIOR_MODEL_TYPES,
-    NONPARAMETRIC_HISTORICAL_PRIOR_MODEL_TYPES,
-    WORKLOAD_BLIND_RANGE_MODEL_TYPE,
-    build_model_point_features,
-)
+from learning.model_factory import build_qds_model
+from learning.model_features import WORKLOAD_BLIND_RANGE_MODEL_TYPE
 from learning.model_setup import (
     _model_state_on_cpu,
     _pure_query_type_id,
@@ -54,134 +40,36 @@ from learning.model_setup import (
     _single_active_type_id,
     _workload_map_tensor,
 )
+from learning.model_training_fit_diagnostics import build_final_training_fit_diagnostics
+from learning.model_training_helpers import (
+    _fit_scaler_for_model,
+    _require_validation_inputs,
+)
+from learning.model_training_helpers import (
+    _scalar_training_target_for_mode as _scalar_training_target_for_mode,
+)
+from learning.model_training_historical_prior import configure_historical_prior_training
+from learning.model_training_targets import build_training_target_inputs
 from learning.optimization_epoch import _train_one_epoch
 from learning.outputs import TrainingOutputs
 from learning.query_prior_fields import (
     QUERY_PRIOR_FIELD_NAMES,
-    build_train_query_prior_fields,
     query_prior_field_metadata,
 )
-from learning.scaler import FeatureScaler
 from learning.supervised_windows import _filter_supervised_windows, _trajectory_batch_to_device
 from learning.targets.common import (
     _apply_temporal_residual_labels,
-    _scaled_training_target_for_type,
 )
 from learning.targets.query_local_utility import (
     QUERY_LOCAL_UTILITY_FACTORIZED_TARGET_MODE,
-    QUERY_LOCAL_UTILITY_HEAD_NAMES,
-    QUERY_LOCAL_UTILITY_TARGET_MODES,
-    build_query_local_utility_targets,
 )
 from learning.trajectory_batching import batch_windows, build_trajectory_windows
 from runtime.torch_runtime import normalize_amp_mode, torch_autocast_context
-from workloads.generation.workload_profiles import RANGE_QUERY_MIX_PROFILE_ID
 from workloads.query_types import (
     ID_TO_QUERY_NAME,
     NUM_QUERY_TYPES,
 )
 from workloads.typed_workload import TypedQueryWorkload
-
-
-def _historical_prior_support_mask(
-    targets: torch.Tensor,
-    boundaries: list[tuple[int, int]],
-    support_ratio: float,
-) -> torch.Tensor:
-    """Return a per-trajectory top-target support mask for historical priors."""
-    ratio = min(1.0, max(0.0, float(support_ratio)))
-    support_mask = torch.zeros((int(targets.shape[0]),), dtype=torch.bool, device=targets.device)
-    if ratio >= 1.0:
-        support_mask[:] = True
-        return support_mask
-    if ratio <= 0.0:
-        return support_mask
-
-    for start, end in boundaries:
-        point_count = int(end - start)
-        if point_count <= 0:
-            continue
-        keep_count = min(point_count, max(1, math.ceil(ratio * point_count)))
-        if keep_count >= point_count:
-            support_mask[start:end] = True
-            continue
-        local_targets = targets[start:end].float()
-        local_indices = torch.topk(local_targets, k=keep_count, largest=True).indices
-        support_mask[start + local_indices] = True
-    return support_mask
-
-
-def _fit_scaler_for_model(
-    points: torch.Tensor, queries: torch.Tensor, model_type: str
-) -> FeatureScaler:
-    """Fit feature scaling, preserving semantic zero for query-prior channels."""
-    scaler = FeatureScaler.fit(points, queries)
-    if str(model_type).lower() == WORKLOAD_BLIND_RANGE_MODEL_TYPE:
-        prior_dim = len(QUERY_PRIOR_FIELD_NAMES)
-        if int(scaler.point_min.numel()) >= prior_dim:
-            prior_slice = slice(-prior_dim, None)
-            scaler.point_min[prior_slice] = torch.minimum(
-                scaler.point_min[prior_slice],
-                torch.zeros_like(scaler.point_min[prior_slice]),
-            )
-            scaler.point_max[prior_slice] = torch.maximum(
-                scaler.point_max[prior_slice],
-                torch.ones_like(scaler.point_max[prior_slice]),
-            )
-    return scaler
-
-
-def _require_validation_inputs(
-    validation_trajectories: list[torch.Tensor] | None,
-    validation_boundaries: list[tuple[int, int]] | None,
-    validation_workload: TypedQueryWorkload | None,
-) -> tuple[list[torch.Tensor], list[tuple[int, int]], TypedQueryWorkload]:
-    """Return validation inputs after enforcing the checkpoint-score contract."""
-    if (
-        validation_trajectories is None
-        or validation_boundaries is None
-        or validation_workload is None
-    ):
-        raise RuntimeError("Validation scoring requested without complete validation inputs.")
-    return validation_trajectories, validation_boundaries, validation_workload
-
-
-def _canonical_segment_ids_for_boundaries(
-    *,
-    point_count: int,
-    boundaries: list[tuple[int, int]],
-    segment_size: int,
-) -> torch.Tensor:
-    """Return stable selector-aligned segment ids for every flattened point."""
-    ids = torch.full((int(point_count),), -1, dtype=torch.long)
-    size = max(1, int(segment_size))
-    segment_id = 0
-    for start, end in boundaries:
-        for seg_start in range(int(start), int(end), size):
-            seg_end = min(int(end), seg_start + size)
-            if seg_end <= seg_start:
-                continue
-            ids[seg_start:seg_end] = int(segment_id)
-            segment_id += 1
-    return ids
-
-
-def _scalar_training_target_for_mode(
-    *,
-    labels: torch.Tensor,
-    labelled_mask: torch.Tensor,
-    workload_type_id: int,
-    range_training_target_mode: str,
-) -> tuple[torch.Tensor, str]:
-    """Return the scalar target used by the primary loss and its diagnostic basis."""
-    mode = str(range_training_target_mode).lower()
-    if mode in QUERY_LOCAL_UTILITY_TARGET_MODES:
-        return labels[:, int(workload_type_id)].clone().float().clamp(0.0, 1.0), (
-            "raw_query_local_utility_final_label_for_loss"
-        )
-    return _scaled_training_target_for_type(labels, labelled_mask, int(workload_type_id)), (
-        "scaled_training_target_for_loss"
-    )
 
 
 def train_model(
@@ -209,122 +97,30 @@ def train_model(
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(int(seed))
 
-    all_points = torch.cat(train_trajectories, dim=0)
-    train_point_source_ids: torch.Tensor | None = None
-    if train_trajectory_source_ids is not None:
-        if len(train_trajectory_source_ids) != len(train_boundaries):
-            raise ValueError(
-                "train_trajectory_source_ids must match train_boundaries length: "
-                f"got {len(train_trajectory_source_ids)} ids for {len(train_boundaries)} boundaries."
-            )
-        train_point_source_ids = torch.empty((int(all_points.shape[0]),), dtype=torch.long)
-        for source_id, (start, end) in zip(
-            train_trajectory_source_ids, train_boundaries, strict=True
-        ):
-            if int(source_id) < 0:
-                raise ValueError("train_trajectory_source_ids must be non-negative.")
-            train_point_source_ids[start:end] = int(source_id)
-    prior_workloads = list(query_prior_workloads or [workload])
-    prior_queries: list[dict[str, Any]] = []
-    for prior_workload in prior_workloads:
-        prior_queries.extend(prior_workload.typed_queries)
-
-    factorized_targets: torch.Tensor | None = None
-    factorized_mask: torch.Tensor | None = None
-    factorized_target_diagnostics: dict[str, Any] = {}
-    canonical_segment_ids: torch.Tensor | None = None
-    range_training_target_mode = str(
-        getattr(model_config, "range_training_target_mode", "")
-    ).lower()
-    if range_training_target_mode in QUERY_LOCAL_UTILITY_TARGET_MODES:
-        factorized_bundle = build_query_local_utility_targets(
-            points=all_points,
-            boundaries=train_boundaries,
-            typed_queries=prior_queries,
-            target_mode=range_training_target_mode,
-        )
-        labels = factorized_bundle.labels
-        labelled_mask = factorized_bundle.labelled_mask
-        factorized_targets = factorized_bundle.head_targets
-        factorized_mask = factorized_bundle.head_mask
-        factorized_target_diagnostics = factorized_bundle.diagnostics
-        factorized_segment_size = int(factorized_target_diagnostics.get("segment_size_points", 32))
-        canonical_segment_ids = _canonical_segment_ids_for_boundaries(
-            point_count=int(all_points.shape[0]),
-            boundaries=train_boundaries,
-            segment_size=factorized_segment_size,
-        )
-        factorized_target_diagnostics["canonical_segment_ids_available"] = True
-        factorized_target_diagnostics["canonical_segment_size_points"] = int(
-            factorized_segment_size
-        )
-        factorized_target_diagnostics["canonical_segment_count"] = int(
-            torch.unique(canonical_segment_ids[canonical_segment_ids >= 0]).numel()
-        )
-        factorized_target_diagnostics["segment_budget_target_training"] = (
-            "point_repeated_plus_canonical_segment_level_listwise_loss"
-        )
-    elif precomputed_labels is None:
-        labels, labelled_mask = compute_typed_importance_labels(
-            points=all_points,
-            boundaries=train_boundaries,
-            typed_queries=workload.typed_queries,
-            range_label_mode=str(getattr(model_config, "range_label_mode", "usefulness")),
-            range_boundary_prior_weight=float(
-                getattr(model_config, "range_boundary_prior_weight", 0.0)
-            ),
-        )
-    else:
-        labels, labelled_mask = precomputed_labels
-        expected_shape = (all_points.shape[0], NUM_QUERY_TYPES)
-        if labels.shape != expected_shape or labelled_mask.shape != expected_shape:
-            raise ValueError(
-                "precomputed_labels must match flattened training points and query type count: "
-                f"expected {expected_shape}, got labels={tuple(labels.shape)} mask={tuple(labelled_mask.shape)}"
-            )
-
-    query_prior_field: dict[str, Any] | None = None
-    if str(model_config.model_type).lower() == WORKLOAD_BLIND_RANGE_MODEL_TYPE:
-        prior_seed = None
-        if query_prior_workload_seeds:
-            prior_seed = int(query_prior_workload_seeds[0])
-        behavior_prior_values = None
-        if factorized_targets is not None:
-            try:
-                behavior_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index(
-                    "conditional_behavior_utility"
-                )
-                behavior_prior_values = factorized_targets[:, behavior_idx]
-            except ValueError:
-                behavior_prior_values = None
-        query_prior_field = build_train_query_prior_fields(
-            points=all_points,
-            boundaries=train_boundaries,
-            typed_queries=prior_queries,
-            labels=labels,
-            behavior_values=behavior_prior_values,
-            workload_profile_id=str(
-                (workload.generation_diagnostics or {})
-                .get("query_generation", {})
-                .get(
-                    "workload_profile_id",
-                    RANGE_QUERY_MIX_PROFILE_ID,
-                )
-            ),
-            train_workload_seed=prior_seed,
-            grid_bins=int(getattr(model_config, "query_prior_grid_bins", 64)),
-            smoothing_passes=int(getattr(model_config, "query_prior_smoothing_passes", 2)),
-            out_of_extent_sampling="nearest",
-        )
-    points = build_model_point_features(
-        all_points,
-        workload,
-        model_config.model_type,
-        boundaries=train_boundaries,
-        trajectory_mmsis=train_trajectory_mmsis,
-        query_prior_field=query_prior_field,
+    target_inputs = build_training_target_inputs(
+        train_trajectories=train_trajectories,
+        train_boundaries=train_boundaries,
+        workload=workload,
+        model_config=model_config,
+        precomputed_labels=precomputed_labels,
+        train_trajectory_source_ids=train_trajectory_source_ids,
+        train_trajectory_mmsis=train_trajectory_mmsis,
+        query_prior_workloads=query_prior_workloads,
+        query_prior_workload_seeds=query_prior_workload_seeds,
     )
-    point_dim = int(points.shape[1])
+    all_points = target_inputs.all_points
+    train_point_source_ids = target_inputs.train_point_source_ids
+    prior_queries = target_inputs.prior_queries
+    labels = target_inputs.labels
+    labelled_mask = target_inputs.labelled_mask
+    factorized_targets = target_inputs.factorized_targets
+    factorized_mask = target_inputs.factorized_mask
+    factorized_target_diagnostics = target_inputs.factorized_target_diagnostics
+    canonical_segment_ids = target_inputs.canonical_segment_ids
+    range_training_target_mode = target_inputs.range_training_target_mode
+    query_prior_field = target_inputs.query_prior_field
+    points = target_inputs.points
+    point_dim = target_inputs.point_dim
     run_tag = "main"
     requested_temporal_residual_label_mode = str(
         getattr(model_config, "temporal_residual_label_mode", "none")
@@ -471,7 +267,6 @@ def train_model(
     norm_points, norm_queries = scaler.transform(points, workload.query_features)
 
     model_type = str(model_config.model_type).lower()
-    uses_historical_prior = model_type in HISTORICAL_PRIOR_MODEL_TYPES
     model = build_qds_model(
         model_type=model_type,
         model_config=model_config,
@@ -487,118 +282,25 @@ def train_model(
         target_diagnostics["factorized_head_bias_initialization"] = head_bias_initialization
     if query_prior_field is not None:
         cast(Any, model).query_prior_field = query_prior_field
-    if uses_historical_prior:
-        historical_model = require_historical_prior_model(model, model_type=model_type)
-        prior_points = norm_points
-        prior_targets = training_target
-        support_ratio = min(
-            1.0, max(0.0, float(getattr(model_config, "historical_prior_support_ratio", 1.0)))
-        )
-        support_mask = _historical_prior_support_mask(
-            targets=training_target,
-            boundaries=train_boundaries,
-            support_ratio=support_ratio,
-        )
-        if not bool(support_mask.any().item()):
-            raise ValueError("historical_prior_support_ratio removed every training point.")
-        prior_points = prior_points[support_mask]
-        prior_targets = prior_targets[support_mask]
-        prior_source_ids = (
-            train_point_source_ids[support_mask] if train_point_source_ids is not None else None
-        )
-        target_diagnostics["historical_prior_support_ratio"] = float(support_ratio)
-        target_diagnostics["historical_prior_support_pre_min_count"] = int(prior_targets.shape[0])
-        target_diagnostics["historical_prior_support_pre_min_fraction"] = float(
-            int(prior_targets.shape[0]) / max(1, int(training_target.shape[0]))
-        )
-        target_diagnostics["historical_prior_min_target"] = float(
-            getattr(model_config, "historical_prior_min_target", 0.0)
-        )
-        historical_model.set_prior(prior_points, prior_targets, source_ids=prior_source_ids)
-        target_diagnostics["historical_prior_stored_support_count"] = int(
-            historical_model.historical_targets.shape[0]
-        )
-        target_diagnostics["historical_prior_stored_support_fraction"] = float(
-            int(historical_model.historical_targets.shape[0])
-            / max(1, int(training_target.shape[0]))
-        )
-        stored_sources = torch.unique(historical_model.historical_source_ids).numel()
-        target_diagnostics["historical_prior_source_aggregation"] = str(
-            getattr(model_config, "historical_prior_source_aggregation", "none")
-        )
-        target_diagnostics["historical_prior_source_count"] = int(stored_sources)
-    if model_type in NONPARAMETRIC_HISTORICAL_PRIOR_MODEL_TYPES:
-        history = [
-            {
-                "epoch": 0.0,
-                "loss": 0.0,
-                "pred_std": float(training_target.std(unbiased=False).item()),
-                f"positive_fraction_t{workload_type_id}": float(
-                    target_diagnostics.get("positive_label_fraction", 0.0)
-                ),
-                f"label_p95_t{workload_type_id}": float(
-                    _safe_quantile(training_target[training_labelled_mask], 0.95).item()
-                )
-                if bool(training_labelled_mask.any().item())
-                else 0.0,
-                f"kendall_tau_t{workload_type_id}": 1.0,
-                "raw_training_window_count": 0.0,
-                "trained_training_window_count": 0.0,
-                "filtered_zero_window_count": 0.0,
-            }
-        ]
-        fit_t0 = time.perf_counter()
-        try:
-            with torch.no_grad():
-                train_predictions = model(
-                    norm_points.unsqueeze(0),
-                    queries=None,
-                    query_type_ids=None,
-                ).squeeze(0)
-            fit_diagnostics = train_target_fit_diagnostics(
-                predictions=train_predictions,
-                target=training_target,
-                labelled_mask=training_labelled_mask,
-                boundaries=train_boundaries,
-                model_config=model_config,
-                workload_type=ID_TO_QUERY_NAME.get(workload_type_id, str(workload_type_id)),
-                seed=seed,
-            )
-            fit_diagnostics["seconds"] = float(time.perf_counter() - fit_t0)
-            fit_diagnostics["model_fits_stored_train_support"] = True
-            matched_delta = fit_diagnostics.get("matched_mlqds_vs_uniform_target_recall")
-            low_delta = fit_diagnostics.get("low_budget_mean_mlqds_vs_uniform_target_recall")
-            matched_text = f"{float(matched_delta):+.4f}" if matched_delta is not None else "n/a"
-            low_text = f"{float(low_delta):+.4f}" if low_delta is not None else "n/a"
-            print(
-                f"  [{run_tag}] historical_prior_train_target_fit "
-                f"tau={fit_diagnostics.get('score_target_kendall_tau', 0.0):+.3f} "
-                f"matched_delta={matched_text} low_delta={low_text} "
-                f"({fit_diagnostics['seconds']:.2f}s)",
-                flush=True,
-            )
-        except Exception as exc:  # pragma: no cover - diagnostic must not mask fitted prior.
-            fit_diagnostics = {
-                "enabled": False,
-                "error": str(exc),
-                "seconds": float(time.perf_counter() - fit_t0),
-                "model_fits_stored_train_support": True,
-            }
-            print(f"  [{run_tag}] historical_prior_train_target_fit failed: {exc}", flush=True)
-        return TrainingOutputs(
-            model=model.eval(),
-            scaler=scaler,
-            labels=labels,
-            labelled_mask=labelled_mask,
-            history=history,
-            epochs_trained=0,
-            best_epoch=0,
-            best_loss=0.0,
-            best_selection_score=0.0,
-            target_diagnostics=target_diagnostics,
-            fit_diagnostics=fit_diagnostics,
-        )
-
+    historical_prior_outputs = configure_historical_prior_training(
+        model=model,
+        model_type=model_type,
+        norm_points=norm_points,
+        train_boundaries=train_boundaries,
+        training_target=training_target,
+        train_point_source_ids=train_point_source_ids,
+        model_config=model_config,
+        target_diagnostics=target_diagnostics,
+        training_labelled_mask=training_labelled_mask,
+        workload_type_id=workload_type_id,
+        scaler=scaler,
+        labels=labels,
+        labelled_mask=labelled_mask,
+        seed=seed,
+        run_tag=run_tag,
+    )
+    if historical_prior_outputs is not None:
+        return historical_prior_outputs
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
     norm_points_dev = norm_points.to(device)
@@ -652,8 +354,6 @@ def train_model(
     train_batch_size = max(1, int(getattr(model_config, "train_batch_size", 1)))
     windows = batch_windows(windows_cpu, train_batch_size)
     trained_window_count = len(windows_cpu)
-    # Keep diagnostics as sampleable single windows, then batch the selected
-    # subset before forward so sampled diagnostics still use useful GPU work.
     diag_windows = windows_cpu
     diag_every = max(1, int(getattr(model_config, "diagnostic_every", 1)))
     diag_fraction = float(getattr(model_config, "diagnostic_window_fraction", 1.0))
@@ -1234,7 +934,6 @@ def train_model(
                         )
                         break
         else:
-            # Non-diagnostic epoch: log loss only, no tau / early-stopping update.
             print(
                 f"  [{run_tag}] epoch {epoch + 1:0{epoch_label_width}d}/{effective_epochs}  "
                 f"loss={stats['loss']:.8f}  (no-diag)  ({epoch_dt:.2f}s)",
@@ -1258,146 +957,29 @@ def train_model(
             f"val_selection_score={best_selection_score:.6f})",
             flush=True,
         )
-    fit_t0 = time.perf_counter()
-    fit_diagnostics: dict[str, Any] = {}
-    try:
-        train_predictions, train_head_logits = windowed_predict_with_heads(
-            model=model,
-            norm_points=norm_points,
-            boundaries=train_boundaries,
-            queries=norm_queries,
-            query_type_ids=workload.type_ids,
-            window_length=model_config.window_length,
-            window_stride=model_config.window_stride,
-            batch_size=max(1, int(getattr(model_config, "inference_batch_size", train_batch_size))),
-            device=device,
-            amp_mode=amp_mode,
-        )
-        zero_prior_predictions: torch.Tensor | None = None
-        zero_prior_head_logits: torch.Tensor | None = None
-        if (
-            model_type == WORKLOAD_BLIND_RANGE_MODEL_TYPE
-            and int(norm_points.shape[1]) >= len(QUERY_PRIOR_FIELD_NAMES)
-        ):
-            zero_prior_norm_points = norm_points.clone()
-            zero_prior_norm_points[:, -len(QUERY_PRIOR_FIELD_NAMES) :] = 0.0
-            zero_prior_predictions, zero_prior_head_logits = windowed_predict_with_heads(
-                model=model,
-                norm_points=zero_prior_norm_points,
-                boundaries=train_boundaries,
-                queries=norm_queries,
-                query_type_ids=workload.type_ids,
-                window_length=model_config.window_length,
-                window_stride=model_config.window_stride,
-                batch_size=max(
-                    1, int(getattr(model_config, "inference_batch_size", train_batch_size))
-                ),
-                device=device,
-                amp_mode=amp_mode,
-            )
-        fit_diagnostics = train_target_fit_diagnostics(
-            predictions=train_predictions,
-            target=training_target,
-            labelled_mask=training_labelled_mask,
-            boundaries=train_boundaries,
-            model_config=model_config,
-            workload_type=ID_TO_QUERY_NAME.get(workload_type_id, str(workload_type_id)),
-            seed=seed,
-        )
-        fit_diagnostics["target_basis"] = training_target_basis
-        fit_diagnostics.update(
-            _factorized_head_fit_diagnostics(
-                head_logits=train_head_logits,
-                factorized_targets=factorized_targets,
-                factorized_mask=factorized_mask,
-                points=all_points,
-                boundaries=train_boundaries,
-                typed_queries=prior_queries,
-                seed=seed,
-            )
-        )
-        fit_diagnostics.update(
-            _factorized_final_score_composition_diagnostics(
-                head_logits=train_head_logits,
-                factorized_targets=factorized_targets,
-                scalar_target=training_target,
-                scalar_mask=training_labelled_mask,
-                seed=seed,
-            )
-        )
-        fit_diagnostics.update(
-            _segment_head_fit_diagnostics(
-                head_logits=train_head_logits,
-                factorized_targets=factorized_targets,
-                factorized_mask=factorized_mask,
-                canonical_segment_ids=canonical_segment_ids,
-                seed=seed,
-            )
-        )
-        fit_diagnostics["behavior_head_training_signal"] = (
-            _behavior_head_training_signal_diagnostics(
-                head_logits=train_head_logits,
-                factorized_targets=factorized_targets,
-                factorized_mask=factorized_mask,
-                boundaries=train_boundaries,
-                behavior_rank_loss_weight=float(
-                    getattr(model_config, "query_local_utility_behavior_rank_loss_weight", 0.0)
-                ),
-            )
-        )
-        fit_diagnostics["prior_feature_learning_signal"] = _prior_feature_learning_diagnostics(
-            model=model,
-            norm_points=norm_points,
-            primary_predictions=train_predictions,
-            zero_prior_predictions=zero_prior_predictions,
-            primary_head_logits=train_head_logits,
-            zero_prior_head_logits=zero_prior_head_logits,
-            factorized_targets=factorized_targets,
-            factorized_mask=factorized_mask,
-            scalar_target=training_target,
-            scalar_mask=training_labelled_mask,
-            raw_points=all_points,
-            boundaries=train_boundaries,
-            typed_queries=prior_queries,
-            window_length=model_config.window_length,
-            window_stride=model_config.window_stride,
-            batch_size=max(1, int(getattr(model_config, "inference_batch_size", train_batch_size))),
-            segment_budget_head_weight=float(
-                getattr(model_config, "query_local_utility_segment_budget_head_weight", 0.10)
-            ),
-            segment_level_loss_weight=float(
-                getattr(model_config, "query_local_utility_segment_level_loss_weight", 0.25)
-            ),
-            behavior_rank_loss_weight=float(
-                getattr(model_config, "query_local_utility_behavior_rank_loss_weight", 0.25)
-            ),
-            sparse_head_rank_loss_weight=float(
-                getattr(model_config, "query_local_utility_sparse_head_rank_loss_weight", 0.0)
-            ),
-            sparse_head_bce_target_mode=str(
-                getattr(model_config, "query_local_utility_sparse_head_bce_target_mode", "raw")
-            ),
-            seed=seed,
-        )
-        fit_diagnostics["seconds"] = float(time.perf_counter() - fit_t0)
-        matched_delta = fit_diagnostics.get("matched_mlqds_vs_uniform_target_recall")
-        low_delta = fit_diagnostics.get("low_budget_mean_mlqds_vs_uniform_target_recall")
-        matched_text = f"{float(matched_delta):+.4f}" if matched_delta is not None else "n/a"
-        low_text = f"{float(low_delta):+.4f}" if low_delta is not None else "n/a"
-        print(
-            f"  [{run_tag}] train_target_fit "
-            f"tau={fit_diagnostics.get('score_target_kendall_tau', 0.0):+.3f} "
-            f"matched_delta={matched_text} low_delta={low_text} "
-            f"({fit_diagnostics['seconds']:.2f}s)",
-            flush=True,
-        )
-    except Exception as exc:  # pragma: no cover - diagnostic must not mask training result.
-        fit_diagnostics = {
-            "enabled": False,
-            "error": str(exc),
-            "seconds": float(time.perf_counter() - fit_t0),
-        }
-        print(f"  [{run_tag}] train_target_fit failed: {exc}", flush=True)
+    fit_diagnostics = build_final_training_fit_diagnostics(
+        model=model,
+        norm_points=norm_points,
+        train_boundaries=train_boundaries,
+        norm_queries=norm_queries,
+        query_type_ids=workload.type_ids,
+        model_config=model_config,
+        device=device,
+        amp_mode=amp_mode,
+        train_batch_size=train_batch_size,
+        model_type=model_type,
+        training_target=training_target,
+        training_labelled_mask=training_labelled_mask,
+        workload_type_id=workload_type_id,
+        training_target_basis=training_target_basis,
+        factorized_targets=factorized_targets,
+        factorized_mask=factorized_mask,
+        all_points=all_points,
+        prior_queries=prior_queries,
+        canonical_segment_ids=canonical_segment_ids,
+        seed=seed,
+        run_tag=run_tag,
+    )
     return TrainingOutputs(
         model=model,
         scaler=scaler,

@@ -7,6 +7,13 @@ import json
 from pathlib import Path
 from typing import Any
 
+from orchestration.diagnostics.artifact_utils import (
+    as_dict as _as_dict,
+)
+from orchestration.diagnostics.artifact_utils import (
+    load_json_dict as _load_json,
+)
+
 PRIMARY_METHOD = "MLQDS"
 BASELINE_METHOD = "DouglasPeucker"
 GROUP_KEYS = ("anchor_family", "footprint_family", "anchor_footprint_family")
@@ -79,10 +86,6 @@ def _as_float(value: Any, default: float = 0.0) -> float:
     if isinstance(value, int | float):
         return float(value)
     return default
-
-
-def _as_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
 
 
 def _sorted_rows(
@@ -717,14 +720,6 @@ def build_workload_component_compatibility_diagnostic(
             ),
         },
     }
-
-
-def _load_json(path: Path) -> dict[str, Any]:
-    with path.open("r", encoding="utf-8") as handle:
-        payload = json.load(handle)
-    if not isinstance(payload, dict):
-        raise ValueError(f"Expected object JSON artifact: {path}")
-    return payload
 
 
 def _parse_labeled_artifact(value: str) -> tuple[str, Path]:
