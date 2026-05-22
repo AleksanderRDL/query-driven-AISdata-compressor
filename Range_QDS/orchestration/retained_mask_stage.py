@@ -116,36 +116,38 @@ def freeze_workload_blind_retained_masks(
                     )
                     method_elapsed_seconds = float(time.perf_counter() - freeze_t0)
                     cast(Any, method).latency_ms = float(method_elapsed_seconds * 1000.0)
-                    freeze_timing_diagnostics["primary_method_simplify_seconds"][
-                        method.name
-                    ] = method_elapsed_seconds
-                    score_cache = getattr(method, "_score_cache", None)
+                    freeze_timing_diagnostics["primary_method_simplify_seconds"][method.name] = (
+                        method_elapsed_seconds
+                    )
+                    score_snapshot_fn = getattr(method, "cached_score_snapshot", None)
+                    score_snapshot = score_snapshot_fn() if callable(score_snapshot_fn) else None
+                    score_cache = getattr(score_snapshot, "scores", None)
                     if isinstance(score_cache, torch.Tensor):
                         frozen_primary_scores[method.name] = score_cache.detach().cpu().float()
-                    raw_pred_cache = getattr(method, "_raw_pred_cache", None)
+                    raw_pred_cache = getattr(score_snapshot, "raw_predictions", None)
                     if isinstance(raw_pred_cache, torch.Tensor):
                         frozen_primary_raw_preds[method.name] = (
                             raw_pred_cache.detach().cpu().float()
                         )
-                    head_logit_cache = getattr(method, "_head_logit_cache", None)
+                    head_logit_cache = getattr(score_snapshot, "head_logits", None)
                     if isinstance(head_logit_cache, torch.Tensor):
                         frozen_primary_head_logits[method.name] = (
                             head_logit_cache.detach().cpu().float()
                         )
-                    segment_score_cache = getattr(method, "_segment_score_cache", None)
+                    segment_score_cache = getattr(score_snapshot, "segment_scores", None)
                     if isinstance(segment_score_cache, torch.Tensor):
                         frozen_primary_segment_scores[method.name] = (
                             segment_score_cache.detach().cpu().float()
                         )
                     path_length_support_cache = getattr(
-                        method, "_path_length_support_score_cache", None
+                        score_snapshot, "path_length_support_scores", None
                     )
                     if isinstance(path_length_support_cache, torch.Tensor):
                         frozen_primary_path_length_support_scores[method.name] = (
                             path_length_support_cache.detach().cpu().float()
                         )
                     selector_segment_score_cache = getattr(
-                        method, "_selector_segment_score_cache", None
+                        score_snapshot, "selector_segment_scores", None
                     )
                     if isinstance(selector_segment_score_cache, torch.Tensor):
                         frozen_primary_selector_segment_scores[method.name] = (
@@ -164,15 +166,6 @@ def freeze_workload_blind_retained_masks(
                 )
                 primary_selector_segment_scores = frozen_primary_selector_segment_scores.get(
                     "MLQDS"
-                )
-                primary_method = next(
-                    (method for method in methods if getattr(method, "name", "") == "MLQDS"),
-                    None,
-                )
-                primary_selector_segment_score_source = getattr(
-                    primary_method,
-                    "_selector_segment_score_source_cache",
-                    None,
                 )
                 trace_started_at = time.perf_counter()
                 trace_mask, trace = simplify_with_learned_segment_budget_with_trace(
@@ -210,16 +203,12 @@ def freeze_workload_blind_retained_masks(
                         length_support_blend_weight=float(
                             config.model.learned_segment_length_support_blend_weight
                         ),
-                        base_segment_score_source=(
-                            str(primary_selector_segment_score_source)
-                            if primary_selector_segment_score_source is not None
-                            else "segment_budget_head_top20_mean"
-                        ),
+                        base_segment_score_source="segment_budget_head_top20_mean",
                     ),
                 )
-                freeze_timing_diagnostics["substage_seconds"][
-                    "selector_trace_reconstruction"
-                ] = float(time.perf_counter() - trace_started_at)
+                freeze_timing_diagnostics["substage_seconds"]["selector_trace_reconstruction"] = (
+                    float(time.perf_counter() - trace_started_at)
+                )
                 frozen_mlqds_mask = frozen_primary_masks.get("MLQDS")
                 if isinstance(frozen_mlqds_mask, torch.Tensor):
                     trace["retained_mask_matches_frozen_primary"] = bool(
@@ -250,9 +239,7 @@ def freeze_workload_blind_retained_masks(
                             selector_scores=primary_scores,
                             segment_scores=primary_segment_scores,
                             score_component_vectors=(
-                                factorized_score_component_vectors_from_logits(
-                                    primary_head_logits
-                                )
+                                factorized_score_component_vectors_from_logits(primary_head_logits)
                             ),
                             query_free_teacher_proxy_vectors=teacher_proxy_vectors,
                             sampled_prior_vectors=sampled_prior_vectors,
@@ -271,9 +258,9 @@ def freeze_workload_blind_retained_masks(
                         "error": str(exc),
                     }
                 finally:
-                    freeze_timing_diagnostics["substage_seconds"][
-                        "retained_marginal_alignment"
-                    ] = float(time.perf_counter() - diagnostic_started_at)
+                    freeze_timing_diagnostics["substage_seconds"]["retained_marginal_alignment"] = (
+                        float(time.perf_counter() - diagnostic_started_at)
+                    )
                 compression_for_trace = float(config.model.compression_ratio)
                 learned_fraction_min_for_trace = (
                     0.35
@@ -323,16 +310,14 @@ def freeze_workload_blind_retained_masks(
                     primary_selector_segment_scores=primary_selector_segment_scores,
                     primary_head_logits=frozen_primary_head_logits.get("MLQDS"),
                 )
-                freeze_timing_diagnostics["substage_seconds"]["query_free_ablation_freeze"] = (
-                    float(time.perf_counter() - ablation_started_at)
+                freeze_timing_diagnostics["substage_seconds"]["query_free_ablation_freeze"] = float(
+                    time.perf_counter() - ablation_started_at
                 )
                 freeze_timing_diagnostics["ablation_freeze_timing"] = (
                     ablation_outputs.freeze_timing_diagnostics
                 )
                 primary_selector_trace = ablation_outputs.primary_selector_trace
-                primary_selector_trace["retained_mask_freeze_timing"] = (
-                    freeze_timing_diagnostics
-                )
+                primary_selector_trace["retained_mask_freeze_timing"] = freeze_timing_diagnostics
                 causality_ablation_methods = ablation_outputs.causality_ablation_methods
                 causal_ablation_freeze_failures = ablation_outputs.causal_ablation_freeze_failures
                 prior_sensitivity_diagnostics = ablation_outputs.prior_sensitivity_diagnostics
@@ -397,9 +382,7 @@ def freeze_workload_blind_retained_masks(
                 "  workload_blind_protocol=enabled: audit retained masks frozen before eval query scoring",
                 flush=True,
             )
-        freeze_timing_diagnostics["total_seconds"] = float(
-            time.perf_counter() - freeze_started_at
-        )
+        freeze_timing_diagnostics["total_seconds"] = float(time.perf_counter() - freeze_started_at)
         if primary_selector_trace is not None:
             primary_selector_trace["retained_mask_freeze_timing"] = freeze_timing_diagnostics
 

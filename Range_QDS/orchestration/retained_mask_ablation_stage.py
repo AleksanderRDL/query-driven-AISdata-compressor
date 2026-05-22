@@ -24,6 +24,7 @@ from orchestration.causality import (
     prior_feature_sample_sensitivity,
     training_outputs_with_query_prior_field,
 )
+from orchestration.learned_segment_freezing import learned_segment_frozen_method_from_config
 from orchestration.mlqds_method_factory import build_mlqds_method
 from orchestration.model_ablations import (
     raw_predictions_without_factorized_head,
@@ -32,7 +33,6 @@ from orchestration.model_ablations import (
     shuffled_query_prior_field,
 )
 from orchestration.selector_diagnostics import (
-    learned_segment_frozen_method,
     neutral_segment_scores_for_ablation,
     pre_repair_frozen_method_from_trace,
     segment_score_quantile_bands_for_ablation,
@@ -124,10 +124,12 @@ def freeze_retained_mask_ablations(
     allocation_length_support_weight = float(
         config.model.learned_segment_allocation_length_support_weight
     )
-    allocation_weight_floor = float(config.model.learned_segment_allocation_weight_floor)
-    repair_score_protection_fraction = float(
-        config.model.learned_segment_length_repair_score_protection_fraction
-    )
+
+    def _selector_method(**kwargs: Any) -> FrozenMaskMethod:
+        kwargs.setdefault("boundaries", test_boundaries)
+        kwargs.setdefault("points", test_points)
+        return learned_segment_frozen_method_from_config(config=config, **kwargs)
+
     pre_repair_diagnostic_name = "MLQDS_pre_repair_allocation_diagnostic"
     substage_started_at = time.perf_counter()
     try:
@@ -160,34 +162,12 @@ def freeze_retained_mask_ablations(
         substage_started_at = time.perf_counter()
         try:
             causality_ablation_methods.append(
-                learned_segment_frozen_method(
+                _selector_method(
                     name="MLQDS_without_geometry_tie_breaker",
                     scores=primary_scores,
-                    boundaries=test_boundaries,
-                    compression_ratio=float(config.model.compression_ratio),
                     segment_scores=primary_selector_segment_scores,
                     segment_point_scores=primary_segment_scores,
-                    points=test_points,
                     learned_segment_geometry_gain_weight=0.0,
-                    learned_segment_allocation_length_support_weight=(
-                        allocation_length_support_weight
-                    ),
-                    learned_segment_allocation_weight_floor=allocation_weight_floor,
-                    learned_segment_score_blend_weight=float(
-                        config.model.learned_segment_score_blend_weight
-                    ),
-                    learned_segment_transfer_calibration_mode=str(
-                        config.model.learned_segment_transfer_calibration_mode
-                    ),
-                    learned_segment_fairness_preallocation=bool(
-                        config.model.learned_segment_fairness_preallocation
-                    ),
-                    learned_segment_length_repair_fraction=float(
-                        config.model.learned_segment_length_repair_fraction
-                    ),
-                    learned_segment_length_repair_score_protection_fraction=(
-                        repair_score_protection_fraction
-                    ),
                 )
             )
         except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
@@ -198,34 +178,12 @@ def freeze_retained_mask_ablations(
         substage_started_at = time.perf_counter()
         try:
             causality_ablation_methods.append(
-                learned_segment_frozen_method(
+                _selector_method(
                     name="MLQDS_without_segment_length_support_allocation",
                     scores=primary_scores,
-                    boundaries=test_boundaries,
-                    compression_ratio=float(config.model.compression_ratio),
                     segment_scores=primary_selector_segment_scores,
                     segment_point_scores=primary_segment_scores,
-                    points=test_points,
-                    learned_segment_geometry_gain_weight=float(
-                        config.model.learned_segment_geometry_gain_weight
-                    ),
                     learned_segment_allocation_length_support_weight=0.0,
-                    learned_segment_allocation_weight_floor=allocation_weight_floor,
-                    learned_segment_score_blend_weight=float(
-                        config.model.learned_segment_score_blend_weight
-                    ),
-                    learned_segment_transfer_calibration_mode=str(
-                        config.model.learned_segment_transfer_calibration_mode
-                    ),
-                    learned_segment_fairness_preallocation=bool(
-                        config.model.learned_segment_fairness_preallocation
-                    ),
-                    learned_segment_length_repair_fraction=float(
-                        config.model.learned_segment_length_repair_fraction
-                    ),
-                    learned_segment_length_repair_score_protection_fraction=(
-                        repair_score_protection_fraction
-                    ),
                 )
             )
         except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
@@ -246,38 +204,19 @@ def freeze_retained_mask_ablations(
         primary_segment_scores[shuffled_order] if primary_segment_scores is not None else None
     )
     substage_started_at = time.perf_counter()
-    causality_ablation_methods.append(
-        learned_segment_frozen_method(
-            name="MLQDS_shuffled_scores",
-            scores=shuffled_scores,
-            boundaries=test_boundaries,
-            compression_ratio=float(config.model.compression_ratio),
-            segment_scores=shuffled_segment_scores,
-            segment_point_scores=shuffled_segment_point_scores,
-            points=test_points,
-            learned_segment_geometry_gain_weight=float(
-                config.model.learned_segment_geometry_gain_weight
-            ),
-            learned_segment_allocation_length_support_weight=allocation_length_support_weight,
-            learned_segment_allocation_weight_floor=allocation_weight_floor,
-            learned_segment_score_blend_weight=float(
-                config.model.learned_segment_score_blend_weight
-            ),
-            learned_segment_transfer_calibration_mode=str(
-                config.model.learned_segment_transfer_calibration_mode
-            ),
-            learned_segment_fairness_preallocation=bool(
-                config.model.learned_segment_fairness_preallocation
-            ),
-            learned_segment_length_repair_fraction=float(
-                config.model.learned_segment_length_repair_fraction
-            ),
-            learned_segment_length_repair_score_protection_fraction=(
-                repair_score_protection_fraction
-            ),
+    try:
+        causality_ablation_methods.append(
+            _selector_method(
+                name="MLQDS_shuffled_scores",
+                scores=shuffled_scores,
+                segment_scores=shuffled_segment_scores,
+                segment_point_scores=shuffled_segment_point_scores,
+            )
         )
-    )
-    _record_substage("shuffled_scores", substage_started_at)
+    except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
+        causal_ablation_freeze_failures["MLQDS_shuffled_scores"] = str(exc)
+    finally:
+        _record_substage("shuffled_scores", substage_started_at)
     if primary_segment_scores is not None:
         substage_started_at = time.perf_counter()
         neutral_segment_scores = neutral_segment_scores_for_ablation(primary_segment_scores)
@@ -289,34 +228,11 @@ def freeze_retained_mask_ablations(
             ),
         )
         segment_budget_head_ablation_mode = "neutral_constant_segment_scores"
-        segment_budget_ablation_method = learned_segment_frozen_method(
+        segment_budget_ablation_method = _selector_method(
             name="MLQDS_without_segment_budget_head",
             scores=primary_scores,
-            boundaries=test_boundaries,
-            compression_ratio=float(config.model.compression_ratio),
             segment_scores=no_segment_selector_scores,
             segment_point_scores=neutral_segment_scores,
-            points=test_points,
-            learned_segment_geometry_gain_weight=float(
-                config.model.learned_segment_geometry_gain_weight
-            ),
-            learned_segment_allocation_length_support_weight=allocation_length_support_weight,
-            learned_segment_allocation_weight_floor=allocation_weight_floor,
-            learned_segment_score_blend_weight=float(
-                config.model.learned_segment_score_blend_weight
-            ),
-            learned_segment_transfer_calibration_mode=str(
-                config.model.learned_segment_transfer_calibration_mode
-            ),
-            learned_segment_fairness_preallocation=bool(
-                config.model.learned_segment_fairness_preallocation
-            ),
-            learned_segment_length_repair_fraction=float(
-                config.model.learned_segment_length_repair_fraction
-            ),
-            learned_segment_length_repair_score_protection_fraction=(
-                repair_score_protection_fraction
-            ),
         )
         causality_ablation_methods.append(segment_budget_ablation_method)
         segment_budget_sensitivity = head_ablation_sensitivity(
@@ -335,34 +251,11 @@ def freeze_retained_mask_ablations(
             segment_budget_sensitivity
         )
         if primary_selector_segment_scores is not None:
-            segment_allocation_ablation_method = learned_segment_frozen_method(
+            segment_allocation_ablation_method = _selector_method(
                 name="MLQDS_without_segment_budget_allocation_only",
                 scores=primary_scores,
-                boundaries=test_boundaries,
-                compression_ratio=float(config.model.compression_ratio),
                 segment_scores=no_segment_selector_scores,
                 segment_point_scores=primary_segment_scores,
-                points=test_points,
-                learned_segment_geometry_gain_weight=float(
-                    config.model.learned_segment_geometry_gain_weight
-                ),
-                learned_segment_allocation_length_support_weight=allocation_length_support_weight,
-                learned_segment_allocation_weight_floor=allocation_weight_floor,
-                learned_segment_score_blend_weight=float(
-                    config.model.learned_segment_score_blend_weight
-                ),
-                learned_segment_transfer_calibration_mode=str(
-                    config.model.learned_segment_transfer_calibration_mode
-                ),
-                learned_segment_fairness_preallocation=bool(
-                    config.model.learned_segment_fairness_preallocation
-                ),
-                learned_segment_length_repair_fraction=float(
-                    config.model.learned_segment_length_repair_fraction
-                ),
-                learned_segment_length_repair_score_protection_fraction=(
-                    repair_score_protection_fraction
-                ),
             )
             causality_ablation_methods.append(segment_allocation_ablation_method)
             allocation_sensitivity = head_ablation_sensitivity(
@@ -384,34 +277,12 @@ def freeze_retained_mask_ablations(
                 "MLQDS_without_segment_budget_allocation_only"
             ] = allocation_sensitivity
 
-            uniform_segment_allocation_method = learned_segment_frozen_method(
+            uniform_segment_allocation_method = _selector_method(
                 name="MLQDS_uniform_segment_allocation_only_diagnostic",
                 scores=primary_scores,
-                boundaries=test_boundaries,
-                compression_ratio=float(config.model.compression_ratio),
                 segment_scores=neutral_segment_scores,
                 segment_point_scores=primary_segment_scores,
-                points=test_points,
-                learned_segment_geometry_gain_weight=float(
-                    config.model.learned_segment_geometry_gain_weight
-                ),
                 learned_segment_allocation_length_support_weight=0.0,
-                learned_segment_allocation_weight_floor=allocation_weight_floor,
-                learned_segment_score_blend_weight=float(
-                    config.model.learned_segment_score_blend_weight
-                ),
-                learned_segment_transfer_calibration_mode=str(
-                    config.model.learned_segment_transfer_calibration_mode
-                ),
-                learned_segment_fairness_preallocation=bool(
-                    config.model.learned_segment_fairness_preallocation
-                ),
-                learned_segment_length_repair_fraction=float(
-                    config.model.learned_segment_length_repair_fraction
-                ),
-                learned_segment_length_repair_score_protection_fraction=(
-                    repair_score_protection_fraction
-                ),
             )
             causality_ablation_methods.append(uniform_segment_allocation_method)
             uniform_allocation_sensitivity = head_ablation_sensitivity(
@@ -436,34 +307,11 @@ def freeze_retained_mask_ablations(
                 "MLQDS_uniform_segment_allocation_only_diagnostic"
             ] = uniform_allocation_sensitivity
 
-            point_score_allocation_method = learned_segment_frozen_method(
+            point_score_allocation_method = _selector_method(
                 name="MLQDS_point_score_allocation_diagnostic",
                 scores=primary_scores,
-                boundaries=test_boundaries,
-                compression_ratio=float(config.model.compression_ratio),
                 segment_scores=None,
                 segment_point_scores=primary_segment_scores,
-                points=test_points,
-                learned_segment_geometry_gain_weight=float(
-                    config.model.learned_segment_geometry_gain_weight
-                ),
-                learned_segment_allocation_length_support_weight=allocation_length_support_weight,
-                learned_segment_allocation_weight_floor=allocation_weight_floor,
-                learned_segment_score_blend_weight=float(
-                    config.model.learned_segment_score_blend_weight
-                ),
-                learned_segment_transfer_calibration_mode=str(
-                    config.model.learned_segment_transfer_calibration_mode
-                ),
-                learned_segment_fairness_preallocation=bool(
-                    config.model.learned_segment_fairness_preallocation
-                ),
-                learned_segment_length_repair_fraction=float(
-                    config.model.learned_segment_length_repair_fraction
-                ),
-                learned_segment_length_repair_score_protection_fraction=(
-                    repair_score_protection_fraction
-                ),
             )
             causality_ablation_methods.append(point_score_allocation_method)
             point_score_allocation_sensitivity = head_ablation_sensitivity(
@@ -520,36 +368,11 @@ def freeze_retained_mask_ablations(
                 authority_scores,
                 authority_mode,
             ) in allocation_authority_variants:
-                authority_method = learned_segment_frozen_method(
+                authority_method = _selector_method(
                     name=diagnostic_name,
                     scores=primary_scores,
-                    boundaries=test_boundaries,
-                    compression_ratio=float(config.model.compression_ratio),
                     segment_scores=authority_scores,
                     segment_point_scores=primary_segment_scores,
-                    points=test_points,
-                    learned_segment_geometry_gain_weight=float(
-                        config.model.learned_segment_geometry_gain_weight
-                    ),
-                    learned_segment_allocation_length_support_weight=(
-                        allocation_length_support_weight
-                    ),
-                    learned_segment_allocation_weight_floor=allocation_weight_floor,
-                    learned_segment_score_blend_weight=float(
-                        config.model.learned_segment_score_blend_weight
-                    ),
-                    learned_segment_transfer_calibration_mode=str(
-                        config.model.learned_segment_transfer_calibration_mode
-                    ),
-                    learned_segment_fairness_preallocation=bool(
-                        config.model.learned_segment_fairness_preallocation
-                    ),
-                    learned_segment_length_repair_fraction=float(
-                        config.model.learned_segment_length_repair_fraction
-                    ),
-                    learned_segment_length_repair_score_protection_fraction=(
-                        repair_score_protection_fraction
-                    ),
                 )
                 causality_ablation_methods.append(authority_method)
                 authority_sensitivity = head_ablation_sensitivity(
@@ -569,32 +392,12 @@ def freeze_retained_mask_ablations(
                 authority_sensitivity["allocation_score_source"] = "selector_segment_score_bands"
                 head_ablation_sensitivity_diagnostics[diagnostic_name] = authority_sensitivity
 
-            segment_point_blend_ablation_method = learned_segment_frozen_method(
+            segment_point_blend_ablation_method = _selector_method(
                 name="MLQDS_without_segment_budget_point_blend_only",
                 scores=primary_scores,
-                boundaries=test_boundaries,
-                compression_ratio=float(config.model.compression_ratio),
                 segment_scores=primary_selector_segment_scores,
                 segment_point_scores=primary_segment_scores,
-                points=test_points,
-                learned_segment_geometry_gain_weight=float(
-                    config.model.learned_segment_geometry_gain_weight
-                ),
-                learned_segment_allocation_length_support_weight=allocation_length_support_weight,
-                learned_segment_allocation_weight_floor=allocation_weight_floor,
                 learned_segment_score_blend_weight=0.0,
-                learned_segment_transfer_calibration_mode=str(
-                    config.model.learned_segment_transfer_calibration_mode
-                ),
-                learned_segment_fairness_preallocation=bool(
-                    config.model.learned_segment_fairness_preallocation
-                ),
-                learned_segment_length_repair_fraction=float(
-                    config.model.learned_segment_length_repair_fraction
-                ),
-                learned_segment_length_repair_score_protection_fraction=(
-                    repair_score_protection_fraction
-                ),
             )
             causality_ablation_methods.append(segment_point_blend_ablation_method)
             point_blend_sensitivity = head_ablation_sensitivity(
@@ -617,34 +420,12 @@ def freeze_retained_mask_ablations(
         if bool(config.model.learned_segment_fairness_preallocation):
             substage_started_at = time.perf_counter()
             causality_ablation_methods.append(
-                learned_segment_frozen_method(
+                _selector_method(
                     name="MLQDS_without_trajectory_fairness_preallocation",
                     scores=primary_scores,
-                    boundaries=test_boundaries,
-                    compression_ratio=float(config.model.compression_ratio),
                     segment_scores=primary_selector_segment_scores,
                     segment_point_scores=primary_segment_scores,
-                    points=test_points,
-                    learned_segment_geometry_gain_weight=float(
-                        config.model.learned_segment_geometry_gain_weight
-                    ),
-                    learned_segment_allocation_length_support_weight=(
-                        allocation_length_support_weight
-                    ),
-                    learned_segment_allocation_weight_floor=allocation_weight_floor,
-                    learned_segment_score_blend_weight=float(
-                        config.model.learned_segment_score_blend_weight
-                    ),
-                    learned_segment_transfer_calibration_mode=str(
-                        config.model.learned_segment_transfer_calibration_mode
-                    ),
                     learned_segment_fairness_preallocation=False,
-                    learned_segment_length_repair_fraction=float(
-                        config.model.learned_segment_length_repair_fraction
-                    ),
-                    learned_segment_length_repair_score_protection_fraction=(
-                        repair_score_protection_fraction
-                    ),
                 )
             )
             _record_substage("without_trajectory_fairness_preallocation", substage_started_at)
@@ -652,33 +433,10 @@ def freeze_retained_mask_ablations(
     if path_length_support_scores is not None:
         substage_started_at = time.perf_counter()
         try:
-            path_length_segment_method = learned_segment_frozen_method(
+            path_length_segment_method = _selector_method(
                 name="MLQDS_path_length_support_segment_head_diagnostic",
                 scores=primary_scores,
-                boundaries=test_boundaries,
-                compression_ratio=float(config.model.compression_ratio),
                 segment_scores=path_length_support_scores,
-                points=test_points,
-                learned_segment_geometry_gain_weight=float(
-                    config.model.learned_segment_geometry_gain_weight
-                ),
-                learned_segment_allocation_length_support_weight=allocation_length_support_weight,
-                learned_segment_allocation_weight_floor=allocation_weight_floor,
-                learned_segment_score_blend_weight=float(
-                    config.model.learned_segment_score_blend_weight
-                ),
-                learned_segment_transfer_calibration_mode=str(
-                    config.model.learned_segment_transfer_calibration_mode
-                ),
-                learned_segment_fairness_preallocation=bool(
-                    config.model.learned_segment_fairness_preallocation
-                ),
-                learned_segment_length_repair_fraction=float(
-                    config.model.learned_segment_length_repair_fraction
-                ),
-                learned_segment_length_repair_score_protection_fraction=(
-                    repair_score_protection_fraction
-                ),
             )
             causality_ablation_methods.append(path_length_segment_method)
             head_ablation_sensitivity_diagnostics[
@@ -698,34 +456,11 @@ def freeze_retained_mask_ablations(
                 "replacement_head_name": "path_length_support_target",
                 "ablation_mode": "path_length_support_as_segment_scores",
             }
-            path_length_allocation_method = learned_segment_frozen_method(
+            path_length_allocation_method = _selector_method(
                 name="MLQDS_path_length_support_allocation_only_diagnostic",
                 scores=primary_scores,
-                boundaries=test_boundaries,
-                compression_ratio=float(config.model.compression_ratio),
                 segment_scores=path_length_support_scores,
                 segment_point_scores=primary_segment_scores,
-                points=test_points,
-                learned_segment_geometry_gain_weight=float(
-                    config.model.learned_segment_geometry_gain_weight
-                ),
-                learned_segment_allocation_length_support_weight=allocation_length_support_weight,
-                learned_segment_allocation_weight_floor=allocation_weight_floor,
-                learned_segment_score_blend_weight=float(
-                    config.model.learned_segment_score_blend_weight
-                ),
-                learned_segment_transfer_calibration_mode=str(
-                    config.model.learned_segment_transfer_calibration_mode
-                ),
-                learned_segment_fairness_preallocation=bool(
-                    config.model.learned_segment_fairness_preallocation
-                ),
-                learned_segment_length_repair_fraction=float(
-                    config.model.learned_segment_length_repair_fraction
-                ),
-                learned_segment_length_repair_score_protection_fraction=(
-                    repair_score_protection_fraction
-                ),
             )
             causality_ablation_methods.append(path_length_allocation_method)
             head_ablation_sensitivity_diagnostics[
@@ -763,33 +498,10 @@ def freeze_retained_mask_ablations(
     if behavior_segment_scores is not None:
         substage_started_at = time.perf_counter()
         try:
-            behavior_segment_method = learned_segment_frozen_method(
+            behavior_segment_method = _selector_method(
                 name="MLQDS_behavior_utility_segment_head_diagnostic",
                 scores=primary_scores,
-                boundaries=test_boundaries,
-                compression_ratio=float(config.model.compression_ratio),
                 segment_scores=behavior_segment_scores,
-                points=test_points,
-                learned_segment_geometry_gain_weight=float(
-                    config.model.learned_segment_geometry_gain_weight
-                ),
-                learned_segment_allocation_length_support_weight=allocation_length_support_weight,
-                learned_segment_allocation_weight_floor=allocation_weight_floor,
-                learned_segment_score_blend_weight=float(
-                    config.model.learned_segment_score_blend_weight
-                ),
-                learned_segment_transfer_calibration_mode=str(
-                    config.model.learned_segment_transfer_calibration_mode
-                ),
-                learned_segment_fairness_preallocation=bool(
-                    config.model.learned_segment_fairness_preallocation
-                ),
-                learned_segment_length_repair_fraction=float(
-                    config.model.learned_segment_length_repair_fraction
-                ),
-                learned_segment_length_repair_score_protection_fraction=(
-                    repair_score_protection_fraction
-                ),
             )
             causality_ablation_methods.append(behavior_segment_method)
             head_ablation_sensitivity_diagnostics[
@@ -809,34 +521,11 @@ def freeze_retained_mask_ablations(
                 "replacement_head_name": "conditional_behavior_utility",
                 "ablation_mode": "conditional_behavior_utility_as_segment_scores",
             }
-            behavior_allocation_method = learned_segment_frozen_method(
+            behavior_allocation_method = _selector_method(
                 name="MLQDS_behavior_utility_allocation_only_diagnostic",
                 scores=primary_scores,
-                boundaries=test_boundaries,
-                compression_ratio=float(config.model.compression_ratio),
                 segment_scores=behavior_segment_scores,
                 segment_point_scores=primary_segment_scores,
-                points=test_points,
-                learned_segment_geometry_gain_weight=float(
-                    config.model.learned_segment_geometry_gain_weight
-                ),
-                learned_segment_allocation_length_support_weight=allocation_length_support_weight,
-                learned_segment_allocation_weight_floor=allocation_weight_floor,
-                learned_segment_score_blend_weight=float(
-                    config.model.learned_segment_score_blend_weight
-                ),
-                learned_segment_transfer_calibration_mode=str(
-                    config.model.learned_segment_transfer_calibration_mode
-                ),
-                learned_segment_fairness_preallocation=bool(
-                    config.model.learned_segment_fairness_preallocation
-                ),
-                learned_segment_length_repair_fraction=float(
-                    config.model.learned_segment_length_repair_fraction
-                ),
-                learned_segment_length_repair_score_protection_fraction=(
-                    repair_score_protection_fraction
-                ),
             )
             causality_ablation_methods.append(behavior_allocation_method)
             head_ablation_sensitivity_diagnostics[
@@ -867,7 +556,6 @@ def freeze_retained_mask_ablations(
             }
         finally:
             _record_substage("behavior_utility_segment_score_ablations", substage_started_at)
-    primary_head_logits = primary_head_logits
     if primary_head_logits is not None:
         substage_started_at = time.perf_counter()
         try:
@@ -886,34 +574,11 @@ def freeze_retained_mask_ablations(
                 score_temperature=float(config.model.mlqds_score_temperature),
                 rank_confidence_weight=float(config.model.mlqds_rank_confidence_weight),
             )
-            behavior_ablation_method = learned_segment_frozen_method(
+            behavior_ablation_method = _selector_method(
                 name="MLQDS_without_behavior_utility_head",
                 scores=behavior_scores,
-                boundaries=test_boundaries,
-                compression_ratio=float(config.model.compression_ratio),
                 segment_scores=primary_selector_segment_scores,
                 segment_point_scores=primary_segment_scores,
-                points=test_points,
-                learned_segment_geometry_gain_weight=float(
-                    config.model.learned_segment_geometry_gain_weight
-                ),
-                learned_segment_allocation_length_support_weight=allocation_length_support_weight,
-                learned_segment_allocation_weight_floor=allocation_weight_floor,
-                learned_segment_score_blend_weight=float(
-                    config.model.learned_segment_score_blend_weight
-                ),
-                learned_segment_transfer_calibration_mode=str(
-                    config.model.learned_segment_transfer_calibration_mode
-                ),
-                learned_segment_fairness_preallocation=bool(
-                    config.model.learned_segment_fairness_preallocation
-                ),
-                learned_segment_length_repair_fraction=float(
-                    config.model.learned_segment_length_repair_fraction
-                ),
-                learned_segment_length_repair_score_protection_fraction=(
-                    repair_score_protection_fraction
-                ),
             )
             causality_ablation_methods.append(behavior_ablation_method)
             behavior_sensitivity = head_ablation_sensitivity(
@@ -976,39 +641,20 @@ def freeze_retained_mask_ablations(
     query_prior_field = trained.feature_context.get("query_prior_field")
     if isinstance(query_prior_field, dict):
         substage_started_at = time.perf_counter()
-        prior_scores = (
-            query_prior_predictability_scores(test_points, query_prior_field).detach().cpu()
-        )
-        causality_ablation_methods.append(
-            learned_segment_frozen_method(
-                name="MLQDS_prior_field_only_score",
-                scores=prior_scores,
-                boundaries=test_boundaries,
-                compression_ratio=float(config.model.compression_ratio),
-                points=test_points,
-                learned_segment_geometry_gain_weight=float(
-                    config.model.learned_segment_geometry_gain_weight
-                ),
-                learned_segment_allocation_length_support_weight=allocation_length_support_weight,
-                learned_segment_allocation_weight_floor=allocation_weight_floor,
-                learned_segment_score_blend_weight=float(
-                    config.model.learned_segment_score_blend_weight
-                ),
-                learned_segment_transfer_calibration_mode=str(
-                    config.model.learned_segment_transfer_calibration_mode
-                ),
-                learned_segment_fairness_preallocation=bool(
-                    config.model.learned_segment_fairness_preallocation
-                ),
-                learned_segment_length_repair_fraction=float(
-                    config.model.learned_segment_length_repair_fraction
-                ),
-                learned_segment_length_repair_score_protection_fraction=(
-                    repair_score_protection_fraction
-                ),
+        try:
+            prior_scores = (
+                query_prior_predictability_scores(test_points, query_prior_field).detach().cpu()
             )
-        )
-        _record_substage("prior_field_only_score", substage_started_at)
+            causality_ablation_methods.append(
+                _selector_method(
+                    name="MLQDS_prior_field_only_score",
+                    scores=prior_scores,
+                )
+            )
+        except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
+            causal_ablation_freeze_failures["MLQDS_prior_field_only_score"] = str(exc)
+        finally:
+            _record_substage("prior_field_only_score", substage_started_at)
         substage_started_at = time.perf_counter()
         try:
             shuffled_prior_field = shuffled_query_prior_field(
@@ -1047,14 +693,11 @@ def freeze_retained_mask_ablations(
                 test_boundaries,
                 float(config.model.compression_ratio),
             )
-            shuffled_prior_scores = getattr(shuffled_prior_method, "_score_cache", None)
-            shuffled_prior_raw_preds = getattr(shuffled_prior_method, "_raw_pred_cache", None)
-            shuffled_prior_head_logits = getattr(shuffled_prior_method, "_head_logit_cache", None)
-            shuffled_prior_selector_segment_scores = getattr(
-                shuffled_prior_method,
-                "_selector_segment_score_cache",
-                None,
-            )
+            shuffled_prior_snapshot = shuffled_prior_method.cached_score_snapshot()
+            shuffled_prior_scores = shuffled_prior_snapshot.scores
+            shuffled_prior_raw_preds = shuffled_prior_snapshot.raw_predictions
+            shuffled_prior_head_logits = shuffled_prior_snapshot.head_logits
+            shuffled_prior_selector_segment_scores = shuffled_prior_snapshot.selector_segment_scores
             prior_sensitivity_diagnostics["shuffled_prior_fields"] = (
                 prior_ablation_sensitivity_from_tensors(
                     sampled_prior_features=shuffled_prior_feature_sensitivity,
@@ -1125,14 +768,11 @@ def freeze_retained_mask_ablations(
                 test_boundaries,
                 float(config.model.compression_ratio),
             )
-            zero_prior_scores = getattr(zero_prior_method, "_score_cache", None)
-            zero_prior_raw_preds = getattr(zero_prior_method, "_raw_pred_cache", None)
-            zero_prior_head_logits = getattr(zero_prior_method, "_head_logit_cache", None)
-            zero_prior_selector_segment_scores = getattr(
-                zero_prior_method,
-                "_selector_segment_score_cache",
-                None,
-            )
+            zero_prior_snapshot = zero_prior_method.cached_score_snapshot()
+            zero_prior_scores = zero_prior_snapshot.scores
+            zero_prior_raw_preds = zero_prior_snapshot.raw_predictions
+            zero_prior_head_logits = zero_prior_snapshot.head_logits
+            zero_prior_selector_segment_scores = zero_prior_snapshot.selector_segment_scores
             prior_sensitivity_diagnostics["without_query_prior_features"] = (
                 prior_ablation_sensitivity_from_tensors(
                     sampled_prior_features=zero_prior_feature_sensitivity,
@@ -1209,14 +849,11 @@ def freeze_retained_mask_ablations(
                     test_boundaries,
                     float(config.model.compression_ratio),
                 )
-                channel_scores = getattr(channel_method, "_score_cache", None)
-                channel_raw_preds = getattr(channel_method, "_raw_pred_cache", None)
-                channel_head_logits = getattr(channel_method, "_head_logit_cache", None)
-                channel_selector_segment_scores = getattr(
-                    channel_method,
-                    "_selector_segment_score_cache",
-                    None,
-                )
+                channel_snapshot = channel_method.cached_score_snapshot()
+                channel_scores = channel_snapshot.scores
+                channel_raw_preds = channel_snapshot.raw_predictions
+                channel_head_logits = channel_snapshot.head_logits
+                channel_selector_segment_scores = channel_snapshot.selector_segment_scores
                 channel_sensitivity = prior_ablation_sensitivity_from_tensors(
                     sampled_prior_features=channel_feature_sensitivity,
                     model_prior_features=channel_model_prior_sensitivity,

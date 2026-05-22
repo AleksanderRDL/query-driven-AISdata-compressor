@@ -227,7 +227,7 @@ def test_fixed_count_range_acceptance_retries_rejected_candidates() -> None:
         range_spatial_fraction=0.02,
         range_time_fraction=0.05,
         range_anchor_mode="uniform",
-        range_max_point_hit_fraction=0.10,
+        range_max_point_hit_fraction=0.05,
         range_acceptance_max_attempts=80,
     )
 

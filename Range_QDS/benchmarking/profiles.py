@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 from learning.model_features import (
     WORKLOAD_BLIND_RANGE_MODEL_TYPE,
@@ -23,9 +23,7 @@ DEFAULT_PROFILE = "range_workload_aware_diagnostic"
 BLIND_EXPECTED_USEFULNESS_PROFILE = "range_workload_blind_expected_usefulness"
 BLIND_RETAINED_FREQUENCY_PROFILE = "range_workload_blind_retained_frequency"
 BLIND_TEACHER_DISTILL_PROFILE = "range_workload_blind_teacher_distill"
-LEGACY_DIAGNOSTIC_PROFILE_NOTE = (
-    "Old RangeUseful/scalar-target diagnostic path. Not valid for QueryLocalUtility final acceptance."
-)
+LEGACY_DIAGNOSTIC_PROFILE_NOTE = "Old RangeUseful/scalar-target diagnostic path. Not valid for QueryLocalUtility final acceptance."
 RANGE_QUERY_MIX_WORKLOAD_BLIND_PROFILE = "range_query_mix_workload_blind"
 PROFILE_CHOICES = (
     DEFAULT_PROFILE,
@@ -450,19 +448,32 @@ def benchmark_profile(name: str) -> BenchmarkProfile:
         raise ValueError(f"Unknown benchmark profile: {name}") from exc
 
 
-def benchmark_profile_args(
-    name: str,
-    *,
-    include_workload: bool = False,
-    include_checkpoint_selection: bool = False,
-    include_validation_score_diagnostic: bool = False,
-) -> list[str]:
-    """Return shared child CLI args for a benchmark profile."""
-    profile = benchmark_profile(name)
-    args = [
-        "--n_queries",
-        str(profile.n_queries),
-    ]
+def _profile_value_settings(profile: BenchmarkProfile) -> dict[str, ProfileSetting]:
+    """Return profile dataclass values in JSON-friendly settings form."""
+    settings = asdict(profile)
+    settings["range_train_anchor_modes"] = list(profile.range_train_anchor_modes)
+    settings["budget_loss_ratios"] = list(profile.budget_loss_ratios)
+    return settings
+
+
+def _profile_role(profile: BenchmarkProfile, *, workload_blind: bool) -> str:
+    if profile.range_training_target_mode == QUERY_LOCAL_UTILITY_FACTORIZED_TARGET_MODE:
+        return "query_driven_workload_blind"
+    if profile.range_teacher_distillation_mode != "none":
+        return "workload_blind_teacher_distill"
+    if workload_blind and profile.range_training_target_mode == "marginal_coverage_frequency":
+        return "workload_blind_marginal_coverage"
+    if workload_blind and profile.range_training_target_mode == "query_spine_frequency":
+        return "workload_blind_query_spine"
+    if workload_blind and profile.range_training_target_mode == "retained_frequency":
+        return "workload_blind_retained_frequency"
+    if workload_blind:
+        return "workload_blind_expected_usefulness"
+    return "workload_aware_diagnostic"
+
+
+def _profile_query_args(profile: BenchmarkProfile) -> list[str]:
+    args = ["--n_queries", str(profile.n_queries)]
     if profile.query_coverage is not None:
         args += ["--query_coverage", f"{profile.query_coverage:.2f}"]
     args += [
@@ -475,10 +486,7 @@ def benchmark_profile_args(
         args += ["--range_spatial_km", str(profile.range_spatial_km)]
     if profile.range_time_hours is not None:
         args += ["--range_time_hours", str(profile.range_time_hours)]
-    args += [
-        "--range_footprint_jitter",
-        str(profile.range_footprint_jitter),
-    ]
+    args += ["--range_footprint_jitter", str(profile.range_footprint_jitter)]
     if profile.range_max_coverage_overshoot is not None:
         args += ["--range_max_coverage_overshoot", str(profile.range_max_coverage_overshoot)]
     if profile.workload_profile_id is not None:
@@ -490,11 +498,14 @@ def benchmark_profile_args(
         profile.range_time_domain_mode,
         "--range_anchor_mode",
         profile.range_anchor_mode,
-        *(
-            ["--range_train_anchor_modes", ",".join(profile.range_train_anchor_modes)]
-            if profile.range_train_anchor_modes
-            else []
-        ),
+    ]
+    if profile.range_train_anchor_modes:
+        args += ["--range_train_anchor_modes", ",".join(profile.range_train_anchor_modes)]
+    return args
+
+
+def _profile_runtime_args(profile: BenchmarkProfile) -> list[str]:
+    return [
         "--range_diagnostics_mode",
         profile.range_diagnostics_mode,
         "--final_metrics_mode",
@@ -510,6 +521,11 @@ def benchmark_profile_args(
         str(profile.train_batch_size),
         "--inference_batch_size",
         str(profile.inference_batch_size),
+    ]
+
+
+def _profile_model_loss_args(profile: BenchmarkProfile) -> list[str]:
+    return [
         "--model_type",
         profile.model_type,
         "--max_queries",
@@ -536,6 +552,11 @@ def benchmark_profile_args(
         f"{profile.budget_loss_temperature:.2f}",
         "--temporal_distribution_loss_weight",
         f"{profile.temporal_distribution_loss_weight:.3f}",
+    ]
+
+
+def _profile_selector_args(profile: BenchmarkProfile) -> list[str]:
+    return [
         "--mlqds_temporal_fraction",
         f"{profile.mlqds_temporal_fraction:.2f}",
         "--mlqds_score_mode",
@@ -556,6 +577,11 @@ def benchmark_profile_args(
         f"{profile.mlqds_stratified_center_weight:.2f}",
         "--temporal_residual_label_mode",
         profile.temporal_residual_label_mode,
+    ]
+
+
+def _profile_range_target_args(profile: BenchmarkProfile) -> list[str]:
+    return [
         "--range_label_mode",
         profile.range_label_mode,
         "--range_training_target_mode",
@@ -587,6 +613,24 @@ def benchmark_profile_args(
         "--range_teacher_epochs",
         str(profile.range_teacher_epochs),
     ]
+
+
+def benchmark_profile_args(
+    name: str,
+    *,
+    include_workload: bool = False,
+    include_checkpoint_selection: bool = False,
+    include_validation_score_diagnostic: bool = False,
+) -> list[str]:
+    """Return shared child CLI args for a benchmark profile."""
+    profile = benchmark_profile(name)
+    args = [
+        *_profile_query_args(profile),
+        *_profile_runtime_args(profile),
+        *_profile_model_loss_args(profile),
+        *_profile_selector_args(profile),
+        *_profile_range_target_args(profile),
+    ]
     if include_workload:
         args += ["--workload", profile.workload]
     if include_checkpoint_selection:
@@ -610,24 +654,9 @@ def benchmark_profile_settings(name: str) -> dict[str, ProfileSetting]:
         if profile.workload_profile_id is not None
         else None
     )
-    profile_role = (
-        "query_driven_workload_blind"
-        if profile.range_training_target_mode == QUERY_LOCAL_UTILITY_FACTORIZED_TARGET_MODE
-        else "workload_blind_teacher_distill"
-        if profile.range_teacher_distillation_mode != "none"
-        else "workload_blind_marginal_coverage"
-        if workload_blind and profile.range_training_target_mode == "marginal_coverage_frequency"
-        else "workload_blind_query_spine"
-        if workload_blind and profile.range_training_target_mode == "query_spine_frequency"
-        else "workload_blind_retained_frequency"
-        if workload_blind and profile.range_training_target_mode == "retained_frequency"
-        else "workload_blind_expected_usefulness"
-        if workload_blind
-        else "workload_aware_diagnostic"
-    )
     final_candidate = bool(profile.final_success_allowed)
-    return {
-        "profile_role": profile_role,
+    settings: dict[str, ProfileSetting] = {
+        "profile_role": _profile_role(profile, workload_blind=workload_blind),
         "profile_diagnostic_only": not final_candidate,
         "profile_note": profile.profile_note,
         "primary_metric_family": "QueryLocalUtility" if final_candidate else "RangeUsefulLegacy",
@@ -647,77 +676,19 @@ def benchmark_profile_settings(name: str) -> dict[str, ProfileSetting]:
         "train_day": "first sorted cleaned CSV",
         "validation_day": "second sorted cleaned CSV",
         "eval_day": "third sorted cleaned CSV",
-        "n_queries": profile.n_queries,
-        "max_queries": profile.max_queries,
-        "query_coverage": profile.query_coverage,
         "workload_profile_default_target_coverage": (
             None if workload_profile is None else workload_profile.target_coverage
         ),
         "workload_profile_default_max_coverage_overshoot": (
             None if workload_profile is None else workload_profile.max_coverage_overshoot
         ),
-        "range_spatial_fraction": profile.range_spatial_fraction,
-        "range_time_fraction": profile.range_time_fraction,
-        "range_spatial_km": profile.range_spatial_km,
-        "range_time_hours": profile.range_time_hours,
-        "range_footprint_jitter": profile.range_footprint_jitter,
-        "range_max_coverage_overshoot": profile.range_max_coverage_overshoot,
-        "range_time_domain_mode": profile.range_time_domain_mode,
-        "range_anchor_mode": profile.range_anchor_mode,
-        "range_train_anchor_modes": list(profile.range_train_anchor_modes),
-        "range_train_workload_replicates": int(profile.range_train_workload_replicates),
-        "workload_profile_id": profile.workload_profile_id,
-        "range_diagnostics_mode": profile.range_diagnostics_mode,
-        "final_metrics_mode": profile.final_metrics_mode,
-        "query_chunk_size": profile.query_chunk_size,
-        "train_batch_size": profile.train_batch_size,
-        "inference_batch_size": profile.inference_batch_size,
-        "model_type": profile.model_type,
-        "compression_ratio": profile.compression_ratio,
-        "epochs": profile.epochs,
-        "early_stopping_patience": profile.early_stopping_patience,
-        "checkpoint_selection_metric": profile.checkpoint_selection_metric,
-        "checkpoint_score_variant": profile.checkpoint_score_variant,
-        "float32_matmul_precision": profile.float32_matmul_precision,
-        "allow_tf32": profile.allow_tf32,
-        "amp_mode": profile.amp_mode,
-        "checkpoint_full_score_every": profile.checkpoint_full_score_every,
-        "checkpoint_candidate_pool_size": profile.checkpoint_candidate_pool_size,
-        "loss_objective": profile.loss_objective,
-        "budget_loss_ratios": list(profile.budget_loss_ratios),
-        "budget_loss_temperature": profile.budget_loss_temperature,
-        "temporal_distribution_loss_weight": profile.temporal_distribution_loss_weight,
-        "mlqds_score_mode": profile.mlqds_score_mode,
-        "mlqds_score_temperature": profile.mlqds_score_temperature,
-        "mlqds_rank_confidence_weight": profile.mlqds_rank_confidence_weight,
-        "mlqds_range_geometry_blend": profile.mlqds_range_geometry_blend,
-        "mlqds_diversity_bonus": profile.mlqds_diversity_bonus,
         "mlqds_effective_diversity_bonus": effective_mlqds_diversity_bonus(
             profile.mlqds_hybrid_mode,
             profile.mlqds_diversity_bonus,
         ),
-        "mlqds_hybrid_mode": profile.mlqds_hybrid_mode,
-        "selector_type": profile.selector_type,
-        "mlqds_stratified_center_weight": profile.mlqds_stratified_center_weight,
-        "temporal_residual_label_mode": profile.temporal_residual_label_mode,
-        "validation_score_every": profile.validation_score_every,
-        "range_label_mode": profile.range_label_mode,
-        "range_training_target_mode": profile.range_training_target_mode,
-        "range_temporal_target_blend": profile.range_temporal_target_blend,
-        "range_target_budget_weight_power": profile.range_target_budget_weight_power,
-        "range_marginal_target_radius_scale": profile.range_marginal_target_radius_scale,
-        "range_query_spine_fraction": profile.range_query_spine_fraction,
-        "range_query_residual_multiplier": profile.range_query_residual_multiplier,
-        "range_query_residual_mass_mode": profile.range_query_residual_mass_mode,
-        "range_set_utility_multiplier": profile.range_set_utility_multiplier,
-        "range_set_utility_candidate_limit": profile.range_set_utility_candidate_limit,
-        "range_set_utility_mass_mode": profile.range_set_utility_mass_mode,
-        "checkpoint_smoothing_window": profile.checkpoint_smoothing_window,
-        "mlqds_temporal_fraction": profile.mlqds_temporal_fraction,
-        "range_boundary_prior_weight": profile.range_boundary_prior_weight,
         "range_boundary_prior_enabled": profile.range_boundary_prior_weight > 0.0,
-        "range_teacher_distillation_mode": profile.range_teacher_distillation_mode,
-        "range_teacher_epochs": profile.range_teacher_epochs,
         "range_workload_profile_sweep_ids": list(RANGE_WORKLOAD_PROFILE_SWEEP_IDS),
         "range_compression_sweep_ratios": list(RANGE_COMPRESSION_SWEEP_RATIOS),
     }
+    profile_values = _profile_value_settings(profile)
+    return {**profile_values, **settings}

@@ -1,5 +1,5 @@
-import csv
 import argparse
+import csv
 
 
 def filter_csv(
@@ -10,7 +10,7 @@ def filter_csv(
 ) -> None:
     """Filter a CSV file based on a list of IDs."""
     ids_to_keep = ids_to_keep or set()
-    with open(input_file, "r", newline="", encoding="utf-8") as infile:
+    with open(input_file, newline="", encoding="utf-8") as infile:
         reader = csv.DictReader(infile)
         fieldnames = reader.fieldnames
 
@@ -35,7 +35,7 @@ def filter_csv(
 
 def load_ids_from_file(filepath: str) -> set[str]:
     """Load IDs from a text file (one ID per line)."""
-    with open(filepath, "r", encoding="utf-8") as f:
+    with open(filepath, encoding="utf-8") as f:
         return set(line.strip() for line in f if line.strip())
 
 

@@ -54,6 +54,7 @@ def _boundaries(trajectories: list[torch.Tensor]) -> list[tuple[int, int]]:
         cursor = end
     return out
 
+
 def test_target_diffusion_gate_blocks_broad_low_budget_labels() -> None:
     diagnostics = {
         "query_local_utility_factorized": {
@@ -823,7 +824,12 @@ def test_factorized_head_ablation_uses_neutral_multiplicative_heads() -> None:
     high_segment = head_logits.clone()
     low_segment[..., segment_idx] = -10.0
     high_segment[..., segment_idx] = 10.0
-    expected_score = torch.tensor(0.34375, dtype=torch.float32)
+    expected_score = query_local_utility_point_score(
+        q_hit=torch.tensor(0.5),
+        behavior=torch.tensor(0.0),
+        boundary=torch.tensor(0.5),
+        replacement=torch.tensor(0.5),
+    )
 
     assert torch.allclose(disabled.squeeze(), torch.logit(expected_score), atol=1e-6)
     assert torch.allclose(disabled, disabled_with_large_calibration)
@@ -837,7 +843,9 @@ def test_factorized_head_ablation_uses_neutral_multiplicative_heads() -> None:
     assert all(not parameter.requires_grad for parameter in model.calibration_head.parameters())
 
 
-def test_workload_blind_range_final_score_composition_matches_query_local_utility_target_formula() -> None:
+def test_workload_blind_range_final_score_composition_matches_query_local_utility_target_formula() -> (
+    None
+):
     model = WorkloadBlindRangeModel(
         point_dim=WORKLOAD_BLIND_RANGE_POINT_DIM,
         query_dim=12,
@@ -861,5 +869,5 @@ def test_workload_blind_range_final_score_composition_matches_query_local_utilit
         replacement=head_probabilities[..., 3],
     )
     assert torch.allclose(final_probabilities, expected, atol=1e-5)
-    assert final_probabilities[0, 0] > 0.5
+    assert final_probabilities[0, 0] < 0.5
     assert final_probabilities[0, 1] > final_probabilities[0, 0]

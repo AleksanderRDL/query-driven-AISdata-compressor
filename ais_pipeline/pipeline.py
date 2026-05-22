@@ -2,20 +2,16 @@ import os
 import time
 from pathlib import Path
 
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
+
 from .environment.hadoop_environment import configure_hadoop_environment
 from .environment.java_environment import configure_java_environment
 from .environment.spark_environment import (
     configure_pyspark_python,
     configure_spark_environment,
 )
-from pyspark.sql import SparkSession
-from pyspark.sql import functions as F
-
-from .steps import remove_duplicates
-from .steps import remove_outliers
-from .steps import remove_shiptypes
-from .steps import ship_type
-from .steps import trim_stationary
+from .steps import remove_duplicates, remove_outliers, remove_shiptypes, ship_type, trim_stationary
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 AISDATA_DIR = PROJECT_DIR / "AISDATA"

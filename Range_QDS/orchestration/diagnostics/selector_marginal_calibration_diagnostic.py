@@ -7,6 +7,25 @@ import json
 from pathlib import Path
 from typing import Any
 
+from orchestration.diagnostics.artifact_utils import (
+    as_bool as _as_bool,
+)
+from orchestration.diagnostics.artifact_utils import (
+    as_dict as _as_dict,
+)
+from orchestration.diagnostics.artifact_utils import (
+    as_float as _as_float,
+)
+from orchestration.diagnostics.artifact_utils import (
+    as_list as _as_list,
+)
+from orchestration.diagnostics.artifact_utils import (
+    delta as _delta,
+)
+from orchestration.diagnostics.artifact_utils import (
+    load_json_dict as _load_json,
+)
+
 PRIMARY_METHOD = "MLQDS"
 BASELINE_METHOD = "DouglasPeucker"
 ALIGNMENT_PATH = (
@@ -20,26 +39,6 @@ MID_RANK_FRACTION = 0.50
 TOP_EXAMPLE_LIMIT = 10
 
 
-def _as_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _as_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
-
-
-def _as_float(value: Any) -> float | None:
-    if isinstance(value, bool):
-        return float(value)
-    if isinstance(value, int | float):
-        return float(value)
-    return None
-
-
-def _as_bool(value: Any) -> bool | None:
-    return value if isinstance(value, bool) else None
-
-
 def _mean(values: list[float]) -> float | None:
     return None if not values else float(sum(values) / len(values))
 
@@ -50,12 +49,6 @@ def _rank_fraction_from_rank(rank: Any, denominator: Any) -> float | None:
     if rank_value is None or denominator_value is None or denominator_value <= 0:
         return None
     return float(rank_value / denominator_value)
-
-
-def _delta(left: float | None, right: float | None) -> float | None:
-    if left is None or right is None:
-        return None
-    return float(left - right)
 
 
 def _score_summary(artifact: dict[str, Any]) -> dict[str, float | None]:
@@ -686,14 +679,6 @@ def build_selector_marginal_calibration_diagnostic(
             ),
         },
     }
-
-
-def _load_json(path: Path) -> dict[str, Any]:
-    with path.open("r", encoding="utf-8") as handle:
-        payload = json.load(handle)
-    if not isinstance(payload, dict):
-        raise ValueError(f"Expected object JSON artifact: {path}")
-    return payload
 
 
 def _parse_labeled_artifact(value: str) -> tuple[str, Path]:

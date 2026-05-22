@@ -8,6 +8,17 @@ import math
 from pathlib import Path
 from typing import Any
 
+from orchestration.diagnostics.artifact_utils import (
+    as_bool,
+    as_dict,
+)
+from orchestration.diagnostics.artifact_utils import (
+    as_list as _as_list,
+)
+from orchestration.diagnostics.artifact_utils import (
+    load_json_dict as _load_json,
+)
+
 PRIMARY_METHOD = "MLQDS"
 BASELINE_METHOD = "DouglasPeucker"
 SELECTOR_TRACE_PATH = "selector_trace_diagnostics"
@@ -27,14 +38,6 @@ LOW_TOP_OVERLAP_MAX = 0.10
 WEAK_SPEARMAN_ABS_MAX = 0.05
 
 
-def as_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _as_list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
-
-
 def as_float(value: Any) -> float | None:
     if isinstance(value, bool):
         return float(value)
@@ -42,10 +45,6 @@ def as_float(value: Any) -> float | None:
         value_float = float(value)
         return value_float if math.isfinite(value_float) else None
     return None
-
-
-def as_bool(value: Any) -> bool | None:
-    return value if isinstance(value, bool) else None
 
 
 def mean(values: list[float]) -> float | None:
@@ -483,14 +482,6 @@ def build_selection_eval_segment_teacher_transfer_diagnostic(
             ),
         },
     }
-
-
-def _load_json(path: Path) -> dict[str, Any]:
-    with path.open("r", encoding="utf-8") as handle:
-        payload = json.load(handle)
-    if not isinstance(payload, dict):
-        raise ValueError(f"Expected object JSON artifact: {path}")
-    return payload
 
 
 def _parse_labeled_artifact(value: str) -> tuple[str, Path]:

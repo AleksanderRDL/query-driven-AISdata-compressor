@@ -3,7 +3,6 @@ import platform
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 JAVA_EXECUTABLE = "java.exe" if os.name == "nt" else "java"
 
@@ -20,8 +19,7 @@ def _java_command_is_usable(java_cmd: str) -> bool:
     try:
         completed = subprocess.run(
             [java_cmd, "-version"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
             check=False,
             timeout=10,
@@ -35,7 +33,7 @@ def _is_java_home(candidate: Path) -> bool:
     return (candidate / "bin" / JAVA_EXECUTABLE).is_file()
 
 
-def _java_home_from_path_command(java_cmd: str) -> Optional[Path]:
+def _java_home_from_path_command(java_cmd: str) -> Path | None:
     java_path = Path(java_cmd).resolve()
     candidate = java_path.parent.parent
     if _is_java_home(candidate):
@@ -43,7 +41,7 @@ def _java_home_from_path_command(java_cmd: str) -> Optional[Path]:
     return None
 
 
-def _system_java_home() -> Optional[Path]:
+def _system_java_home() -> Path | None:
     env_java_home = os.environ.get("JAVA_HOME")
     if env_java_home:
         candidate = Path(env_java_home)
@@ -59,7 +57,7 @@ def _system_java_home() -> Optional[Path]:
     return _java_home_from_path_command(java_cmd)
 
 
-def _linux_portable_java_home(project_dir: Path) -> Optional[Path]:
+def _linux_portable_java_home(project_dir: Path) -> Path | None:
     if platform.system() != "Linux":
         return None
 

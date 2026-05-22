@@ -19,20 +19,18 @@ from orchestration.causality import (
     retained_mask_comparison,
     training_outputs_with_query_prior_field,
 )
+from orchestration.learned_segment_freezing import learned_segment_frozen_method_from_config
 from orchestration.mlqds_method_factory import build_mlqds_method
 from orchestration.model_ablations import (
     raw_predictions_without_factorized_head,
     scores_without_factorized_head,
     shuffled_query_prior_field,
 )
+from orchestration.selection_retained_marginal_teacher_diagnostics import (
+    selection_retained_marginal_teacher_diagnostics,
+)
 from orchestration.selector_diagnostics import (
-    factorized_score_component_vectors_from_logits,
-    learned_segment_frozen_method,
     neutral_segment_scores_for_ablation,
-    query_free_retained_removal_teacher_proxy_vectors,
-    query_prior_component_vectors_for_points,
-    retained_decision_marginal_query_local_utility_diagnostics,
-    selector_segment_score_source_label,
 )
 from orchestration.selector_teacher_vectors import (
     hybrid_marginal_teacher_selector_score_vectors,
@@ -42,67 +40,9 @@ from scoring.method_scoring import score_method
 from scoring.methods import FrozenMaskMethod, MLQDSMethod
 from scoring.metrics import MethodScore
 from scoring.query_cache import ScoringQueryCache
-from selection.learned_segment_budget import (
-    blend_segment_support_scores,
-    simplify_with_learned_segment_budget_with_trace,
-)
+from selection.learned_segment_budget import blend_segment_support_scores
 from selection.selector_types import LEARNED_SEGMENT_BUDGET_SELECTOR_TYPE
 from workloads.query_types import single_workload_type
-
-
-def _compact_selection_retained_marginal_teacher_summary(
-    payload: dict[str, Any],
-    *,
-    source_path: str,
-    split_name: str,
-) -> dict[str, Any]:
-    summary_keys = (
-        "available",
-        "diagnostic_only",
-        "exact_query_local_utility_marginals",
-        "performance_mode",
-        "primary_query_local_utility",
-        "retained_count",
-        "point_count",
-        "max_retained_per_source",
-        "max_removed_candidates",
-        "score_fields_available",
-        "score_component_fields_available",
-        "context_fields_available",
-        "candidate_count",
-        "overall",
-        "by_source",
-        "by_decision",
-        "query_free_teacher_proxy_guard_coupling_summary",
-        "learned_controllable_marginal_teacher_summary",
-        "separated_marginal_teacher_summary",
-        "top_marginal_miss_summary",
-    )
-    summary = {key: payload.get(key) for key in summary_keys if key in payload}
-    separated_summary = summary.get("separated_marginal_teacher_summary")
-    if isinstance(separated_summary, dict):
-        compact_separated_summary = dict(separated_summary)
-        compact_separated_summary.pop("segment_target_rows", None)
-        compact_separated_summary.pop("point_target_rows", None)
-        compact_separated_summary["segment_target_rows_in_selector_trace_only"] = True
-        compact_separated_summary["point_target_rows_in_selector_trace_only"] = True
-        summary["separated_marginal_teacher_summary"] = compact_separated_summary
-    top_miss_summary = summary.get("top_marginal_miss_summary")
-    if isinstance(top_miss_summary, dict):
-        compact_top_miss_summary = dict(top_miss_summary)
-        compact_top_miss_summary.pop("top_marginal_rows", None)
-        compact_top_miss_summary["top_marginal_rows_in_selector_trace_only"] = True
-        summary["top_marginal_miss_summary"] = compact_top_miss_summary
-    summary.update(
-        {
-            "split": split_name,
-            "source_path": source_path,
-            "rows_in_selector_trace_only": True,
-            "query_conditioned_teacher_allowed_for_train_or_checkpoint_diagnostics_only": True,
-            "eval_time_feature_allowed": False,
-        }
-    )
-    return summary
 
 
 def build_selection_causality_diagnostics(
@@ -177,19 +117,13 @@ def build_selection_causality_diagnostics(
         compression_ratio=config.model.compression_ratio,
         query_cache=selection_query_cache,
     )
-    primary_scores = getattr(primary_method, "_score_cache", None)
-    primary_raw_preds = getattr(primary_method, "_raw_pred_cache", None)
-    primary_head_logits = getattr(primary_method, "_head_logit_cache", None)
-    primary_segment_scores = getattr(primary_method, "_segment_score_cache", None)
-    primary_path_length_support_scores = getattr(
-        primary_method, "_path_length_support_score_cache", None
-    )
-    primary_selector_segment_scores = getattr(primary_method, "_selector_segment_score_cache", None)
-    primary_selector_segment_score_source = getattr(
-        primary_method,
-        "_selector_segment_score_source_cache",
-        None,
-    )
+    primary_snapshot = primary_method.cached_score_snapshot()
+    primary_scores = primary_snapshot.scores
+    primary_raw_preds = primary_snapshot.raw_predictions
+    primary_head_logits = primary_snapshot.head_logits
+    primary_segment_scores = primary_snapshot.segment_scores
+    primary_path_length_support_scores = primary_snapshot.path_length_support_scores
+    primary_selector_segment_scores = primary_snapshot.selector_segment_scores
     if isinstance(primary_scores, torch.Tensor):
         primary_scores = primary_scores.detach().cpu().float()
     if isinstance(primary_raw_preds, torch.Tensor):
@@ -205,13 +139,30 @@ def build_selection_causality_diagnostics(
     if isinstance(primary_selector_segment_scores, torch.Tensor):
         primary_selector_segment_scores = primary_selector_segment_scores.detach().cpu().float()
 
-    selection_selector_trace: dict[str, Any] | None = None
-    selection_marginal_teacher_summary: dict[str, Any] = {
-        "available": False,
-        "diagnostic_only": True,
-        "split": split_name,
-        "reason": "not_run",
-    }
+    def _selector_method(**kwargs: Any) -> FrozenMaskMethod:
+        kwargs.setdefault("boundaries", selection_boundaries)
+        kwargs.setdefault("points", selection_points)
+        return learned_segment_frozen_method_from_config(config=config, **kwargs)
+
+    selection_selector_trace, selection_marginal_teacher_summary = (
+        selection_retained_marginal_teacher_diagnostics(
+            trained=trained,
+            selection_points=selection_points,
+            selection_boundaries=selection_boundaries,
+            typed_queries=selection_workload.typed_queries,
+            selection_query_cache=selection_query_cache,
+            config=config,
+            split_name=split_name,
+            selector_trace_source_path=selector_trace_source_path,
+            primary_mask=primary_mask,
+            primary_scores=primary_scores,
+            primary_raw_preds=primary_raw_preds,
+            primary_head_logits=primary_head_logits,
+            primary_segment_scores=primary_segment_scores,
+            primary_path_length_support_scores=primary_path_length_support_scores,
+            primary_selector_segment_scores=primary_selector_segment_scores,
+        )
+    )
     separated_teacher_selector_diagnostic: dict[str, Any] = {
         "available": False,
         "diagnostic_only": True,
@@ -231,129 +182,6 @@ def build_selection_causality_diagnostics(
         "reason": "not_run",
         "methods": {},
     }
-    if isinstance(primary_scores, torch.Tensor):
-        try:
-            trace_mask, trace = simplify_with_learned_segment_budget_with_trace(
-                primary_scores,
-                selection_boundaries,
-                float(config.model.compression_ratio),
-                segment_scores=(
-                    primary_selector_segment_scores
-                    if isinstance(primary_selector_segment_scores, torch.Tensor)
-                    else None
-                ),
-                segment_point_scores=(
-                    primary_segment_scores
-                    if isinstance(primary_segment_scores, torch.Tensor)
-                    else None
-                ),
-                points=selection_points.detach().cpu().float(),
-                geometry_gain_weight=float(config.model.learned_segment_geometry_gain_weight),
-                segment_length_support_weight=float(
-                    config.model.learned_segment_allocation_length_support_weight
-                ),
-                segment_allocation_weight_floor=float(
-                    config.model.learned_segment_allocation_weight_floor
-                ),
-                segment_score_point_blend_weight=float(
-                    config.model.learned_segment_score_blend_weight
-                ),
-                segment_transfer_calibration_mode=str(
-                    config.model.learned_segment_transfer_calibration_mode
-                ),
-                fairness_preallocation_enabled=bool(
-                    config.model.learned_segment_fairness_preallocation
-                ),
-                length_repair_fraction=float(config.model.learned_segment_length_repair_fraction),
-                length_repair_score_protection_fraction=float(
-                    config.model.learned_segment_length_repair_score_protection_fraction
-                ),
-                segment_score_source_label=selector_segment_score_source_label(
-                    segment_scores=primary_selector_segment_scores
-                    if isinstance(primary_selector_segment_scores, torch.Tensor)
-                    else None,
-                    path_length_support_scores=primary_path_length_support_scores
-                    if isinstance(primary_path_length_support_scores, torch.Tensor)
-                    else None,
-                    length_support_blend_weight=float(
-                        config.model.learned_segment_length_support_blend_weight
-                    ),
-                    base_segment_score_source=(
-                        str(primary_selector_segment_score_source)
-                        if primary_selector_segment_score_source is not None
-                        else "segment_budget_head_top20_mean"
-                    ),
-                ),
-            )
-            mask_matches_primary = bool(
-                torch.equal(trace_mask.detach().cpu(), primary_mask.detach().cpu())
-            )
-            trace["retained_mask_matches_primary"] = mask_matches_primary
-            if split_name == "checkpoint_selection":
-                trace["retained_mask_matches_selection_primary"] = mask_matches_primary
-            trace["frozen_primary_retained_count"] = int(primary_mask.sum().item())
-            sampled_prior_vectors, model_prior_vectors = query_prior_component_vectors_for_points(
-                selection_points.detach().cpu().float(),
-                trained.feature_context.get("query_prior_field"),
-            )
-            teacher_proxy_vectors = query_free_retained_removal_teacher_proxy_vectors(
-                selection_points.detach().cpu().float(),
-                selection_boundaries,
-            )
-            marginal_points = (
-                selection_points
-                if selection_query_cache is not None
-                else selection_points.detach().cpu().float()
-            )
-            trace["retained_decision_marginal_query_local_utility_alignment"] = (
-                retained_decision_marginal_query_local_utility_diagnostics(
-                    points=marginal_points,
-                    boundaries=selection_boundaries,
-                    typed_queries=selection_workload.typed_queries,
-                    primary_retained_mask=trace_mask.detach().cpu().bool(),
-                    raw_scores=primary_raw_preds,
-                    selector_scores=primary_scores,
-                    segment_scores=primary_segment_scores
-                    if isinstance(primary_segment_scores, torch.Tensor)
-                    else None,
-                    score_component_vectors=factorized_score_component_vectors_from_logits(
-                        primary_head_logits
-                        if isinstance(primary_head_logits, torch.Tensor)
-                        else None
-                    ),
-                    query_free_teacher_proxy_vectors=teacher_proxy_vectors,
-                    sampled_prior_vectors=sampled_prior_vectors,
-                    model_prior_vectors=model_prior_vectors,
-                    selector_trace=trace,
-                    query_cache=selection_query_cache,
-                    max_retained_per_source=32,
-                    max_removed_candidates=64,
-                    teacher_usage_split=split_name,
-                )
-            )
-            selection_marginal_teacher_summary = (
-                _compact_selection_retained_marginal_teacher_summary(
-                    trace["retained_decision_marginal_query_local_utility_alignment"],
-                    source_path=selector_trace_source_path,
-                    split_name=split_name,
-                )
-            )
-            selection_selector_trace = trace
-        except Exception as exc:  # pragma: no cover - diagnostic should not break selection.
-            selection_marginal_teacher_summary = {
-                "available": False,
-                "diagnostic_only": True,
-                "reason": "diagnostic_failed",
-                "error": str(exc),
-                "source_path": selector_trace_source_path,
-                "split": split_name,
-            }
-            selection_selector_trace = {
-                "available": False,
-                "reason": "retained_marginal_teacher_diagnostic_failed",
-                "error": str(exc),
-            }
-
     ablation_methods: list[FrozenMaskMethod] = []
     freeze_failures: dict[str, str] = {}
     prior_sensitivity: dict[str, Any] = {}
@@ -362,10 +190,6 @@ def build_selection_causality_diagnostics(
     geometry_gain_weight = float(config.model.learned_segment_geometry_gain_weight)
     allocation_length_support_weight = float(
         config.model.learned_segment_allocation_length_support_weight
-    )
-    allocation_weight_floor = float(config.model.learned_segment_allocation_weight_floor)
-    repair_score_protection_fraction = float(
-        config.model.learned_segment_length_repair_score_protection_fraction
     )
     if selection_selector_trace is not None:
         retained_marginal = selection_selector_trace.get(
@@ -391,30 +215,14 @@ def build_selection_causality_diagnostics(
                     "selector_diagnostic_only": True,
                 }
                 if teacher_segment_scores is not None and teacher_point_scores is not None:
-                    teacher_method = learned_segment_frozen_method(
+                    teacher_method = _selector_method(
                         name=separated_teacher_method_name,
                         scores=teacher_point_scores,
-                        boundaries=selection_boundaries,
-                        compression_ratio=float(config.model.compression_ratio),
                         segment_scores=teacher_segment_scores,
                         segment_point_scores=teacher_point_scores,
-                        points=selection_points,
                         learned_segment_geometry_gain_weight=0.0,
                         learned_segment_allocation_length_support_weight=0.0,
-                        learned_segment_allocation_weight_floor=allocation_weight_floor,
                         learned_segment_score_blend_weight=1.0,
-                        learned_segment_transfer_calibration_mode=str(
-                            config.model.learned_segment_transfer_calibration_mode
-                        ),
-                        learned_segment_fairness_preallocation=bool(
-                            config.model.learned_segment_fairness_preallocation
-                        ),
-                        learned_segment_length_repair_fraction=float(
-                            config.model.learned_segment_length_repair_fraction
-                        ),
-                        learned_segment_length_repair_score_protection_fraction=(
-                            repair_score_protection_fraction
-                        ),
                     )
                     ablation_methods.append(teacher_method)
                     separated_teacher_selector_diagnostic.update(
@@ -471,34 +279,11 @@ def build_selection_causality_diagnostics(
                             if hybrid_segment_scores is None or hybrid_point_scores is None:
                                 hybrid_method_diagnostics[hybrid_method_name] = hybrid_diag
                                 continue
-                            hybrid_method = learned_segment_frozen_method(
+                            hybrid_method = _selector_method(
                                 name=hybrid_method_name,
                                 scores=hybrid_point_scores,
-                                boundaries=selection_boundaries,
-                                compression_ratio=float(config.model.compression_ratio),
                                 segment_scores=hybrid_segment_scores,
                                 segment_point_scores=hybrid_point_scores,
-                                points=selection_points,
-                                learned_segment_geometry_gain_weight=geometry_gain_weight,
-                                learned_segment_allocation_length_support_weight=(
-                                    allocation_length_support_weight
-                                ),
-                                learned_segment_allocation_weight_floor=allocation_weight_floor,
-                                learned_segment_score_blend_weight=float(
-                                    config.model.learned_segment_score_blend_weight
-                                ),
-                                learned_segment_transfer_calibration_mode=str(
-                                    config.model.learned_segment_transfer_calibration_mode
-                                ),
-                                learned_segment_fairness_preallocation=bool(
-                                    config.model.learned_segment_fairness_preallocation
-                                ),
-                                learned_segment_length_repair_fraction=float(
-                                    config.model.learned_segment_length_repair_fraction
-                                ),
-                                learned_segment_length_repair_score_protection_fraction=(
-                                    repair_score_protection_fraction
-                                ),
                             )
                             ablation_methods.append(hybrid_method)
                             hybrid_diag.update(
@@ -578,34 +363,12 @@ def build_selection_causality_diagnostics(
                 else None
             )
             ablation_methods.append(
-                learned_segment_frozen_method(
+                _selector_method(
                     name="MLQDS_without_geometry_tie_breaker",
                     scores=primary_scores,
-                    boundaries=selection_boundaries,
-                    compression_ratio=float(config.model.compression_ratio),
                     segment_scores=selection_segment_scores,
                     segment_point_scores=primary_segment_scores,
-                    points=selection_points,
                     learned_segment_geometry_gain_weight=0.0,
-                    learned_segment_allocation_length_support_weight=(
-                        allocation_length_support_weight
-                    ),
-                    learned_segment_allocation_weight_floor=allocation_weight_floor,
-                    learned_segment_score_blend_weight=float(
-                        config.model.learned_segment_score_blend_weight
-                    ),
-                    learned_segment_transfer_calibration_mode=str(
-                        config.model.learned_segment_transfer_calibration_mode
-                    ),
-                    learned_segment_fairness_preallocation=bool(
-                        config.model.learned_segment_fairness_preallocation
-                    ),
-                    learned_segment_length_repair_fraction=float(
-                        config.model.learned_segment_length_repair_fraction
-                    ),
-                    learned_segment_length_repair_score_protection_fraction=(
-                        repair_score_protection_fraction
-                    ),
                 )
             )
         except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
@@ -619,34 +382,12 @@ def build_selection_causality_diagnostics(
                 else None
             )
             ablation_methods.append(
-                learned_segment_frozen_method(
+                _selector_method(
                     name="MLQDS_without_segment_length_support_allocation",
                     scores=primary_scores,
-                    boundaries=selection_boundaries,
-                    compression_ratio=float(config.model.compression_ratio),
                     segment_scores=selection_segment_scores,
                     segment_point_scores=primary_segment_scores,
-                    points=selection_points,
-                    learned_segment_geometry_gain_weight=float(
-                        config.model.learned_segment_geometry_gain_weight
-                    ),
                     learned_segment_allocation_length_support_weight=0.0,
-                    learned_segment_allocation_weight_floor=allocation_weight_floor,
-                    learned_segment_score_blend_weight=float(
-                        config.model.learned_segment_score_blend_weight
-                    ),
-                    learned_segment_transfer_calibration_mode=str(
-                        config.model.learned_segment_transfer_calibration_mode
-                    ),
-                    learned_segment_fairness_preallocation=bool(
-                        config.model.learned_segment_fairness_preallocation
-                    ),
-                    learned_segment_length_repair_fraction=float(
-                        config.model.learned_segment_length_repair_fraction
-                    ),
-                    learned_segment_length_repair_score_protection_fraction=(
-                        repair_score_protection_fraction
-                    ),
                 )
             )
         except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
@@ -668,34 +409,11 @@ def build_selection_causality_diagnostics(
                     config.model.learned_segment_length_support_blend_weight
                 ),
             )
-            no_segment = learned_segment_frozen_method(
+            no_segment = _selector_method(
                 name="MLQDS_without_segment_budget_head",
                 scores=primary_scores,
-                boundaries=selection_boundaries,
-                compression_ratio=float(config.model.compression_ratio),
                 segment_scores=no_segment_selector_scores,
                 segment_point_scores=neutral_segment_scores,
-                points=selection_points,
-                learned_segment_geometry_gain_weight=float(
-                    config.model.learned_segment_geometry_gain_weight
-                ),
-                learned_segment_allocation_length_support_weight=allocation_length_support_weight,
-                learned_segment_allocation_weight_floor=allocation_weight_floor,
-                learned_segment_score_blend_weight=float(
-                    config.model.learned_segment_score_blend_weight
-                ),
-                learned_segment_transfer_calibration_mode=str(
-                    config.model.learned_segment_transfer_calibration_mode
-                ),
-                learned_segment_fairness_preallocation=bool(
-                    config.model.learned_segment_fairness_preallocation
-                ),
-                learned_segment_length_repair_fraction=float(
-                    config.model.learned_segment_length_repair_fraction
-                ),
-                learned_segment_length_repair_score_protection_fraction=(
-                    repair_score_protection_fraction
-                ),
             )
             ablation_methods.append(no_segment)
             head_sensitivity["MLQDS_without_segment_budget_head"] = {
@@ -727,33 +445,10 @@ def build_selection_causality_diagnostics(
         primary_path_length_support_scores, torch.Tensor
     ):
         try:
-            path_length_segment_method = learned_segment_frozen_method(
+            path_length_segment_method = _selector_method(
                 name="MLQDS_path_length_support_segment_head_diagnostic",
                 scores=primary_scores,
-                boundaries=selection_boundaries,
-                compression_ratio=float(config.model.compression_ratio),
                 segment_scores=primary_path_length_support_scores,
-                points=selection_points,
-                learned_segment_geometry_gain_weight=float(
-                    config.model.learned_segment_geometry_gain_weight
-                ),
-                learned_segment_allocation_length_support_weight=allocation_length_support_weight,
-                learned_segment_allocation_weight_floor=allocation_weight_floor,
-                learned_segment_score_blend_weight=float(
-                    config.model.learned_segment_score_blend_weight
-                ),
-                learned_segment_transfer_calibration_mode=str(
-                    config.model.learned_segment_transfer_calibration_mode
-                ),
-                learned_segment_fairness_preallocation=bool(
-                    config.model.learned_segment_fairness_preallocation
-                ),
-                learned_segment_length_repair_fraction=float(
-                    config.model.learned_segment_length_repair_fraction
-                ),
-                learned_segment_length_repair_score_protection_fraction=(
-                    repair_score_protection_fraction
-                ),
             )
             ablation_methods.append(path_length_segment_method)
             head_sensitivity["MLQDS_path_length_support_segment_head_diagnostic"] = {
@@ -781,34 +476,11 @@ def build_selection_causality_diagnostics(
                 "replacement_head_name": "path_length_support_target",
                 "ablation_mode": "path_length_support_as_segment_scores",
             }
-            path_length_allocation_method = learned_segment_frozen_method(
+            path_length_allocation_method = _selector_method(
                 name="MLQDS_path_length_support_allocation_only_diagnostic",
                 scores=primary_scores,
-                boundaries=selection_boundaries,
-                compression_ratio=float(config.model.compression_ratio),
                 segment_scores=primary_path_length_support_scores,
                 segment_point_scores=primary_segment_scores,
-                points=selection_points,
-                learned_segment_geometry_gain_weight=float(
-                    config.model.learned_segment_geometry_gain_weight
-                ),
-                learned_segment_allocation_length_support_weight=allocation_length_support_weight,
-                learned_segment_allocation_weight_floor=allocation_weight_floor,
-                learned_segment_score_blend_weight=float(
-                    config.model.learned_segment_score_blend_weight
-                ),
-                learned_segment_transfer_calibration_mode=str(
-                    config.model.learned_segment_transfer_calibration_mode
-                ),
-                learned_segment_fairness_preallocation=bool(
-                    config.model.learned_segment_fairness_preallocation
-                ),
-                learned_segment_length_repair_fraction=float(
-                    config.model.learned_segment_length_repair_fraction
-                ),
-                learned_segment_length_repair_score_protection_fraction=(
-                    repair_score_protection_fraction
-                ),
             )
             ablation_methods.append(path_length_allocation_method)
             head_sensitivity["MLQDS_path_length_support_allocation_only_diagnostic"] = {
@@ -860,34 +532,11 @@ def build_selection_causality_diagnostics(
                 score_temperature=float(config.model.mlqds_score_temperature),
                 rank_confidence_weight=float(config.model.mlqds_rank_confidence_weight),
             )
-            no_behavior = learned_segment_frozen_method(
+            no_behavior = _selector_method(
                 name="MLQDS_without_behavior_utility_head",
                 scores=behavior_scores,
-                boundaries=selection_boundaries,
-                compression_ratio=float(config.model.compression_ratio),
                 segment_scores=primary_selector_segment_scores,
                 segment_point_scores=primary_segment_scores,
-                points=selection_points,
-                learned_segment_geometry_gain_weight=float(
-                    config.model.learned_segment_geometry_gain_weight
-                ),
-                learned_segment_allocation_length_support_weight=allocation_length_support_weight,
-                learned_segment_allocation_weight_floor=allocation_weight_floor,
-                learned_segment_score_blend_weight=float(
-                    config.model.learned_segment_score_blend_weight
-                ),
-                learned_segment_transfer_calibration_mode=str(
-                    config.model.learned_segment_transfer_calibration_mode
-                ),
-                learned_segment_fairness_preallocation=bool(
-                    config.model.learned_segment_fairness_preallocation
-                ),
-                learned_segment_length_repair_fraction=float(
-                    config.model.learned_segment_length_repair_fraction
-                ),
-                learned_segment_length_repair_score_protection_fraction=(
-                    repair_score_protection_fraction
-                ),
             )
             ablation_methods.append(no_behavior)
             head_sensitivity["MLQDS_without_behavior_utility_head"] = {
@@ -918,34 +567,9 @@ def build_selection_causality_diagnostics(
                 .cpu()
             )
             ablation_methods.append(
-                learned_segment_frozen_method(
+                _selector_method(
                     name="MLQDS_prior_field_only_score",
                     scores=prior_scores,
-                    boundaries=selection_boundaries,
-                    compression_ratio=float(config.model.compression_ratio),
-                    points=selection_points,
-                    learned_segment_geometry_gain_weight=float(
-                        config.model.learned_segment_geometry_gain_weight
-                    ),
-                    learned_segment_allocation_length_support_weight=(
-                        allocation_length_support_weight
-                    ),
-                    learned_segment_allocation_weight_floor=allocation_weight_floor,
-                    learned_segment_score_blend_weight=float(
-                        config.model.learned_segment_score_blend_weight
-                    ),
-                    learned_segment_transfer_calibration_mode=str(
-                        config.model.learned_segment_transfer_calibration_mode
-                    ),
-                    learned_segment_fairness_preallocation=bool(
-                        config.model.learned_segment_fairness_preallocation
-                    ),
-                    learned_segment_length_repair_fraction=float(
-                        config.model.learned_segment_length_repair_fraction
-                    ),
-                    learned_segment_length_repair_score_protection_fraction=(
-                        repair_score_protection_fraction
-                    ),
                 )
             )
         except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
@@ -991,9 +615,10 @@ def build_selection_causality_diagnostics(
                     selection_boundaries,
                     float(config.model.compression_ratio),
                 )
-                ablation_point_scores = getattr(ablation_method, "_score_cache", None)
-                ablation_raw_preds = getattr(ablation_method, "_raw_pred_cache", None)
-                ablation_head_logits = getattr(ablation_method, "_head_logit_cache", None)
+                ablation_snapshot = ablation_method.cached_score_snapshot()
+                ablation_point_scores = ablation_snapshot.scores
+                ablation_raw_preds = ablation_snapshot.raw_predictions
+                ablation_head_logits = ablation_snapshot.head_logits
                 prior_sensitivity[prior_sensitivity_key] = prior_ablation_sensitivity_from_tensors(
                     sampled_prior_features=prior_feature_sensitivity,
                     model_prior_features=model_prior_sensitivity,

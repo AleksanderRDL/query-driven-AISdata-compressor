@@ -3,13 +3,12 @@ import csv
 import io
 import os
 from concurrent.futures import ProcessPoolExecutor
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 
-from dotenv import load_dotenv
 import psycopg
-
+from dotenv import load_dotenv
 
 REQUIRED_HEADERS = [
     "MMSI",
@@ -142,7 +141,7 @@ def parse_ts_to_iso(ts: str | None) -> str | None:
 
     try:
         dt = datetime.strptime(ts, "%d/%m/%Y %H:%M:%S")
-        dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
         return dt.isoformat()
     except ValueError:
         pass
@@ -150,8 +149,8 @@ def parse_ts_to_iso(ts: str | None) -> str | None:
     try:
         dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(timezone.utc).isoformat()
+            dt = dt.replace(tzinfo=UTC)
+        return dt.astimezone(UTC).isoformat()
     except ValueError:
         return None
 

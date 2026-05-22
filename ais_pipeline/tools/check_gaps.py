@@ -7,6 +7,8 @@ Usage:
     python -m ais_pipeline.tools.check_gaps --input AISDATA/cleaned/<cleaned-output-directory> --top 1000 --suspicious-only
 """
 
+# ruff: noqa: E402
+
 import argparse
 import sys
 from pathlib import Path
@@ -16,6 +18,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
+from pyspark.sql.window import Window
+
 from ais_pipeline.environment.hadoop_environment import configure_hadoop_environment
 from ais_pipeline.environment.java_environment import configure_java_environment
 from ais_pipeline.environment.spark_environment import (
@@ -23,9 +29,6 @@ from ais_pipeline.environment.spark_environment import (
     configure_spark_environment,
 )
 from ais_pipeline.geo import KNOTS_TO_KMH, haversine_km
-from pyspark.sql import SparkSession
-from pyspark.sql import functions as F
-from pyspark.sql.window import Window
 
 AISDATA_DIR = REPO_ROOT / "AISDATA"
 CHECKPOINT_DIR = REPO_ROOT / "spark_temp" / "checkpoints"
