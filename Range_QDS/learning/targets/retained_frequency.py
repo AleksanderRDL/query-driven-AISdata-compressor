@@ -6,7 +6,7 @@ import math
 
 import torch
 
-from learning.losses import _safe_quantile
+from learning.losses import safe_quantile
 from learning.model_features import (
     HISTORICAL_PRIOR_CLOCK_DIM,
     HISTORICAL_PRIOR_DENSITY_DIM,
@@ -339,10 +339,10 @@ def _historical_prior_teacher_scores(
         diagnostics.update(
             {
                 "historical_prior_teacher_score_p50": float(
-                    _safe_quantile(scores[positive], 0.50).item()
+                    safe_quantile(scores[positive], 0.50).item()
                 ),
                 "historical_prior_teacher_score_p95": float(
-                    _safe_quantile(scores[positive], 0.95).item()
+                    safe_quantile(scores[positive], 0.95).item()
                 ),
             }
         )

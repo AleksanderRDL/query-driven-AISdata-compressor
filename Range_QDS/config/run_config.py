@@ -553,6 +553,17 @@ RUN_CONFIG_NAMESPACE_ALIASES = {
     "validation_global_sanity_penalty_enabled": "validation_global_sanity_penalty",
 }
 
+RUN_CONFIG_LOG_FIELD_ALIASES = {
+    ("model", "model_type"): "model",
+    ("query", "target_coverage"): "query_coverage",
+    ("data", "n_points_per_ship"): "n_points",
+    ("model", "checkpoint_uniform_gap_weight"): "uniform_gap_weight",
+    ("model", "checkpoint_type_penalty_weight"): "type_penalty_weight",
+    ("model", "checkpoint_smoothing_window"): "smoothing_window",
+    ("model", "checkpoint_full_score_every"): "full_score_every",
+    ("model", "checkpoint_candidate_pool_size"): "candidate_pool",
+}
+
 
 def build_run_config_from_namespace(args: Any) -> RunConfig:
     """Build run config from a parsed CLI namespace using the canonical builder contract."""
@@ -562,6 +573,44 @@ def build_run_config_from_namespace(args: Any) -> RunConfig:
         if hasattr(args, source_name):
             kwargs[name] = getattr(args, source_name)
     return build_run_config(**kwargs)
+
+
+def iter_run_config_log_items(
+    config: RunConfig,
+    runtime_settings: dict[str, Any] | None = None,
+) -> list[tuple[str, Any]]:
+    """Return flattened effective run config fields for human-readable logs."""
+    runtime_settings = runtime_settings or {}
+    items: list[tuple[str, Any]] = []
+    for section_name, section in (
+        ("model", config.model),
+        ("query", config.query),
+        ("data", config.data),
+        ("baselines", config.baselines),
+    ):
+        for config_field in fields(section):
+            value = getattr(section, config_field.name)
+            if section_name == "model" and config_field.name == "float32_matmul_precision":
+                value = runtime_settings.get("float32_matmul_precision", value)
+            elif section_name == "model" and config_field.name == "allow_tf32":
+                value = runtime_settings.get("tf32_matmul_allowed", value)
+            log_name = RUN_CONFIG_LOG_FIELD_ALIASES.get(
+                (section_name, config_field.name),
+                config_field.name,
+            )
+            items.append((log_name, value))
+    return items
+
+
+def format_run_config_log_line(
+    config: RunConfig,
+    runtime_settings: dict[str, Any] | None = None,
+) -> str:
+    """Format the effective run config as the single-line CLI config log."""
+    fields_text = "  ".join(
+        f"{name}={value}" for name, value in iter_run_config_log_items(config, runtime_settings)
+    )
+    return f"[config] {fields_text}"
 
 
 def derive_seed_bundle(master_seed: int) -> SeedBundle:

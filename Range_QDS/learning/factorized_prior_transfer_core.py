@@ -7,7 +7,7 @@ from typing import Any, cast
 
 import torch
 
-from learning.losses import _safe_quantile
+from learning.losses import safe_quantile
 from learning.targets.query_local_utility import _rank_correlation
 
 
@@ -264,7 +264,7 @@ def _prior_output_layer_alignment_diagnostics(
         if int(cosine.numel())
         else None,
         "final_weight_to_hidden_delta_abs_cosine_p95": float(
-            _safe_quantile(cosine.abs(), 0.95).item()
+            safe_quantile(cosine.abs(), 0.95).item()
         )
         if int(cosine.numel())
         else None,
@@ -375,7 +375,7 @@ def _loss_gradient_alignment_summary(
         "descent_alignment_sum": float(local_alignment.sum().item()),
         "descent_alignment_positive_fraction": float((local_alignment > 0.0).float().mean().item()),
         "logit_gradient_abs_mean": float(local_gradient.abs().mean().item()),
-        "logit_gradient_abs_p95": float(_safe_quantile(local_gradient.abs(), 0.95).item()),
+        "logit_gradient_abs_p95": float(safe_quantile(local_gradient.abs(), 0.95).item()),
         "logit_delta_abs_mean": float(local_logit_delta.abs().mean().item()),
     }
 

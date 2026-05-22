@@ -28,6 +28,9 @@ def _safe_quantile(values: torch.Tensor, quantile: float | torch.Tensor) -> torc
     return torch.quantile(flat[sampled_indices], quantile)
 
 
+safe_quantile = _safe_quantile
+
+
 def _balanced_pointwise_loss(
     pred: torch.Tensor,
     target: torch.Tensor,
@@ -391,6 +394,9 @@ def _budget_loss_ratios(model_config: ModelConfig) -> tuple[float, ...]:
     if not ratios:
         ratios = [float(getattr(model_config, "compression_ratio", 0.05))]
     return tuple(ratios)
+
+
+budget_loss_ratios = _budget_loss_ratios
 
 
 def _effective_temporal_residual_label_mode(

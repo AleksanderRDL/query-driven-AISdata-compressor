@@ -9,7 +9,7 @@ import torch
 
 from config.run_config import ModelConfig
 from learning.inference import windowed_predict
-from learning.losses import _budget_loss_ratios, _safe_quantile
+from learning.losses import budget_loss_ratios, safe_quantile
 from learning.model_features import build_model_point_features
 from learning.outputs import TrainingOutputs
 from selection.model_score_conversion import pure_workload_scores
@@ -90,7 +90,7 @@ def _retained_frequency_labels(
     model_config: ModelConfig,
 ) -> torch.Tensor:
     """Use teacher-retained membership frequency across configured budgets."""
-    ratios = _budget_loss_ratios(model_config)
+    ratios = budget_loss_ratios(model_config)
     if not ratios:
         ratios = (float(model_config.compression_ratio),)
     scores = pure_workload_scores(
@@ -142,9 +142,9 @@ def _label_diagnostics(values: torch.Tensor, mode: str) -> dict[str, Any]:
     }
     if positive_count > 0:
         positive_values = values[positive]
-        diag["positive_label_p50"] = float(_safe_quantile(positive_values, 0.50).item())
-        diag["positive_label_p90"] = float(_safe_quantile(positive_values, 0.90).item())
-        diag["positive_label_p99"] = float(_safe_quantile(positive_values, 0.99).item())
+        diag["positive_label_p50"] = float(safe_quantile(positive_values, 0.50).item())
+        diag["positive_label_p90"] = float(safe_quantile(positive_values, 0.90).item())
+        diag["positive_label_p99"] = float(safe_quantile(positive_values, 0.99).item())
     else:
         diag["positive_label_p50"] = 0.0
         diag["positive_label_p90"] = 0.0
@@ -196,7 +196,7 @@ def distill_range_teacher_labels(
     diagnostics = _label_diagnostics(labels[:, QUERY_TYPE_ID_RANGE], mode)
     diagnostics["teacher_model_type"] = str(teacher_model_type)
     diagnostics["teacher_epochs_trained"] = int(teacher.epochs_trained)
-    diagnostics["budget_loss_ratios"] = list(_budget_loss_ratios(model_config))
+    diagnostics["budget_loss_ratios"] = list(budget_loss_ratios(model_config))
     diagnostics["mlqds_temporal_fraction"] = float(
         getattr(model_config, "mlqds_temporal_fraction", 0.0)
     )

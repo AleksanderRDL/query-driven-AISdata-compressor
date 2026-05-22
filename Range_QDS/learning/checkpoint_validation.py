@@ -19,14 +19,14 @@ from config.run_config import (
     DEFAULT_VALIDATION_SED_PENALTY_WEIGHT,
     ModelConfig,
 )
-from learning.fit_diagnostics import _discriminative_sample, _kendall_tau
+from learning.fit_diagnostics import discriminative_sample, kendall_tau
 from learning.inference import (
     _is_workload_blind_model,
     _model_point_dim,
     windowed_predict_with_heads,
 )
 from learning.model_features import build_model_point_features_for_dim
-from learning.model_setup import _pure_query_type_id
+from learning.model_setup import pure_query_type_id
 from learning.scaler import FeatureScaler
 from learning.targets.query_local_utility import (
     QUERY_LOCAL_UTILITY_HEAD_NAMES,
@@ -202,7 +202,7 @@ def _predict_workload_logits_with_heads(
     else:
         norm_points, norm_queries = scaler.transform(model_points, workload.query_features)
         type_ids_dev = workload.type_ids.to(device)
-        _pure_query_type_id(workload.type_ids)
+        pure_query_type_id(workload.type_ids)
     inference_batch_size = max(1, int(getattr(model_config, "inference_batch_size", 16)))
     amp_mode = normalize_amp_mode(getattr(model_config, "amp_mode", "off"))
     scores, head_logits = windowed_predict_with_heads(
@@ -320,7 +320,7 @@ def _validation_factorized_target_fit_metrics(
         head_targets = (
             targets.head_targets[:, head_idx].detach().cpu().float().clamp(0.0, 1.0)[valid]
         )
-        sampled_scores, sampled_targets = _discriminative_sample(
+        sampled_scores, sampled_targets = discriminative_sample(
             scores,
             head_targets,
             n_each=200,
@@ -332,7 +332,7 @@ def _validation_factorized_target_fit_metrics(
         selected_mass = float(head_targets[selected].sum().item())
         ideal_mass = float(head_targets[ideal].sum().item())
         metrics[f"head_{head_name}_target_fit_available"] = 1.0
-        metrics[f"head_{head_name}_tau"] = float(_kendall_tau(sampled_scores, sampled_targets))
+        metrics[f"head_{head_name}_tau"] = float(kendall_tau(sampled_scores, sampled_targets))
         metrics[f"head_{head_name}_top5_mass_recall"] = float(
             selected_mass / max(ideal_mass, 1e-12)
         )
@@ -370,7 +370,7 @@ def _validation_factorized_target_fit_metrics(
     if segment_scores:
         pooled_scores = torch.stack(segment_scores).float()
         pooled_targets = torch.stack(segment_targets).float().clamp(0.0, 1.0)
-        sampled_scores, sampled_targets = _discriminative_sample(
+        sampled_scores, sampled_targets = discriminative_sample(
             pooled_scores,
             pooled_targets,
             n_each=200,
@@ -383,7 +383,7 @@ def _validation_factorized_target_fit_metrics(
         ideal_mass = float(pooled_targets[ideal].sum().item())
         metrics["segment_budget_canonical_segment_fit_available"] = 1.0
         metrics["segment_budget_canonical_segment_tau"] = float(
-            _kendall_tau(sampled_scores, sampled_targets)
+            kendall_tau(sampled_scores, sampled_targets)
         )
         metrics["segment_budget_canonical_segment_top5_mass_recall"] = float(
             selected_mass / max(ideal_mass, 1e-12)
@@ -891,3 +891,7 @@ def _validation_uniform_score(
     if variant == "combined":
         return combined_agg, combined_pt
     return answer_agg, answer_pt
+
+
+validation_checkpoint_scores = _validation_checkpoint_scores
+validation_uniform_score = _validation_uniform_score

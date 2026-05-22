@@ -13,6 +13,9 @@ def _model_state_on_cpu(model: torch.nn.Module) -> dict[str, torch.Tensor]:
     return {name: value.detach().cpu().clone() for name, value in model.state_dict().items()}
 
 
+model_state_on_cpu = _model_state_on_cpu
+
+
 def _workload_map_tensor(workload_map: dict[str, float], device: torch.device) -> torch.Tensor:
     """Return normalized pure-workload weights in query-type ID order."""
     normalized = normalize_pure_workload_map(workload_map)
@@ -43,3 +46,6 @@ def _pure_query_type_id(type_ids: torch.Tensor) -> int:
     if int(unique_ids.numel()) != 1:
         raise ValueError("Pure-workload learning/scoring requires exactly one query type id.")
     return int(unique_ids[0].item())
+
+
+pure_query_type_id = _pure_query_type_id

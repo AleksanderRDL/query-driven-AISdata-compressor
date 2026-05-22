@@ -10,7 +10,7 @@ import pytest
 from config.run_config import build_run_config
 from learning.outputs import TrainingOutputs
 from orchestration.final_gate_summary import FinalRunSummaries
-from orchestration.run_payload import build_run_payload
+from orchestration.run_payload import RunPayloadInputs, build_run_payload
 from orchestration.scoring_stage import build_workload_scoring_compatibility_diagnostics
 from scoring.metrics import MethodScore
 
@@ -107,43 +107,45 @@ def test_build_run_payload_preserves_stable_artifact_fields() -> None:
     )
 
     payload = build_run_payload(
-        config=config,
-        final_summaries=final_summaries,
-        trained=trained,
-        train_workload=train_workload,
-        train_label_workloads=[train_workload],
-        eval_workload=eval_workload,
-        selection_workload=None,
-        eval_workload_map={"range": 1.0},
-        data_split_diagnostics={"split": "ok"},
-        selector_budget_diagnostics={"eval": {}},
-        primary_selector_trace=None,
-        selection_selector_trace=None,
-        train_selector_trace=None,
-        train_marginal_causality_diagnostics=None,
-        segment_oracle_allocation_audit={},
-        target_segment_oracle_alignment_audit={},
-        matched={"MLQDS": MethodScore(aggregate_f1=0.7, per_type_f1={"range": 0.7})},
-        causality_ablation_scores={},
-        learned_fill_diagnostics={},
-        range_learned_fill_summary={},
-        predictability_audit={"gate_pass": False},
-        workload_scoring_compatibility_diagnostics={"available": True},
-        range_compression_audit={},
-        shift_pairs={},
-        range_training_target_transform={},
-        range_target_balance_diagnostics={},
-        range_training_label_aggregation={},
-        teacher_distillation_diagnostics={},
-        selection_metric="score",
-        workload_blind_eval=True,
-        frozen_primary_masks={"MLQDS": cast(Any, object())},
-        frozen_audit_methods_by_ratio={"0.0500": cast(Any, object())},
-        data_audit=None,
-        range_diagnostics_summary={"train": {}},
-        workload_distribution_comparison={"deltas_vs_eval": {}},
-        training_cuda_memory={"available": False},
-        run_oracle_baseline=False,
+        RunPayloadInputs(
+            config=config,
+            final_summaries=final_summaries,
+            trained=trained,
+            train_workload=cast(Any, train_workload),
+            train_label_workloads=[cast(Any, train_workload)],
+            eval_workload=cast(Any, eval_workload),
+            selection_workload=None,
+            eval_workload_map={"range": 1.0},
+            data_split_diagnostics={"split": "ok"},
+            selector_budget_diagnostics={"eval": {}},
+            primary_selector_trace=None,
+            selection_selector_trace=None,
+            train_selector_trace=None,
+            train_marginal_causality_diagnostics=None,
+            segment_oracle_allocation_audit={},
+            target_segment_oracle_alignment_audit={},
+            matched={"MLQDS": MethodScore(aggregate_f1=0.7, per_type_f1={"range": 0.7})},
+            causality_ablation_scores={},
+            learned_fill_diagnostics={},
+            range_learned_fill_summary={},
+            predictability_audit={"gate_pass": False},
+            workload_scoring_compatibility_diagnostics={"available": True},
+            range_compression_audit={},
+            shift_pairs={},
+            range_training_target_transform={},
+            range_target_balance_diagnostics={},
+            range_training_label_aggregation={},
+            teacher_distillation_diagnostics={},
+            selection_metric="score",
+            workload_blind_eval=True,
+            frozen_primary_masks={"MLQDS": cast(Any, object())},
+            frozen_audit_methods_by_ratio={"0.0500": cast(Any, object())},
+            data_audit=None,
+            range_diagnostics_summary={"train": {}},
+            workload_distribution_comparison={"deltas_vs_eval": {}},
+            training_cuda_memory={"available": False},
+            run_oracle_baseline=False,
+        )
     )
 
     assert payload["workload"] == "range"

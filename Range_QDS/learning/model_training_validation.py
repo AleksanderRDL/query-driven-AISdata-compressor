@@ -8,8 +8,8 @@ from typing import Any
 import torch
 
 from config.run_config import ModelConfig
-from learning.checkpoint_validation import _validation_uniform_score
-from learning.model_training_helpers import _require_validation_inputs
+from learning.checkpoint_validation import validation_uniform_score
+from learning.model_training_helpers import require_validation_inputs
 from workloads.typed_workload import TypedQueryWorkload
 
 
@@ -69,7 +69,7 @@ def _validation_uniform_baseline(
     model_config: ModelConfig,
     run_tag: str,
 ) -> tuple[float, dict[str, float]]:
-    validation_uniform_result = _validation_uniform_score(
+    validation_uniform_result = validation_uniform_score(
         trajectories=validation_trajectories,
         boundaries=validation_boundaries,
         workload=validation_workload,
@@ -128,7 +128,7 @@ def build_validation_scoring_plan(
     validation_query_cache: Any | None = None
     if has_validation_score:
         validation_trajectories, validation_boundaries, validation_workload = (
-            _require_validation_inputs(
+            require_validation_inputs(
                 validation_trajectories,
                 validation_boundaries,
                 validation_workload,
@@ -145,7 +145,7 @@ def build_validation_scoring_plan(
     validation_uniform_result: tuple[float, dict[str, float]] | None = None
     if normalized_metric == "uniform_gap" and has_validation_score:
         validation_trajectories, validation_boundaries, validation_workload = (
-            _require_validation_inputs(
+            require_validation_inputs(
                 validation_trajectories,
                 validation_boundaries,
                 validation_workload,

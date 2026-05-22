@@ -100,7 +100,7 @@ def _retained_point_gap_stats(
     return float(total_gap / gap_count), float(total_norm_gap / gap_count), float(max_gap)
 
 
-def _endpoint_sanity(retained_mask: torch.Tensor, boundaries: list[tuple[int, int]]) -> float:
+def endpoint_sanity(retained_mask: torch.Tensor, boundaries: list[tuple[int, int]]) -> float:
     """Return the fraction of eligible trajectories retaining both endpoints."""
     eligible = 0
     passing = 0
@@ -117,6 +117,9 @@ def _endpoint_sanity(retained_mask: torch.Tensor, boundaries: list[tuple[int, in
     if eligible <= 0:
         return 1.0
     return float(passing / eligible)
+
+
+_endpoint_sanity = endpoint_sanity
 
 
 def score_method(
@@ -174,14 +177,14 @@ def score_method(
             typed_queries=typed_queries,
             query_cache=query_cache,
         )
-    endpoint_sanity = _endpoint_sanity(retained_mask, boundaries)
-    range_audit["endpoint_sanity"] = endpoint_sanity
+    endpoint_sanity_score = endpoint_sanity(retained_mask, boundaries)
+    range_audit["endpoint_sanity"] = endpoint_sanity_score
     boundary_f1 = float(range_audit.get("range_entry_exit_f1", 0.0))
     query_local_utility = query_local_utility_from_range_audit(
         range_audit,
         length_preservation=avg_length_preserved,
         avg_sed_km=float(geometric.get("avg_sed_km", 0.0)),
-        endpoint_sanity=endpoint_sanity,
+        endpoint_sanity=endpoint_sanity_score,
     )
     range_audit.update(query_local_utility)
     query_local_utility_components_raw = query_local_utility.get(

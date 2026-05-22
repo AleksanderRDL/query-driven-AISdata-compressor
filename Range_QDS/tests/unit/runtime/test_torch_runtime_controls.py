@@ -21,6 +21,7 @@ from config.run_config import (
     DEFAULT_VALIDATION_SED_PENALTY_WEIGHT,
     RunConfig,
     build_run_config,
+    format_run_config_log_line,
 )
 from orchestration.learning_scoring_cli import build_parser
 from orchestration.train_and_score import _split_max_segments
@@ -653,6 +654,31 @@ def test_run_config_loads_missing_runtime_and_mlqds_defaults() -> None:
     assert restored.data.eval_max_segments is None
     assert restored.data.range_diagnostics_mode == "full"
     assert restored.baselines.final_metrics_mode == "diagnostic"
+
+
+def test_run_config_log_line_uses_effective_config_and_runtime_settings() -> None:
+    cfg = build_run_config(
+        model_type="workload_blind_range",
+        query_coverage=0.25,
+        float32_matmul_precision="high",
+        allow_tf32=True,
+        range_training_target_mode="query_local_utility_factorized",
+    )
+
+    line = format_run_config_log_line(
+        cfg,
+        {
+            "float32_matmul_precision": "highest",
+            "tf32_matmul_allowed": False,
+        },
+    )
+
+    assert line.startswith("[config] ")
+    assert "model=workload_blind_range" in line
+    assert "query_coverage=0.25" in line
+    assert "range_training_target_mode=query_local_utility_factorized" in line
+    assert "float32_matmul_precision=highest" in line
+    assert "allow_tf32=False" in line
 
 
 def test_split_max_segments_falls_back_to_global_cap() -> None:

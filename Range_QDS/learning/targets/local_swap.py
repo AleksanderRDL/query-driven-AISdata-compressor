@@ -6,7 +6,7 @@ import math
 
 import torch
 
-from learning.targets.common import _target_budget_ratios, _target_budget_weights
+from learning.targets.common import target_budget_ratios, target_budget_weights
 from learning.targets.set_utility import _range_set_utility_candidates
 from scoring.method_scoring import score_range_usefulness
 from scoring.query_cache import ScoringQueryCache
@@ -120,7 +120,7 @@ def _range_local_swap_utility_scores(
         }
 
     used_budget_count = 0
-    budget_weights = _target_budget_weights(model_config, ratios)
+    budget_weights = target_budget_weights(model_config, ratios)
     used_weight = 0.0
     total_candidate_count = 0
     total_scored_candidate_count = 0
@@ -336,7 +336,7 @@ def range_local_swap_utility_frequency_training_labels(
     if int(points.shape[0]) != int(labels.shape[0]):
         raise ValueError("points and labels must have the same point count.")
 
-    ratios = _target_budget_ratios(model_config)
+    ratios = target_budget_ratios(model_config)
     target, utility_diagnostics = _range_local_swap_utility_scores(
         points=points,
         labels=labels,
@@ -359,7 +359,7 @@ def range_local_swap_utility_frequency_training_labels(
         "mode": "local_swap_utility_frequency",
         "source": "range_train_query_local_swap_usefulness_gain",
         "budget_loss_ratios": list(ratios),
-        "budget_weights": list(_target_budget_weights(model_config, ratios)),
+        "budget_weights": list(target_budget_weights(model_config, ratios)),
         "budget_weight_power": float(
             getattr(model_config, "range_target_budget_weight_power", 0.0) or 0.0
         ),
@@ -432,7 +432,7 @@ def _range_local_swap_gain_cost_scores(
         }
 
     used_budget_count = 0
-    budget_weights = _target_budget_weights(model_config, ratios)
+    budget_weights = target_budget_weights(model_config, ratios)
     used_weight = 0.0
     total_candidate_count = 0
     total_scored_candidate_count = 0
@@ -736,7 +736,7 @@ def range_local_swap_gain_cost_frequency_training_labels(
     if int(points.shape[0]) != int(labels.shape[0]):
         raise ValueError("points and labels must have the same point count.")
 
-    ratios = _target_budget_ratios(model_config)
+    ratios = target_budget_ratios(model_config)
     target, gain_cost_diagnostics = _range_local_swap_gain_cost_scores(
         points=points,
         labels=labels,
@@ -759,7 +759,7 @@ def range_local_swap_gain_cost_frequency_training_labels(
         "mode": "local_swap_gain_cost_frequency",
         "source": "range_train_query_local_swap_candidate_value_and_removal_cost",
         "budget_loss_ratios": list(ratios),
-        "budget_weights": list(_target_budget_weights(model_config, ratios)),
+        "budget_weights": list(target_budget_weights(model_config, ratios)),
         "budget_weight_power": float(
             getattr(model_config, "range_target_budget_weight_power", 0.0) or 0.0
         ),

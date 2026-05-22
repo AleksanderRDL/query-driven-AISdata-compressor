@@ -16,14 +16,14 @@ from learning.checkpoint_selection import (
     selection_from_stats,
     selection_score,
 )
-from learning.checkpoint_validation import _validation_checkpoint_scores
-from learning.fit_diagnostics import _discriminative_sample, _kendall_tau
-from learning.losses import _safe_quantile
-from learning.model_setup import _model_state_on_cpu
-from learning.model_training_helpers import _require_validation_inputs
+from learning.checkpoint_validation import validation_checkpoint_scores
+from learning.fit_diagnostics import discriminative_sample, kendall_tau
+from learning.losses import safe_quantile
+from learning.model_setup import model_state_on_cpu
+from learning.model_training_helpers import require_validation_inputs
 from learning.model_training_validation import ValidationScoringPlan
-from learning.optimization_epoch import _train_one_epoch
-from learning.supervised_windows import _trajectory_batch_to_device
+from learning.optimization_epoch import train_one_epoch
+from learning.supervised_windows import trajectory_batch_to_device
 from learning.trajectory_batching import TrajectoryBatch, batch_windows
 from runtime.torch_runtime import torch_autocast_context
 from workloads.query_types import ID_TO_QUERY_NAME, NUM_QUERY_TYPES
@@ -125,7 +125,7 @@ def _diagnostic_full_scores(
             1, int(getattr(model_config, "inference_batch_size", train_batch_size))
         )
         for diagnostic_batch_cpu in batch_windows(diagnostic_windows, diagnostic_batch_size):
-            diagnostic_batch = _trajectory_batch_to_device(diagnostic_batch_cpu, device)
+            diagnostic_batch = trajectory_batch_to_device(diagnostic_batch_cpu, device)
             with torch_autocast_context(device, amp_mode):
                 window_scores = model(
                     points=diagnostic_batch.points,
@@ -206,9 +206,9 @@ def _diagnostic_stats(
         stats[f"kendall_tau_t{type_idx}"] = 0.0
 
     type_scores = full_scores
-    stats[f"pred_p50_t{active_type_id}"] = float(_safe_quantile(type_scores, 0.50).item())
-    stats[f"pred_p90_t{active_type_id}"] = float(_safe_quantile(type_scores, 0.90).item())
-    stats[f"pred_p99_t{active_type_id}"] = float(_safe_quantile(type_scores, 0.99).item())
+    stats[f"pred_p50_t{active_type_id}"] = float(safe_quantile(type_scores, 0.50).item())
+    stats[f"pred_p90_t{active_type_id}"] = float(safe_quantile(type_scores, 0.90).item())
+    stats[f"pred_p99_t{active_type_id}"] = float(safe_quantile(type_scores, 0.99).item())
     labelled_type = labelled_mask_dev
     positive_type = labelled_type & (training_target_dev > 0)
     labelled_count = max(1, int(labelled_type.sum().item()))
@@ -217,18 +217,18 @@ def _diagnostic_stats(
     )
     if bool(positive_type.any().item()):
         stats[f"label_p95_t{active_type_id}"] = float(
-            _safe_quantile(training_target_dev[positive_type], 0.95).item()
+            safe_quantile(training_target_dev[positive_type], 0.95).item()
         )
     eval_mask = labelled_mask_dev & covered_mask
     if bool(eval_mask.any().item()):
         diagnostic_sample_generator.manual_seed(int(seed) + 777)
-        pred_sample, target_sample = _discriminative_sample(
+        pred_sample, target_sample = discriminative_sample(
             type_scores[eval_mask].detach().cpu(),
             training_target_dev[eval_mask].detach().cpu(),
             n_each=100,
             generator=diagnostic_sample_generator,
         )
-        stats[f"kendall_tau_t{active_type_id}"] = _kendall_tau(pred_sample, target_sample)
+        stats[f"kendall_tau_t{active_type_id}"] = kendall_tau(pred_sample, target_sample)
 
     if stats["pred_std"] < 1e-3:
         stats["collapse_warning"] = 1.0
@@ -269,13 +269,13 @@ def _score_validation_checkpoint(
     precomputed_validation_geometry_scores: torch.Tensor | None,
 ) -> tuple[float, dict[str, float], dict[str, float]]:
     validation_trajectories, validation_boundaries, validation_workload = (
-        _require_validation_inputs(
+        require_validation_inputs(
             validation_plan.validation_trajectories,
             validation_plan.validation_boundaries,
             validation_plan.validation_workload,
         )
     )
-    return _validation_checkpoint_scores(
+    return validation_checkpoint_scores(
         model=model,
         scaler=scaler,
         trajectories=validation_trajectories,
@@ -358,7 +358,7 @@ def _collect_checkpoint_candidates(
             epoch_index=epoch,
             cheap_score=float(stats["checkpoint_candidate_cheap_score"]),
             loss=float(stats["loss"]),
-            state_dict=_model_state_on_cpu(model),
+            state_dict=model_state_on_cpu(model),
             stats=stats,
             avg_tau=candidate_avg_tau,
         )
@@ -369,7 +369,7 @@ def _collect_checkpoint_candidates(
         return checkpoint_candidates, evaluated_checkpoint_candidates, elapsed
 
     score_t0 = time.perf_counter()
-    current_state_dict = _model_state_on_cpu(model)
+    current_state_dict = model_state_on_cpu(model)
     for candidate in sorted(checkpoint_candidates, key=lambda item: item.epoch_number):
         candidate_t0 = time.perf_counter()
         model.load_state_dict(candidate.state_dict)
@@ -503,7 +503,7 @@ def _select_epoch_checkpoint(
                 best_loss = stats["loss"]
                 best_selection_score = float(stats.get("val_selection_score", best_selection_score))
                 best_epoch = epoch + 1
-                best_state_dict = _model_state_on_cpu(model)
+                best_state_dict = model_state_on_cpu(model)
 
     return EpochCheckpointSelection(
         selection=selection,
@@ -587,7 +587,7 @@ def run_training_epochs(plan: TrainingEpochLoopPlan) -> TrainingEpochLoopResult:
     epochs_trained = 0
     for epoch in range(effective_epochs):
         epoch_t0 = time.perf_counter()
-        epoch_result = _train_one_epoch(
+        epoch_result = train_one_epoch(
             model=model,
             windows=windows,
             opt=opt,

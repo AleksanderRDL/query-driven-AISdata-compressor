@@ -14,8 +14,8 @@ from learning.factorized_prior_learning_diagnostics import (
 from learning.factorized_prior_transfer_core import (
     _prior_output_layer_alignment_diagnostics as _prior_output_layer_alignment_diagnostics,
 )
-from learning.fit_diagnostics import _discriminative_sample, _kendall_tau
-from learning.losses import _safe_quantile
+from learning.fit_diagnostics import discriminative_sample, kendall_tau
+from learning.losses import safe_quantile
 from learning.targets.query_local_utility import (
     QUERY_LOCAL_UTILITY_FINAL_LABEL_FORMULA,
     QUERY_LOCAL_UTILITY_HEAD_NAMES,
@@ -127,13 +127,13 @@ def _segment_head_fit_diagnostics(
     if not bool(valid.any().item()):
         return {"segment_head_diagnostics_available": False, "reason": "no_valid_segment_targets"}
     generator = torch.Generator().manual_seed(int(seed) + 811)
-    sampled_scores, sampled_targets = _discriminative_sample(
+    sampled_scores, sampled_targets = discriminative_sample(
         scores[valid],
         targets[valid],
         n_each=200,
         generator=generator,
     )
-    tau = _kendall_tau(sampled_scores, sampled_targets)
+    tau = kendall_tau(sampled_scores, sampled_targets)
     valid_scores = scores[valid]
     valid_targets = targets[valid]
     k = max(1, math.ceil(0.05 * int(valid_scores.numel())))
@@ -191,7 +191,7 @@ def _segment_head_fit_diagnostics(
     if pooled_scores:
         segment_scores = torch.stack(pooled_scores)
         segment_targets = torch.stack(pooled_targets)
-        segment_sampled_scores, segment_sampled_targets = _discriminative_sample(
+        segment_sampled_scores, segment_sampled_targets = discriminative_sample(
             segment_scores,
             segment_targets,
             n_each=200,
@@ -202,7 +202,7 @@ def _segment_head_fit_diagnostics(
         segment_ideal = torch.topk(segment_targets, k=segment_k, largest=True).indices
         segment_selected_mass = float(segment_targets[segment_selected].sum().item())
         segment_ideal_mass = float(segment_targets[segment_ideal].sum().item())
-        segment_tau = float(_kendall_tau(segment_sampled_scores, segment_sampled_targets))
+        segment_tau = float(kendall_tau(segment_sampled_scores, segment_sampled_targets))
         segment_topk_recall = float(segment_selected_mass / max(segment_ideal_mass, 1e-12))
         diagnostics.update(
             {
@@ -431,7 +431,7 @@ def _factorized_head_fit_diagnostics(
             continue
         scores = torch.sigmoid(head_logits[:, head_idx].detach().cpu().float())[valid]
         targets = factorized_targets[:, head_idx].detach().cpu().float().clamp(0.0, 1.0)[valid]
-        sampled_scores, sampled_targets = _discriminative_sample(
+        sampled_scores, sampled_targets = discriminative_sample(
             scores,
             targets,
             n_each=200,
@@ -442,7 +442,7 @@ def _factorized_head_fit_diagnostics(
         ideal = torch.topk(targets, k=k, largest=True).indices
         selected_mass = float(targets[selected].sum().item())
         ideal_mass = float(targets[ideal].sum().item())
-        tau = float(_kendall_tau(sampled_scores, sampled_targets))
+        tau = float(kendall_tau(sampled_scores, sampled_targets))
         topk_recall = float(selected_mass / max(ideal_mass, 1e-12))
         head_rows[str(head_name)] = {
             "available": True,
@@ -546,7 +546,7 @@ def _family_conditioned_head_trainability_diagnostics(
             return {"available": False, "reason": "insufficient_valid_points"}
         valid_scores = scores[valid].float()
         valid_targets = target_values[valid].float().clamp(0.0, 1.0)
-        sampled_scores, sampled_targets = _discriminative_sample(
+        sampled_scores, sampled_targets = discriminative_sample(
             valid_scores,
             valid_targets,
             n_each=200,
@@ -576,7 +576,7 @@ def _family_conditioned_head_trainability_diagnostics(
             "prediction_std": float(valid_scores.std(unbiased=False).item())
             if int(valid_scores.numel()) > 1
             else 0.0,
-            "kendall_tau_with_head_target": float(_kendall_tau(sampled_scores, sampled_targets)),
+            "kendall_tau_with_head_target": float(kendall_tau(sampled_scores, sampled_targets)),
             "topk_head_target_mass_recall": float(
                 selected_target_mass / max(ideal_target_mass, 1e-12)
             ),
@@ -716,7 +716,7 @@ def _factorized_final_score_composition_diagnostics(
     composed = composed_score(probabilities)[mask]
     target_valid = target[mask]
     generator = torch.Generator().manual_seed(int(seed) + 1701)
-    sampled_scores, sampled_targets = _discriminative_sample(
+    sampled_scores, sampled_targets = discriminative_sample(
         composed,
         target_valid,
         n_each=200,
@@ -729,10 +729,10 @@ def _factorized_final_score_composition_diagnostics(
     prediction_std = (
         float(composed.std(unbiased=False).item()) if int(composed.numel()) > 1 else 0.0
     )
-    prediction_p05 = float(_safe_quantile(composed, 0.05).item())
-    prediction_p95 = float(_safe_quantile(composed, 0.95).item())
-    target_p05 = float(_safe_quantile(target_valid, 0.05).item())
-    target_p95 = float(_safe_quantile(target_valid, 0.95).item())
+    prediction_p05 = float(safe_quantile(composed, 0.05).item())
+    prediction_p95 = float(safe_quantile(composed, 0.95).item())
+    target_p05 = float(safe_quantile(target_valid, 0.05).item())
+    target_p95 = float(safe_quantile(target_valid, 0.95).item())
     replacement_multiplier = (0.75 + 0.25 * probabilities[:, 3].float().clamp(0.0, 1.0))[mask]
     query_hit_branch = (0.50 * probabilities[:, 0].float().clamp(0.0, 1.0))[mask]
     behavior_branch = (0.45 * probabilities[:, 1].float().clamp(0.0, 1.0))[mask]
@@ -752,7 +752,7 @@ def _factorized_final_score_composition_diagnostics(
         "factorized_final_score_prediction_std_to_target_std": (
             None if target_std <= 1e-12 else float(prediction_std / target_std)
         ),
-        "factorized_final_score_tau": float(_kendall_tau(sampled_scores, sampled_targets)),
+        "factorized_final_score_tau": float(kendall_tau(sampled_scores, sampled_targets)),
         "factorized_final_score_topk_mass_recall_at_5_percent": topk_recall,
         "factorized_final_score_topk_overlap_at_5_percent": topk_overlap,
         "factorized_replacement_multiplier_mean": float(replacement_multiplier.mean().item()),
@@ -778,7 +778,7 @@ def _factorized_final_score_composition_diagnostics(
     if factorized_targets is not None and factorized_targets.shape == logits.shape:
         target_probabilities = factorized_targets.detach().cpu().float().clamp(0.0, 1.0)
         target_composed = composed_score(target_probabilities)[mask]
-        sampled_target_composed, sampled_label = _discriminative_sample(
+        sampled_target_composed, sampled_label = discriminative_sample(
             target_composed,
             target_valid,
             n_each=200,
@@ -793,7 +793,7 @@ def _factorized_final_score_composition_diagnostics(
                     (target_composed - target_valid).abs().mean().item()
                 ),
                 "factorized_target_formula_label_tau": float(
-                    _kendall_tau(sampled_target_composed, sampled_label)
+                    kendall_tau(sampled_target_composed, sampled_label)
                 ),
                 "factorized_target_formula_topk_mass_recall_at_5_percent": target_topk_recall,
                 "factorized_target_formula_topk_overlap_at_5_percent": target_topk_overlap,

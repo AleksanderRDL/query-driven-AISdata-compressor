@@ -18,7 +18,7 @@ from learning.factorized_prior_transfer_core import (
     _ratio_from_summaries,
     _summarize_prior_channel_direction_decomposition,
 )
-from learning.optimization_epoch import _factorized_query_local_utility_loss
+from learning.optimization_epoch import factorized_query_local_utility_loss
 from learning.query_prior_fields import QUERY_PRIOR_FIELD_NAMES
 from learning.targets.query_local_utility import QUERY_LOCAL_UTILITY_HEAD_NAMES
 from learning.targets.query_local_utility_family import (
@@ -370,7 +370,7 @@ def _prior_to_head_transfer_sensitivity_diagnostics(
                         dim=-1,
                     ).detach()
                     with torch.enable_grad():
-                        loss = _factorized_query_local_utility_loss(
+                        loss = factorized_query_local_utility_loss(
                             head_logits=primary_logits,
                             head_targets=window_targets.to(device=device),
                             head_mask=window_mask.to(device=device),

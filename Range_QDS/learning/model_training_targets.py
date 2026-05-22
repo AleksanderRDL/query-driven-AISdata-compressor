@@ -10,7 +10,7 @@ import torch
 from config.run_config import ModelConfig
 from learning.importance_labels import compute_typed_importance_labels
 from learning.model_features import WORKLOAD_BLIND_RANGE_MODEL_TYPE, build_model_point_features
-from learning.model_training_helpers import _canonical_segment_ids_for_boundaries
+from learning.model_training_helpers import canonical_segment_ids_for_boundaries
 from learning.query_prior_fields import build_train_query_prior_fields
 from learning.targets.query_local_utility import (
     QUERY_LOCAL_UTILITY_HEAD_NAMES,
@@ -91,7 +91,7 @@ def build_training_target_inputs(
         factorized_mask = factorized_bundle.head_mask
         factorized_target_diagnostics = factorized_bundle.diagnostics
         factorized_segment_size = int(factorized_target_diagnostics.get("segment_size_points", 32))
-        canonical_segment_ids = _canonical_segment_ids_for_boundaries(
+        canonical_segment_ids = canonical_segment_ids_for_boundaries(
             point_count=int(all_points.shape[0]),
             boundaries=train_boundaries,
             segment_size=factorized_segment_size,

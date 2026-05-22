@@ -24,7 +24,7 @@ from learning.losses import (
     _pointwise_bce_loss_rows,
     _ranking_loss_for_type,
 )
-from learning.supervised_windows import _trajectory_batch_to_device
+from learning.supervised_windows import trajectory_batch_to_device
 from learning.targets.query_local_utility import QUERY_LOCAL_UTILITY_HEAD_NAMES
 from learning.trajectory_batching import TrajectoryBatch
 from runtime.torch_runtime import torch_autocast_context
@@ -132,6 +132,9 @@ def _factorized_query_local_utility_loss(
         + max(0.0, float(behavior_rank_loss_weight)) * behavior_rank_loss
         + sparse_rank_weight * sparse_head_rank_loss
     )
+
+
+factorized_query_local_utility_loss = _factorized_query_local_utility_loss
 
 
 def _sparse_head_rank_loss(
@@ -381,7 +384,7 @@ def _train_one_epoch(
     ranking_pair_counts = torch.zeros((NUM_QUERY_TYPES,), dtype=torch.long)
 
     for window_batch_cpu in windows:
-        window_batch = _trajectory_batch_to_device(window_batch_cpu, device)
+        window_batch = trajectory_batch_to_device(window_batch_cpu, device)
         forward_t0 = time.perf_counter()
         with torch_autocast_context(device, amp_mode):
             forward_with_heads = getattr(model, "forward_with_heads", None)
@@ -601,3 +604,6 @@ def _train_one_epoch(
         ranking_pair_counts=ranking_pair_counts,
         timing=timing,
     )
+
+
+train_one_epoch = _train_one_epoch

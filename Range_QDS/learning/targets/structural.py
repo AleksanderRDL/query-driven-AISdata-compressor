@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import torch
 
-from learning.losses import _safe_quantile
+from learning.losses import safe_quantile
 from learning.targets.common import (
     _apply_temporal_target_blend,
     _retained_frequency_from_scores,
@@ -131,8 +131,8 @@ def _query_free_structural_scores(
     if bool(positive.any().item()):
         diagnostics.update(
             {
-                "structural_score_p50": float(_safe_quantile(structural[positive], 0.50).item()),
-                "structural_score_p95": float(_safe_quantile(structural[positive], 0.95).item()),
+                "structural_score_p50": float(safe_quantile(structural[positive], 0.50).item()),
+                "structural_score_p95": float(safe_quantile(structural[positive], 0.95).item()),
             }
         )
     return structural, diagnostics

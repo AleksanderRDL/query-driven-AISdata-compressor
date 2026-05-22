@@ -9,7 +9,7 @@ import torch
 from learning.model_features import WORKLOAD_BLIND_RANGE_MODEL_TYPE
 from learning.query_prior_fields import QUERY_PRIOR_FIELD_NAMES
 from learning.scaler import FeatureScaler
-from learning.targets.common import _scaled_training_target_for_type
+from learning.targets.common import scaled_training_target_for_type
 from learning.targets.query_local_utility import QUERY_LOCAL_UTILITY_TARGET_MODES
 from workloads.typed_workload import TypedQueryWorkload
 
@@ -110,6 +110,11 @@ def _scalar_training_target_for_mode(
         return labels[:, int(workload_type_id)].clone().float().clamp(0.0, 1.0), (
             "raw_query_local_utility_final_label_for_loss"
         )
-    return _scaled_training_target_for_type(labels, labelled_mask, int(workload_type_id)), (
+    return scaled_training_target_for_type(labels, labelled_mask, int(workload_type_id)), (
         "scaled_training_target_for_loss"
     )
+
+
+historical_prior_support_mask = _historical_prior_support_mask
+require_validation_inputs = _require_validation_inputs
+canonical_segment_ids_for_boundaries = _canonical_segment_ids_for_boundaries

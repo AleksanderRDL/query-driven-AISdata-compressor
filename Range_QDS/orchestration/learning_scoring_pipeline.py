@@ -30,7 +30,7 @@ from orchestration.range_runtime_cache import RangeRuntimeCache
 from orchestration.retained_mask_stage import freeze_workload_blind_retained_masks
 from orchestration.run_artifacts import RunOutputs, write_run_results
 from orchestration.run_exports import export_eval_queries_geojson, export_simplified_eval_csvs
-from orchestration.run_payload import build_run_payload
+from orchestration.run_payload import RunPayloadInputs, build_run_payload
 from orchestration.scoring_methods import (
     build_primary_methods,
 )
@@ -513,43 +513,47 @@ def run_learning_scoring_pipeline(
         workload_distribution_comparison=workload_distribution_comparison,
     )
     dump = build_run_payload(
-        config=config,
-        final_summaries=final_summaries,
-        trained=trained,
-        train_workload=train_workload,
-        train_label_workloads=train_label_workloads,
-        eval_workload=eval_workload,
-        selection_workload=selection_workload,
-        eval_workload_map=eval_workload_map,
-        data_split_diagnostics=data_split.split_diagnostics,
-        selector_budget_diagnostics=selector_budget_diagnostics,
-        primary_selector_trace=primary_selector_trace,
-        selection_selector_trace=selection_selector_trace,
-        train_selector_trace=train_selector_trace,
-        train_marginal_causality_diagnostics=train_marginal_causality_payload,
-        segment_oracle_allocation_audit=segment_oracle_allocation_audit,
-        target_segment_oracle_alignment_audit=target_segment_oracle_alignment_audit,
-        matched=matched,
-        causality_ablation_scores=causality_ablation_scores,
-        learned_fill_diagnostics=learned_fill_diagnostics,
-        range_learned_fill_summary=range_learned_fill_summary,
-        predictability_audit=predictability_audit,
-        workload_scoring_compatibility_diagnostics=(workload_scoring_compatibility_diagnostics),
-        range_compression_audit=range_compression_audit,
-        shift_pairs=shift_pairs,
-        range_training_target_transform=range_training_target_transform,
-        range_target_balance_diagnostics=range_target_balance_diagnostics,
-        range_training_label_aggregation=range_training_label_aggregation,
-        teacher_distillation_diagnostics=teacher_distillation_diagnostics,
-        selection_metric=selection_metric,
-        workload_blind_eval=workload_blind_eval,
-        frozen_primary_masks=frozen_primary_masks,
-        frozen_audit_methods_by_ratio=frozen_audit_methods_by_ratio,
-        data_audit=data_audit,
-        range_diagnostics_summary=range_diagnostics_summary,
-        workload_distribution_comparison=workload_distribution_comparison,
-        training_cuda_memory=training_cuda_memory,
-        run_oracle_baseline=run_oracle_baseline,
+        RunPayloadInputs(
+            config=config,
+            final_summaries=final_summaries,
+            trained=trained,
+            train_workload=train_workload,
+            train_label_workloads=train_label_workloads,
+            eval_workload=eval_workload,
+            selection_workload=selection_workload,
+            eval_workload_map=eval_workload_map,
+            data_split_diagnostics=data_split.split_diagnostics,
+            selector_budget_diagnostics=selector_budget_diagnostics,
+            primary_selector_trace=primary_selector_trace,
+            selection_selector_trace=selection_selector_trace,
+            train_selector_trace=train_selector_trace,
+            train_marginal_causality_diagnostics=train_marginal_causality_payload,
+            segment_oracle_allocation_audit=segment_oracle_allocation_audit,
+            target_segment_oracle_alignment_audit=target_segment_oracle_alignment_audit,
+            matched=matched,
+            causality_ablation_scores=causality_ablation_scores,
+            learned_fill_diagnostics=learned_fill_diagnostics,
+            range_learned_fill_summary=range_learned_fill_summary,
+            predictability_audit=predictability_audit,
+            workload_scoring_compatibility_diagnostics=(
+                workload_scoring_compatibility_diagnostics
+            ),
+            range_compression_audit=range_compression_audit,
+            shift_pairs=shift_pairs,
+            range_training_target_transform=range_training_target_transform,
+            range_target_balance_diagnostics=range_target_balance_diagnostics,
+            range_training_label_aggregation=range_training_label_aggregation,
+            teacher_distillation_diagnostics=teacher_distillation_diagnostics,
+            selection_metric=selection_metric,
+            workload_blind_eval=workload_blind_eval,
+            frozen_primary_masks=frozen_primary_masks,
+            frozen_audit_methods_by_ratio=frozen_audit_methods_by_ratio,
+            data_audit=data_audit,
+            range_diagnostics_summary=range_diagnostics_summary,
+            workload_distribution_comparison=workload_distribution_comparison,
+            training_cuda_memory=training_cuda_memory,
+            run_oracle_baseline=run_oracle_baseline,
+        )
     )
 
     with _phase("write-results"):

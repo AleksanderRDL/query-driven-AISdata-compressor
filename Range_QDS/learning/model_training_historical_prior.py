@@ -9,13 +9,13 @@ import torch
 
 from config.run_config import ModelConfig
 from learning.fit_diagnostics import train_target_fit_diagnostics
-from learning.losses import _safe_quantile
+from learning.losses import safe_quantile
 from learning.model_factory import require_historical_prior_model
 from learning.model_features import (
     HISTORICAL_PRIOR_MODEL_TYPES,
     NONPARAMETRIC_HISTORICAL_PRIOR_MODEL_TYPES,
 )
-from learning.model_training_helpers import _historical_prior_support_mask
+from learning.model_training_helpers import historical_prior_support_mask
 from learning.outputs import TrainingOutputs
 from workloads.query_types import ID_TO_QUERY_NAME
 
@@ -45,7 +45,7 @@ def configure_historical_prior_training(
         support_ratio = min(
             1.0, max(0.0, float(getattr(model_config, "historical_prior_support_ratio", 1.0)))
         )
-        support_mask = _historical_prior_support_mask(
+        support_mask = historical_prior_support_mask(
             targets=training_target,
             boundaries=train_boundaries,
             support_ratio=support_ratio,
@@ -88,7 +88,7 @@ def configure_historical_prior_training(
                     target_diagnostics.get("positive_label_fraction", 0.0)
                 ),
                 f"label_p95_t{workload_type_id}": float(
-                    _safe_quantile(training_target[training_labelled_mask], 0.95).item()
+                    safe_quantile(training_target[training_labelled_mask], 0.95).item()
                 )
                 if bool(training_labelled_mask.any().item())
                 else 0.0,

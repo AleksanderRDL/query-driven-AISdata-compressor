@@ -26,6 +26,7 @@ from learning.targets.modes import SCALAR_RANGE_TARGET_MODES
 from learning.targets.query_local_utility import (
     QUERY_LOCAL_UTILITY_TARGET_MODES,
 )
+from learning.targets.registry import RANGE_SCALAR_TARGET_MODE_SPECS
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -156,6 +157,9 @@ def test_scalar_and_query_local_utility_target_modes_are_separated() -> None:
     assert "retained_frequency" in SCALAR_RANGE_TARGET_MODES
     assert "historical_prior_retained_frequency" in SCALAR_RANGE_TARGET_MODES
     assert "query_local_utility_factorized" not in SCALAR_RANGE_TARGET_MODES
+    assert set(RANGE_SCALAR_TARGET_MODE_SPECS) == set(SCALAR_RANGE_TARGET_MODES) - {
+        "point_value"
+    }
     assert (
         frozenset(
             {

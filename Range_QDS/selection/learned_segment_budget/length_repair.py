@@ -487,3 +487,7 @@ def _select_with_spacing(
     if not selected:
         return torch.empty((0,), dtype=torch.long, device=local_scores.device)
     return torch.cat(selected).unique(sorted=True)[:keep]
+
+
+fill_missing_by_length_gain = _fill_missing_by_length_gain
+select_with_spacing = _select_with_spacing

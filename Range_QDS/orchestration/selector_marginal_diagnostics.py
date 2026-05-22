@@ -13,7 +13,7 @@ from learning.targets.query_local_utility import (
     build_query_local_utility_targets,
 )
 from orchestration import selector_marginal_alignment, selector_trace_payloads
-from scoring.method_scoring import _endpoint_sanity, score_range_usefulness
+from scoring.method_scoring import endpoint_sanity, score_range_usefulness
 from scoring.metrics import compute_geometric_distortion, compute_length_preservation
 from scoring.query_cache import ScoringQueryCache
 from scoring.query_local_utility import query_local_utility_from_range_audit
@@ -308,12 +308,12 @@ def _query_local_utility_payload_for_mask(
     )
     geometric = compute_geometric_distortion(points, boundaries, retained_mask)
     length = compute_length_preservation(points, boundaries, retained_mask)
-    endpoint_sanity = _endpoint_sanity(retained_mask.detach().cpu().bool(), boundaries)
+    endpoint_sanity_score = endpoint_sanity(retained_mask.detach().cpu().bool(), boundaries)
     query_local_utility = query_local_utility_from_range_audit(
         range_audit,
         length_preservation=length,
         avg_sed_km=float(geometric.get("avg_sed_km", 0.0)),
-        endpoint_sanity=endpoint_sanity,
+        endpoint_sanity=endpoint_sanity_score,
     )
     score = query_local_utility.get("query_local_utility_score", 0.0)
     components_payload = query_local_utility.get("query_local_utility_components", {})

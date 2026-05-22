@@ -6,7 +6,7 @@ from typing import Any
 
 import torch
 
-from learning.losses import _safe_quantile
+from learning.losses import safe_quantile
 from learning.targets.query_local_utility import (
     QUERY_LOCAL_UTILITY_FACTORIZED_TARGET_MODE,
     QUERY_LOCAL_UTILITY_TARGET_MODES,
@@ -143,7 +143,7 @@ def _discriminative_sample(
     target_count = target.numel()
     if target_count <= 2 * n_each:
         return pred, target
-    quartiles = _safe_quantile(
+    quartiles = safe_quantile(
         target, torch.tensor([0.25, 0.75], dtype=torch.float32, device=target.device)
     )
     bottom_quantile_indices = torch.where(target <= quartiles[0])[0]
@@ -175,6 +175,10 @@ def _kendall_tau(predictions: torch.Tensor, targets: torch.Tensor) -> float:
     discordant = int(((pair_order < 0) & upper_triangle & ~tied_target).sum().item())
     denom = max(1, concordant + discordant)
     return float((concordant - discordant) / denom)
+
+
+discriminative_sample = _discriminative_sample
+kendall_tau = _kendall_tau
 
 
 def _fit_budget_ratios(model_config: object) -> tuple[float, ...]:

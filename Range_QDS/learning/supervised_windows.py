@@ -72,3 +72,7 @@ def _trajectory_batch_to_device(batch: TrajectoryBatch, device: torch.device) ->
         trajectory_ids=batch.trajectory_ids,
         global_indices=batch.global_indices.to(device=device, non_blocking=True),
     )
+
+
+trajectory_batch_to_device = _trajectory_batch_to_device
+filter_supervised_windows = _filter_supervised_windows

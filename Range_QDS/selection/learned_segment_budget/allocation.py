@@ -404,3 +404,6 @@ def _allocate_segment_budgets(
         )
         remaining_slots -= 1
     return segment_allocations
+
+
+allocate_segment_budgets = _allocate_segment_budgets

@@ -8,10 +8,10 @@ from typing import Any
 import torch
 
 from scoring.geometry_thresholds import FINAL_LENGTH_PRESERVATION_MIN
-from selection.learned_segment_budget.allocation import _allocate_segment_budgets
+from selection.learned_segment_budget.allocation import allocate_segment_budgets
 from selection.learned_segment_budget.length_repair import (
-    _fill_missing_by_length_gain,
-    _select_with_spacing,
+    fill_missing_by_length_gain,
+    select_with_spacing,
 )
 
 
@@ -772,7 +772,7 @@ def _length_only_mask_for_segment_allocations(
         min_spacing = math.floor(
             float(end - start) * float(min_temporal_spacing_fraction_within_segment)
         )
-        selected = _select_with_spacing(
+        selected = select_with_spacing(
             trajectory_scores,
             int(keep_count),
             trajectory_id=trajectory_id,
@@ -783,7 +783,7 @@ def _length_only_mask_for_segment_allocations(
         )
         retained[trajectory_start + selected] = True
 
-    length_fill_count = _fill_missing_by_length_gain(
+    length_fill_count = fill_missing_by_length_gain(
         retained=retained,
         points=points_cpu,
         boundaries=boundaries,
@@ -821,7 +821,7 @@ def _allocation_counterfactual_diagnostics(
         return {"available": False, "reason": "no_learned_allocation_budget"}
 
     counterfactual_rows = [dict(row) for row in segment_rows]
-    length_support_allocations = _allocate_segment_budgets(
+    length_support_allocations = allocate_segment_budgets(
         segment_rows=counterfactual_rows,
         retained=skeleton_retained.detach().cpu().bool(),
         remaining=remaining,

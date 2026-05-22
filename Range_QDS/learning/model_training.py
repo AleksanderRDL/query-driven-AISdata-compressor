@@ -44,7 +44,7 @@ from learning.query_prior_fields import (
     QUERY_PRIOR_FIELD_NAMES,
     query_prior_field_metadata,
 )
-from learning.supervised_windows import _filter_supervised_windows
+from learning.supervised_windows import filter_supervised_windows
 from learning.targets.common import (
     _apply_temporal_residual_labels,
 )
@@ -323,7 +323,7 @@ def train_model(
         stride=model_config.window_stride,
     )
     raw_window_count = len(windows_cpu)
-    windows_cpu, prefiltered_zero_windows = _filter_supervised_windows(
+    windows_cpu, prefiltered_zero_windows = filter_supervised_windows(
         windows=windows_cpu,
         training_target=training_target,
         labelled_mask=training_labelled_mask,

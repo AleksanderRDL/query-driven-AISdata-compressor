@@ -12,39 +12,16 @@ import torch
 from config.run_config import RunConfig, SeedBundle
 from learning.model_features import is_workload_blind_model_type
 from learning.model_training import train_model
-from learning.targets.aggregation import (
-    aggregate_range_component_label_sets,
-    aggregate_range_component_retained_frequency_training_labels,
-    aggregate_range_continuity_retained_frequency_training_labels,
-    aggregate_range_global_budget_retained_frequency_training_labels,
-    aggregate_range_marginal_coverage_training_labels,
-    aggregate_range_retained_frequency_training_labels,
-    aggregate_range_structural_retained_frequency_training_labels,
-    range_component_retained_frequency_training_labels,
-    range_continuity_retained_frequency_training_labels,
-)
+from learning.targets.aggregation import aggregate_range_component_label_sets
 from learning.targets.common import (
     aggregate_range_label_sets,
     balance_range_training_target_by_trajectory,
 )
-from learning.targets.local_swap import (
-    range_local_swap_gain_cost_frequency_training_labels,
-    range_local_swap_utility_frequency_training_labels,
-)
-from learning.targets.marginal_coverage import range_marginal_coverage_training_labels
 from learning.targets.query_local_utility import (
     QUERY_LOCAL_UTILITY_FACTORIZED_TARGET_MODE,
     QUERY_LOCAL_UTILITY_TARGET_MODES,
 )
-from learning.targets.query_residual import range_query_residual_frequency_training_labels
-from learning.targets.query_spine import range_query_spine_frequency_training_labels
-from learning.targets.retained_frequency import (
-    range_global_budget_retained_frequency_training_labels,
-    range_historical_prior_retained_frequency_training_labels,
-    range_retained_frequency_training_labels,
-)
-from learning.targets.set_utility import range_set_utility_frequency_training_labels
-from learning.targets.structural import range_structural_retained_frequency_training_labels
+from learning.targets.registry import RangeTargetModeSpec, range_scalar_target_mode_spec
 from learning.teacher_distillation import (
     build_range_teacher_config,
     distill_range_teacher_labels,
@@ -76,6 +53,210 @@ class TargetPreparationOutputs:
     teacher_distillation_diagnostics: dict[str, Any]
     selection_query_cache: ScoringQueryCache | None
     selection_geometry_scores: torch.Tensor | None
+
+
+def _label_aggregation_mode(replicate_target_aggregation: str) -> str:
+    return "max" if replicate_target_aggregation == "label_max" else "mean"
+
+
+def _target_summary_line(target_phase: str, diagnostics: dict[str, Any]) -> str:
+    return (
+        f"  {target_phase} target: "
+        f"positives={diagnostics['positive_label_count']} "
+        f"fraction={diagnostics['positive_label_fraction']:.4f} "
+        f"mass={diagnostics['positive_label_mass']:.4f}"
+    )
+
+
+def _component_labels_required(
+    mode: str,
+    component_label_sets: list[dict[str, torch.Tensor] | None],
+) -> None:
+    if not component_label_sets or any(
+        component_labels is None for component_labels in component_label_sets
+    ):
+        raise RuntimeError(
+            f"{mode} requires range component labels; use range_label_mode=usefulness."
+        )
+
+
+def _run_range_target_transform(
+    *,
+    spec: RangeTargetModeSpec,
+    labels: torch.Tensor,
+    labelled_mask: torch.Tensor,
+    train_points: torch.Tensor,
+    train_boundaries: list[tuple[int, int]],
+    train_workload: TypedQueryWorkload,
+    model_config: object,
+    component_labels: dict[str, torch.Tensor] | None = None,
+) -> tuple[torch.Tensor, torch.Tensor, dict[str, Any]]:
+    target_kwargs: dict[str, Any] = {
+        "labels": labels,
+        "labelled_mask": labelled_mask,
+        "boundaries": train_boundaries,
+        "model_config": model_config,
+    }
+    if spec.requires_points:
+        target_kwargs["points"] = train_points
+    if spec.requires_typed_queries:
+        target_kwargs["typed_queries"] = train_workload.typed_queries
+    if spec.requires_component_labels:
+        if component_labels is None:
+            raise RuntimeError(f"{spec.mode} requires component labels.")
+        target_kwargs["component_labels"] = component_labels
+    return spec.target_fn(**target_kwargs)
+
+
+def _run_frequency_mean_range_target(
+    *,
+    spec: RangeTargetModeSpec,
+    train_label_sets: list[RangeLabels],
+    train_component_label_sets: list[dict[str, torch.Tensor] | None],
+    train_points: torch.Tensor,
+    train_boundaries: list[tuple[int, int]],
+    model_config: object,
+) -> tuple[torch.Tensor, torch.Tensor, dict[str, Any]]:
+    if not spec.supports_frequency_mean or spec.aggregate_target_fn is None:
+        if spec.mode == "historical_prior_retained_frequency":
+            raise RuntimeError(
+                "historical_prior_retained_frequency does not support "
+                "range_replicate_target_aggregation='frequency_mean'; use label_mean or label_max."
+            )
+        raise RuntimeError(
+            f"{spec.mode} does not support range_replicate_target_aggregation='frequency_mean'."
+        )
+    aggregate_target_kwargs: dict[str, Any] = {
+        "label_sets": train_label_sets,
+        "boundaries": train_boundaries,
+        "model_config": model_config,
+    }
+    if spec.requires_points:
+        aggregate_target_kwargs["points"] = train_points
+    if spec.requires_component_labels:
+        aggregate_target_kwargs["component_label_sets"] = train_component_label_sets
+    return spec.aggregate_target_fn(**aggregate_target_kwargs)
+
+
+def _run_label_aggregated_range_target(
+    *,
+    spec: RangeTargetModeSpec,
+    train_label_sets: list[RangeLabels],
+    train_component_label_sets: list[dict[str, torch.Tensor] | None],
+    train_points: torch.Tensor,
+    train_boundaries: list[tuple[int, int]],
+    train_workload: TypedQueryWorkload,
+    model_config: object,
+    replicate_target_aggregation: str,
+) -> tuple[torch.Tensor, torch.Tensor, dict[str, Any], dict[str, Any]]:
+    aggregation_mode = _label_aggregation_mode(replicate_target_aggregation)
+    if spec.requires_component_labels:
+        labels, labelled_mask, component_labels, aggregation_diagnostics = (
+            aggregate_range_component_label_sets(
+                label_sets=train_label_sets,
+                component_label_sets=train_component_label_sets,
+                aggregation=aggregation_mode,
+            )
+        )
+    else:
+        labels, labelled_mask, aggregation_diagnostics = aggregate_range_label_sets(
+            label_sets=train_label_sets,
+            source=f"range_label_{aggregation_mode}_before_{spec.mode}",
+            aggregation=aggregation_mode,
+        )
+        component_labels = None
+
+    labels, labelled_mask, target_transform = _run_range_target_transform(
+        spec=spec,
+        labels=labels,
+        labelled_mask=labelled_mask,
+        train_points=train_points,
+        train_boundaries=train_boundaries,
+        train_workload=train_workload,
+        model_config=model_config,
+        component_labels=component_labels,
+    )
+    target_transform["label_aggregation"] = aggregation_diagnostics
+    return labels, labelled_mask, target_transform, aggregation_diagnostics
+
+
+def _prepare_scalar_range_target(
+    *,
+    spec: RangeTargetModeSpec,
+    train_labels: RangeLabels | None,
+    train_label_sets: list[RangeLabels],
+    train_component_label_sets: list[dict[str, torch.Tensor] | None],
+    train_points: torch.Tensor,
+    train_boundaries: list[tuple[int, int]],
+    train_workload: TypedQueryWorkload,
+    model_config: object,
+    replicate_target_aggregation: str,
+    range_training_label_aggregation: dict[str, Any],
+    phase: PhaseLogger,
+) -> tuple[RangeLabels, dict[str, Any]]:
+    if train_labels is None:
+        raise RuntimeError(f"{spec.mode} target mode requires precomputed range training labels.")
+    if len(train_label_sets) > 1 and not spec.supports_multiple_replicates:
+        raise RuntimeError(f"{spec.mode} does not yet support multiple train workload replicates.")
+    if spec.requires_component_labels:
+        _component_labels_required(spec.mode, train_component_label_sets)
+
+    target_phase = spec.mode.replace("_", "-")
+    with phase(f"range-{target_phase}-target"):
+        if len(train_label_sets) > 1:
+            if replicate_target_aggregation == "frequency_mean":
+                labels, labelled_mask, target_transform = _run_frequency_mean_range_target(
+                    spec=spec,
+                    train_label_sets=train_label_sets,
+                    train_component_label_sets=train_component_label_sets,
+                    train_points=train_points,
+                    train_boundaries=train_boundaries,
+                    model_config=model_config,
+                )
+                range_training_label_aggregation["enabled"] = True
+                range_training_label_aggregation["target_mode"] = spec.mode
+                range_training_label_aggregation["replicate_target_aggregation"] = "frequency_mean"
+            else:
+                labels, labelled_mask, target_transform, aggregation_diagnostics = (
+                    _run_label_aggregated_range_target(
+                        spec=spec,
+                        train_label_sets=train_label_sets,
+                        train_component_label_sets=train_component_label_sets,
+                        train_points=train_points,
+                        train_boundaries=train_boundaries,
+                        train_workload=train_workload,
+                        model_config=model_config,
+                        replicate_target_aggregation=replicate_target_aggregation,
+                    )
+                )
+                range_training_label_aggregation.update(aggregation_diagnostics)
+                range_training_label_aggregation["enabled"] = True
+                range_training_label_aggregation["target_mode"] = spec.mode
+                range_training_label_aggregation["replicate_target_aggregation"] = (
+                    replicate_target_aggregation
+                )
+            target_transform["replicate_target_aggregation"] = replicate_target_aggregation
+        else:
+            labels, labelled_mask = train_labels
+            component_labels = (
+                train_component_label_sets[0] if spec.requires_component_labels else None
+            )
+            labels, labelled_mask, target_transform = _run_range_target_transform(
+                spec=spec,
+                labels=labels,
+                labelled_mask=labelled_mask,
+                train_points=train_points,
+                train_boundaries=train_boundaries,
+                train_workload=train_workload,
+                model_config=model_config,
+                component_labels=component_labels,
+            )
+        target_transform["enabled"] = True
+        target_transform["replicate_count"] = len(train_label_sets)
+        if spec.requires_component_labels:
+            target_transform["replicate_target_aggregation"] = replicate_target_aggregation
+        print(_target_summary_line(target_phase, target_transform), flush=True)
+        return (labels, labelled_mask), target_transform
 
 
 def prepare_training_targets(
@@ -346,276 +527,21 @@ def prepare_training_targets(
                 f"mass={teacher_distillation_diagnostics['positive_label_mass']:.4f}",
                 flush=True,
             )
-    elif range_training_target_mode in {
-        "query_spine_frequency",
-        "query_residual_frequency",
-        "set_utility_frequency",
-        "local_swap_utility_frequency",
-        "local_swap_gain_cost_frequency",
-    }:
-        if train_labels is None:
-            raise RuntimeError(
-                f"{range_training_target_mode} target mode requires precomputed range training labels."
-            )
-        if len(train_label_sets) > 1:
-            raise RuntimeError(
-                f"{range_training_target_mode} does not yet support multiple train workload replicates."
-            )
-        target_phase = range_training_target_mode.replace("_", "-")
-        with phase(f"range-{target_phase}-target"):
-            labels, labelled_mask = train_labels
-            target_fn = (
-                range_local_swap_gain_cost_frequency_training_labels
-                if range_training_target_mode == "local_swap_gain_cost_frequency"
-                else (
-                    range_local_swap_utility_frequency_training_labels
-                    if range_training_target_mode == "local_swap_utility_frequency"
-                    else (
-                        range_set_utility_frequency_training_labels
-                        if range_training_target_mode == "set_utility_frequency"
-                        else (
-                            range_query_residual_frequency_training_labels
-                            if range_training_target_mode == "query_residual_frequency"
-                            else range_query_spine_frequency_training_labels
-                        )
-                    )
-                )
-            )
-            labels, labelled_mask, range_training_target_transform = target_fn(
-                labels=labels,
-                labelled_mask=labelled_mask,
-                points=train_points,
-                boundaries=train_boundaries,
-                typed_queries=train_workload.typed_queries,
-                model_config=config.model,
-            )
-            range_training_target_transform["enabled"] = True
-            range_training_target_transform["replicate_count"] = len(train_label_sets)
-            train_labels = (labels, labelled_mask)
-            print(
-                f"  {target_phase} target: "
-                f"positives={range_training_target_transform['positive_label_count']} "
-                f"fraction={range_training_target_transform['positive_label_fraction']:.4f} "
-                f"mass={range_training_target_transform['positive_label_mass']:.4f}",
-                flush=True,
-            )
-    elif range_training_target_mode in {
-        "retained_frequency",
-        "global_budget_retained_frequency",
-        "marginal_coverage_frequency",
-        "historical_prior_retained_frequency",
-        "structural_retained_frequency",
-    }:
-        if train_labels is None:
-            raise RuntimeError(
-                f"{range_training_target_mode} target mode requires precomputed range training labels."
-            )
-        target_fn = (
-            range_marginal_coverage_training_labels
-            if range_training_target_mode == "marginal_coverage_frequency"
-            else range_global_budget_retained_frequency_training_labels
-            if range_training_target_mode == "global_budget_retained_frequency"
-            else range_structural_retained_frequency_training_labels
-            if range_training_target_mode == "structural_retained_frequency"
-            else range_historical_prior_retained_frequency_training_labels
-            if range_training_target_mode == "historical_prior_retained_frequency"
-            else range_retained_frequency_training_labels
-        )
-        aggregate_target_fn = (
-            aggregate_range_marginal_coverage_training_labels
-            if range_training_target_mode == "marginal_coverage_frequency"
-            else aggregate_range_global_budget_retained_frequency_training_labels
-            if range_training_target_mode == "global_budget_retained_frequency"
-            else aggregate_range_structural_retained_frequency_training_labels
-            if range_training_target_mode == "structural_retained_frequency"
-            else aggregate_range_retained_frequency_training_labels
-        )
-        target_phase = range_training_target_mode.replace("_", "-")
-        with phase(f"range-{target_phase}-target"):
-            if len(train_label_sets) > 1:
-                if range_replicate_target_aggregation == "frequency_mean":
-                    if range_training_target_mode == "historical_prior_retained_frequency":
-                        raise RuntimeError(
-                            "historical_prior_retained_frequency does not support "
-                            "range_replicate_target_aggregation='frequency_mean'; use label_mean or label_max."
-                        )
-                    aggregate_target_kwargs = {
-                        "label_sets": train_label_sets,
-                        "boundaries": train_boundaries,
-                        "model_config": config.model,
-                    }
-                    if range_training_target_mode == "structural_retained_frequency":
-                        aggregate_target_kwargs["points"] = train_points
-                    labels, labelled_mask, range_training_target_transform = aggregate_target_fn(
-                        **aggregate_target_kwargs
-                    )
-                    range_training_label_aggregation["enabled"] = True
-                    range_training_label_aggregation["target_mode"] = range_training_target_mode
-                    range_training_label_aggregation["replicate_target_aggregation"] = (
-                        "frequency_mean"
-                    )
-                else:
-                    labels, labelled_mask, aggregation_diagnostics = aggregate_range_label_sets(
-                        label_sets=train_label_sets,
-                        source=(
-                            f"range_label_{'max' if range_replicate_target_aggregation == 'label_max' else 'mean'}"
-                            f"_before_{range_training_target_mode}"
-                        ),
-                        aggregation="max"
-                        if range_replicate_target_aggregation == "label_max"
-                        else "mean",
-                    )
-                    range_training_label_aggregation.update(aggregation_diagnostics)
-                    range_training_label_aggregation["enabled"] = True
-                    range_training_label_aggregation["target_mode"] = range_training_target_mode
-                    range_training_label_aggregation["replicate_target_aggregation"] = (
-                        range_replicate_target_aggregation
-                    )
-                    target_kwargs = {
-                        "labels": labels,
-                        "labelled_mask": labelled_mask,
-                        "boundaries": train_boundaries,
-                        "model_config": config.model,
-                    }
-                    if range_training_target_mode in {
-                        "historical_prior_retained_frequency",
-                        "structural_retained_frequency",
-                    }:
-                        target_kwargs["points"] = train_points
-                    labels, labelled_mask, range_training_target_transform = target_fn(
-                        **target_kwargs
-                    )
-                    range_training_target_transform["label_aggregation"] = aggregation_diagnostics
-                range_training_target_transform["replicate_target_aggregation"] = (
-                    range_replicate_target_aggregation
-                )
-            else:
-                labels, labelled_mask = train_labels
-                target_kwargs = {
-                    "labels": labels,
-                    "labelled_mask": labelled_mask,
-                    "boundaries": train_boundaries,
-                    "model_config": config.model,
-                }
-                if range_training_target_mode in {
-                    "historical_prior_retained_frequency",
-                    "structural_retained_frequency",
-                }:
-                    target_kwargs["points"] = train_points
-                labels, labelled_mask, range_training_target_transform = target_fn(**target_kwargs)
-            range_training_target_transform["enabled"] = True
-            range_training_target_transform["replicate_count"] = len(train_label_sets)
-            train_labels = (labels, labelled_mask)
-            print(
-                f"  {target_phase} target: positives={range_training_target_transform['positive_label_count']} "
-                f"fraction={range_training_target_transform['positive_label_fraction']:.4f} "
-                f"mass={range_training_target_transform['positive_label_mass']:.4f}",
-                flush=True,
-            )
     elif range_training_target_mode not in {"point_value", *QUERY_LOCAL_UTILITY_TARGET_MODES}:
-        if range_training_target_mode in {
-            "component_retained_frequency",
-            "continuity_retained_frequency",
-        }:
-            if train_labels is None:
-                raise RuntimeError(
-                    f"{range_training_target_mode} target mode requires precomputed range training labels."
-                )
-            if not train_component_label_sets or any(
-                component_labels is None for component_labels in train_component_label_sets
-            ):
-                raise RuntimeError(
-                    f"{range_training_target_mode} requires range component labels; use range_label_mode=usefulness."
-                )
-            target_fn = (
-                range_continuity_retained_frequency_training_labels
-                if range_training_target_mode == "continuity_retained_frequency"
-                else range_component_retained_frequency_training_labels
-            )
-            aggregate_target_fn = (
-                aggregate_range_continuity_retained_frequency_training_labels
-                if range_training_target_mode == "continuity_retained_frequency"
-                else aggregate_range_component_retained_frequency_training_labels
-            )
-            target_phase = range_training_target_mode.replace("_", "-")
-            with phase(f"range-{target_phase}-target"):
-                if len(train_label_sets) > 1:
-                    if range_replicate_target_aggregation == "frequency_mean":
-                        labels, labelled_mask, range_training_target_transform = (
-                            aggregate_target_fn(
-                                label_sets=train_label_sets,
-                                component_label_sets=train_component_label_sets,
-                                boundaries=train_boundaries,
-                                model_config=config.model,
-                            )
-                        )
-                        range_training_label_aggregation["replicate_target_aggregation"] = (
-                            "frequency_mean"
-                        )
-                    else:
-                        aggregation_mode = (
-                            "max" if range_replicate_target_aggregation == "label_max" else "mean"
-                        )
-                        labels, labelled_mask, component_labels, aggregation_diagnostics = (
-                            aggregate_range_component_label_sets(
-                                label_sets=train_label_sets,
-                                component_label_sets=train_component_label_sets,
-                                aggregation=aggregation_mode,
-                            )
-                        )
-                        range_training_label_aggregation.update(aggregation_diagnostics)
-                        range_training_label_aggregation["replicate_target_aggregation"] = (
-                            range_replicate_target_aggregation
-                        )
-                        labels, labelled_mask, range_training_target_transform = target_fn(
-                            labels=labels,
-                            labelled_mask=labelled_mask,
-                            component_labels=component_labels,
-                            boundaries=train_boundaries,
-                            model_config=config.model,
-                        )
-                        range_training_target_transform["label_aggregation"] = (
-                            aggregation_diagnostics
-                        )
-                    range_training_label_aggregation["enabled"] = True
-                    range_training_label_aggregation["target_mode"] = range_training_target_mode
-                else:
-                    labels, labelled_mask = train_labels
-                    component_labels = train_component_label_sets[0]
-                    if component_labels is None:
-                        raise RuntimeError(
-                            "component_retained_frequency requires component labels."
-                        )
-                    labels, labelled_mask, range_training_target_transform = target_fn(
-                        labels=labels,
-                        labelled_mask=labelled_mask,
-                        component_labels=component_labels,
-                        boundaries=train_boundaries,
-                        model_config=config.model,
-                    )
-                range_training_target_transform["enabled"] = True
-                range_training_target_transform["replicate_count"] = len(train_label_sets)
-                range_training_target_transform["replicate_target_aggregation"] = (
-                    range_replicate_target_aggregation
-                )
-                train_labels = (labels, labelled_mask)
-                print(
-                    f"  {target_phase} target: "
-                    f"positives={range_training_target_transform['positive_label_count']} "
-                    f"fraction={range_training_target_transform['positive_label_fraction']:.4f} "
-                    f"mass={range_training_target_transform['positive_label_mass']:.4f}",
-                    flush=True,
-                )
-        else:
-            raise RuntimeError(
-                "range_training_target_mode must be 'point_value', 'retained_frequency', "
-                "'global_budget_retained_frequency', 'historical_prior_retained_frequency', "
-                "'marginal_coverage_frequency', 'query_spine_frequency', "
-                "'query_residual_frequency', 'set_utility_frequency', 'local_swap_utility_frequency', "
-                "'local_swap_gain_cost_frequency', 'structural_retained_frequency', "
-                "'component_retained_frequency', or "
-                "'continuity_retained_frequency', or a QueryLocalUtility factorized target mode."
-            )
+        spec = range_scalar_target_mode_spec(range_training_target_mode)
+        train_labels, range_training_target_transform = _prepare_scalar_range_target(
+            spec=spec,
+            train_labels=train_labels,
+            train_label_sets=train_label_sets,
+            train_component_label_sets=train_component_label_sets,
+            train_points=train_points,
+            train_boundaries=train_boundaries,
+            train_workload=train_workload,
+            model_config=config.model,
+            replicate_target_aggregation=range_replicate_target_aggregation,
+            range_training_label_aggregation=range_training_label_aggregation,
+            phase=phase,
+        )
     range_target_balance_mode = str(
         getattr(config.model, "range_target_balance_mode", "none")
     ).lower()

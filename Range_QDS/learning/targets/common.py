@@ -6,7 +6,7 @@ import math
 
 import torch
 
-from learning.losses import _safe_quantile
+from learning.losses import safe_quantile
 from learning.targets.modes import RANGE_TARGET_BALANCE_MODES
 from selection.retained_mask_selectors import (
     evenly_spaced_indices,
@@ -25,8 +25,11 @@ def _scaled_training_target_for_type(
     positive = labelled_mask[:, type_idx] & (labels[:, type_idx] > 0)
     if not bool(positive.any().item()):
         return target.zero_()
-    scale = _safe_quantile(labels[positive, type_idx].detach(), 0.95).clamp(min=1e-6)
+    scale = safe_quantile(labels[positive, type_idx].detach(), 0.95).clamp(min=1e-6)
     return torch.clamp(target / scale, 0.0, 1.0)
+
+
+scaled_training_target_for_type = _scaled_training_target_for_type
 
 
 def _apply_temporal_residual_labels(
@@ -83,6 +86,10 @@ def _target_budget_weights(model_config: object, ratios: tuple[float, ...]) -> t
         weight = 1.0 / float(len(ratios))
         return tuple(weight for _ratio in ratios)
     return tuple(value / total for value in raw)
+
+
+target_budget_ratios = _target_budget_ratios
+target_budget_weights = _target_budget_weights
 
 
 def aggregate_range_label_sets(
