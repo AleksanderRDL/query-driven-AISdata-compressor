@@ -119,7 +119,7 @@ def _safe_int(value: Any) -> int:
     """Convert MMSI-like values to stable integer IDs for downstream writers."""
     try:
         return int(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return 0
 
 

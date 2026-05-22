@@ -125,9 +125,7 @@ def _configure_native_library_paths(hadoop_home: Path) -> None:
     java_library_opt = f"-Djava.library.path={native_dir}"
     spark_submit_opts = os.environ.get("SPARK_SUBMIT_OPTS", "")
     if java_library_opt not in spark_submit_opts:
-        os.environ["SPARK_SUBMIT_OPTS"] = (
-            f"{java_library_opt} {spark_submit_opts}".strip()
-        )
+        os.environ["SPARK_SUBMIT_OPTS"] = f"{java_library_opt} {spark_submit_opts}".strip()
 
     system_name = platform.system()
     if system_name == "Linux":

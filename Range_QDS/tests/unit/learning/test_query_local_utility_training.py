@@ -49,6 +49,7 @@ def _boundaries(trajectories: list[torch.Tensor]) -> list[tuple[int, int]]:
         cursor = end
     return out
 
+
 def test_segment_budget_head_has_segment_level_loss() -> None:
     head_targets = torch.zeros((1, 8, len(QUERY_LOCAL_UTILITY_HEAD_NAMES)), dtype=torch.float32)
     head_mask = torch.ones_like(head_targets, dtype=torch.bool)
@@ -607,7 +608,9 @@ def test_factorized_head_fit_diagnostics_reports_each_head() -> None:
 
 def test_factorized_final_score_composition_diagnostics_match_scalar_target() -> None:
     point_count = 8
-    head_targets = torch.zeros((point_count, len(QUERY_LOCAL_UTILITY_HEAD_NAMES)), dtype=torch.float32)
+    head_targets = torch.zeros(
+        (point_count, len(QUERY_LOCAL_UTILITY_HEAD_NAMES)), dtype=torch.float32
+    )
     head_targets[:, 0] = torch.linspace(0.20, 0.90, steps=point_count)
     head_targets[:, 1] = torch.linspace(0.10, 0.80, steps=point_count)
     head_targets[:, 2] = torch.linspace(0.00, 0.35, steps=point_count)

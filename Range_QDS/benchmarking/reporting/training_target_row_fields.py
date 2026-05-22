@@ -138,4 +138,3 @@ def training_target_row_fields(
         "oracle_kind": oracle_diagnostic.get("kind"),
         "oracle_exact_optimum": oracle_diagnostic.get("exact_optimum"),
     }
-

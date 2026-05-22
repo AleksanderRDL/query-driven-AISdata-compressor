@@ -374,8 +374,7 @@ def _safe_logit(value: float) -> float:
 
 def _factorized_replacement_modulated_score(values: dict[str, float]) -> float:
     query_local = float(
-        0.50 * values["query_hit_probability"]
-        + 0.45 * values["conditional_behavior_utility"]
+        0.50 * values["query_hit_probability"] + 0.45 * values["conditional_behavior_utility"]
     )
     replacement_multiplier = float(0.75 + 0.25 * values["replacement_representative_value"])
     return float(query_local * replacement_multiplier)
@@ -391,7 +390,7 @@ def _factorized_replacement_modulated_shapley_deltas(
         "conditional_behavior_utility",
         "replacement_representative_value",
     )
-    contributions = {name: 0.0 for name in factor_names}
+    contributions: dict[str, float] = dict.fromkeys(factor_names, 0.0)
     permutation_count = 0
     for order in permutations(factor_names):
         current = {name: float(ablation[name]) for name in factor_names}
@@ -404,9 +403,7 @@ def _factorized_replacement_modulated_shapley_deltas(
         permutation_count += 1
     if permutation_count <= 0:
         return contributions
-    return {
-        name: float(value / permutation_count) for name, value in contributions.items()
-    }
+    return {name: float(value / permutation_count) for name, value in contributions.items()}
 
 
 def _factorized_composition_for_row(
@@ -449,9 +446,7 @@ def _factorized_composition_for_row(
     logit_ablation = _safe_logit(composed_ablation)
     logit_delta = float(logit_primary - logit_ablation)
 
-    shapley = _factorized_replacement_modulated_shapley_deltas(
-        primary=primary, ablation=ablation
-    )
+    shapley = _factorized_replacement_modulated_shapley_deltas(primary=primary, ablation=ablation)
     contribution_deltas = {
         "query_hit_branch_shapley": shapley["query_hit_probability"],
         "behavior_branch_shapley": shapley["conditional_behavior_utility"],
@@ -460,29 +455,19 @@ def _factorized_composition_for_row(
         "clamp": clamp_delta,
     }
     finite_contributions = {
-        name: value
-        for name, value in contribution_deltas.items()
-        if math.isfinite(float(value))
+        name: value for name, value in contribution_deltas.items() if math.isfinite(float(value))
     }
     raw_delta = None
     if isinstance(raw_prediction, dict):
         raw_delta = _finite_number(raw_prediction.get("delta"))
     residual = float(raw_delta - logit_delta) if raw_delta is not None else None
-    positive_items = {
-        name: value for name, value in finite_contributions.items() if value > 0.0
-    }
-    negative_items = {
-        name: value for name, value in finite_contributions.items() if value < 0.0
-    }
+    positive_items = {name: value for name, value in finite_contributions.items() if value > 0.0}
+    negative_items = {name: value for name, value in finite_contributions.items() if value < 0.0}
     dominant_positive = (
-        max(positive_items.items(), key=lambda item: float(item[1]))
-        if positive_items
-        else None
+        max(positive_items.items(), key=lambda item: float(item[1])) if positive_items else None
     )
     dominant_negative = (
-        min(negative_items.items(), key=lambda item: float(item[1]))
-        if negative_items
-        else None
+        min(negative_items.items(), key=lambda item: float(item[1])) if negative_items else None
     )
     return {
         "available": True,
@@ -602,9 +587,7 @@ def _group_delta_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     summary["factorized_composed_score_mean_delta"] = _mean_from_rows(
         rows,
         lambda row: (
-            row.get("factorized_composition", {})
-            .get("composed_score", {})
-            .get("delta")
+            row.get("factorized_composition", {}).get("composed_score", {}).get("delta")
             if isinstance(row.get("factorized_composition"), dict)
             else None
         ),
@@ -612,9 +595,7 @@ def _group_delta_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     summary["factorized_composed_logit_mean_delta"] = _mean_from_rows(
         rows,
         lambda row: (
-            row.get("factorized_composition", {})
-            .get("composed_logit", {})
-            .get("delta")
+            row.get("factorized_composition", {}).get("composed_logit", {}).get("delta")
             if isinstance(row.get("factorized_composition"), dict)
             else None
         ),
@@ -631,9 +612,7 @@ def _group_delta_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         term: _mean_from_rows(
             rows,
             lambda row, term=term: (
-                row.get("factorized_composition", {})
-                .get("contribution_deltas", {})
-                .get(term)
+                row.get("factorized_composition", {}).get("contribution_deltas", {}).get(term)
                 if isinstance(row.get("factorized_composition"), dict)
                 else None
             ),
@@ -644,9 +623,7 @@ def _group_delta_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         term: _positive_fraction_from_rows(
             rows,
             lambda row, term=term: (
-                row.get("factorized_composition", {})
-                .get("contribution_deltas", {})
-                .get(term)
+                row.get("factorized_composition", {}).get("contribution_deltas", {}).get(term)
                 if isinstance(row.get("factorized_composition"), dict)
                 else None
             ),
@@ -811,9 +788,7 @@ def marginal_row_delta_path_diagnostics(
             ablation_logits=ablation_head_logits,
             idx=idx,
         )
-        raw_prediction = _score_pair_for_row(
-            primary=raw_primary, ablation=raw_ablation, idx=idx
-        )
+        raw_prediction = _score_pair_for_row(primary=raw_primary, ablation=raw_ablation, idx=idx)
         out: dict[str, Any] = {
             "point_index": idx,
             "decision": row.get("decision"),
@@ -825,9 +800,7 @@ def marginal_row_delta_path_diagnostics(
             "selector_score_rank_fraction": _row_float(
                 row, "selector_score_candidate_rank_fraction"
             ),
-            "segment_score_rank_fraction": _row_float(
-                row, "segment_score_candidate_rank_fraction"
-            ),
+            "segment_score_rank_fraction": _row_float(row, "segment_score_candidate_rank_fraction"),
             "failure_buckets": list(row.get("failure_buckets") or []),
             "score_output": _score_pair_for_row(
                 primary=score_primary, ablation=score_ablation, idx=idx
@@ -965,10 +938,12 @@ def score_rank_margin_boundary_diagnostics(
     )
     if mask_changed:
         classification = "prior_score_delta_moves_retained_mask"
-    elif (
-        marginal_class.startswith("prior_delta_wrong_way")
-        or marginal_class.startswith("prior_delta_non_positive")
-        or marginal_class.startswith("prior_delta_globally_wrong_way")
+    elif marginal_class.startswith(
+        (
+            "prior_delta_wrong_way",
+            "prior_delta_non_positive",
+            "prior_delta_globally_wrong_way",
+        )
     ):
         classification = marginal_class
     elif below_margin:

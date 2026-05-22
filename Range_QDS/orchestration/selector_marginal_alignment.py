@@ -128,9 +128,7 @@ def nested_value_alignment_summary(
     rows: list[dict[str, Any]],
     row_field_name: str,
 ) -> dict[str, Any]:
-    value_names = sorted(
-        {str(name) for row in rows for name in (row.get(row_field_name) or {}).keys()}
-    )
+    value_names = sorted({str(name) for row in rows for name in (row.get(row_field_name) or {})})
     if not value_names:
         return {}
     nested_summary: dict[str, Any] = {}

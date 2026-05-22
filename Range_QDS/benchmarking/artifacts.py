@@ -108,7 +108,7 @@ def _first_float(row: dict[str, Any], keys: tuple[str, ...]) -> float | None:
             continue
         try:
             return float(value)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             continue
     return None
 
@@ -340,9 +340,11 @@ def format_artifact_readme(artifact: dict[str, Any], rows: list[dict[str, Any]])
         "| workload | run_label | returncode | run_dir |",
         "| --- | --- | --- | --- |",
     ]
-    for row in rows:
-        lines.append(
+    lines.extend(
+        (
             f"| {row.get('workload')} | {row.get('run_label')} | {row.get('returncode')} | `{row.get('run_dir')}` |"
         )
+        for row in rows
+    )
     lines.append("")
     return "\n".join(lines)

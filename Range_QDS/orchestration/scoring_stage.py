@@ -72,7 +72,7 @@ def _top_component_deltas(
 def _safe_float(value: Any, default: float = 0.0) -> float:
     try:
         result = float(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return float(default)
     if result != result:
         return float(default)
@@ -107,9 +107,7 @@ def _family_group_comparison(
         for key in sorted(set(primary_ship_evidence) | set(baseline_ship_evidence)):
             ship_evidence_deltas[str(key)] = _safe_float(
                 primary_ship_evidence.get(key)
-            ) - _safe_float(
-                baseline_ship_evidence.get(key)
-            )
+            ) - _safe_float(baseline_ship_evidence.get(key))
     return {
         "available": True,
         "query_count": int(primary_group.get("query_count", 0) or 0),
@@ -118,9 +116,7 @@ def _family_group_comparison(
         "baseline_query_local_score_normalized": baseline_query_local,
         "query_local_score_delta": float(primary_query_local - baseline_query_local),
         "primary_range_usefulness_score": float(primary_group.get("range_usefulness_score", 0.0)),
-        "baseline_range_usefulness_score": float(
-            baseline_group.get("range_usefulness_score", 0.0)
-        ),
+        "baseline_range_usefulness_score": float(baseline_group.get("range_usefulness_score", 0.0)),
         "range_usefulness_delta": float(
             float(primary_group.get("range_usefulness_score", 0.0))
             - float(baseline_group.get("range_usefulness_score", 0.0))
@@ -443,8 +439,8 @@ def run_scoring_stage(
     matched_table = print_method_comparison_table(matched)
     geometric_table = print_geometric_distortion_table(matched)
     range_usefulness_table = print_range_usefulness_table(matched)
-    workload_scoring_compatibility_diagnostics = (
-        build_workload_scoring_compatibility_diagnostics(matched)
+    workload_scoring_compatibility_diagnostics = build_workload_scoring_compatibility_diagnostics(
+        matched
     )
     range_compression_audit: dict[str, dict[str, Any]] = {}
     range_compression_audit_table = ""
@@ -491,8 +487,7 @@ def run_scoring_stage(
                             )
                 ratio_key = f"{float(ratio):.4f}"
                 range_compression_audit[ratio_key] = {
-                    name: method_score_payload(metrics)
-                    for name, metrics in ratio_results.items()
+                    name: method_score_payload(metrics) for name, metrics in ratio_results.items()
                 }
                 audit_sections.append(
                     f"compression_ratio={ratio_key}\n{print_range_usefulness_table(ratio_results)}"
@@ -524,9 +519,7 @@ def run_scoring_stage(
         causality_ablation_mask_diagnostics=causality_ablation_mask_diagnostics,
         range_compression_audit=range_compression_audit,
         range_compression_audit_table=range_compression_audit_table,
-        workload_scoring_compatibility_diagnostics=(
-            workload_scoring_compatibility_diagnostics
-        ),
+        workload_scoring_compatibility_diagnostics=(workload_scoring_compatibility_diagnostics),
         shift_pairs=shift_pairs,
         shift_table=shift_table,
         segment_oracle_allocation_audit=segment_oracle_audit_payload,

@@ -145,9 +145,9 @@ def _attach_top_marginal_miss_diagnostics(rows: list[dict[str, Any]]) -> None:
         )
 
     component_names = sorted(
-        {str(name) for row in rows for name in (row.get("score_components") or {}).keys()}
+        {str(name) for row in rows for name in (row.get("score_components") or {})}
     )
-    component_rank_by_row: list[dict[str, int]] = [dict() for _row in rows]
+    component_rank_by_row: list[dict[str, int]] = [{} for _row in rows]
     for component_name in component_names:
         valid = [
             (row_idx, float(row["score_components"][component_name]))
@@ -169,9 +169,9 @@ def _attach_top_marginal_miss_diagnostics(rows: list[dict[str, Any]]) -> None:
             }
 
     query_free_proxy_names = sorted(
-        {str(name) for row in rows for name in (row.get("query_free_teacher_proxies") or {}).keys()}
+        {str(name) for row in rows for name in (row.get("query_free_teacher_proxies") or {})}
     )
-    query_free_proxy_rank_by_row: list[dict[str, int]] = [dict() for _row in rows]
+    query_free_proxy_rank_by_row: list[dict[str, int]] = [{} for _row in rows]
     for proxy_name in query_free_proxy_names:
         valid = [
             (row_idx, float(row["query_free_teacher_proxies"][proxy_name]))
@@ -325,9 +325,7 @@ def _query_local_utility_payload_for_mask(
         if isinstance(value, (int, float)) and not isinstance(value, bool)
     }
     return (
-        float(score)
-        if isinstance(score, (int, float)) and not isinstance(score, bool)
-        else 0.0,
+        float(score) if isinstance(score, (int, float)) and not isinstance(score, bool) else 0.0,
         components,
     )
 
@@ -844,25 +842,23 @@ def retained_decision_marginal_query_local_utility_diagnostics(
             "selector_score": selector_vector is not None,
             "segment_score": segment_vector is not None,
         },
-        "score_component_fields_available": {
-            name: True for name in sorted(component_vectors.keys())
-        },
+        "score_component_fields_available": dict.fromkeys(sorted(component_vectors.keys()), True),
         "context_fields_available": {
-            "sampled_prior_channels": {
-                name: True for name in sorted(sampled_prior_component_vectors.keys())
-            },
-            "model_prior_channels": {
-                name: True for name in sorted(model_prior_component_vectors.keys())
-            },
-            "query_free_teacher_proxies": {
-                name: True for name in sorted(query_free_proxy_vectors.keys())
-            },
-            "selector_stage_state": {name: True for name in sorted(trace_mask_state.keys())},
+            "sampled_prior_channels": dict.fromkeys(
+                sorted(sampled_prior_component_vectors.keys()), True
+            ),
+            "model_prior_channels": dict.fromkeys(
+                sorted(model_prior_component_vectors.keys()), True
+            ),
+            "query_free_teacher_proxies": dict.fromkeys(
+                sorted(query_free_proxy_vectors.keys()), True
+            ),
+            "selector_stage_state": dict.fromkeys(sorted(trace_mask_state.keys()), True),
             "selector_segment_context": bool(selector_segment_context_rows),
             "trajectory_index": True,
             "query_local_utility_target": scalar_target_vector is not None,
-            "head_targets": {name: True for name in sorted(target_component_vectors.keys())},
-            "head_target_masks": {name: True for name in sorted(target_component_masks.keys())},
+            "head_targets": dict.fromkeys(sorted(target_component_vectors.keys()), True),
+            "head_target_masks": dict.fromkeys(sorted(target_component_masks.keys()), True),
             "target_diagnostic_error": target_error,
             "query_local_utility_component_delta": True,
             "primary_query_local_utility_components": True,

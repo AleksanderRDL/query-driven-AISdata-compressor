@@ -240,9 +240,7 @@ def selector_segment_score_source_label(
     if path_length_support_scores is not None and weight >= 1.0 - 1e-12:
         return "path_length_support_head_top20_mean"
     base_source = (
-        str(base_segment_score_source)
-        if segment_scores is not None
-        else "point_score_top20_mean"
+        str(base_segment_score_source) if segment_scores is not None else "point_score_top20_mean"
     )
     if path_length_support_scores is not None and weight > 0.0:
         if base_source == "segment_budget_head_top20_mean":

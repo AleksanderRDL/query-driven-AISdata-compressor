@@ -107,7 +107,7 @@ def _ship_query_pair_fractional_segment_targets(
 
     for query_mask in query_hit_masks:
         query_hit = query_mask.to(device=device, dtype=torch.bool)
-        for _trajectory_id, segment_indices in segments_by_trajectory.items():
+        for segment_indices in segments_by_trajectory.values():
             hit_segment_indices = [
                 segment_idx
                 for segment_idx in segment_indices

@@ -63,9 +63,8 @@ def build_final_training_fit_diagnostics(
         )
         zero_prior_predictions: torch.Tensor | None = None
         zero_prior_head_logits: torch.Tensor | None = None
-        if (
-            model_type == WORKLOAD_BLIND_RANGE_MODEL_TYPE
-            and int(norm_points.shape[1]) >= len(QUERY_PRIOR_FIELD_NAMES)
+        if model_type == WORKLOAD_BLIND_RANGE_MODEL_TYPE and int(norm_points.shape[1]) >= len(
+            QUERY_PRIOR_FIELD_NAMES
         ):
             zero_prior_norm_points = norm_points.clone()
             zero_prior_norm_points[:, -len(QUERY_PRIOR_FIELD_NAMES) :] = 0.0

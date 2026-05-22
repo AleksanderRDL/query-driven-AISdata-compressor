@@ -48,7 +48,6 @@ def range_retained_frequency_training_labels(
     source_scores = labels[:, type_idx].float().clamp(min=0.0)
     source_positive = source_scores > 0.0
     retained_frequency = torch.zeros_like(source_scores)
-    used = 0
     used_weight = 0.0
     for ratio, budget_weight in zip(ratios, budget_weights, strict=False):
         mask = simplify_with_temporal_score_hybrid(
@@ -66,7 +65,6 @@ def range_retained_frequency_training_labels(
         retained_frequency += float(budget_weight) * (mask & source_positive).to(
             dtype=retained_frequency.dtype
         )
-        used += 1
         used_weight += float(budget_weight)
     if used_weight > 1e-12:
         retained_frequency = retained_frequency / float(used_weight)
@@ -112,11 +110,9 @@ def _global_budget_retained_frequency_from_scores(
     """Return retained frequency from global score allocation across trajectories."""
     source_positive = source_scores > 0.0
     retained_frequency = torch.zeros_like(source_scores, dtype=torch.float32)
-    used = 0
+    budget_pairs = tuple(zip(ratios, _target_budget_weights(model_config, ratios), strict=False))
     used_weight = 0.0
-    for ratio, budget_weight in zip(
-        ratios, _target_budget_weights(model_config, ratios), strict=False
-    ):
+    for ratio, budget_weight in budget_pairs:
         mask = simplify_with_global_score_budget(
             source_scores,
             boundaries,
@@ -125,11 +121,10 @@ def _global_budget_retained_frequency_from_scores(
         retained_frequency += float(budget_weight) * (mask & source_positive).to(
             dtype=retained_frequency.dtype
         )
-        used += 1
         used_weight += float(budget_weight)
     if used_weight > 1e-12:
         retained_frequency = retained_frequency / float(used_weight)
-    return retained_frequency, used
+    return retained_frequency, len(budget_pairs)
 
 
 def range_global_budget_retained_frequency_training_labels(

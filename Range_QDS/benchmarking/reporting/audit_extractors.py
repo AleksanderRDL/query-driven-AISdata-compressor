@@ -72,7 +72,7 @@ def _audit_summary(run_json: dict[str, Any] | None) -> dict[str, Any]:
             continue
         try:
             ratio = float(raw_ratio)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             missing_baseline_count += 1
             continue
         ratio_rows.append((ratio, methods))
@@ -282,7 +282,7 @@ def _target_budget_row(
         return {}
     try:
         target_ratio = float(compression_ratio)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         last_row = rows[-1]
         return last_row if isinstance(last_row, dict) else {}
 
@@ -296,7 +296,7 @@ def _target_budget_row(
             continue
         try:
             ratio = float(raw_ratio)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             continue
         distance = abs(ratio - target_ratio)
         if distance < best_distance:
@@ -314,7 +314,7 @@ def _selector_budget_row(
         return {}
     try:
         target_ratio = float(compression_ratio)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         last_row = rows[-1]
         return last_row if isinstance(last_row, dict) else {}
 
@@ -328,7 +328,7 @@ def _selector_budget_row(
             continue
         try:
             ratio = float(raw_ratio)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             continue
         distance = abs(ratio - target_ratio)
         if distance < best_distance:

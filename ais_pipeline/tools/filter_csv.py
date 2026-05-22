@@ -36,7 +36,7 @@ def filter_csv(
 def load_ids_from_file(filepath: str) -> set[str]:
     """Load IDs from a text file (one ID per line)."""
     with open(filepath, encoding="utf-8") as f:
-        return set(line.strip() for line in f if line.strip())
+        return {value for line in f if (value := line.strip())}
 
 
 if __name__ == "__main__":

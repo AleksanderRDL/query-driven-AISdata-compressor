@@ -70,12 +70,12 @@ def _score_summary(artifact: dict[str, Any]) -> dict[str, float | None]:
 
 def _gate_summary(artifact: dict[str, Any]) -> dict[str, bool | None]:
     return {
-        "target_diffusion": _as_bool(_as_dict(artifact.get("target_diffusion_gate")).get("gate_pass")),
+        "target_diffusion": _as_bool(
+            _as_dict(artifact.get("target_diffusion_gate")).get("gate_pass")
+        ),
         "predictability": _as_bool(_as_dict(artifact.get("predictability_audit")).get("gate_pass")),
         "learning_causality": _as_bool(
-            _as_dict(artifact.get("learning_causality_summary")).get(
-                "learning_causality_gate_pass"
-            )
+            _as_dict(artifact.get("learning_causality_summary")).get("learning_causality_gate_pass")
         ),
         "global_sanity": _as_bool(_as_dict(artifact.get("global_sanity_gate")).get("gate_pass")),
         "final_success_allowed": _as_bool(
@@ -175,9 +175,7 @@ def _row_ref(row: dict[str, Any]) -> dict[str, Any]:
         "failure_buckets": [str(item) for item in _as_list(row.get("failure_buckets"))],
         "segment_index": segment_context.get("segment_index"),
         "selector_segment_score_rank": segment_context.get("segment_score_rank"),
-        "selector_segment_length_support_rank": segment_context.get(
-            "segment_length_support_rank"
-        ),
+        "selector_segment_length_support_rank": segment_context.get("segment_length_support_rank"),
         "segment_allocation_weight_rank": segment_context.get("segment_allocation_weight_rank"),
         "segment_allocation_count": segment_context.get("segment_allocation_count"),
         "selector_segment_learned_count": segment_context.get("learned_count"),
@@ -194,36 +192,25 @@ def _field_under_rank(row: dict[str, Any], score_field: str) -> float | None:
 
 
 def _top_marginal_diagnostics(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    top_rows = [
-        row
-        for row in rows
-        if _marginal_rank_fraction_at_most(row, TOP_RANK_FRACTION)
-    ]
+    top_rows = [row for row in rows if _marginal_rank_fraction_at_most(row, TOP_RANK_FRACTION)]
     out: dict[str, Any] = {
         "top_rank_fraction_max": TOP_RANK_FRACTION,
         "row_count": len(top_rows),
         "by_stage_owner": _count_by(top_rows, _stage_owner),
         "top_rows": [
-            _row_ref(row)
-            for row in sorted(top_rows, key=_marginal_sort_key)[:TOP_EXAMPLE_LIMIT]
+            _row_ref(row) for row in sorted(top_rows, key=_marginal_sort_key)[:TOP_EXAMPLE_LIMIT]
         ],
         "score_under_rank": {},
     }
     for score_field in SCORE_FIELDS:
         deltas = [
-            value
-            for row in top_rows
-            if (value := _field_under_rank(row, score_field)) is not None
+            value for row in top_rows if (value := _field_under_rank(row, score_field)) is not None
         ]
         low_rank_count = sum(
-            1
-            for row in top_rows
-            if _rank_fraction_at_least(row, score_field, MID_RANK_FRACTION)
+            1 for row in top_rows if _rank_fraction_at_least(row, score_field, MID_RANK_FRACTION)
         )
         very_low_rank_count = sum(
-            1
-            for row in top_rows
-            if _rank_fraction_at_least(row, score_field, LOW_RANK_FRACTION)
+            1 for row in top_rows if _rank_fraction_at_least(row, score_field, LOW_RANK_FRACTION)
         )
         out["score_under_rank"][score_field] = {
             "mean_score_rank_minus_marginal_rank": _mean(deltas),
@@ -256,8 +243,7 @@ def _overranked_low_marginal_diagnostics(rows: list[dict[str, Any]]) -> dict[str
         "by_stage_owner": _count_by(overranked, _stage_owner),
         "by_decision": _count_by(overranked, lambda row: str(row.get("decision") or "unknown")),
         "examples": [
-            _row_ref(row)
-            for row in sorted(overranked, key=_overrank_sort_key)[:TOP_EXAMPLE_LIMIT]
+            _row_ref(row) for row in sorted(overranked, key=_overrank_sort_key)[:TOP_EXAMPLE_LIMIT]
         ],
     }
 
@@ -329,9 +315,7 @@ def _teacher_summary(alignment: dict[str, Any]) -> dict[str, Any]:
             "learned_controllable_retained_removal_count"
         ),
         "guard_coupling_suspected": _as_bool(
-            _as_dict(guard.get("endpoint_proxy_guard_coupling")).get(
-                "guard_coupling_suspected"
-            )
+            _as_dict(guard.get("endpoint_proxy_guard_coupling")).get("guard_coupling_suspected")
         ),
     }
 
@@ -355,9 +339,7 @@ def _segment_teacher_row_ref(row: dict[str, Any], *, segment_count: int | None) 
         "selector_segment_allocation_weight_rank_fraction": _rank_fraction_from_rank(
             row.get("selector_segment_allocation_weight_rank"), segment_count
         ),
-        "selector_segment_length_support_rank": row.get(
-            "selector_segment_length_support_rank"
-        ),
+        "selector_segment_length_support_rank": row.get("selector_segment_length_support_rank"),
         "selector_segment_allocation_count": row.get("selector_segment_allocation_count"),
         "selector_segment_learned_count": row.get("selector_segment_learned_count"),
     }
@@ -459,8 +441,7 @@ def _segment_teacher_diagnostics(
             for row in top_segment_rows
         ],
         "top_point_target_rows": [
-            _point_teacher_row_ref(row, segment_count=segment_count_int)
-            for row in top_point_rows
+            _point_teacher_row_ref(row, segment_count=segment_count_int) for row in top_point_rows
         ],
     }
 
@@ -582,9 +563,7 @@ def _alignment_summary(alignment: dict[str, Any], trace: dict[str, Any]) -> dict
         "overranked_low_marginal_diagnostics": _overranked_low_marginal_diagnostics(rows),
         "component_alignment": _component_alignment(alignment),
         "teacher_summary": _teacher_summary(alignment),
-        "segment_marginal_teacher_diagnostics": _segment_teacher_diagnostics(
-            alignment, trace
-        ),
+        "segment_marginal_teacher_diagnostics": _segment_teacher_diagnostics(alignment, trace),
         "allocation_diagnostics": _allocation_diagnostics(trace),
         "failure_mode_summary": _failure_mode_summary(alignment, trace, rows),
     }
@@ -599,7 +578,10 @@ def _count_by(rows: list[dict[str, Any]], key_fn: Any) -> dict[str, int]:
 
 
 def _marginal_sort_key(row: dict[str, Any]) -> tuple[float, int]:
-    return (-float(row.get("marginal_query_local_utility") or 0.0), int(row.get("point_index") or 0))
+    return (
+        -float(row.get("marginal_query_local_utility") or 0.0),
+        int(row.get("point_index") or 0),
+    )
 
 
 def _overrank_sort_key(row: dict[str, Any]) -> tuple[float, int]:
@@ -648,9 +630,10 @@ def _decision(summary: dict[str, Any]) -> str:
         if int(selector_top_low_count or 0) > 0:
             return "diagnose_under_ranked_high_marginal_rows_before_selector_change"
         return "diagnose_score_to_marginal_monotonicity_before_selector_change"
-    if teacher.get("separated_teacher_shape_viable") is True and teacher.get(
-        "separated_teacher_allowed_for_training"
-    ) is not True:
+    if (
+        teacher.get("separated_teacher_shape_viable") is True
+        and teacher.get("separated_teacher_allowed_for_training") is not True
+    ):
         return "construct_train_side_marginal_calibration_evidence_before_promotion"
     return "diagnostic_only_no_promotion"
 

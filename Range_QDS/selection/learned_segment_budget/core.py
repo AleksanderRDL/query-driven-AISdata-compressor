@@ -416,9 +416,7 @@ def simplify_with_learned_segment_budget_with_trace(
         segment_budget_allocation_method="score_weighted_diminishing_priority",
         fairness_preallocation_enabled=fairness_preallocation_enabled,
         geometry_gain_weight=geometry_gain_weight,
-        segment_length_support_weight=(
-            effective_segment_length_support_weight
-        ),
+        segment_length_support_weight=(effective_segment_length_support_weight),
         segment_allocation_weight_floor=float(segment_allocation_weight_floor),
         segment_score_point_blend_weight=segment_score_point_blend_weight,
         segment_transfer_calibration_summary=segment_transfer_calibration_summary,

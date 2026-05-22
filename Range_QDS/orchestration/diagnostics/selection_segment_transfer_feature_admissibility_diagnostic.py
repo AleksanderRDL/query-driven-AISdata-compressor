@@ -74,9 +74,7 @@ def _feature_values(rows: list[dict[str, Any]], feature: str) -> list[float] | N
     return out
 
 
-def _values_by_segment(
-    rows: list[dict[str, Any]], values: list[float]
-) -> dict[int, float]:
+def _values_by_segment(rows: list[dict[str, Any]], values: list[float]) -> dict[int, float]:
     out: dict[int, float] = {}
     for row, value in zip(rows, values, strict=True):
         segment_index = row.get("segment_index")
@@ -114,7 +112,7 @@ def _single_feature(feature: str) -> Callable[[list[dict[str, Any]]], list[float
 
 
 def _zblend(
-    weighted_features: tuple[tuple[str, float], ...]
+    weighted_features: tuple[tuple[str, float], ...],
 ) -> Callable[[list[dict[str, Any]]], list[float] | None]:
     def _score(rows: list[dict[str, Any]]) -> list[float] | None:
         columns: list[tuple[list[float], float]] = []
@@ -252,9 +250,7 @@ def _candidate_summary(
         targets=eval_targets,
         values=eval_values,
     )
-    selection_spearman = as_float(
-        selection_metrics.get("spearman_with_segment_teacher_target")
-    )
+    selection_spearman = as_float(selection_metrics.get("spearman_with_segment_teacher_target"))
     eval_spearman = as_float(eval_metrics.get("spearman_with_segment_teacher_target"))
     selection_top5 = as_float(
         as_dict(as_dict(selection_metrics.get("topk_target_lift")).get("0.05")).get(
@@ -262,9 +258,7 @@ def _candidate_summary(
         )
     )
     eval_top5 = as_float(
-        as_dict(as_dict(eval_metrics.get("topk_target_lift")).get("0.05")).get(
-            "top_target_lift"
-        )
+        as_dict(as_dict(eval_metrics.get("topk_target_lift")).get("0.05")).get("top_target_lift")
     )
     transfer_consistent = (
         selection_spearman is not None
@@ -302,38 +296,27 @@ def _feature_coupling_summary(candidate_rows: list[dict[str, Any]]) -> dict[str,
         row
         for row in candidate_rows
         if as_bool(row.get("available")) is True
-        and as_bool(as_dict(row.get("classification")).get("uses_post_selection_coupling"))
-        is True
+        and as_bool(as_dict(row.get("classification")).get("uses_post_selection_coupling")) is True
         and as_float(
-            as_dict(row.get("selection_metrics")).get(
-                "spearman_with_segment_teacher_target"
-            )
+            as_dict(row.get("selection_metrics")).get("spearman_with_segment_teacher_target")
         )
         is not None
         and (
             as_float(
-                as_dict(row.get("selection_metrics")).get(
-                    "spearman_with_segment_teacher_target"
-                )
+                as_dict(row.get("selection_metrics")).get("spearman_with_segment_teacher_target")
             )
             or 0.0
         )
         > 0.0
         and (
-            as_float(
-                as_dict(row.get("eval_metrics")).get(
-                    "spearman_with_segment_teacher_target"
-                )
-            )
+            as_float(as_dict(row.get("eval_metrics")).get("spearman_with_segment_teacher_target"))
             or 0.0
         )
         > 0.0
     ]
     admissible = [row for row in candidate_rows if row.get("probe_admissible") is True]
     return {
-        "post_selection_positive_candidate_names": [
-            str(row.get("name")) for row in post_positive
-        ],
+        "post_selection_positive_candidate_names": [str(row.get("name")) for row in post_positive],
         "admissible_candidate_names": [str(row.get("name")) for row in admissible],
         "post_selection_positive_candidate_count": len(post_positive),
         "admissible_candidate_count": len(admissible),
@@ -358,7 +341,11 @@ def _artifact_summary(label: str, artifact: dict[str, Any]) -> dict[str, Any]:
         for candidate in TRANSFER_CANDIDATES
     ]
     selection_teacher = as_dict(
-        as_dict(as_dict(selection_trace.get("retained_decision_marginal_query_local_utility_alignment")).get("separated_marginal_teacher_summary"))
+        as_dict(
+            as_dict(
+                selection_trace.get("retained_decision_marginal_query_local_utility_alignment")
+            ).get("separated_marginal_teacher_summary")
+        )
     )
     return {
         "label": label,
@@ -440,9 +427,7 @@ def main(argv: list[str] | None = None) -> int:
         (label, _load_json(path))
         for label, path in (_parse_labeled_artifact(value) for value in args.artifact)
     ]
-    diagnostic = build_selection_segment_transfer_feature_admissibility_diagnostic(
-        artifacts
-    )
+    diagnostic = build_selection_segment_transfer_feature_admissibility_diagnostic(artifacts)
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("w", encoding="utf-8") as handle:

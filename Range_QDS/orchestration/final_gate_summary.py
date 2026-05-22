@@ -208,10 +208,10 @@ def build_final_run_summaries(
     )
     for name, tradeoff_diagnostics in causality_ablation_tradeoff_diagnostics.items():
         if name in head_ablation_sensitivity_diagnostics:
-            head_ablation_sensitivity_diagnostics[name]["query_local_utility_component_tradeoff"] = (
-                tradeoff_diagnostics
-            )
-    for _prior_channel_name, channel_diagnostics in prior_channel_ablation_diagnostics.items():
+            head_ablation_sensitivity_diagnostics[name][
+                "query_local_utility_component_tradeoff"
+            ] = tradeoff_diagnostics
+    for channel_diagnostics in prior_channel_ablation_diagnostics.values():
         if not isinstance(channel_diagnostics, dict) or not bool(
             channel_diagnostics.get("available", False)
         ):
@@ -246,9 +246,7 @@ def build_final_run_summaries(
         "MLQDS_without_segment_budget_head",
     )
     missing_causality_ablations = [
-        name
-        for name in required_causality_ablation_names
-        if name not in causality_ablation_scores
+        name for name in required_causality_ablation_names if name not in causality_ablation_scores
     ]
     failed_causality_checks: list[str] = []
     delta_checks = {
@@ -396,10 +394,7 @@ def build_final_run_summaries(
             blocking_gates.append("workload_signature_gate")
         if not learning_causality_gate_pass:
             blocking_gates.append("learning_causality_ablations")
-        if (
-            global_sanity_required_for_initial_local_learning
-            and not global_sanity_gate_pass
-        ):
+        if global_sanity_required_for_initial_local_learning and not global_sanity_gate_pass:
             blocking_gates.append("global_sanity_gates")
         single_cell_blocking_gates = list(blocking_gates)
         blocking_gates.append("full_workload_profile_compression_grid")
@@ -432,9 +427,7 @@ def build_final_run_summaries(
             "global_sanity_gate_required_for_initial_local_learning": (
                 global_sanity_required_for_initial_local_learning
             ),
-            "global_sanity_gate_role": (
-                "diagnostic_guardrail_during_initial_query_local_learning"
-            ),
+            "global_sanity_gate_role": ("diagnostic_guardrail_during_initial_query_local_learning"),
             "mlqds_score": matched["MLQDS"].query_local_utility_score,
             "uniform_score": uniform_score.query_local_utility_score
             if uniform_score is not None

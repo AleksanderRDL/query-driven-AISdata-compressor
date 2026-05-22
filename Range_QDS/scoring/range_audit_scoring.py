@@ -59,9 +59,7 @@ def _range_query_point_recall(retained_mask: torch.Tensor, range_mask: torch.Ten
     if full_hits <= 0:
         return 1.0
     retained_hits = int(
-        (
-            retained_mask.to(device=range_mask.device, dtype=torch.bool) & range_mask
-        ).sum().item()
+        (retained_mask.to(device=range_mask.device, dtype=torch.bool) & range_mask).sum().item()
     )
     return float(max(0.0, min(1.0, retained_hits / full_hits)))
 
@@ -106,6 +104,7 @@ def _point_index_subset_f1(retained_mask: torch.Tensor, support_indices_cpu: tor
         return 0.0
     recall = float(retained_hits / full_hits)
     return float((2.0 * recall) / (1.0 + recall))
+
 
 def _range_boundary_indices_for_trajectories(
     range_mask: torch.Tensor,
@@ -667,9 +666,7 @@ def score_range_usefulness(
         )
 
         entry_exit_score = _point_index_subset_f1(retained_bool, support.boundary_indices_cpu)
-        crossing_score = _point_index_subset_f1(
-            retained_bool, support.crossing_bracket_indices_cpu
-        )
+        crossing_score = _point_index_subset_f1(retained_bool, support.crossing_bracket_indices_cpu)
         entry_exit_scores.append(entry_exit_score)
         crossing_scores.append(crossing_score)
 

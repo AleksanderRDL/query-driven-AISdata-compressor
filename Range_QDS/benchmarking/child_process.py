@@ -115,10 +115,11 @@ def _run_capture_streaming(
         bufsize=1,
     )
     try:
-        with open(stdout_path, "w", encoding="utf-8") as log:
-            if proc.stdout is None:
-                raise RuntimeError("benchmark child stdout pipe was not created.")
-            for line in proc.stdout:
+        stdout_pipe = proc.stdout
+        if stdout_pipe is None:
+            raise RuntimeError("benchmark child stdout pipe was not created.")
+        with stdout_pipe, stdout_path.open("w", encoding="utf-8") as log:
+            for line in stdout_pipe:
                 tail_chars, line_truncated = _append_stdout_tail(
                     tail_chunks, tail_chars, line, max_stdout_chars
                 )

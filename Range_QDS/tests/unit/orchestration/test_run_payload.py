@@ -67,18 +67,14 @@ def test_workload_scoring_compatibility_diagnostics_compares_family_components()
     )
 
     assert diagnostics["available"] is True
-    comparison = diagnostics["comparisons_vs_baseline"]["uniform"]["anchor_family"][
-        "density"
-    ]
+    comparison = diagnostics["comparisons_vs_baseline"]["uniform"]["anchor_family"]["density"]
     assert comparison["query_local_score_delta"] == 0.19999999999999996
     assert comparison["range_component_deltas"]["range_point_f1"] == 0.19999999999999996
     assert comparison["top_primary_better_component_deltas"] == [
         {"component": "range_point_f1", "delta": 0.19999999999999996}
     ]
     assert comparison["top_baseline_better_component_deltas"] == []
-    assert comparison["ship_evidence_count_deltas"]["ship_presence_recall"] == pytest.approx(
-        0.2
-    )
+    assert comparison["ship_evidence_count_deltas"]["ship_presence_recall"] == pytest.approx(0.2)
     assert comparison["ship_evidence_count_deltas"]["missed_trajectory_hit_count_total"] == -2
 
 

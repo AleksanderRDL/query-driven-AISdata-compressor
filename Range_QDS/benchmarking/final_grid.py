@@ -72,9 +72,7 @@ def query_driven_final_grid_summary(
         profile_rows[workload_profile_id] = row
 
     missing_workload_profile_ids = [
-        profile_id
-        for profile_id in required_workload_profile_ids
-        if profile_id not in profile_rows
+        profile_id for profile_id in required_workload_profile_ids if profile_id not in profile_rows
     ]
     cells: list[dict[str, Any]] = []
     missing_cells: list[dict[str, Any]] = []
@@ -94,13 +92,12 @@ def query_driven_final_grid_summary(
             mlqds = as_float(row.get(f"{prefix}_mlqds_query_local_utility"))
             uniform = as_float(row.get(f"{prefix}_uniform_query_local_utility"))
             dp = as_float(row.get(f"{prefix}_douglas_peucker_query_local_utility"))
-            if mlqds is None or uniform is None or dp is None:
-                if _ratio_close(
-                    _normalized_grid_float(row.get("compression_ratio")), ratio, tol=1e-6
-                ):
-                    mlqds = as_float(row.get("mlqds_query_local_utility_score"))
-                    uniform = as_float(row.get("uniform_query_local_utility_score"))
-                    dp = as_float(row.get("douglas_peucker_query_local_utility_score"))
+            if (mlqds is None or uniform is None or dp is None) and _ratio_close(
+                _normalized_grid_float(row.get("compression_ratio")), ratio, tol=1e-6
+            ):
+                mlqds = as_float(row.get("mlqds_query_local_utility_score"))
+                uniform = as_float(row.get("uniform_query_local_utility_score"))
+                dp = as_float(row.get("douglas_peucker_query_local_utility_score"))
             if mlqds is None or uniform is None or dp is None:
                 missing_cells.append(
                     {
@@ -136,9 +133,7 @@ def query_driven_final_grid_summary(
     )
     required_cell_count = int(len(required_workload_profile_ids) * len(required_ratios))
     grid_complete = (
-        len(cells) == required_cell_count
-        and not missing_cells
-        and not missing_workload_profile_ids
+        len(cells) == required_cell_count and not missing_cells and not missing_workload_profile_ids
     )
     required_single_run_gate_names = (
         "workload_stability_gate_pass",

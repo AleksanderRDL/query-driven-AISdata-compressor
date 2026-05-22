@@ -10,10 +10,16 @@ def main() -> None:
 
     with psycopg.connect(db_url) as conn, conn.cursor() as cur:
         cur.execute("SELECT postgis_version();")
-        print("PostGIS:", cur.fetchone()[0])
+        postgis_row = cur.fetchone()
+        if postgis_row is None:
+            raise RuntimeError("PostGIS version query returned no row.")
+        print("PostGIS:", postgis_row[0])
 
         cur.execute("SELECT COUNT(*) FROM ais_points_cleaned;")
-        print("Rows in ais_points_cleaned:", cur.fetchone()[0])
+        count_row = cur.fetchone()
+        if count_row is None:
+            raise RuntimeError("ais_points_cleaned count query returned no row.")
+        print("Rows in ais_points_cleaned:", count_row[0])
 
 
 if __name__ == "__main__":

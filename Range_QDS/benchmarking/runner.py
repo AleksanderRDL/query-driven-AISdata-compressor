@@ -50,11 +50,7 @@ from workloads.generation.workload_profiles import range_workload_profile
 
 QDS_ARTIFACTS_DIR = Path(__file__).resolve().parents[1] / "artifacts"
 DEFAULT_RESULTS_DIR = (
-    QDS_ARTIFACTS_DIR
-    / "benchmarks"
-    / "query_driven_workload_blind"
-    / "runs"
-    / "manual_benchmark"
+    QDS_ARTIFACTS_DIR / "benchmarks" / "query_driven_workload_blind" / "runs" / "manual_benchmark"
 )
 
 

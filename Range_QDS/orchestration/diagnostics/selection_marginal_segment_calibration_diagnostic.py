@@ -58,7 +58,9 @@ def _score_summary(artifact: dict[str, Any]) -> dict[str, float | None]:
         "uniform_query_local_utility": uniform_score,
         "baseline_query_local_utility": baseline_score,
         "primary_minus_uniform_query_local_utility": (
-            None if primary_score is None or uniform_score is None else primary_score - uniform_score
+            None
+            if primary_score is None or uniform_score is None
+            else primary_score - uniform_score
         ),
         "primary_minus_baseline_query_local_utility": (
             None
@@ -70,9 +72,7 @@ def _score_summary(artifact: dict[str, Any]) -> dict[str, float | None]:
 
 def _gate_summary(artifact: dict[str, Any]) -> dict[str, bool | None]:
     workload_signature = _as_dict(
-        _as_dict(artifact.get("workload_distribution_comparison")).get(
-            "workload_signature_gate"
-        )
+        _as_dict(artifact.get("workload_distribution_comparison")).get("workload_signature_gate")
     )
     return {
         "workload_stability": _as_bool(
@@ -87,9 +87,7 @@ def _gate_summary(artifact: dict[str, Any]) -> dict[str, bool | None]:
         "workload_signature": _as_bool(workload_signature.get("all_pass")),
         "predictability": _as_bool(_as_dict(artifact.get("predictability_audit")).get("gate_pass")),
         "learning_causality": _as_bool(
-            _as_dict(artifact.get("learning_causality_summary")).get(
-                "learning_causality_gate_pass"
-            )
+            _as_dict(artifact.get("learning_causality_summary")).get("learning_causality_gate_pass")
         ),
         "global_sanity": _as_bool(_as_dict(artifact.get("global_sanity_gate")).get("gate_pass")),
         "final_success_allowed": _as_bool(
@@ -145,9 +143,7 @@ def _segment_row_ref(row: dict[str, Any], denominator: int | None) -> dict[str, 
         "selector_segment_allocation_weight_rank_fraction": _rank_fraction(
             row.get("selector_segment_allocation_weight_rank"), denominator
         ),
-        "selector_segment_length_support_rank": row.get(
-            "selector_segment_length_support_rank"
-        ),
+        "selector_segment_length_support_rank": row.get("selector_segment_length_support_rank"),
         "selector_segment_allocation_count": row.get("selector_segment_allocation_count"),
         "selector_segment_learned_count": row.get("selector_segment_learned_count"),
     }
@@ -165,11 +161,7 @@ def _trace_teacher_summary(trace_name: str, trace: dict[str, Any]) -> dict[str, 
     segment_rank_fractions = [
         value
         for row in top_rows
-        if (
-            value := _rank_fraction(
-                row.get("selector_segment_score_rank"), segment_count_int
-            )
-        )
+        if (value := _rank_fraction(row.get("selector_segment_score_rank"), segment_count_int))
         is not None
     ]
     allocation_rank_fractions = [
@@ -190,9 +182,7 @@ def _trace_teacher_summary(trace_name: str, trace: dict[str, Any]) -> dict[str, 
         "selector_score_spearman": _as_float(
             _as_dict(overall.get("selector_score")).get("spearman")
         ),
-        "segment_score_spearman": _as_float(
-            _as_dict(overall.get("segment_score")).get("spearman")
-        ),
+        "segment_score_spearman": _as_float(_as_dict(overall.get("segment_score")).get("spearman")),
         "raw_score_spearman": _as_float(_as_dict(overall.get("raw_score")).get("spearman")),
         "teacher_usage_split": separated.get("teacher_usage_split"),
         "candidate_for_train_side_teacher": _as_bool(
@@ -201,9 +191,7 @@ def _trace_teacher_summary(trace_name: str, trace: dict[str, Any]) -> dict[str, 
         "candidate_for_train_side_teacher_reason": separated.get(
             "candidate_for_train_side_teacher_reason"
         ),
-        "teacher_target_shape_viable": _as_bool(
-            separated.get("teacher_target_shape_viable")
-        ),
+        "teacher_target_shape_viable": _as_bool(separated.get("teacher_target_shape_viable")),
         "segment_target_count": separated.get("segment_target_count"),
         "point_target_count": separated.get("point_target_count"),
         "top_segment_row_count": len(top_rows),
@@ -215,9 +203,7 @@ def _trace_teacher_summary(trace_name: str, trace: dict[str, Any]) -> dict[str, 
         ),
         "top_segment_mean_selector_score_rank_fraction": _mean(segment_rank_fractions),
         "top_segment_mean_allocation_weight_rank_fraction": _mean(allocation_rank_fractions),
-        "top_segment_rows": [
-            _segment_row_ref(row, segment_count_int) for row in top_rows
-        ],
+        "top_segment_rows": [_segment_row_ref(row, segment_count_int) for row in top_rows],
         "point_target_top_rows": [
             {
                 "point_index": row.get("point_index"),
@@ -231,9 +217,7 @@ def _trace_teacher_summary(trace_name: str, trace: dict[str, Any]) -> dict[str, 
                     row.get("segment_score_candidate_rank_fraction")
                 ),
                 "selector_segment_score_rank": row.get("selector_segment_score_rank"),
-                "selector_segment_allocation_count": row.get(
-                    "selector_segment_allocation_count"
-                ),
+                "selector_segment_allocation_count": row.get("selector_segment_allocation_count"),
             }
             for row in sorted(
                 point_rows,
@@ -270,9 +254,7 @@ def _split_overlap(selection: dict[str, Any], eval_trace: dict[str, Any]) -> dic
         ),
         "top_segment_overlap_count": len(top_overlap),
         "top_segment_overlap_fraction_of_selection_top": (
-            None
-            if not top_selection_segments
-            else len(top_overlap) / len(top_selection_segments)
+            None if not top_selection_segments else len(top_overlap) / len(top_selection_segments)
         ),
         "overlap_segment_indices": sorted(overlap),
         "top_overlap_segment_indices": sorted(top_overlap),

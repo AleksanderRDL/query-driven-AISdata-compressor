@@ -140,8 +140,7 @@ def parse_ts_to_iso(ts: str | None) -> str | None:
         return None
 
     try:
-        dt = datetime.strptime(ts, "%d/%m/%Y %H:%M:%S")
-        dt = dt.replace(tzinfo=UTC)
+        dt = datetime.strptime(ts, "%d/%m/%Y %H:%M:%S").replace(tzinfo=UTC)
         return dt.isoformat()
     except ValueError:
         pass
@@ -165,7 +164,9 @@ def safe_get(row: list[str], idx: int) -> str | None:
     return None
 
 
-def transform_subchunk(rows: list[tuple[str | None, ...]]) -> tuple[list[list[object]], int, int, int]:
+def transform_subchunk(
+    rows: list[tuple[str | None, ...]],
+) -> tuple[list[list[object]], int, int, int]:
     out_rows: list[list[object]] = []
     skip_missing_ts = 0
     skip_missing_core = 0
@@ -199,11 +200,13 @@ def transform_subchunk(rows: list[tuple[str | None, ...]]) -> tuple[list[list[ob
     return out_rows, skip_missing_ts, skip_missing_core, skip_bad_coords
 
 
-def split_subchunks(rows: list[tuple[str | None, ...]], parts: int) -> list[list[tuple[str | None, ...]]]:
+def split_subchunks(
+    rows: list[tuple[str | None, ...]], parts: int
+) -> list[list[tuple[str | None, ...]]]:
     if parts <= 1 or len(rows) <= 1:
         return [rows]
     step = max(1, (len(rows) + parts - 1) // parts)
-    return [rows[i:i + step] for i in range(0, len(rows), step)]
+    return [rows[i : i + step] for i in range(0, len(rows), step)]
 
 
 def process_chunk(
@@ -284,15 +287,23 @@ def main():
     )
     parser.add_argument("--limit", type=int, default=0, help="0 = no limit")
     parser.add_argument("--chunk-rows", type=int, default=100000, help="Rows per transaction chunk")
-    parser.add_argument("--copy-buffer-rows", type=int, default=25000, help="Rows per in-memory COPY write")
+    parser.add_argument(
+        "--copy-buffer-rows", type=int, default=25000, help="Rows per in-memory COPY write"
+    )
     parser.add_argument(
         "--workers",
         type=int,
         default=max(1, (os.cpu_count() or 2) - 1),
         help="Parallel parser worker processes (1 disables multi-core parsing)",
     )
-    parser.add_argument("--no-resume", action="store_true", help="Ignore stored checkpoint and start from row 0")
-    parser.add_argument("--reset-progress", action="store_true", help="Delete stored progress for this file before run")
+    parser.add_argument(
+        "--no-resume", action="store_true", help="Ignore stored checkpoint and start from row 0"
+    )
+    parser.add_argument(
+        "--reset-progress",
+        action="store_true",
+        help="Delete stored progress for this file before run",
+    )
     args = parser.parse_args()
 
     if args.chunk_rows <= 0:
@@ -387,16 +398,12 @@ def main():
                 raise RuntimeError("CSV has no header / no columns detected")
             print("Raw headers:", raw_headers)
 
-            header_index = {
-                normalize_header(name): idx for idx, name in enumerate(raw_headers)
-            }
+            header_index = {normalize_header(name): idx for idx, name in enumerate(raw_headers)}
             print("Normalized headers:", sorted(header_index.keys()))
 
             missing_headers = [h for h in REQUIRED_HEADERS if h not in header_index]
             if missing_headers:
-                raise RuntimeError(
-                    "CSV missing required headers: " + ", ".join(missing_headers)
-                )
+                raise RuntimeError("CSV missing required headers: " + ", ".join(missing_headers))
 
             idx_mmsi = header_index["MMSI"]
             idx_ts = header_index["Timestamp"]
@@ -423,11 +430,7 @@ def main():
             else:
                 print("Starting from first data row.")
 
-            executor = (
-                ProcessPoolExecutor(max_workers=args.workers)
-                if args.workers > 1
-                else None
-            )
+            executor = ProcessPoolExecutor(max_workers=args.workers) if args.workers > 1 else None
             try:
                 while True:
                     raw_chunk: list[tuple[str | None, ...]] = []
@@ -456,10 +459,12 @@ def main():
                     if not raw_chunk:
                         break
 
-                    valid_rows, chunk_missing_ts, chunk_missing_core, chunk_bad_coords = process_chunk(
-                        raw_rows=raw_chunk,
-                        workers=args.workers,
-                        executor=executor,
+                    valid_rows, chunk_missing_ts, chunk_missing_core, chunk_bad_coords = (
+                        process_chunk(
+                            raw_rows=raw_chunk,
+                            workers=args.workers,
+                            executor=executor,
+                        )
                     )
 
                     chunk_inserted = len(valid_rows)

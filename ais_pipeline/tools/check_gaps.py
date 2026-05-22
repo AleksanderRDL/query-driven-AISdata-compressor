@@ -49,8 +49,7 @@ def build_spark():
     configure_spark_environment(REPO_ROOT)
 
     return (
-        SparkSession.builder
-        .master("local[*]")
+        SparkSession.builder.master("local[*]")
         .appName("check_gaps")
         .config("spark.sql.shuffle.partitions", "64")
         .config("spark.sql.adaptive.enabled", "true")
@@ -68,11 +67,14 @@ def main():
         help="Path to cleaned CSV (Spark output directory)",
     )
     parser.add_argument(
-        "--top", type=int, default=1000,
+        "--top",
+        type=int,
+        default=1000,
         help="Check this many biggest gaps (default: 1000)",
     )
     parser.add_argument(
-        "--suspicious-only", action="store_true",
+        "--suspicious-only",
+        action="store_true",
         help="Only print gaps classified as suspicious",
     )
     args = parser.parse_args()
@@ -88,16 +90,16 @@ def main():
     )
     df = (
         df.withColumn("Latitude", F.col("Latitude").cast("double"))
-          .withColumn("Longitude", F.col("Longitude").cast("double"))
-          .withColumn("SOG", F.col("SOG").cast("double"))
-          .withColumn("# Timestamp",
-                      F.coalesce(
-                          F.try_to_timestamp(F.col("# Timestamp"),
-                                             F.lit("dd/MM/yyyy HH:mm:ss")),
-                          F.try_to_timestamp(F.col("# Timestamp"),
-                                             F.lit("yyyy-MM-dd'T'HH:mm:ss.SSSXXX")),
-                          F.try_to_timestamp(F.col("# Timestamp")),
-                      ))
+        .withColumn("Longitude", F.col("Longitude").cast("double"))
+        .withColumn("SOG", F.col("SOG").cast("double"))
+        .withColumn(
+            "# Timestamp",
+            F.coalesce(
+                F.try_to_timestamp(F.col("# Timestamp"), F.lit("dd/MM/yyyy HH:mm:ss")),
+                F.try_to_timestamp(F.col("# Timestamp"), F.lit("yyyy-MM-dd'T'HH:mm:ss.SSSXXX")),
+                F.try_to_timestamp(F.col("# Timestamp")),
+            ),
+        )
     )
 
     total_rows = df.count()
@@ -109,16 +111,15 @@ def main():
     prev_lat = F.lag("Latitude").over(w)
     prev_lon = F.lag("Longitude").over(w)
     prev_sog = F.lag("SOG").over(w)
-    prev_ts  = F.lag("# Timestamp").over(w)
+    prev_ts = F.lag("# Timestamp").over(w)
 
     next_lat = F.lead("Latitude").over(w)
     next_lon = F.lead("Longitude").over(w)
     next_sog = F.lead("SOG").over(w)
-    next_ts  = F.lead("# Timestamp").over(w)
+    next_ts = F.lead("# Timestamp").over(w)
 
     gaps = (
-        df
-        .withColumn("_prev_lat", prev_lat)
+        df.withColumn("_prev_lat", prev_lat)
         .withColumn("_prev_lon", prev_lon)
         .withColumn("_prev_sog", prev_sog)
         .withColumn("_prev_ts", prev_ts)
@@ -130,43 +131,47 @@ def main():
 
     # Filter after window columns are materialized
     gaps = (
-        gaps
-        .filter(F.col("_prev_ts").isNotNull())
-        .withColumn("_dist_km",
-                    haversine_km(prev_lat, prev_lon,
-                                 F.col("Latitude"), F.col("Longitude")))
-        .withColumn("_time_s",
-                    F.col("# Timestamp").cast("long") - prev_ts.cast("long"))
-        .withColumn("_time_h",
-                    F.col("_time_s") / 3600.0)
+        gaps.filter(F.col("_prev_ts").isNotNull())
+        .withColumn(
+            "_dist_km", haversine_km(prev_lat, prev_lon, F.col("Latitude"), F.col("Longitude"))
+        )
+        .withColumn("_time_s", F.col("# Timestamp").cast("long") - prev_ts.cast("long"))
+        .withColumn("_time_h", F.col("_time_s") / 3600.0)
         # Speed needed to cover the gap
-        .withColumn("_needed_kn",
-                    F.when(F.col("_time_h") > 0,
-                           F.col("_dist_km") / (F.col("_time_h") * KNOTS_TO_KMH)))
+        .withColumn(
+            "_needed_kn",
+            F.when(F.col("_time_h") > 0, F.col("_dist_km") / (F.col("_time_h") * KNOTS_TO_KMH)),
+        )
         # Max SOG of the two endpoints
-        .withColumn("_max_sog",
-                    F.greatest(F.col("_prev_sog"), F.col("SOG")))
+        .withColumn("_max_sog", F.greatest(F.col("_prev_sog"), F.col("SOG")))
         # Ratio: needed speed / reported SOG  (>1 = suspicious)
-        .withColumn("_speed_ratio",
-                    F.when(F.col("_max_sog") > 0,
-                           F.col("_needed_kn") / F.col("_max_sog")))
+        .withColumn(
+            "_speed_ratio", F.when(F.col("_max_sog") > 0, F.col("_needed_kn") / F.col("_max_sog"))
+        )
         # Distance to next point (to check if THIS point is an outlier)
-        .withColumn("_dist_next_km",
-                    haversine_km(F.col("Latitude"), F.col("Longitude"),
-                                 next_lat, next_lon))
-        .withColumn("_time_next_s",
-                    F.when(next_ts.isNotNull(),
-                           next_ts.cast("long") - F.col("# Timestamp").cast("long")))
+        .withColumn(
+            "_dist_next_km", haversine_km(F.col("Latitude"), F.col("Longitude"), next_lat, next_lon)
+        )
+        .withColumn(
+            "_time_next_s",
+            F.when(next_ts.isNotNull(), next_ts.cast("long") - F.col("# Timestamp").cast("long")),
+        )
         # Distance from prev to next (skip current point)
-        .withColumn("_skip_dist_km",
-                    F.when(next_lat.isNotNull(),
-                           haversine_km(prev_lat, prev_lon, next_lat, next_lon)))
-        .withColumn("_skip_time_h",
-                    F.when(next_ts.isNotNull(),
-                           (next_ts.cast("long") - prev_ts.cast("long")) / 3600.0))
-        .withColumn("_skip_needed_kn",
-                    F.when((F.col("_skip_time_h").isNotNull()) & (F.col("_skip_time_h") > 0),
-                           F.col("_skip_dist_km") / (F.col("_skip_time_h") * KNOTS_TO_KMH)))
+        .withColumn(
+            "_skip_dist_km",
+            F.when(next_lat.isNotNull(), haversine_km(prev_lat, prev_lon, next_lat, next_lon)),
+        )
+        .withColumn(
+            "_skip_time_h",
+            F.when(next_ts.isNotNull(), (next_ts.cast("long") - prev_ts.cast("long")) / 3600.0),
+        )
+        .withColumn(
+            "_skip_needed_kn",
+            F.when(
+                (F.col("_skip_time_h").isNotNull()) & (F.col("_skip_time_h") > 0),
+                F.col("_skip_dist_km") / (F.col("_skip_time_h") * KNOTS_TO_KMH),
+            ),
+        )
     )
 
     # ── Classify each gap ──
@@ -176,23 +181,21 @@ def main():
     gaps = gaps.withColumn(
         "_verdict",
         F.when(F.col("_time_s") == 0, F.lit("DUPLICATE_TS"))
-         .when(F.col("_speed_ratio") <= 1.5, F.lit("OK_SPEED_MATCHES"))
-         .when(
-             # Current point is outlier if: gap is big AND skipping it makes prev→next normal
-             (F.col("_skip_needed_kn").isNotNull()) &
-             (F.col("_skip_needed_kn") < F.col("_max_sog") * 1.5) &
-             (F.col("_speed_ratio") > 2.0),
-             F.lit("SUSPICIOUS_SKIP_FIXES"))
-         .when(F.col("_speed_ratio") > 3.0, F.lit("SUSPICIOUS_VERY_FAST"))
-         .when(F.col("_speed_ratio") > 1.5, F.lit("BORDERLINE"))
-         .otherwise(F.lit("OK"))
+        .when(F.col("_speed_ratio") <= 1.5, F.lit("OK_SPEED_MATCHES"))
+        .when(
+            # Current point is outlier if: gap is big AND skipping it makes prev→next normal
+            (F.col("_skip_needed_kn").isNotNull())
+            & (F.col("_skip_needed_kn") < F.col("_max_sog") * 1.5)
+            & (F.col("_speed_ratio") > 2.0),
+            F.lit("SUSPICIOUS_SKIP_FIXES"),
+        )
+        .when(F.col("_speed_ratio") > 3.0, F.lit("SUSPICIOUS_VERY_FAST"))
+        .when(F.col("_speed_ratio") > 1.5, F.lit("BORDERLINE"))
+        .otherwise(F.lit("OK")),
     )
 
     # ── Get top N biggest gaps ──
-    top_gaps = (
-        gaps.orderBy(F.col("_dist_km").desc())
-        .limit(args.top)
-    )
+    top_gaps = gaps.orderBy(F.col("_dist_km").desc()).limit(args.top)
 
     top_gaps.cache()
     rows = top_gaps.collect()
@@ -218,9 +221,11 @@ def main():
     else:
         print(f"\nAll {len(rows)} gaps:\n")
 
-    header = (f"{'#':>4} {'MMSI':<12} {'Gap':>12} {'Time':>8} "
-              f"{'Needed':>8} {'MaxSOG':>7} {'Ratio':>6} "
-              f"{'SkipDist':>12} {'SkipNeed':>8} {'Verdict':<25}")
+    header = (
+        f"{'#':>4} {'MMSI':<12} {'Gap':>12} {'Time':>8} "
+        f"{'Needed':>8} {'MaxSOG':>7} {'Ratio':>6} "
+        f"{'SkipDist':>12} {'SkipNeed':>8} {'Verdict':<25}"
+    )
     print(header)
     print("-" * len(header))
 
@@ -238,14 +243,14 @@ def main():
         if time_s < 60:
             time_str = f"{time_s:.0f}s"
         elif time_s < 3600:
-            time_str = f"{time_s/60:.1f}m"
+            time_str = f"{time_s / 60:.1f}m"
         else:
-            time_str = f"{time_s/3600:.2f}h"
+            time_str = f"{time_s / 3600:.2f}h"
 
         flag = " <<<" if verdict in suspicious_verdicts else ""
 
         print(
-            f"{i+1:>4} {r['MMSI']:<12} {fmt_dist(dist):>12} {time_str:>8} "
+            f"{i + 1:>4} {r['MMSI']:<12} {fmt_dist(dist):>12} {time_str:>8} "
             f"{needed or 0:>7.1f}kn {max_sog:>6.1f}kn {ratio or 0:>5.1f}x "
             f"{fmt_dist(skip_dist):>12} {skip_need or 0:>7.1f}kn "
             f"{verdict:<25}{flag}"
@@ -254,25 +259,35 @@ def main():
     # ── Show SUSPICIOUS details ──
     suspicious = [r for r in rows if r["_verdict"] in suspicious_verdicts]
     if suspicious:
-        print(f"\n{'='*100}")
+        print(f"\n{'=' * 100}")
         print(f"SUSPICIOUS GAPS DETAIL ({len(suspicious)} found)")
-        print(f"{'='*100}")
+        print(f"{'=' * 100}")
         for r in suspicious:
             dist = r["_dist_km"] or 0
             time_s = r["_time_s"] or 0
             skip_dist = r["_skip_dist_km"]
             print(f"\n  MMSI {r['MMSI']}  verdict={r['_verdict']}")
-            print(f"    Point BEFORE: lat={r['_prev_lat']:.5f}  lon={r['_prev_lon']:.5f}  SOG={r['_prev_sog']:.1f}")
-            print(f"    Point THIS:   lat={r['Latitude']:.5f}  lon={r['Longitude']:.5f}  SOG={r['SOG']:.1f}  ts={r['# Timestamp']}")
+            print(
+                f"    Point BEFORE: lat={r['_prev_lat']:.5f}  lon={r['_prev_lon']:.5f}  SOG={r['_prev_sog']:.1f}"
+            )
+            print(
+                f"    Point THIS:   lat={r['Latitude']:.5f}  lon={r['Longitude']:.5f}  SOG={r['SOG']:.1f}  ts={r['# Timestamp']}"
+            )
             print(
                 f"    Point AFTER:  lat={r['_next_lat']:.5f}  lon={r['_next_lon']:.5f}  SOG={r['_next_sog']:.1f}"
                 if r["_next_lat"] is not None
                 else "    Point AFTER:  N/A"
             )
-            print(f"    Gap:      {fmt_dist(dist)}  in {time_s:.0f}s  needed={r['_needed_kn'] or 0:.1f}kn  vs maxSOG={r['_max_sog'] or 0:.1f}kn")
+            print(
+                f"    Gap:      {fmt_dist(dist)}  in {time_s:.0f}s  needed={r['_needed_kn'] or 0:.1f}kn  vs maxSOG={r['_max_sog'] or 0:.1f}kn"
+            )
             if skip_dist is not None:
-                print(f"    Skip gap: {fmt_dist(skip_dist)}  needed={r['_skip_needed_kn'] or 0:.1f}kn  (removing THIS point)")
-            print(f"    Dist to next: {fmt_dist(r['_dist_next_km'])}  in {r['_time_next_s'] or 0:.0f}s")
+                print(
+                    f"    Skip gap: {fmt_dist(skip_dist)}  needed={r['_skip_needed_kn'] or 0:.1f}kn  (removing THIS point)"
+                )
+            print(
+                f"    Dist to next: {fmt_dist(r['_dist_next_km'])}  in {r['_time_next_s'] or 0:.0f}s"
+            )
 
     top_gaps.unpersist()
     print("\nDone.")

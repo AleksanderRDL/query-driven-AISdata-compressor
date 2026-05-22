@@ -60,9 +60,11 @@ def test_orchestration_production_modules_do_not_cross_import_private_helpers() 
                 continue
             if not node.module or not node.module.startswith("orchestration."):
                 continue
-            for alias in node.names:
-                if alias.name.startswith("_") and not alias.name.startswith("__"):
-                    violations.append(f"{path.relative_to(REPO_ROOT)}:{node.lineno}:{alias.name}")
+            violations.extend(
+                f"{path.relative_to(REPO_ROOT)}:{node.lineno}:{alias.name}"
+                for alias in node.names
+                if alias.name.startswith("_") and not alias.name.startswith("__")
+            )
 
     assert violations == []
 
@@ -154,10 +156,13 @@ def test_scalar_and_query_local_utility_target_modes_are_separated() -> None:
     assert "retained_frequency" in SCALAR_RANGE_TARGET_MODES
     assert "historical_prior_retained_frequency" in SCALAR_RANGE_TARGET_MODES
     assert "query_local_utility_factorized" not in SCALAR_RANGE_TARGET_MODES
-    assert QUERY_LOCAL_UTILITY_TARGET_MODES == frozenset(
-        {
-            "query_local_utility_factorized",
-        }
+    assert (
+        frozenset(
+            {
+                "query_local_utility_factorized",
+            }
+        )
+        == QUERY_LOCAL_UTILITY_TARGET_MODES
     )
 
 

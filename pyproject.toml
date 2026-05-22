@@ -33,6 +33,7 @@ dev = [
 [tool.setuptools.packages.find]
 where = [".", "Range_QDS"]
 include = [
+    "ais_pipeline*",
     "benchmarking*",
     "config*",
     "data_preparation*",
@@ -47,6 +48,7 @@ include = [
 ]
 
 [tool.pytest.ini_options]
+minversion = "9.0"
 testpaths = ["Range_QDS/tests"]
 pythonpath = [".", "Range_QDS"]
 addopts = [
@@ -62,9 +64,14 @@ markers = [
     "slow: tests that are intentionally slow",
     "spark: tests that require Spark",
 ]
+filterwarnings = [
+    "error::ResourceWarning",
+    "error::pytest.PytestUnraisableExceptionWarning",
+    "ignore:The PyTorch API of nested tensors is in prototype stage.*:UserWarning",
+]
 
 [tool.pyright]
-include = [".", "Range_QDS"]
+include = ["Range_QDS", "ais_pipeline", "db", "main.py"]
 exclude = [
     "**/.git",
     "**/.pytest_cache",
@@ -79,6 +86,7 @@ exclude = [
     "**/node_modules",
     "**/.*",
 ]
+extraPaths = [".", "Range_QDS"]
 pythonVersion = "3.14"
 typeCheckingMode = "standard"
 reportMissingTypeStubs = "none"
@@ -111,13 +119,22 @@ select = [
     "F",
     "I",
     "B",
+    "C4",
+    "DTZ",
+    "NPY",
+    "PD",
+    "PERF",
+    "PIE",
     "PT",
+    "RET",
     "RUF",
+    "SIM",
     "UP",
 ]
 
 [tool.ruff.lint.isort]
 known-first-party = [
+    "ais_pipeline",
     "benchmarking",
     "config",
     "data_preparation",

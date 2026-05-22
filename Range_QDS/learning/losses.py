@@ -23,10 +23,7 @@ def _safe_quantile(values: torch.Tensor, quantile: float | torch.Tensor) -> torc
     """
     if values.numel() <= _QUANTILE_SUBSAMPLE_CAP:
         return torch.quantile(values, quantile)
-    if values.is_floating_point():
-        flat = values.detach().reshape(-1)
-    else:
-        flat = values.reshape(-1)
+    flat = values.detach().reshape(-1) if values.is_floating_point() else values.reshape(-1)
     sampled_indices = torch.randperm(flat.numel(), device=flat.device)[:_QUANTILE_SUBSAMPLE_CAP]
     return torch.quantile(flat[sampled_indices], quantile)
 

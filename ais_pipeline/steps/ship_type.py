@@ -8,17 +8,13 @@ def fill_ship_type(df: DataFrame):
 
     # Replace "Undefined" string with actual null first
     df = df.withColumn(
-        "Ship type",
-        F.when(F.col("Ship type") == "Undefined", None).otherwise(F.col("Ship type"))
+        "Ship type", F.when(F.col("Ship type") == "Undefined", None).otherwise(F.col("Ship type"))
     )
 
     # Now fill nulls using first non-null value within the same MMSI group
     return df.withColumn(
         "Ship type",
-        F.coalesce(
-            F.col("Ship type"),
-            F.first(F.col("Ship type"), ignorenulls=True).over(window)
-        )
+        F.coalesce(F.col("Ship type"), F.first(F.col("Ship type"), ignorenulls=True).over(window)),
     )
 
 

@@ -226,10 +226,7 @@ def causality_ablation_tradeoff_summary(
     def _row_list(value: Any) -> list[dict[str, Any]]:
         if not isinstance(value, list):
             return []
-        rows: list[dict[str, Any]] = []
-        for row in value:
-            if isinstance(row, dict):
-                rows.append(dict(row))
+        rows = [dict(row) for row in value if isinstance(row, dict)]
         return rows[: max(0, int(top_k))]
 
     summary: dict[str, Any] = {}

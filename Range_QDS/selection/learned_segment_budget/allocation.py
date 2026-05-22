@@ -102,9 +102,7 @@ def _segment_path_length_support(segment_points: torch.Tensor) -> float:
         return 0.0
     lats = segment_points[:, 1].float()
     lons = segment_points[:, 2].float()
-    local_path = local_equirectangular_distance_km(
-        lats[:-1], lons[:-1], lats[1:], lons[1:]
-    ).sum()
+    local_path = local_equirectangular_distance_km(lats[:-1], lons[:-1], lats[1:], lons[1:]).sum()
     shortcut = local_equirectangular_distance_km(lats[0], lons[0], lats[-1], lons[-1])
     return float(torch.clamp(local_path - shortcut, min=0.0).item())
 
@@ -214,13 +212,10 @@ def _apply_segment_transfer_calibration(
         row["transfer_calibration_score_z"] = float(score_value)
         row["transfer_calibration_allocation_weight_z"] = float(weight_value)
         row["transfer_calibrated_score"] = float(calibrated_score)
-        row["transfer_calibration_mode"] = (
-            SEGMENT_TRANSFER_CALIBRATION_MODE_SCORE_ALLOCATION_ZBLEND
-        )
+        row["transfer_calibration_mode"] = SEGMENT_TRANSFER_CALIBRATION_MODE_SCORE_ALLOCATION_ZBLEND
         row["score"] = float(calibrated_score)
         row["score_source"] = (
-            f"{row.get('score_source', 'segment_score')}"
-            "+segment_score_allocation_weight_zblend"
+            f"{row.get('score_source', 'segment_score')}+segment_score_allocation_weight_zblend"
         )
 
     # The calibrated score already embeds the active pre-selection allocation

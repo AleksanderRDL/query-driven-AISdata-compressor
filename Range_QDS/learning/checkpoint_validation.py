@@ -171,7 +171,9 @@ def _validation_global_sanity_penalty(
     """Return the validation-only global-sanity penalty magnitude."""
     return float(
         raw_query_local_utility
-        - _validation_query_local_utility_selection_score(raw_query_local_utility, sanity, model_config)
+        - _validation_query_local_utility_selection_score(
+            raw_query_local_utility, sanity, model_config
+        )
     )
 
 
@@ -715,13 +717,15 @@ def _validation_checkpoint_scores(
     }
     range_audit: dict[str, Any] | None = None
     if any(str(query.get("type", "")).lower() == "range" for query in workload.typed_queries):
-        raw_query_local_utility_score, range_audit, sanity = _validation_query_local_utility_score_for_mask(
-            points=points,
-            boundaries=boundaries,
-            retained_mask=retained_mask,
-            workload=workload,
-            query_cache=query_cache,
-            model_config=model_config,
+        raw_query_local_utility_score, range_audit, sanity = (
+            _validation_query_local_utility_score_for_mask(
+                points=points,
+                boundaries=boundaries,
+                retained_mask=retained_mask,
+                workload=workload,
+                query_cache=query_cache,
+                model_config=model_config,
+            )
         )
         penalized_query_local_utility_score = _validation_query_local_utility_selection_score(
             raw_query_local_utility_score,

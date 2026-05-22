@@ -124,9 +124,7 @@ def build_run_payload(
         },
         "range_learned_fill_summary": range_learned_fill_summary,
         "predictability_audit": predictability_audit,
-        "workload_scoring_compatibility_diagnostics": (
-            workload_scoring_compatibility_diagnostics
-        ),
+        "workload_scoring_compatibility_diagnostics": (workload_scoring_compatibility_diagnostics),
         "workload_stability_gate": final_summaries.workload_stability_gate,
         "range_compression_audit": range_compression_audit,
         "shift": shift_pairs,

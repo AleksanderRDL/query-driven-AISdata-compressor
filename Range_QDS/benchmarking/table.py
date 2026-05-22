@@ -282,12 +282,14 @@ def _format_report_table(rows: list[dict[str, Any]]) -> str:
         "| " + " | ".join(BENCHMARK_REPORT_TABLE_COLUMNS) + " |",
         "| " + " | ".join(["---"] * len(BENCHMARK_REPORT_TABLE_COLUMNS)) + " |",
     ]
-    for row in rows:
-        lines.append(
+    lines.extend(
+        (
             "| "
             + " | ".join(
                 _format_value(row.get(column)) for column in BENCHMARK_REPORT_TABLE_COLUMNS
             )
             + " |"
         )
+        for row in rows
+    )
     return "\n".join(lines) + "\n"

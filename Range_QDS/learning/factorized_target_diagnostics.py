@@ -72,7 +72,7 @@ def _segment_position_mass(
         buckets["middle"] += float(local[(positions > 0.20) & (positions < 0.80)].sum().item())
         buckets["end"] += float(local[positions >= 0.80].sum().item())
     if total <= 1e-12:
-        return {key: 0.0 for key in buckets}
+        return dict.fromkeys(buckets, 0.0)
     return {key: float(value / total) for key, value in buckets.items()}
 
 

@@ -9,7 +9,7 @@ UV_RUN := cd $(REPO_ROOT) && $(UV) run $(UV_GROUP_FLAGS) --
 CSV ?=
 QUERY_ARGS ?= --help
 
-.PHONY: help setup sync lock-check check-env pipeline qds-check-env lint lint-full lint-yaml test typecheck smoke smoke-csv db-up db-down db-reset db-logs db-smoke db-import db-query
+.PHONY: help setup sync lock-check check-env pipeline qds-check-env lint lint-imports lint-full lint-yaml format format-check test typecheck smoke smoke-csv db-up db-down db-reset db-logs db-smoke db-import db-query
 
 help:
 	@echo "Targets:"
@@ -19,9 +19,12 @@ help:
 	@echo "  check-env        Print uv/Python versions and run pip check"
 	@echo "  pipeline         Run AIS cleaning pipeline"
 	@echo "  qds-check-env    Print QDS Python/package versions and run pip check"
-	@echo "  lint             Run QDS scoped Ruff correctness lint"
-	@echo "  lint-full        Run QDS full Ruff lint across active packages"
+	@echo "  lint             Run configured QDS Ruff lint"
+	@echo "  lint-imports     Run minimal QDS import/name Ruff check"
+	@echo "  lint-full        Run configured Ruff lint across the whole repository"
 	@echo "  lint-yaml        Run yamllint on repository YAML files"
+	@echo "  format           Format active QDS packages with Ruff"
+	@echo "  format-check     Check Ruff formatting across active QDS packages"
 	@echo "  test             Run the QDS pytest suite"
 	@echo "  typecheck        Run QDS Pyright"
 	@echo "  smoke            Run a tiny QDS synthetic training/evaluation experiment"
@@ -56,11 +59,20 @@ qds-check-env:
 lint:
 	$(MAKE) -C $(RANGE_QDS_DIR) lint UV="$(UV)" UV_GROUP="$(UV_GROUP)"
 
+lint-imports:
+	$(MAKE) -C $(RANGE_QDS_DIR) lint-imports UV="$(UV)" UV_GROUP="$(UV_GROUP)"
+
 lint-full:
 	$(MAKE) -C $(RANGE_QDS_DIR) lint-full UV="$(UV)" UV_GROUP="$(UV_GROUP)"
 
 lint-yaml:
 	$(UV_RUN) yamllint .
+
+format:
+	$(MAKE) -C $(RANGE_QDS_DIR) format UV="$(UV)" UV_GROUP="$(UV_GROUP)"
+
+format-check:
+	$(MAKE) -C $(RANGE_QDS_DIR) format-check UV="$(UV)" UV_GROUP="$(UV_GROUP)"
 
 test:
 	$(MAKE) -C $(RANGE_QDS_DIR) test UV="$(UV)" UV_GROUP="$(UV_GROUP)"

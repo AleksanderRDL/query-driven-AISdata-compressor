@@ -97,8 +97,12 @@ def _gate_summary(artifact: dict[str, Any]) -> dict[str, bool | None]:
         "workload_stability": _as_bool(
             _as_dict(artifact.get("workload_stability_gate")).get("gate_pass")
         ),
-        "support_overlap": _as_bool(_as_dict(artifact.get("support_overlap_gate")).get("gate_pass")),
-        "target_diffusion": _as_bool(_as_dict(artifact.get("target_diffusion_gate")).get("gate_pass")),
+        "support_overlap": _as_bool(
+            _as_dict(artifact.get("support_overlap_gate")).get("gate_pass")
+        ),
+        "target_diffusion": _as_bool(
+            _as_dict(artifact.get("target_diffusion_gate")).get("gate_pass")
+        ),
         "workload_signature": _as_bool(
             _as_dict(
                 _as_dict(artifact.get("workload_distribution_comparison")).get(
@@ -115,9 +119,7 @@ def _gate_summary(artifact: dict[str, Any]) -> dict[str, bool | None]:
         ),
         "predictability": _as_bool(_as_dict(artifact.get("predictability_audit")).get("gate_pass")),
         "learning_causality": _as_bool(
-            _as_dict(artifact.get("learning_causality_summary")).get(
-                "learning_causality_gate_pass"
-            )
+            _as_dict(artifact.get("learning_causality_summary")).get("learning_causality_gate_pass")
         ),
         "global_sanity": _as_bool(_as_dict(artifact.get("global_sanity_gate")).get("gate_pass")),
         "final_success_allowed": _as_bool(
@@ -133,9 +135,7 @@ def _target_metadata(artifact: dict[str, Any]) -> dict[str, Any]:
     return {
         "target_mode": target.get("target_mode"),
         "query_hit_target_variant": target.get("query_hit_target_variant"),
-        "conditional_behavior_target_variant": target.get(
-            "conditional_behavior_target_variant"
-        ),
+        "conditional_behavior_target_variant": target.get("conditional_behavior_target_variant"),
         "segment_budget_target_variant": target.get("segment_budget_target_variant"),
         "segment_budget_target_aggregation": target.get("segment_budget_target_aggregation"),
         "final_success_allowed": _as_bool(target.get("final_success_allowed")),
@@ -227,9 +227,7 @@ def _target_family_ranker(
         _as_dict(artifact.get("training_target_diagnostics")).get("query_local_utility_factorized")
     )
     row = _as_dict(
-        _as_dict(
-            _as_dict(target.get("family_conditioned_target_trainability")).get("group_by")
-        )
+        _as_dict(_as_dict(target.get("family_conditioned_target_trainability")).get("group_by"))
         .get(group_key, {})
         .get(family)
     )
@@ -429,10 +427,7 @@ def _active_metric_score_component_alignment(alignment: dict[str, Any]) -> dict[
     retained_removal = _as_dict(retained_removal_row.get("score_component_alignment"))
     return {
         "available": bool(overall or retained_removal),
-        "source_layout": (
-            f"{RETAINED_MARGINAL_ALIGNMENT_PATH}."
-            "overall.score_component_alignment"
-        ),
+        "source_layout": (f"{RETAINED_MARGINAL_ALIGNMENT_PATH}.overall.score_component_alignment"),
         "overall": _active_metric_alignment_subset(overall),
         "retained_removal_loss": _active_metric_alignment_subset(retained_removal),
         "legacy_ship_evidence_note": (
@@ -472,9 +467,7 @@ def _causality_component_tradeoff_row(row: dict[str, Any]) -> dict[str, Any]:
         "available": _as_bool(row.get("available")) if row else False,
         "delta_convention": "primary_minus_ablation",
         "query_local_utility_delta": _as_float(row.get("query_local_utility_delta")),
-        "component_weighted_delta_sum": _as_float(
-            row.get("component_weighted_delta_sum")
-        ),
+        "component_weighted_delta_sum": _as_float(row.get("component_weighted_delta_sum")),
         "component_delta_residual": _as_float(row.get("component_delta_residual")),
         "top_positive_weighted_component_deltas": _component_delta_rows(
             row.get("top_positive_weighted_component_deltas")
@@ -509,7 +502,9 @@ def _behavior_head_semantic_alignment(
         _as_dict(artifact.get("training_target_diagnostics")).get("query_local_utility_factorized")
     )
     fit = _as_dict(artifact.get("training_fit_diagnostics"))
-    head_fit = _as_dict(_as_dict(fit.get("factorized_head_fit")).get("conditional_behavior_utility"))
+    head_fit = _as_dict(
+        _as_dict(fit.get("factorized_head_fit")).get("conditional_behavior_utility")
+    )
     active_alignment = _as_dict(
         retained_marginal_alignment.get("active_metric_score_component_alignment")
     )
@@ -517,9 +512,7 @@ def _behavior_head_semantic_alignment(
         active_alignment,
         head="conditional_behavior_utility",
     )
-    no_behavior_tradeoff = _as_dict(
-        component_tradeoffs.get("MLQDS_without_behavior_utility_head")
-    )
+    no_behavior_tradeoff = _as_dict(component_tradeoffs.get("MLQDS_without_behavior_utility_head"))
     target_alignment = _behavior_target_reference_alignment(
         _as_dict(target.get("conditional_behavior_target_alignment"))
     )
@@ -536,9 +529,7 @@ def _behavior_head_semantic_alignment(
             target.get("behavior_change_highpass_quantile")
         ),
         "target_reference_alignment": target_alignment,
-        "strongest_target_reference_by_spearman": _strongest_target_reference(
-            target_alignment
-        ),
+        "strongest_target_reference_by_spearman": _strongest_target_reference(target_alignment),
         "head_fit": {
             "kendall_tau": _as_float(head_fit.get("kendall_tau")),
             "topk_mass_recall_at_5_percent": _as_float(
@@ -749,13 +740,9 @@ def _summary(artifact_summaries: list[dict[str, Any]]) -> dict[str, Any]:
         ),
         "current_metric_behavior_head_status": _current_metric_behavior_head_status(
             behavior_alignment=behavior_alignment,
-            behavior_ablation_delta=_as_float(
-                behavior_tradeoff.get("query_local_utility_delta")
-            ),
+            behavior_ablation_delta=_as_float(behavior_tradeoff.get("query_local_utility_delta")),
         ),
-        "behavior_head_semantic_statuses": _as_list(
-            behavior_semantics.get("semantic_statuses")
-        ),
+        "behavior_head_semantic_statuses": _as_list(behavior_semantics.get("semantic_statuses")),
         "behavior_head_strongest_target_reference": behavior_semantics.get(
             "strongest_target_reference_by_spearman"
         ),
@@ -777,14 +764,10 @@ def _active_metric_head_summary(
     head: str,
 ) -> dict[str, Any]:
     overall = _as_dict(_as_dict(active_alignment.get("overall")).get(head))
-    retained = _as_dict(
-        _as_dict(active_alignment.get("retained_removal_loss")).get(head)
-    )
+    retained = _as_dict(_as_dict(active_alignment.get("retained_removal_loss")).get(head))
     return {
         "overall_spearman": _as_float(overall.get("spearman")),
-        "overall_top_minus_bottom_marginal": _as_float(
-            overall.get("top_minus_bottom_marginal")
-        ),
+        "overall_top_minus_bottom_marginal": _as_float(overall.get("top_minus_bottom_marginal")),
         "retained_removal_spearman": _as_float(retained.get("spearman")),
         "retained_removal_top_minus_bottom_marginal": _as_float(
             retained.get("top_minus_bottom_marginal")
@@ -819,7 +802,10 @@ def _decision(
     predictability = _as_dict(primary.get("predictability"))
     if gates.get("target_diffusion") is False:
         return "reject_target_contract_before_transfer_work"
-    if blocked_rows and predictability.get("family_conditioned_prior_predictability_available") is not True:
+    if (
+        blocked_rows
+        and predictability.get("family_conditioned_prior_predictability_available") is not True
+    ):
         return "add_family_conditioned_prior_predictability_before_model_or_scoring_change"
     if selector_spearman is not None and selector_spearman <= 0.0:
         return "diagnose_score_to_selector_marginal_calibration_before_promotion"

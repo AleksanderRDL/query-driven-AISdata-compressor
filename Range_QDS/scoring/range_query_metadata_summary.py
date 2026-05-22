@@ -46,7 +46,7 @@ def _mean(values: list[float], default: float = 0.0) -> float:
 def _safe_float(value: Any, default: float = 0.0) -> float:
     try:
         result = float(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return float(default)
     if result != result:
         return float(default)
@@ -112,9 +112,7 @@ def _range_query_component_summary_for_rows(rows: list[dict[str, Any]]) -> dict[
     full_point_counts = [_safe_float(row.get("full_point_hit_count")) for row in rows]
     retained_point_counts = [_safe_float(row.get("retained_point_hit_count")) for row in rows]
     full_ship_counts = [_safe_float(row.get("full_trajectory_hit_count")) for row in rows]
-    retained_ship_counts = [
-        _safe_float(row.get("retained_trajectory_hit_count")) for row in rows
-    ]
+    retained_ship_counts = [_safe_float(row.get("retained_trajectory_hit_count")) for row in rows]
     ship_evidence_rows: list[dict[str, Any]] = []
     for row in rows:
         ship_evidence = row.get("ship_evidence_counts")
@@ -127,16 +125,14 @@ def _range_query_component_summary_for_rows(rows: list[dict[str, Any]]) -> dict[
         _safe_float(row.get("missed_trajectory_hit_fraction")) for row in ship_evidence_rows
     ]
     single_full = [
-        _safe_float(row.get("single_point_full_trajectory_hit_count"))
-        for row in ship_evidence_rows
+        _safe_float(row.get("single_point_full_trajectory_hit_count")) for row in ship_evidence_rows
     ]
     single_retained = [
         _safe_float(row.get("single_point_retained_trajectory_hit_count"))
         for row in ship_evidence_rows
     ]
     multi_full = [
-        _safe_float(row.get("multi_point_full_trajectory_hit_count"))
-        for row in ship_evidence_rows
+        _safe_float(row.get("multi_point_full_trajectory_hit_count")) for row in ship_evidence_rows
     ]
     multi_retained = [
         _safe_float(row.get("multi_point_retained_trajectory_hit_count"))

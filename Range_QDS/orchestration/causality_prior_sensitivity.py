@@ -500,13 +500,19 @@ def prior_sample_gate_failures(prior_sensitivity_diagnostics: dict[str, Any]) ->
     model_prior = shuffled.get("model_prior_features")
     if isinstance(model_prior, dict):
         model_input = model_prior.get("model_input_prior_features")
-        if isinstance(model_input, dict) and model_input.get("available"):
-            if not bool(model_input.get("sampled_inputs_changed", False)):
-                failures.append("shuffled_prior_fields_did_not_change_model_inputs")
+        if (
+            isinstance(model_input, dict)
+            and model_input.get("available")
+            and not bool(model_input.get("sampled_inputs_changed", False))
+        ):
+            failures.append("shuffled_prior_fields_did_not_change_model_inputs")
         normalized = model_prior.get("normalized_model_prior_features")
-        if isinstance(normalized, dict) and normalized.get("available"):
-            if not bool(normalized.get("sampled_inputs_changed", False)):
-                failures.append("shuffled_prior_fields_did_not_change_normalized_model_inputs")
+        if (
+            isinstance(normalized, dict)
+            and normalized.get("available")
+            and not bool(normalized.get("sampled_inputs_changed", False))
+        ):
+            failures.append("shuffled_prior_fields_did_not_change_normalized_model_inputs")
     outside_fraction = sampled.get("points_outside_prior_extent_fraction")
     if outside_fraction is not None and float(outside_fraction) > 0.50:
         failures.append("eval_points_mostly_outside_query_prior_extent")

@@ -78,11 +78,10 @@ def _load_index_rows(csv_path: Path) -> tuple[list[str], list[IndexRow]]:
     with open(csv_path, encoding="utf-8", newline="") as f:
         reader = csv.DictReader(f)
         fieldnames = list(reader.fieldnames or DEFAULT_INDEX_FIELDS)
-        rows: list[IndexRow] = []
-        for raw_row in reader:
-            rows.append(
-                {key: _index_value(value) for key, value in raw_row.items() if key is not None}
-            )
+        rows: list[IndexRow] = [
+            {key: _index_value(value) for key, value in raw_row.items() if key is not None}
+            for raw_row in reader
+        ]
     return fieldnames, rows
 
 

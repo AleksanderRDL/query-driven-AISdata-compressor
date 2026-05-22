@@ -27,11 +27,12 @@ from workloads.generation.signatures import _counts_from_metadata
 
 def _density_test_trajectories() -> list[torch.Tensor]:
     """Build a point cloud with one intentionally dense spatial region."""
-    trajectories: list[torch.Tensor] = []
-    for idx in range(120):
-        trajectories.append(torch.tensor([[float(idx), 10.0, 10.0, 1.0]], dtype=torch.float32))
-    for idx in range(24):
-        trajectories.append(torch.tensor([[float(idx), 20.0, 20.0, 1.0]], dtype=torch.float32))
+    trajectories = [
+        torch.tensor([[float(idx), 10.0, 10.0, 1.0]], dtype=torch.float32) for idx in range(120)
+    ]
+    trajectories.extend(
+        torch.tensor([[float(idx), 20.0, 20.0, 1.0]], dtype=torch.float32) for idx in range(24)
+    )
     trajectories.append(torch.tensor([[0.0, 0.0, 0.0, 1.0]], dtype=torch.float32))
     trajectories.append(torch.tensor([[1.0, 30.0, 30.0, 1.0]], dtype=torch.float32))
     return trajectories
@@ -395,8 +396,10 @@ def test_sampled_range_coverage_estimator_works_on_loaded_cleaned_csv(tmp_path: 
     csv_path = tmp_path / "cleaned.csv"
     lines = ["MMSI,# Timestamp,Latitude,Longitude,SOG,COG"]
     for mmsi, lat0, lon0 in ((100, 55.0, 12.0), (200, 55.4, 12.4)):
-        for idx in range(6):
-            lines.append(f"{mmsi},{idx * 600},{lat0 + idx * 0.01},{lon0 + idx * 0.01},8.0,90.0")
+        lines.extend(
+            f"{mmsi},{idx * 600},{lat0 + idx * 0.01},{lon0 + idx * 0.01},8.0,90.0"
+            for idx in range(6)
+        )
     csv_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     trajectories = load_ais_csv(str(csv_path), min_points_per_segment=4)
 

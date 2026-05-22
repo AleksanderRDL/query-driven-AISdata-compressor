@@ -48,6 +48,7 @@ def _boundaries(trajectories: list[torch.Tensor]) -> list[tuple[int, int]]:
         cursor = end
     return out
 
+
 def test_query_local_utility_prioritizes_query_local_components() -> None:
     weak = {
         "query_point_recall": 0.1,
@@ -75,7 +76,9 @@ def test_query_local_utility_prioritizes_query_local_components() -> None:
     strong_score = float(
         cast(Any, query_local_utility_from_range_audit(strong)["query_local_utility_score"])
     )
-    weak_score = float(cast(Any, query_local_utility_from_range_audit(weak)["query_local_utility_score"]))
+    weak_score = float(
+        cast(Any, query_local_utility_from_range_audit(weak)["query_local_utility_score"])
+    )
     assert strong_score > weak_score
 
 
@@ -160,9 +163,7 @@ def test_query_local_utility_point_score_uses_additive_qhit_behavior_branches() 
         boundary=boundary,
     )
 
-    expected = (0.50 * q_hit + 0.45 * behavior) * (0.75 + 0.25 * replacement) + (
-        0.05 * boundary
-    )
+    expected = (0.50 * q_hit + 0.45 * behavior) * (0.75 + 0.25 * replacement) + (0.05 * boundary)
     assert torch.allclose(score, expected)
 
 
@@ -183,12 +184,15 @@ def test_query_local_utility_behavior_branch_not_multiplied_by_tiny_qhit() -> No
         replacement=replacement,
         boundary=boundary,
     )
-    qhit_increment = query_local_utility_point_score(
-        q_hit=q_hit + 0.01,
-        behavior=torch.tensor([0.60], dtype=torch.float32),
-        replacement=replacement,
-        boundary=boundary,
-    ) - with_behavior
+    qhit_increment = (
+        query_local_utility_point_score(
+            q_hit=q_hit + 0.01,
+            behavior=torch.tensor([0.60], dtype=torch.float32),
+            replacement=replacement,
+            boundary=boundary,
+        )
+        - with_behavior
+    )
 
     assert no_behavior.item() == pytest.approx(0.01)
     assert (with_behavior - no_behavior).item() == pytest.approx(0.27)
@@ -313,10 +317,7 @@ def test_factorized_replacement_target_is_query_local_and_final_label_keeps_quer
         targets.diagnostics["replacement_representative_value_normalization"]
         == "conditional_on_query_hit"
     )
-    assert (
-        targets.diagnostics["final_label_formula"]
-        == QUERY_LOCAL_UTILITY_FINAL_LABEL_FORMULA
-    )
+    assert targets.diagnostics["final_label_formula"] == QUERY_LOCAL_UTILITY_FINAL_LABEL_FORMULA
 
 
 def test_query_hit_head_target_uses_ship_query_evidence_multiplier() -> None:
@@ -594,10 +595,7 @@ def test_conditional_behavior_target_alignment_diagnostics_report_final_mass_rec
     partial_final = partial["references"]["final_score"]
     assert partial_final["behavior_spearman"] is not None
     assert partial_final["replacement_spearman"] is not None
-    assert (
-        partial_final["behavior_partial_spearman_controlling_replacement"]
-        is not None
-    )
+    assert partial_final["behavior_partial_spearman_controlling_replacement"] is not None
 
     ship_alignment = targets.diagnostics["ship_query_evidence_target_alignment"]
     assert ship_alignment["available"] is True
@@ -704,14 +702,16 @@ def test_ship_presence_segment_budget_candidate_improves_ship_evidence_alignment
     query_hit_blend = candidates["query_hit_ship_presence_blend_segment_budget_candidate"]
 
     assert active["target_std"] > 0.0
-    assert ship_presence["spearman_with_ship_query_evidence"] > active[
-        "spearman_with_ship_query_evidence"
-    ]
+    assert (
+        ship_presence["spearman_with_ship_query_evidence"]
+        > active["spearman_with_ship_query_evidence"]
+    )
     assert ship_presence["topk_ship_query_evidence_mass_recall"] == pytest.approx(1.0)
     assert ship_presence["ship_query_pair_coverage_at_topk"] == pytest.approx(0.5)
-    assert query_hit_blend["spearman_with_ship_query_evidence"] > active[
-        "spearman_with_ship_query_evidence"
-    ]
+    assert (
+        query_hit_blend["spearman_with_ship_query_evidence"]
+        > active["spearman_with_ship_query_evidence"]
+    )
 
 
 def test_family_local_target_candidate_reports_active_evidence_gate_semantics() -> None:
@@ -767,9 +767,11 @@ def test_family_local_target_candidate_reports_active_evidence_gate_semantics() 
     assert composed_candidate["spearman_with_ship_query_evidence"] is not None
     assert active_final["spearman_with_ship_query_evidence"] is not None
     assert "topk_active_final_score_mass_recall" in composed_candidate
-    assert segment_top20["two_stage_ship_query_pair_coverage"] >= segment_sum[
-        "two_stage_ship_query_pair_coverage"
-    ]
-    assert segment_top20["two_stage_selected_point_count"] == segment_sum[
-        "two_stage_selected_point_count"
-    ]
+    assert (
+        segment_top20["two_stage_ship_query_pair_coverage"]
+        >= segment_sum["two_stage_ship_query_pair_coverage"]
+    )
+    assert (
+        segment_top20["two_stage_selected_point_count"]
+        == segment_sum["two_stage_selected_point_count"]
+    )

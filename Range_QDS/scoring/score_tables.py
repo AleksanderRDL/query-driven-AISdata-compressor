@@ -75,8 +75,8 @@ def print_method_comparison_table(results: dict[str, MethodScore]) -> str:
             f"{entry_exit:>{col7}.6f}"
             f"{'all':>{col7}}"
         )
-        for t_name in type_rows:
-            lines.append(
+        lines.extend(
+            (
                 f"{'  - ' + t_name:<{col1}}"
                 f"{metrics.per_type_f1.get(t_name, 0.0):>{col2}.6f}"
                 f"{metrics.per_type_combined_f1.get(t_name, 0.0):>{col3}.6f}"
@@ -86,6 +86,8 @@ def print_method_comparison_table(results: dict[str, MethodScore]) -> str:
                 f"{'':>{col7}}"
                 f"{t_name:>{col7}}"
             )
+            for t_name in type_rows
+        )
 
     def _rel_pct(diff: float, baseline: float) -> str:
         if abs(baseline) < 1e-9:

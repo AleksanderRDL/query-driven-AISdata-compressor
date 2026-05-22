@@ -99,7 +99,9 @@ def test_factorized_target_preparation_does_not_precompute_train_labels() -> Non
     assert prepared.train_labels is None
     assert prepared.range_training_target_mode == "query_local_utility_factorized"
     assert prepared.range_training_target_transform["enabled"] is True
-    assert prepared.range_training_target_transform["target_family"] == "QueryLocalUtilityFactorized"
+    assert (
+        prepared.range_training_target_transform["target_family"] == "QueryLocalUtilityFactorized"
+    )
     assert prepared.range_training_target_transform["final_success_allowed"] is True
     assert prepared.selection_query_cache is None
     assert prepared.selection_geometry_scores is None

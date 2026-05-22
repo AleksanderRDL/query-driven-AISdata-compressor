@@ -1,10 +1,10 @@
-""" GPS Outlier Detector for AIS ship tracking data
+"""GPS Outlier Detector for AIS ship tracking data
 
 Removes position points that are physically impossible given a ship's speed (SOG).
 Runs three phases in sequence:
 
 Phase 1 — clean_head:
-    Checks the first 3 points of each ship's track. Bidirectional (Phase 2) always    
+    Checks the first 3 points of each ship's track. Bidirectional (Phase 2) always
     keeps the first and last point because they have no prev/next neighbor, so this       phase specifically handles P1/P2/P3 by checking them against each other.
 
 Phase 2 — bidirectional_pass (single pass):
@@ -14,9 +14,9 @@ Phase 2 — bidirectional_pass (single pass):
 Phase 3 — skip_neighbor_pass (up to max_passes iterations):
     Handles paired outliers — two consecutive bad points that shield each other from Phase 2. Runs iteratively to peel through
     multi-point outliers, one layer at a time.
-    
+
 Reachability is defined by allowed_km(): max distance a ship could travel given its
-reported SOG, elapsed time, a safety margin, and a 50 m GPS accuracy floor. """
+reported SOG, elapsed time, a safety margin, and a 50 m GPS accuracy floor."""
 
 from pyspark.sql import functions as F
 from pyspark.sql.window import Window
@@ -38,26 +38,27 @@ def reach(w, offset, base_margin, time_scale, null_means=True):
     abs_off = abs(offset)
     fn = F.lead if offset > 0 else F.lag
 
-    neighbor_ts  = fn("# Timestamp", abs_off).over(w)
-    neighbor_lat = fn("Latitude",    abs_off).over(w)
-    neighbor_lon = fn("Longitude",   abs_off).over(w)
-    neighbor_sog = fn("SOG",         abs_off).over(w)
+    neighbor_ts = fn("# Timestamp", abs_off).over(w)
+    neighbor_lat = fn("Latitude", abs_off).over(w)
+    neighbor_lon = fn("Longitude", abs_off).over(w)
+    neighbor_sog = fn("SOG", abs_off).over(w)
 
     if offset > 0:  # forward neighbor
-        time_h  = (neighbor_ts.cast("long") - F.col("# Timestamp").cast("long")) / 3600.0
-        dist    = haversine_km(F.col("Latitude"), F.col("Longitude"), neighbor_lat, neighbor_lon)
+        time_h = (neighbor_ts.cast("long") - F.col("# Timestamp").cast("long")) / 3600.0
+        dist = haversine_km(F.col("Latitude"), F.col("Longitude"), neighbor_lat, neighbor_lon)
         allowed = allowed_km(F.col("SOG"), neighbor_sog, time_h, base_margin, time_scale)
-    else:           # backward neighbor
-        time_h  = (F.col("# Timestamp").cast("long") - neighbor_ts.cast("long")) / 3600.0
-        dist    = haversine_km(neighbor_lat, neighbor_lon, F.col("Latitude"), F.col("Longitude"))
+    else:  # backward neighbor
+        time_h = (F.col("# Timestamp").cast("long") - neighbor_ts.cast("long")) / 3600.0
+        dist = haversine_km(neighbor_lat, neighbor_lon, F.col("Latitude"), F.col("Longitude"))
         allowed = allowed_km(neighbor_sog, F.col("SOG"), time_h, base_margin, time_scale)
 
-    has       = neighbor_ts.isNotNull()
+    has = neighbor_ts.isNotNull()
     reachable = F.coalesce(dist <= allowed, F.lit(null_means))
     return has, reachable
 
 
 # ── Phase 1: Clean head ────────────────────────────────────────────
+
 
 def clean_head(df, base_margin, time_scale):
     """Check first 3 points per ship. Remove any that don't fit with the other two."""
@@ -65,8 +66,8 @@ def clean_head(df, base_margin, time_scale):
 
     df = df.withColumn("row_num", F.row_number().over(w))
 
-    _,        reach_prev  = reach(w, -1, base_margin, time_scale, null_means=False)
-    has_next, reach_next  = reach(w,  1, base_margin, time_scale, null_means=False)
+    _, reach_prev = reach(w, -1, base_margin, time_scale, null_means=False)
+    has_next, reach_next = reach(w, 1, base_margin, time_scale, null_means=False)
     has_next2, reach_next2 = reach(w, 2, base_margin, time_scale, null_means=False)
 
     is_p1 = F.col("row_num") == 1
@@ -81,16 +82,21 @@ def clean_head(df, base_margin, time_scale):
     outlier_p3 = is_p3 & ~reach_prev & ~reach_next & has_next
 
     outlier = outlier_p1 | outlier_p2 | outlier_p3
-    return df.withColumn("is_outlier", outlier).filter(~F.col("is_outlier")).drop("row_num", "is_outlier")
+    return (
+        df.withColumn("is_outlier", outlier)
+        .filter(~F.col("is_outlier"))
+        .drop("row_num", "is_outlier")
+    )
 
 
 # ── Phase 2: Bidirectional pass ────────────────────────────────────
+
 
 def bidirectional_pass(df, base_margin, time_scale):
     w = Window.partitionBy("MMSI").orderBy("# Timestamp")
 
     has_prev, reach_prev = reach(w, -1, base_margin, time_scale, null_means=True)
-    has_next, reach_next = reach(w,  1, base_margin, time_scale, null_means=True)
+    has_next, reach_next = reach(w, 1, base_margin, time_scale, null_means=True)
 
     keep = ~has_prev | ~has_next | reach_prev | reach_next
     return df.withColumn("_k", keep).filter(F.col("_k")).drop("_k")
@@ -98,21 +104,22 @@ def bidirectional_pass(df, base_margin, time_scale):
 
 # ── Phase 3: Skip-neighbor pass ───────────────────────────────────
 
+
 def skip_neighbor_pass(df, base_margin, time_scale):
-    
+
     w = Window.partitionBy("MMSI").orderBy("# Timestamp")
 
     has_prev, reach_prev = reach(w, -1, base_margin, time_scale, null_means=True)
-    has_next, reach_next = reach(w,  1, base_margin, time_scale, null_means=True)
-    has_p2,   reach_p2   = reach(w, -2, base_margin, time_scale, null_means=True)
-    has_n2,   reach_n2   = reach(w,  2, base_margin, time_scale, null_means=True)
+    has_next, reach_next = reach(w, 1, base_margin, time_scale, null_means=True)
+    has_p2, reach_p2 = reach(w, -2, base_margin, time_scale, null_means=True)
+    has_n2, reach_n2 = reach(w, 2, base_margin, time_scale, null_means=True)
 
     # Interior: both skip-neighbors exist but neither is reachable
     interior = has_p2 & has_n2 & ~reach_p2 & ~reach_n2
     # Near start (no lag 2): unreachable from next(1) AND lead(2)
-    start    = ~has_p2 & has_next & has_n2 & ~reach_next & ~reach_n2
+    start = ~has_p2 & has_next & has_n2 & ~reach_next & ~reach_n2
     # Near end (no lead 2): unreachable from prev(1) AND lag(2)
-    end      = has_prev & has_p2 & ~has_n2 & ~reach_prev & ~reach_p2
+    end = has_prev & has_p2 & ~has_n2 & ~reach_prev & ~reach_p2
 
     isolated = interior | start | end
     return df.withColumn("_iso", isolated).filter(~F.col("_iso")).drop("_iso")
@@ -120,15 +127,17 @@ def skip_neighbor_pass(df, base_margin, time_scale):
 
 # ── Orchestrator ───────────────────────────────────────────────────
 
+
 def run_iterative(df, pass_fn, base_margin, time_scale, max_iter, label):
     """Run a pass function iteratively until convergence, with checkpointing."""
     prev_count = df.count()
+    curr_count = prev_count
     for i in range(max_iter):
         df = pass_fn(df, base_margin, time_scale)
         df = df.checkpoint(eager=True)
         curr_count = df.count()
         removed_rows = prev_count - curr_count
-        print(f"  {label} {i+1}: {curr_count} rows ({removed_rows} removed)")
+        print(f"  {label} {i + 1}: {curr_count} rows ({removed_rows} removed)")
         if curr_count == prev_count:
             break
         prev_count = curr_count
@@ -136,10 +145,11 @@ def run_iterative(df, pass_fn, base_margin, time_scale, max_iter, label):
 
 
 def outlier_detector(df, base_margin=1.2, time_scale=0.3, max_passes=3):
-    df = (df
-          .withColumn("Latitude",  F.col("Latitude").cast("double"))
-          .withColumn("Longitude", F.col("Longitude").cast("double"))
-          .withColumn("SOG",       F.col("SOG").cast("double")))
+    df = (
+        df.withColumn("Latitude", F.col("Latitude").cast("double"))
+        .withColumn("Longitude", F.col("Longitude").cast("double"))
+        .withColumn("SOG", F.col("SOG").cast("double"))
+    )
 
     # Phase 1: clean first 3 points
     df = clean_head(df, base_margin, time_scale)

@@ -615,12 +615,11 @@ def _prior_predictability_score(
         1.0,
     )
     boundary_event = torch.maximum(endpoint_likelihood, crossing_likelihood)
-    score = torch.clamp(
+    return torch.clamp(
         query_mass * (0.50 + behavior_utility_prior) + 0.25 * boundary_event.square(),
         0.0,
         1.0,
     )
-    return score
 
 
 def query_prior_predictability_scores(

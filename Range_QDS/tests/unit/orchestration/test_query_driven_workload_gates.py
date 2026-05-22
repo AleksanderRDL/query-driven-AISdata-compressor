@@ -47,6 +47,7 @@ def _boundaries(trajectories: list[torch.Tensor]) -> list[tuple[int, int]]:
         cursor = end
     return out
 
+
 def test_workload_signature_gate_reports_pass_for_matching_profiles() -> None:
     signature = {
         "profile_id": "range_query_mix",

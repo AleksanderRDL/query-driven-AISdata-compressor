@@ -45,9 +45,7 @@ def _head_mlp_transfer(
 def _head_final_linear_weight(head: torch.nn.Module) -> torch.Tensor | None:
     if not isinstance(head, torch.nn.Sequential):
         return None
-    linear_layers = [
-        module for module in head.children() if isinstance(module, torch.nn.Linear)
-    ]
+    linear_layers = [module for module in head.children() if isinstance(module, torch.nn.Linear)]
     if not linear_layers:
         return None
     final_linear = cast(torch.nn.Linear, linear_layers[-1])
@@ -95,16 +93,14 @@ def _prior_direction_subset_alignment_summary(
         top_idx = torch.topk(local_target, k=quartile_count, largest=True).indices
         bottom_idx = torch.topk(local_target, k=quartile_count, largest=False).indices
         top_minus_bottom_logit_delta = float(
-            local_logit_delta[top_idx].mean().item()
-            - local_logit_delta[bottom_idx].mean().item()
+            local_logit_delta[top_idx].mean().item() - local_logit_delta[bottom_idx].mean().item()
         )
         top_minus_bottom_projected_delta = float(
             local_projected_delta[top_idx].mean().item()
             - local_projected_delta[bottom_idx].mean().item()
         )
         top_minus_bottom_hidden_norm = float(
-            local_hidden_norm[top_idx].mean().item()
-            - local_hidden_norm[bottom_idx].mean().item()
+            local_hidden_norm[top_idx].mean().item() - local_hidden_norm[bottom_idx].mean().item()
         )
     return {
         "available": True,
@@ -119,9 +115,7 @@ def _prior_direction_subset_alignment_summary(
         ),
         "logit_delta_mean": float(local_logit_delta.mean().item()),
         "logit_delta_abs_mean": float(local_logit_delta.abs().mean().item()),
-        "positive_logit_delta_fraction": float(
-            (local_logit_delta > 0.0).float().mean().item()
-        ),
+        "positive_logit_delta_fraction": float((local_logit_delta > 0.0).float().mean().item()),
         "projected_hidden_delta_abs_mean": float(local_projected_delta.abs().mean().item()),
         "target_to_logit_delta_spearman": _rank_correlation(
             local_logit_delta,
@@ -138,9 +132,7 @@ def _prior_direction_subset_alignment_summary(
             local_target,
             torch.ones_like(local_target, dtype=torch.bool),
         ),
-        "target_top_quartile_minus_bottom_quartile_logit_delta": (
-            top_minus_bottom_logit_delta
-        ),
+        "target_top_quartile_minus_bottom_quartile_logit_delta": (top_minus_bottom_logit_delta),
         "target_top_quartile_minus_bottom_quartile_projected_delta": (
             top_minus_bottom_projected_delta
         ),
@@ -366,9 +358,7 @@ def _loss_gradient_alignment_summary(
             "logit_delta_count": int(logit_delta.numel()),
         }
     finite = (
-        torch.isfinite(descent_alignment)
-        & torch.isfinite(gradient)
-        & torch.isfinite(logit_delta)
+        torch.isfinite(descent_alignment) & torch.isfinite(gradient) & torch.isfinite(logit_delta)
     )
     if not bool(finite.any().item()):
         return {"available": False, "reason": "no_finite_loss_gradient_rows"}
@@ -383,9 +373,7 @@ def _loss_gradient_alignment_summary(
         "aligned_point_count": int(finite.sum().item()),
         "descent_alignment_mean": float(local_alignment.mean().item()),
         "descent_alignment_sum": float(local_alignment.sum().item()),
-        "descent_alignment_positive_fraction": float(
-            (local_alignment > 0.0).float().mean().item()
-        ),
+        "descent_alignment_positive_fraction": float((local_alignment > 0.0).float().mean().item()),
         "logit_gradient_abs_mean": float(local_gradient.abs().mean().item()),
         "logit_gradient_abs_p95": float(_safe_quantile(local_gradient.abs(), 0.95).item()),
         "logit_delta_abs_mean": float(local_logit_delta.abs().mean().item()),

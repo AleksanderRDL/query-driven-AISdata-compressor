@@ -30,5 +30,4 @@ def test_combine_days_preserves_mmsi_by_default(tmp_path) -> None:
     combine([day1, day2], out)
 
     combined = pd.read_csv(out)
-    assert combined["MMSI"].nunique() == 1
-    assert set(combined["MMSI"]) == {123456789}
+    assert {*combined["MMSI"]} == {123456789}

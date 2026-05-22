@@ -80,7 +80,11 @@ def _prior_path_strength_diagnostics(
     point_encoder = getattr(model, "point_encoder", None)
     prior_encoder = getattr(model, "prior_feature_encoder", None)
     prior_features_fn = getattr(model, "_prior_features", None)
-    if not callable(point_encoder) or not callable(prior_encoder) or not callable(prior_features_fn):
+    if (
+        not callable(point_encoder)
+        or not callable(prior_encoder)
+        or not callable(prior_features_fn)
+    ):
         return {"available": False, "reason": "missing_prior_path_modules"}
     point_encoder_fn = cast(Callable[[torch.Tensor], torch.Tensor], point_encoder)
     prior_encoder_fn = cast(Callable[[torch.Tensor], torch.Tensor], prior_encoder)
@@ -170,7 +174,9 @@ def _prior_feature_learning_diagnostics(
     targets = factorized_targets.detach().cpu().float().clamp(0.0, 1.0)
     masks = factorized_mask.detach().cpu().bool()
     prior_feature_names = [str(name) for name in QUERY_PRIOR_FIELD_NAMES]
-    non_prior_feature_names = [f"non_prior_{idx}" for idx in range(int(non_prior_features.shape[1]))]
+    non_prior_feature_names = [
+        f"non_prior_{idx}" for idx in range(int(non_prior_features.shape[1]))
+    ]
     prior_stats: dict[str, Any] = {}
     for idx, name in enumerate(prior_feature_names):
         values = prior_features[:, idx]

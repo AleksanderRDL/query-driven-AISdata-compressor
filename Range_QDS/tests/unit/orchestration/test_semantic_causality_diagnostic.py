@@ -212,9 +212,7 @@ def test_semantic_causality_diagnostic_classifies_current_blockers() -> None:
                 "classification": "prior_target_signal_available_but_trained_heads_invariant",
                 "prior_to_head_transfer_sensitivity": {
                     "available": True,
-                    "classification_counts": {
-                        "output_layer_suppresses_prior_direction": 1
-                    },
+                    "classification_counts": {"output_layer_suppresses_prior_direction": 1},
                     "per_head": {
                         "query_hit_probability": {
                             "classification": "output_layer_suppresses_prior_direction",
@@ -338,15 +336,11 @@ def test_semantic_causality_diagnostic_classifies_current_blockers() -> None:
                                 -0.001, -0.05
                             ),
                             "factorized_behavior_branch": _score_summary(-0.001, -0.05),
-                            "head_probability_query_hit_probability": _score_summary(
-                                0.001, 0.28
-                            ),
+                            "head_probability_query_hit_probability": _score_summary(0.001, 0.28),
                             "head_probability_replacement_representative_value": _score_summary(
                                 0.0, -0.04
                             ),
-                            "head_probability_segment_budget_target": _score_summary(
-                                -0.001, -0.08
-                            ),
+                            "head_probability_segment_budget_target": _score_summary(-0.001, -0.08),
                             "head_probability_path_length_support_target": _score_summary(
                                 0.001, 0.30
                             ),
@@ -378,12 +372,8 @@ def test_semantic_causality_diagnostic_classifies_current_blockers() -> None:
         "target_segment_oracle_alignment_audit": {
             "source_alignment": {
                 "point_score_top20_mean": {"spearman_vs_oracle_mass": 0.93},
-                "target_head_query_hit_probability_top20_mean": {
-                    "spearman_vs_oracle_mass": 0.95
-                },
-                "target_head_segment_budget_target_top20_mean": {
-                    "spearman_vs_oracle_mass": 0.93
-                },
+                "target_head_query_hit_probability_top20_mean": {"spearman_vs_oracle_mass": 0.95},
+                "target_head_segment_budget_target_top20_mean": {"spearman_vs_oracle_mass": 0.93},
                 "target_head_path_length_support_target_top20_mean": {
                     "spearman_vs_oracle_mass": 0.04
                 },
@@ -427,13 +417,9 @@ def test_semantic_causality_diagnostic_classifies_current_blockers() -> None:
     composition = row_path["top_marginal_factorized_composition"]
     assert composition["available"] is True
     assert composition["composed_score_mean_delta"] == pytest.approx(-0.01)
-    assert composition["most_negative_mean_contribution_name"] == (
-        "query_hit_branch_shapley"
-    )
+    assert composition["most_negative_mean_contribution_name"] == ("query_hit_branch_shapley")
     assert composition["most_negative_mean_contribution_delta"] == pytest.approx(-0.03)
-    assert composition["most_positive_mean_contribution_name"] == (
-        "replacement_modulation_shapley"
-    )
+    assert composition["most_positive_mean_contribution_name"] == ("replacement_modulation_shapley")
     assert rank_margin["missed_high_marginal_mean_score_delta"] == pytest.approx(0.02)
     transfer = diagnostic["artifacts"][0]["query_prior_materiality"][
         "training_prior_learning_signal"

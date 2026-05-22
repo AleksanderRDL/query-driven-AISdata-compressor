@@ -611,10 +611,7 @@ def test_segment_allocation_alignment_diagnostic_flags_score_length_conflict() -
 
     diagnostic = _segment_allocation_alignment_diagnostics(
         segment_rows=segment_rows,
-        segment_allocations={
-            index: allocation_count
-            for index, allocation_count in enumerate(allocation_counts)
-        },
+        segment_allocations=dict(enumerate(allocation_counts)),
     )
 
     assert diagnostic["available"] is True
@@ -623,8 +620,6 @@ def test_segment_allocation_alignment_diagnostic_flags_score_length_conflict() -
     assert diagnostic["segment_score_to_allocation_pearson"] > 0.80
     assert diagnostic["segment_score_to_length_support_pearson"] < 0.0
     assert (
-        diagnostic["top_groups"]["top_20_percent"][
-            "length_support_segment_score_overlap_fraction"
-        ]
+        diagnostic["top_groups"]["top_20_percent"]["length_support_segment_score_overlap_fraction"]
         == 0.0
     )

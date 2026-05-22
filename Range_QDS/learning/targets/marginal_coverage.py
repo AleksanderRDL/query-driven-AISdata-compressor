@@ -132,7 +132,6 @@ def range_marginal_coverage_training_labels(
     budget_weights = _target_budget_weights(model_config, ratios)
     source_scores = labels[:, type_idx].float().clamp(min=0.0)
     retained_frequency = torch.zeros_like(source_scores)
-    used = 0
     used_weight = 0.0
     for ratio, budget_weight in zip(ratios, budget_weights, strict=False):
         mask = _marginal_coverage_mask_from_scores(
@@ -142,7 +141,6 @@ def range_marginal_coverage_training_labels(
             model_config=model_config,
         )
         retained_frequency += float(budget_weight) * mask.to(dtype=retained_frequency.dtype)
-        used += 1
         used_weight += float(budget_weight)
     if used_weight > 1e-12:
         retained_frequency = retained_frequency / float(used_weight)

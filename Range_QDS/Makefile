@@ -9,7 +9,7 @@ UV_RUN := cd $(REPO_ROOT) && $(UV) run $(UV_GROUP_FLAGS) --
 TYPECHECK_PATHS ?= Range_QDS/benchmarking Range_QDS/config Range_QDS/data_preparation Range_QDS/scoring Range_QDS/models Range_QDS/orchestration Range_QDS/workloads Range_QDS/runtime Range_QDS/selection Range_QDS/learning Range_QDS/scripts Range_QDS/tests
 TEST_PATHS ?= Range_QDS/tests
 LINT_PATHS ?= Range_QDS/benchmarking Range_QDS/config Range_QDS/data_preparation Range_QDS/scoring Range_QDS/models Range_QDS/orchestration Range_QDS/workloads Range_QDS/runtime Range_QDS/selection Range_QDS/learning Range_QDS/scripts Range_QDS/tests
-LINT_SELECT ?= F401,F821,F822,F823
+LINT_IMPORT_SELECT ?= F401,F821,F822,F823
 RUN ?= Range_QDS/artifacts/results/latest/example_run.json
 
 RESULTS_DIR ?= Range_QDS/artifacts/results/smoke_synthetic
@@ -31,7 +31,7 @@ QDS_BENCHMARK_FAMILY := $(patsubst Range_QDS/%,%,$(BENCHMARK_FAMILY))
 QDS_BENCHMARK_CACHE := $(patsubst Range_QDS/%,%,$(BENCHMARK_CACHE))
 CONFIRM ?=
 
-.PHONY: help setup sync lock-check check-env lint lint-full lint-yaml test typecheck smoke smoke-csv benchmark-preflight benchmark-queue-preflight list-runs clean-smoke-artifacts range-benchmark-tmux range-benchmark-queue-tmux inspect-run inspect-gates inspect-scores inspect-causality inspect-generator inspect-predictability summarize-run test-property test-regression
+.PHONY: help setup sync lock-check check-env lint lint-imports lint-full lint-yaml format format-check test typecheck smoke smoke-csv benchmark-preflight benchmark-queue-preflight list-runs clean-smoke-artifacts range-benchmark-tmux range-benchmark-queue-tmux inspect-run inspect-gates inspect-scores inspect-causality inspect-generator inspect-predictability summarize-run test-property test-regression
 
 help:
 	@echo "Targets:"
@@ -39,9 +39,12 @@ help:
 	@echo "  sync        Sync the uv environment with dependency group $(UV_GROUP)"
 	@echo "  lock-check  Verify uv.lock is current"
 	@echo "  check-env   Print uv/Python/package versions and run pip check"
-	@echo "  lint        Run scoped Ruff correctness lint using LINT_SELECT"
-	@echo "  lint-full   Run full Ruff lint across active QDS packages"
+	@echo "  lint        Run configured Ruff lint across active QDS packages"
+	@echo "  lint-imports  Run minimal import/name Ruff check using LINT_IMPORT_SELECT"
+	@echo "  lint-full   Run configured Ruff lint across the whole repository"
 	@echo "  lint-yaml   Run yamllint on repository YAML files"
+	@echo "  format      Format active QDS packages with Ruff"
+	@echo "  format-check  Check Ruff formatting across active QDS packages"
 	@echo "  test        Run the QDS pytest suite"
 	@echo "  typecheck   Run Pyright on TYPECHECK_PATHS"
 	@echo "  smoke       Run a tiny synthetic learning/scoring experiment"
@@ -66,7 +69,7 @@ help:
 	@echo "  UV=$(UV)"
 	@echo "  UV_GROUP=$(UV_GROUP)"
 	@echo "  TYPECHECK_PATHS=$(TYPECHECK_PATHS)"
-	@echo "  LINT_SELECT=$(LINT_SELECT)"
+	@echo "  LINT_IMPORT_SELECT=$(LINT_IMPORT_SELECT)"
 	@echo "  RUN=$(RUN)"
 	@echo "  CLEANED_CSV=$(CLEANED_CSV)"
 	@echo "  BENCHMARK_SESSION=$(BENCHMARK_SESSION)"
@@ -97,13 +100,22 @@ check-env:
 	$(UV_RUN) python -c 'from importlib.metadata import version; import numpy, pandas, pyarrow, pyright, pyspark, pytest, torch; print("torch", torch.__version__); print("numpy", numpy.__version__); print("pandas", pandas.__version__); print("pyarrow", pyarrow.__version__); print("pyspark", pyspark.__version__); print("python-dotenv", version("python-dotenv")); print("psycopg", version("psycopg")); print("pytest", pytest.__version__); print("pyright", pyright.__version__); print("ruff", version("ruff"))'
 
 lint:
-	$(UV_RUN) ruff check --select $(LINT_SELECT) $(LINT_PATHS)
+	$(UV_RUN) ruff check $(LINT_PATHS)
+
+lint-imports:
+	$(UV_RUN) ruff check --select $(LINT_IMPORT_SELECT) $(LINT_PATHS)
 
 lint-full:
-	$(UV_RUN) ruff check $(LINT_PATHS)
+	$(UV_RUN) ruff check .
 
 lint-yaml:
 	$(UV_RUN) yamllint .
+
+format:
+	$(UV_RUN) ruff format $(LINT_PATHS)
+
+format-check:
+	$(UV_RUN) ruff format --check $(LINT_PATHS)
 
 test:
 	$(UV_RUN) pytest $(TEST_PATHS)

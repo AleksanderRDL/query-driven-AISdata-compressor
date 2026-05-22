@@ -184,13 +184,17 @@ def score_method(
         endpoint_sanity=endpoint_sanity,
     )
     range_audit.update(query_local_utility)
-    query_local_utility_components_raw = query_local_utility.get("query_local_utility_components", {})
+    query_local_utility_components_raw = query_local_utility.get(
+        "query_local_utility_components", {}
+    )
     query_local_utility_components = (
         {str(key): float(value) for key, value in query_local_utility_components_raw.items()}
         if isinstance(query_local_utility_components_raw, dict)
         else {}
     )
-    query_local_utility_score = float(cast(Any, query_local_utility.get("query_local_utility_score", 0.0)) or 0.0)
+    query_local_utility_score = float(
+        cast(Any, query_local_utility.get("query_local_utility_score", 0.0)) or 0.0
+    )
     query_local_utility_schema = int(
         cast(Any, query_local_utility.get("query_local_utility_schema_version", 0)) or 0
     )

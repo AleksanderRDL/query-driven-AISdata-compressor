@@ -43,7 +43,11 @@ def _env_int(name: str, default: int, minimum: int) -> int:
 
 
 def run() -> None:
-    input_file = Path(os.environ["AIS_INPUT_FILE"]).expanduser() if "AIS_INPUT_FILE" in os.environ else _default_input_file()
+    input_file = (
+        Path(os.environ["AIS_INPUT_FILE"]).expanduser()
+        if "AIS_INPUT_FILE" in os.environ
+        else _default_input_file()
+    )
     output_path = Path(os.environ.get("AIS_OUTPUT_PATH", str(DEFAULT_OUTPUT_PATH))).expanduser()
     local_cores = _env_int("SPARK_LOCAL_CORES", default=4, minimum=1)
     shuffle_partitions = _env_int("SPARK_SHUFFLE_PARTITIONS", default=64, minimum=8)
@@ -61,8 +65,7 @@ def run() -> None:
     start_time = time.time()
 
     spark = (
-        SparkSession.builder
-        .master(f"local[{local_cores}]")
+        SparkSession.builder.master(f"local[{local_cores}]")
         .config("spark.sql.shuffle.partitions", str(shuffle_partitions))
         .config("spark.default.parallelism", str(shuffle_partitions))
         .config("spark.sql.files.maxPartitionBytes", str(input_partition_mb * 1024 * 1024))
@@ -74,8 +77,7 @@ def run() -> None:
     spark.sparkContext.setCheckpointDir(str(checkpoint_dir))
 
     df = (
-        spark.read
-        .format("csv")
+        spark.read.format("csv")
         .option("header", "true")
         .option("inferSchema", "false")
         .load(str(input_file))
@@ -90,8 +92,7 @@ def run() -> None:
         F.try_to_timestamp(F.col(timestamp_col)),
     )
     df = (
-        df
-        .withColumn(timestamp_col, timestamp_expr)
+        df.withColumn(timestamp_col, timestamp_expr)
         .withColumn("Latitude", F.col("Latitude").cast("double"))
         .withColumn("Longitude", F.col("Longitude").cast("double"))
         .withColumn("SOG", F.col("SOG").cast("double"))
@@ -113,8 +114,7 @@ def run() -> None:
 
     (
         df.coalesce(output_partitions)
-        .write
-        .format("csv")
+        .write.format("csv")
         .option("header", "true")
         .mode("overwrite")
         .save(str(output_path))

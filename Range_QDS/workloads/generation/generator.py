@@ -239,10 +239,14 @@ def _make_range_query(
                 if max_hits is not None:
                     upper_target = min(upper_target, max_hits)
                 if hit_count < lower_target:
-                    scale = min(1.25, max(1.02, math.sqrt(float(target_hits) / max(1.0, hit_count))))
+                    scale = min(
+                        1.25, max(1.02, math.sqrt(float(target_hits) / max(1.0, hit_count)))
+                    )
                     calibrated_scale = min(2.0, calibrated_scale * scale)
                 elif hit_count > upper_target:
-                    scale = max(0.80, min(0.98, math.sqrt(float(target_hits) / max(1.0, hit_count))))
+                    scale = max(
+                        0.80, min(0.98, math.sqrt(float(target_hits) / max(1.0, hit_count)))
+                    )
                     calibrated_scale = max(0.50, calibrated_scale * scale)
                 else:
                     break
@@ -477,9 +481,8 @@ def generate_typed_query_workload(
             if isinstance(profile_min_point_fraction, (int, float)):
                 query_min_point_hit_fraction = float(profile_min_point_fraction)
             profile_max_point_fraction = profile_query.get("max_point_hit_fraction")
-            if (
-                not range_max_point_hit_fraction_explicit
-                and isinstance(profile_max_point_fraction, (int, float))
+            if not range_max_point_hit_fraction_explicit and isinstance(
+                profile_max_point_fraction, (int, float)
             ):
                 query_max_point_hit_fraction = (
                     min(float(query_max_point_hit_fraction), float(profile_max_point_fraction))

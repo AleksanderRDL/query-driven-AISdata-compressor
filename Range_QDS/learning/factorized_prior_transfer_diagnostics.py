@@ -233,9 +233,8 @@ def _prior_to_head_transfer_sensitivity_diagnostics(
                 valid_counts = valid_cpu.sum(dim=1).clamp(min=1)
                 valid_ranks = torch.cumsum(valid_cpu.to(dtype=torch.long), dim=1) - 1
                 valid_fractions = (
-                    (valid_ranks.to(dtype=torch.float32) + 0.5)
-                    / valid_counts.unsqueeze(1).to(dtype=torch.float32)
-                )
+                    valid_ranks.to(dtype=torch.float32) + 0.5
+                ) / valid_counts.unsqueeze(1).to(dtype=torch.float32)
                 window_bucket = torch.where(
                     valid_fractions < (1.0 / 3.0),
                     torch.zeros_like(valid_ranks),
@@ -320,9 +319,7 @@ def _prior_to_head_transfer_sensitivity_diagnostics(
                         and head_idx < int(target_cpu.shape[1])
                         and head_idx < int(mask_cpu.shape[1])
                     ):
-                        per_head_target_parts[head_name].append(
-                            target_cpu[valid_global, head_idx]
-                        )
+                        per_head_target_parts[head_name].append(target_cpu[valid_global, head_idx])
                         per_head_mask_parts[head_name].append(mask_cpu[valid_global, head_idx])
                         slice_parts = per_head_slice_mask_parts[head_name]
                         for bucket_id, label in window_slice_labels.items():
@@ -339,9 +336,8 @@ def _prior_to_head_transfer_sensitivity_diagnostics(
                     for name in QUERY_LOCAL_UTILITY_HEAD_NAMES
                     if str(name) in primary_logits_by_head and str(name) in ablation_logits_by_head
                 ]
-                if (
-                    global_indices_usable
-                    and len(ordered_head_names) == len(QUERY_LOCAL_UTILITY_HEAD_NAMES)
+                if global_indices_usable and len(ordered_head_names) == len(
+                    QUERY_LOCAL_UTILITY_HEAD_NAMES
                 ):
                     window_targets = torch.zeros(
                         (
@@ -454,7 +450,9 @@ def _prior_to_head_transfer_sensitivity_diagnostics(
             continue
         valid = mask_cpu[:, head_idx] if head_idx < int(mask_cpu.shape[1]) else torch.zeros(0)
         target = target_cpu[:, head_idx] if head_idx < int(target_cpu.shape[1]) else torch.zeros(0)
-        target_valid = target[valid] if int(valid.numel()) == int(target.numel()) else torch.zeros(0)
+        target_valid = (
+            target[valid] if int(valid.numel()) == int(target.numel()) else torch.zeros(0)
+        )
         probability_stage = stage_parts["probability"][0]
         probability = (
             torch.cat([part.detach().cpu().float().reshape(-1) for part in probability_stage])

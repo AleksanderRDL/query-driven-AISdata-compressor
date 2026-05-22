@@ -108,7 +108,9 @@ def score_summary(artifact: dict[str, Any]) -> dict[str, float | None]:
         "uniform_query_local_utility": uniform_score,
         "baseline_query_local_utility": baseline_score,
         "primary_minus_uniform_query_local_utility": (
-            None if primary_score is None or uniform_score is None else primary_score - uniform_score
+            None
+            if primary_score is None or uniform_score is None
+            else primary_score - uniform_score
         ),
         "primary_minus_baseline_query_local_utility": (
             None
@@ -120,26 +122,20 @@ def score_summary(artifact: dict[str, Any]) -> dict[str, float | None]:
 
 def gate_summary(artifact: dict[str, Any]) -> dict[str, bool | None]:
     workload_signature = as_dict(
-        as_dict(artifact.get("workload_distribution_comparison")).get(
-            "workload_signature_gate"
-        )
+        as_dict(artifact.get("workload_distribution_comparison")).get("workload_signature_gate")
     )
     return {
         "workload_stability": as_bool(
             as_dict(artifact.get("workload_stability_gate")).get("gate_pass")
         ),
-        "support_overlap": as_bool(
-            as_dict(artifact.get("support_overlap_gate")).get("gate_pass")
-        ),
+        "support_overlap": as_bool(as_dict(artifact.get("support_overlap_gate")).get("gate_pass")),
         "target_diffusion": as_bool(
             as_dict(artifact.get("target_diffusion_gate")).get("gate_pass")
         ),
         "workload_signature": as_bool(workload_signature.get("all_pass")),
         "predictability": as_bool(as_dict(artifact.get("predictability_audit")).get("gate_pass")),
         "learning_causality": as_bool(
-            as_dict(artifact.get("learning_causality_summary")).get(
-                "learning_causality_gate_pass"
-            )
+            as_dict(artifact.get("learning_causality_summary")).get("learning_causality_gate_pass")
         ),
         "global_sanity": as_bool(as_dict(artifact.get("global_sanity_gate")).get("gate_pass")),
         "final_success_allowed": as_bool(
@@ -161,9 +157,7 @@ def _teacher_summary(trace: dict[str, Any]) -> dict[str, Any]:
     return {
         "available": as_bool(separated.get("available")),
         "teacher_usage_split": separated.get("teacher_usage_split"),
-        "teacher_target_shape_viable": as_bool(
-            separated.get("teacher_target_shape_viable")
-        ),
+        "teacher_target_shape_viable": as_bool(separated.get("teacher_target_shape_viable")),
         "candidate_for_train_side_teacher": as_bool(
             separated.get("candidate_for_train_side_teacher")
         ),
@@ -232,9 +226,7 @@ def _top_target_segments(targets: dict[int, float], *, fraction: float) -> set[i
     return _top_indices_by_values(positive, fraction=fraction)
 
 
-def _feature_values_by_segment(
-    rows: list[dict[str, Any]], feature: str
-) -> dict[int, float]:
+def _feature_values_by_segment(rows: list[dict[str, Any]], feature: str) -> dict[int, float]:
     out: dict[int, float] = {}
     for row in rows:
         segment_index = row.get("segment_index")
@@ -355,9 +347,7 @@ def _feature_transfer_summary(
     for feature in SEGMENT_FEATURES:
         selection_feature = as_dict(selection_features.get(feature))
         eval_feature = as_dict(eval_features.get(feature))
-        selection_spearman = as_float(
-            selection_feature.get("spearman_with_segment_teacher_target")
-        )
+        selection_spearman = as_float(selection_feature.get("spearman_with_segment_teacher_target"))
         eval_spearman = as_float(eval_feature.get("spearman_with_segment_teacher_target"))
         if selection_spearman is None or eval_spearman is None:
             status = "missing"
@@ -413,9 +403,7 @@ def _artifact_summary(
         "target_overlap": _target_overlap(selection_targets, eval_targets),
         "selection_feature_alignment": selection_alignment,
         "eval_feature_alignment": eval_alignment,
-        "feature_transfer_summary": _feature_transfer_summary(
-            selection_alignment, eval_alignment
-        ),
+        "feature_transfer_summary": _feature_transfer_summary(selection_alignment, eval_alignment),
     }
 
 

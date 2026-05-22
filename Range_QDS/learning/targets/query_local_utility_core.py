@@ -22,6 +22,7 @@ def query_local_utility_point_score(
     boundary_bonus = 0.05 * boundary
     return (query_local * replacement_multiplier + boundary_bonus).clamp(0.0, 1.0)
 
+
 def _normalize_0_1(values: torch.Tensor, mask: torch.Tensor | None = None) -> torch.Tensor:
     """Normalize non-negative values to [0, 1] on the selected support."""
     out = values.float().clamp(min=0.0)

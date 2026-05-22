@@ -74,9 +74,7 @@ def _stage_summary(chain: dict[str, Any], key: str) -> dict[str, Any]:
         "ablation_score_std": _as_float(stage.get("ablation_score_std")),
         "retained_mask_changed": _as_bool(stage.get("retained_mask_changed")),
         "retained_mask_jaccard": _as_float(stage.get("retained_mask_jaccard")),
-        "retained_mask_hamming_fraction": _as_float(
-            stage.get("retained_mask_hamming_fraction")
-        ),
+        "retained_mask_hamming_fraction": _as_float(stage.get("retained_mask_hamming_fraction")),
         "score_topk_jaccard_at_retained_count": _as_float(
             stage.get("score_topk_jaccard_at_retained_count")
         ),
@@ -88,12 +86,8 @@ def _row_path_composition_summary(group: dict[str, Any]) -> dict[str, Any]:
     positive = _as_dict(group.get("factorized_most_positive_mean_contribution"))
     return {
         "available": _as_bool(group.get("factorized_composition_available")),
-        "composed_score_mean_delta": _as_float(
-            group.get("factorized_composed_score_mean_delta")
-        ),
-        "composed_logit_mean_delta": _as_float(
-            group.get("factorized_composed_logit_mean_delta")
-        ),
+        "composed_score_mean_delta": _as_float(group.get("factorized_composed_score_mean_delta")),
+        "composed_logit_mean_delta": _as_float(group.get("factorized_composed_logit_mean_delta")),
         "raw_prediction_delta_residual_mean": _as_float(
             group.get("factorized_raw_prediction_delta_residual_mean")
         ),
@@ -126,9 +120,7 @@ def _prior_chain_summary(chain: dict[str, Any]) -> dict[str, Any]:
             "available": _as_bool(model_prior.get("available")),
             "disabled_prior_fields": model_prior.get("disabled_prior_fields"),
             "model_prior_feature_transform": model_prior.get("model_prior_feature_transform"),
-            "model_input_prior_features": _stage_summary(
-                model_prior, "model_input_prior_features"
-            ),
+            "model_input_prior_features": _stage_summary(model_prior, "model_input_prior_features"),
             "normalized_model_prior_features": _stage_summary(
                 model_prior, "normalized_model_prior_features"
             ),
@@ -199,9 +191,7 @@ def _prior_chain_summary(chain: dict[str, Any]) -> dict[str, Any]:
             "under_ranked_high_marginal_raw_prediction_mean_delta": _as_float(
                 row_path_under_ranked.get("raw_prediction_mean_delta")
             ),
-            "top_marginal_factorized_composition": _row_path_composition_summary(
-                row_path_top
-            ),
+            "top_marginal_factorized_composition": _row_path_composition_summary(row_path_top),
             "missed_high_marginal_factorized_composition": (
                 _row_path_composition_summary(row_path_missed)
             ),
@@ -221,9 +211,7 @@ def _classify_prior_flow(chains: dict[str, Any]) -> dict[str, Any]:
         "normalized_model_prior_features",
         "sampled_inputs_changed",
     )
-    head_delta = _as_float(
-        _path(shuffled, "head_output", "mean_abs_head_probability_delta")
-    )
+    head_delta = _as_float(_path(shuffled, "head_output", "mean_abs_head_probability_delta"))
     score_delta = _as_float(_path(shuffled, "score_output", "mean_abs_score_delta"))
     mask_changed = _path(shuffled, "retained_mask", "retained_mask_changed")
     topk_jaccard = _as_float(
@@ -235,9 +223,9 @@ def _classify_prior_flow(chains: dict[str, Any]) -> dict[str, Any]:
         category = "prior feature normalization/scaling failure"
     elif (head_delta is None or head_delta < 0.0001) and mask_changed is False:
         category = "model ignores prior inputs"
-    elif score_delta is not None and score_delta > 0.0 and mask_changed is False:
-        category = "priors change scores but selector ignores them"
-    elif topk_jaccard == 1.0 and mask_changed is False:
+    elif (score_delta is not None and score_delta > 0.0 and mask_changed is False) or (
+        topk_jaccard == 1.0 and mask_changed is False
+    ):
         category = "priors change scores but selector ignores them"
     else:
         category = "artifact supports only partial prior-flow classification"
@@ -268,9 +256,7 @@ def _output_layer_alignment_summary(alignment_raw: Any) -> dict[str, Any]:
         "target_to_projected_hidden_delta_spearman": _as_float(
             alignment.get("target_to_projected_hidden_delta_spearman")
         ),
-        "bce_descent_alignment_mean": _as_float(
-            alignment.get("bce_descent_alignment_mean")
-        ),
+        "bce_descent_alignment_mean": _as_float(alignment.get("bce_descent_alignment_mean")),
         "bce_descent_alignment_positive_fraction": _as_float(
             alignment.get("bce_descent_alignment_positive_fraction")
         ),
@@ -311,9 +297,7 @@ def _prior_channel_direction_decomposition_summary(transfer: dict[str, Any]) -> 
 
 
 def _prior_learning_signal_summary(artifact: dict[str, Any]) -> dict[str, Any]:
-    signal = _as_dict(
-        _path(artifact, "training_fit_diagnostics", "prior_feature_learning_signal")
-    )
+    signal = _as_dict(_path(artifact, "training_fit_diagnostics", "prior_feature_learning_signal"))
     if not signal:
         return {"available": False}
     path_strength = _as_dict(signal.get("prior_path_strength"))
@@ -452,9 +436,7 @@ def _prior_learning_signal_summary(artifact: dict[str, Any]) -> dict[str, Any]:
             "max_abs_head_probability_delta": _as_float(
                 head_sensitivity.get("max_abs_head_probability_delta")
             ),
-            "mean_abs_final_probability_delta": _as_float(
-                final_probability.get("mean_abs_delta")
-            ),
+            "mean_abs_final_probability_delta": _as_float(final_probability.get("mean_abs_delta")),
             "mean_abs_final_logit_delta": _as_float(final_logit.get("mean_abs_delta")),
         },
     }
@@ -464,8 +446,7 @@ def prior_summary(artifact: dict[str, Any]) -> dict[str, Any]:
     causality = _as_dict(artifact.get("learning_causality_summary"))
     prior = _as_dict(causality.get("prior_sensitivity_diagnostics"))
     chains = {
-        name: _prior_chain_summary(_as_dict(prior.get(name)))
-        for name in PRIOR_DIAGNOSTIC_NAMES
+        name: _prior_chain_summary(_as_dict(prior.get(name))) for name in PRIOR_DIAGNOSTIC_NAMES
     }
     channel_diag = _as_dict(causality.get("prior_channel_ablation_diagnostics"))
     channel_summary = {
@@ -528,4 +509,3 @@ def prior_summary(artifact: dict[str, Any]) -> dict[str, Any]:
         "prior_sample_gate_pass": _as_bool(causality.get("prior_sample_gate_pass")),
         "prior_sample_gate_failures": causality.get("prior_sample_gate_failures"),
     }
-

@@ -54,8 +54,7 @@ def build_spark():
     configure_spark_environment(REPO_ROOT)
 
     return (
-        SparkSession.builder
-        .master("local[*]")
+        SparkSession.builder.master("local[*]")
         .appName("validate_outlier_detection")
         .config("spark.sql.shuffle.partitions", "64")
         .config("spark.sql.adaptive.enabled", "true")
@@ -108,9 +107,7 @@ def compute_max_consecutive_gap(df):
         "_consec_km",
         haversine_km(prev_lat, prev_lon, F.col("Latitude"), F.col("Longitude")),
     )
-    return with_dist.groupBy("MMSI").agg(
-        F.max("_consec_km").alias("max_consec_gap_km")
-    )
+    return with_dist.groupBy("MMSI").agg(F.max("_consec_km").alias("max_consec_gap_km"))
 
 
 def tag_deleted_rows(before_df, after_df):
@@ -124,10 +121,7 @@ def tag_deleted_rows(before_df, after_df):
       _exp_km     : expected km from outlier distance formula
       _margin     : margin used by outlier distance formula
     """
-    after_keys = (
-        after_df.select("MMSI", "# Timestamp")
-        .withColumn("_kept", F.lit(True))
-    )
+    after_keys = after_df.select("MMSI", "# Timestamp").withColumn("_kept", F.lit(True))
 
     tagged = before_df.join(after_keys, on=["MMSI", "# Timestamp"], how="left")
     tagged = tagged.withColumn("_kept", F.coalesce(F.col("_kept"), F.lit(False)))
@@ -137,7 +131,7 @@ def tag_deleted_rows(before_df, after_df):
     prev_lat = F.lag("Latitude").over(w)
     prev_lon = F.lag("Longitude").over(w)
     prev_sog = F.lag("SOG").over(w)
-    prev_ts  = F.lag("# Timestamp").over(w)
+    prev_ts = F.lag("# Timestamp").over(w)
     next_lat = F.lead("Latitude").over(w)
     next_lon = F.lead("Longitude").over(w)
 
@@ -152,17 +146,17 @@ def tag_deleted_rows(before_df, after_df):
     margin = base_margin * (1.0 + time_scale * time_h)
 
     return (
-        tagged
-        .withColumn("_dist_prev_km", F.round(dist_prev, 4))
+        tagged.withColumn("_dist_prev_km", F.round(dist_prev, 4))
         .withColumn("_dist_next_km", F.round(dist_next, 4))
         .withColumn("_time_s_prev", time_s)
         .withColumn("_prev_sog", prev_sog)
         .withColumn("_exp_km", F.round(exp_km, 4))
         .withColumn("_margin", F.round(margin, 4))
         .withColumn("_allowed_km", F.round(exp_km * margin, 4))
-        .withColumn("_implied_speed_knots",
-                     F.when(time_h > 0,
-                            F.round(dist_prev / (time_h * KNOTS_TO_KMH), 2)))
+        .withColumn(
+            "_implied_speed_knots",
+            F.when(time_h > 0, F.round(dist_prev / (time_h * KNOTS_TO_KMH), 2)),
+        )
     )
 
 
@@ -176,22 +170,30 @@ def main():
         help="Path to original AIS CSV file",
     )
     parser.add_argument(
-        "--top", type=int, default=50,
+        "--top",
+        type=int,
+        default=50,
         help="Show top N MMSIs with most deletions (default: 50)",
     )
     parser.add_argument(
-        "--deep", type=int, default=5,
+        "--deep",
+        type=int,
+        default=5,
         help="Deep-dive into this many of the top affected MMSIs (default: 5)",
     )
     parser.add_argument(
-        "--sample-rows", type=int, default=15,
+        "--sample-rows",
+        type=int,
+        default=15,
         help="Number of deleted rows to show per deep-dive ship (default: 15)",
     )
     parser.add_argument(
-        "--report", choices=["all", "deleted", "gaps"], default="all",
+        "--report",
+        choices=["all", "deleted", "gaps"],
+        default="all",
         help="Which report: 'deleted' = top MMSIs by rows deleted, "
-             "'gaps' = top MMSIs where outlier detector reduced MaxGap, "
-             "'all' = both (default: all)",
+        "'gaps' = top MMSIs where outlier detector reduced MaxGap, "
+        "'all' = both (default: all)",
     )
     args = parser.parse_args()
 
@@ -216,24 +218,17 @@ def main():
     print(f"  Rows removed by outlier detector: {total_deleted:,}")
 
     # ── Per-MMSI row counts ──
-    before_counts = before_outliers.groupBy("MMSI").agg(
-        F.count("*").alias("before_rows")
-    )
-    after_counts = after_outliers.groupBy("MMSI").agg(
-        F.count("*").alias("after_rows")
-    )
+    before_counts = before_outliers.groupBy("MMSI").agg(F.count("*").alias("before_rows"))
+    after_counts = after_outliers.groupBy("MMSI").agg(F.count("*").alias("after_rows"))
 
     comparison = before_counts.join(after_counts, on="MMSI", how="left")
-    comparison = comparison.withColumn(
-        "after_rows", F.coalesce(F.col("after_rows"), F.lit(0))
-    ).withColumn(
-        "deleted_rows", F.col("before_rows") - F.col("after_rows")
-    ).withColumn(
-        "pct_deleted",
-        F.round(
-            (F.col("before_rows") - F.col("after_rows"))
-            / F.col("before_rows") * 100, 1
-        ),
+    comparison = (
+        comparison.withColumn("after_rows", F.coalesce(F.col("after_rows"), F.lit(0)))
+        .withColumn("deleted_rows", F.col("before_rows") - F.col("after_rows"))
+        .withColumn(
+            "pct_deleted",
+            F.round((F.col("before_rows") - F.col("after_rows")) / F.col("before_rows") * 100, 1),
+        )
     )
 
     affected = comparison.filter(F.col("deleted_rows") > 0)
@@ -249,13 +244,10 @@ def main():
     )
 
     report = (
-        affected
-        .join(gaps_before, on="MMSI", how="left")
-        .join(gaps_after,  on="MMSI", how="left")
-        .withColumn("gap_before_km",
-                     F.round(F.coalesce(F.col("gap_before_km"), F.lit(0.0)), 3))
-        .withColumn("gap_after_km",
-                     F.round(F.coalesce(F.col("gap_after_km"), F.lit(0.0)), 3))
+        affected.join(gaps_before, on="MMSI", how="left")
+        .join(gaps_after, on="MMSI", how="left")
+        .withColumn("gap_before_km", F.round(F.coalesce(F.col("gap_before_km"), F.lit(0.0)), 3))
+        .withColumn("gap_after_km", F.round(F.coalesce(F.col("gap_after_km"), F.lit(0.0)), 3))
         .orderBy(F.col("deleted_rows").desc())
     )
 
@@ -274,9 +266,12 @@ def main():
     # ══════════════════════════════════════════════════════════════
     #  TOP N BY MOST DELETED ROWS
     # ══════════════════════════════════════════════════════════════
+    top_rows = []
     if args.report in ("all", "deleted"):
-        header = (f"{'MMSI':<12} {'Before':>8} {'After':>8} {'Deleted':>8} "
-                  f"{'%Del':>6} {'MaxGap Before':>14} {'MaxGap After':>14}")
+        header = (
+            f"{'MMSI':<12} {'Before':>8} {'After':>8} {'Deleted':>8} "
+            f"{'%Del':>6} {'MaxGap Before':>14} {'MaxGap After':>14}"
+        )
         print(f"\nTop {args.top} MMSIs by rows deleted:\n")
         print(header)
         print("-" * len(header))
@@ -301,46 +296,51 @@ def main():
         return f"{km:>7.3f} km"
 
     if args.report in ("all", "gaps"):
-      # Only MMSIs where the outlier detector actually reduced the max gap
-      fixed_gap_report = (
-        before_counts
-        .join(after_counts, on="MMSI", how="left")
-        .withColumn("after_rows", F.coalesce(F.col("after_rows"), F.lit(0)))
-        .withColumn("deleted_rows", F.col("before_rows") - F.col("after_rows"))
-        .join(gaps_before, on="MMSI", how="left")
-        .join(gaps_after,  on="MMSI", how="left")
-        .withColumn("gap_before_km",
-                     F.coalesce(F.col("gap_before_km"), F.lit(0.0)))
-        .withColumn("gap_after_km",
-                     F.coalesce(F.col("gap_after_km"), F.lit(0.0)))
-        .withColumn("gap_reduction_km",
-                     F.col("gap_before_km") - F.col("gap_after_km"))
-        .withColumn("gap_reduction_pct",
-                     F.when(F.col("gap_before_km") > 0,
-                            F.round((F.col("gap_before_km") - F.col("gap_after_km"))
-                                    / F.col("gap_before_km") * 100, 1))
-                     .otherwise(F.lit(0.0)))
-          .filter(F.col("gap_reduction_km") > 0.001)
-          .orderBy(F.col("gap_before_km").desc())
-      )
+        # Only MMSIs where the outlier detector actually reduced the max gap
+        fixed_gap_report = (
+            before_counts.join(after_counts, on="MMSI", how="left")
+            .withColumn("after_rows", F.coalesce(F.col("after_rows"), F.lit(0)))
+            .withColumn("deleted_rows", F.col("before_rows") - F.col("after_rows"))
+            .join(gaps_before, on="MMSI", how="left")
+            .join(gaps_after, on="MMSI", how="left")
+            .withColumn("gap_before_km", F.coalesce(F.col("gap_before_km"), F.lit(0.0)))
+            .withColumn("gap_after_km", F.coalesce(F.col("gap_after_km"), F.lit(0.0)))
+            .withColumn("gap_reduction_km", F.col("gap_before_km") - F.col("gap_after_km"))
+            .withColumn(
+                "gap_reduction_pct",
+                F.when(
+                    F.col("gap_before_km") > 0,
+                    F.round(
+                        (F.col("gap_before_km") - F.col("gap_after_km"))
+                        / F.col("gap_before_km")
+                        * 100,
+                        1,
+                    ),
+                ).otherwise(F.lit(0.0)),
+            )
+            .filter(F.col("gap_reduction_km") > 0.001)
+            .orderBy(F.col("gap_before_km").desc())
+        )
 
-      gap_rows = fixed_gap_report.limit(args.top).collect()
+        gap_rows = fixed_gap_report.limit(args.top).collect()
 
-      gap_header = (f"{'MMSI':<12} {'Del':>6} {'MaxGap Before':>14} {'MaxGap After':>14} "
-                    f"{'Reduction':>14} {'Red%':>6}")
-      print(f"\n\nTop {args.top} MMSIs where outlier detector REDUCED the MaxGap:\n")
-      print(gap_header)
-      print("-" * len(gap_header))
-      for r in gap_rows:
-          gb = r["gap_before_km"]
-          ga = r["gap_after_km"]
-          rd = r["gap_reduction_km"]
-          rp = r["gap_reduction_pct"]
-          print(
-              f"{r['MMSI']:<12} {r['deleted_rows']:>6,} "
-              f"{fmt_dist(gb):>14} {fmt_dist(ga):>14} "
-              f"{fmt_dist(rd):>14} {rp:>5.1f}%"
-          )
+        gap_header = (
+            f"{'MMSI':<12} {'Del':>6} {'MaxGap Before':>14} {'MaxGap After':>14} "
+            f"{'Reduction':>14} {'Red%':>6}"
+        )
+        print(f"\n\nTop {args.top} MMSIs where outlier detector REDUCED the MaxGap:\n")
+        print(gap_header)
+        print("-" * len(gap_header))
+        for r in gap_rows:
+            gb = r["gap_before_km"]
+            ga = r["gap_after_km"]
+            rd = r["gap_reduction_km"]
+            rp = r["gap_reduction_pct"]
+            print(
+                f"{r['MMSI']:<12} {r['deleted_rows']:>6,} "
+                f"{fmt_dist(gb):>14} {fmt_dist(ga):>14} "
+                f"{fmt_dist(rd):>14} {rp:>5.1f}%"
+            )
 
     # ══════════════════════════════════════════════════════════════
     #  DEEP DIVE: show WHY rows were deleted for top ships
@@ -362,7 +362,9 @@ def main():
             F.round(F.mean("_implied_speed_knots"), 2).alias("avg_implied_speed"),
             F.sum(F.when(F.col("_prev_sog") < 1.0, 1).otherwise(0)).alias("prev_sog_lt_1"),
             F.sum(F.when(F.col("_prev_sog") < 0.5, 1).otherwise(0)).alias("prev_sog_lt_05"),
-            F.sum(F.when(F.col("_implied_speed_knots") > 50, 1).otherwise(0)).alias("implied_gt_50kn"),
+            F.sum(F.when(F.col("_implied_speed_knots") > 50, 1).otherwise(0)).alias(
+                "implied_gt_50kn"
+            ),
         ).collect()[0]
 
         print("\n" + "=" * 100)
@@ -374,21 +376,24 @@ def main():
         print(f"  Avg distance to prev:             {stats['avg_dist_prev_km']} km")
         print(f"  Avg allowed distance (exp*margin):{stats['avg_allowed_km']} km")
         print(f"  Avg implied speed:                {stats['avg_implied_speed']} knots")
-        print(f"  Deleted where prev_sog < 1.0 kn:  {stats['prev_sog_lt_1']:,}"
-              f"  ({stats['prev_sog_lt_1']*100/max(stats['n'],1):.1f}%)")
-        print(f"  Deleted where prev_sog < 0.5 kn:  {stats['prev_sog_lt_05']:,}"
-              f"  ({stats['prev_sog_lt_05']*100/max(stats['n'],1):.1f}%)")
-        print(f"  Deleted where implied > 50 kn:    {stats['implied_gt_50kn']:,}"
-              f"  ({stats['implied_gt_50kn']*100/max(stats['n'],1):.1f}%)")
+        print(
+            f"  Deleted where prev_sog < 1.0 kn:  {stats['prev_sog_lt_1']:,}"
+            f"  ({stats['prev_sog_lt_1'] * 100 / max(stats['n'], 1):.1f}%)"
+        )
+        print(
+            f"  Deleted where prev_sog < 0.5 kn:  {stats['prev_sog_lt_05']:,}"
+            f"  ({stats['prev_sog_lt_05'] * 100 / max(stats['n'], 1):.1f}%)"
+        )
+        print(
+            f"  Deleted where implied > 50 kn:    {stats['implied_gt_50kn']:,}"
+            f"  ({stats['implied_gt_50kn'] * 100 / max(stats['n'], 1):.1f}%)"
+        )
 
         # Per-ship deep dive
-        deep_mmsis = [r["MMSI"] for r in top_rows[:args.deep]]
+        deep_mmsis = [r["MMSI"] for r in top_rows[: args.deep]]
 
         for mmsi in deep_mmsis:
-            ship_all = (
-                tagged.filter(F.col("MMSI") == mmsi)
-                .orderBy("# Timestamp")
-            )
+            ship_all = tagged.filter(F.col("MMSI") == mmsi).orderBy("# Timestamp")
             ship_deleted = ship_all.filter(~F.col("_kept"))
             n_del = ship_deleted.count()
 
@@ -409,11 +414,17 @@ def main():
 
             # Show sample deleted rows
             sample = (
-                ship_deleted
-                .select(
-                    "# Timestamp", "Latitude", "Longitude", "SOG",
-                    "_prev_sog", "_dist_prev_km", "_dist_next_km",
-                    "_time_s_prev", "_exp_km", "_allowed_km",
+                ship_deleted.select(
+                    "# Timestamp",
+                    "Latitude",
+                    "Longitude",
+                    "SOG",
+                    "_prev_sog",
+                    "_dist_prev_km",
+                    "_dist_next_km",
+                    "_time_s_prev",
+                    "_exp_km",
+                    "_allowed_km",
                     "_implied_speed_knots",
                 )
                 .orderBy("# Timestamp")
@@ -422,9 +433,11 @@ def main():
             )
 
             print(f"\n  Sample deleted rows (first {args.sample_rows}):")
-            print(f"  {'Timestamp':<28} {'Lat':>10} {'Lon':>10} {'SOG':>5} "
-                  f"{'pSOG':>5} {'Dist':>7} {'Allow':>7} {'Impl kn':>8} {'dt(s)':>6}")
-            print(f"  {'-'*92}")
+            print(
+                f"  {'Timestamp':<28} {'Lat':>10} {'Lon':>10} {'SOG':>5} "
+                f"{'pSOG':>5} {'Dist':>7} {'Allow':>7} {'Impl kn':>8} {'dt(s)':>6}"
+            )
+            print(f"  {'-' * 92}")
             for row in sample:
                 ts = str(row["# Timestamp"])[:19] if row["# Timestamp"] else "N/A"
                 print(

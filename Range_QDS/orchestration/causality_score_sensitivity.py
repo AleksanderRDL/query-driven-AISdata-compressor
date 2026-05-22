@@ -126,4 +126,3 @@ def retained_mask_comparison(
             symmetric_difference / max(1, int(primary_bool.numel()))
         ),
     }
-

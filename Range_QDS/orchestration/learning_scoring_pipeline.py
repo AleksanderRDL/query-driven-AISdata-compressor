@@ -297,9 +297,7 @@ def run_learning_scoring_pipeline(
     }
     train_selector_trace: dict[str, Any] | None = None
     if workload_blind_eval:
-        if bool(
-            getattr(config.model, "query_local_utility_train_marginal_diagnostics", False)
-        ):
+        if bool(getattr(config.model, "query_local_utility_train_marginal_diagnostics", False)):
             with _phase("train-marginal-causality-diagnostics"):
                 train_marginal_causality_payload = build_selection_causality_diagnostics(
                     trained=trained,
@@ -536,9 +534,7 @@ def run_learning_scoring_pipeline(
         learned_fill_diagnostics=learned_fill_diagnostics,
         range_learned_fill_summary=range_learned_fill_summary,
         predictability_audit=predictability_audit,
-        workload_scoring_compatibility_diagnostics=(
-            workload_scoring_compatibility_diagnostics
-        ),
+        workload_scoring_compatibility_diagnostics=(workload_scoring_compatibility_diagnostics),
         range_compression_audit=range_compression_audit,
         shift_pairs=shift_pairs,
         range_training_target_transform=range_training_target_transform,

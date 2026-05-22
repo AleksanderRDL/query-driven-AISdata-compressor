@@ -32,7 +32,7 @@ def _component_value(components: dict[str, float], key: str, default: float = 0.
     """Return a finite component value clamped to [0, 1]."""
     try:
         value = float(components.get(key, default))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         value = float(default)
     if value != value:
         return float(default)
@@ -45,7 +45,7 @@ def _guardrail_from_sed(avg_sed_km: float | None) -> float:
         return 1.0
     try:
         sed = max(0.0, float(avg_sed_km))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return 1.0
     return float(1.0 / (1.0 + sed))
 

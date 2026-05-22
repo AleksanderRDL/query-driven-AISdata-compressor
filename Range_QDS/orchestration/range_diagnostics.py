@@ -317,10 +317,10 @@ def _compact_range_workload_summary(summary: dict[str, Any]) -> dict[str, Any]:
 def _normalized_counts(counts: object, keys: set[str]) -> dict[str, float]:
     """Return a normalized count map on the requested key universe."""
     if not isinstance(counts, dict):
-        return {key: 0.0 for key in keys}
+        return dict.fromkeys(keys, 0.0)
     total = sum(float(value) for value in counts.values() if isinstance(value, (int, float)))
     if total <= 0.0:
-        return {key: 0.0 for key in keys}
+        return dict.fromkeys(keys, 0.0)
     return {key: float(counts.get(key, 0.0)) / total for key in keys}
 
 
@@ -328,7 +328,7 @@ def _l1_count_distance(left: object, right: object) -> float | None:
     """Return L1 distance between two normalized count dictionaries."""
     if not isinstance(left, dict) or not isinstance(right, dict):
         return None
-    keys = set(str(key) for key in left) | set(str(key) for key in right)
+    keys = {str(key) for key in left} | {str(key) for key in right}
     if not keys:
         return None
     left_norm = _normalized_counts(left, keys)
@@ -761,7 +761,7 @@ def _target_budget_row(
             continue
         try:
             ratio = float(raw_ratio)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             continue
         distance = abs(ratio - float(compression_ratio))
         if distance < best_distance:

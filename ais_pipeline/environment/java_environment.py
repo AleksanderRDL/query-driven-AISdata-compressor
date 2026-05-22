@@ -2,6 +2,7 @@ import os
 import platform
 import shutil
 import subprocess
+from contextlib import suppress
 from pathlib import Path
 
 JAVA_EXECUTABLE = "java.exe" if os.name == "nt" else "java"
@@ -24,7 +25,7 @@ def _java_command_is_usable(java_cmd: str) -> bool:
             check=False,
             timeout=10,
         )
-    except (OSError, subprocess.SubprocessError):
+    except OSError, subprocess.SubprocessError:
         return False
     return completed.returncode == 0
 
@@ -66,10 +67,8 @@ def _linux_portable_java_home(project_dir: Path) -> Path | None:
     first_level = []
 
     if local_java_root.is_dir():
-        try:
+        with suppress(OSError):
             first_level = [entry for entry in local_java_root.iterdir() if entry.is_dir()]
-        except OSError:
-            pass
 
     candidates.extend(first_level)
 

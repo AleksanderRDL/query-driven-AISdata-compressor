@@ -101,10 +101,7 @@ def _query_segment_local_behavior_signal(
         + 0.35 * _normalize_0_1(segment_behavior, valid)
         + 0.20 * _normalize_0_1(segment_query, valid)
     ).clamp(0.0, 1.0)
-    utility = (
-        normalized_behavior
-        * segment_multiplier
-    ).clamp(0.0, 1.0)
+    utility = (normalized_behavior * segment_multiplier).clamp(0.0, 1.0)
     return torch.where(valid, utility, torch.zeros_like(utility))
 
 
@@ -398,9 +395,7 @@ def build_query_local_utility_targets(
             "raw_query_hit_probability_times_0.65_plus_"
             "0.35_positive_mean_normalized_ship_query_evidence"
         ),
-        "query_hit_target_semantics": (
-            "raw_query_hit_scale_preserving_ship_evidence_ranker"
-        ),
+        "query_hit_target_semantics": ("raw_query_hit_scale_preserving_ship_evidence_ranker"),
         "query_hit_target_raw_query_hit_base_weight": (
             QUERY_LOCAL_UTILITY_QUERY_EVIDENCE_BASE_WEIGHT
         ),
@@ -414,9 +409,7 @@ def build_query_local_utility_targets(
             "0.45_plus_0.35_segment_behavior_support_plus_"
             "0.20_segment_raw_query_hit_evidence_multiplier_support"
         ),
-        "final_label_variant": (
-            "additive_raw_query_hit_behavior_query_local_utility_point_score"
-        ),
+        "final_label_variant": ("additive_raw_query_hit_behavior_query_local_utility_point_score"),
     }
     final_score = query_local_utility_point_score(
         q_hit=target_q_hit,

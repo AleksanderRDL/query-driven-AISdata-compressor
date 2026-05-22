@@ -233,7 +233,7 @@ def _segment_source_attribution(
 def _safe_finite_float(value: Any, default: float = 0.0) -> float:
     try:
         number = float(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return float(default)
     return number if math.isfinite(number) else float(default)
 

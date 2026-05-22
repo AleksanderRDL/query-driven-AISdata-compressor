@@ -211,13 +211,15 @@ def test_fixed_count_range_acceptance_retries_rejected_candidates() -> None:
         dtype=torch.float32,
     )
     trajectories = [cluster]
-    for idx in range(10):
-        trajectories.append(
+    trajectories.extend(
+        (
             torch.tensor(
                 [[float(idx), 1.0 + 0.5 * float(idx), 1.0 + 0.5 * float(idx), 1.0]],
                 dtype=torch.float32,
             )
         )
+        for idx in range(10)
+    )
 
     workload = generate_typed_query_workload(
         trajectories=trajectories,

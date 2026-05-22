@@ -118,9 +118,7 @@ def _alignment_score(alignment: dict[str, Any], field: str) -> dict[str, float |
         "spearman": _as_float(score.get("spearman")),
         "pearson": _as_float(score.get("pearson")),
         "top_quartile_mean_marginal": _as_float(score.get("top_quartile_mean_marginal")),
-        "bottom_quartile_mean_marginal": _as_float(
-            score.get("bottom_quartile_mean_marginal")
-        ),
+        "bottom_quartile_mean_marginal": _as_float(score.get("bottom_quartile_mean_marginal")),
         "top_minus_bottom_marginal": _as_float(score.get("top_minus_bottom_marginal")),
         "value_min": _as_float(score.get("value_min")),
         "value_max": _as_float(score.get("value_max")),
@@ -193,9 +191,7 @@ def _behavior_summary(artifact: dict[str, Any]) -> dict[str, Any]:
     )
     behavior_branch = _score_component_alignment(alignment, "factorized_behavior_branch")
     if not behavior_branch:
-        behavior_branch = _score_component_alignment(
-            alignment, "factorized_behavior_multiplier"
-        )
+        behavior_branch = _score_component_alignment(alignment, "factorized_behavior_multiplier")
     causality = _as_dict(artifact.get("learning_causality_summary"))
     no_behavior_delta = _as_float(causality.get("no_behavior_head_ablation_delta"))
     target_std = _as_float(fit_head.get("target_std"))
@@ -214,9 +210,7 @@ def _behavior_summary(artifact: dict[str, Any]) -> dict[str, Any]:
         "target_location": {
             "training_mask": target.get("conditional_behavior_utility_training"),
             "variant": target.get("conditional_behavior_target_variant"),
-            "positive_point_count": _path(
-                target, "positive_point_count_by_head", BEHAVIOR_HEAD
-            ),
+            "positive_point_count": _path(target, "positive_point_count_by_head", BEHAVIOR_HEAD),
             "positive_fraction": _path(target, "positive_fraction_by_head", BEHAVIOR_HEAD),
             "positive_label_mass": _path(target, "positive_label_mass_by_head", BEHAVIOR_HEAD),
             "support_fraction_by_threshold": _path(
@@ -262,15 +256,11 @@ def _behavior_summary(artifact: dict[str, Any]) -> dict[str, Any]:
             ),
         },
         "absorbed_or_redundant_with_other_heads": {
-            "query_hit_probability_head_tau": _as_float(
-                fit.get("query_hit_probability_head_tau")
-            ),
+            "query_hit_probability_head_tau": _as_float(fit.get("query_hit_probability_head_tau")),
             "replacement_representative_value_head_tau": _as_float(
                 fit.get("replacement_representative_value_head_tau")
             ),
-            "segment_budget_target_head_tau": _as_float(
-                fit.get("segment_budget_target_head_tau")
-            ),
+            "segment_budget_target_head_tau": _as_float(fit.get("segment_budget_target_head_tau")),
             "factorized_final_score_tau": _as_float(fit.get("factorized_final_score_tau")),
             "behavior_target_vs_replacement_spearman": _as_float(
                 target_alignment.get("spearman_with_replacement_representative_value")
@@ -443,9 +433,7 @@ def _segment_summary(artifact: dict[str, Any]) -> dict[str, Any]:
             "neutral_segment_score_query_local_utility": no_segment_budget,
             "pooled_point_score_allocation_query_local_utility": point_score,
             "pooled_point_score_minus_primary": _safe_delta(point_score, primary_score),
-            "without_segment_budget_minus_primary": _safe_delta(
-                no_segment_budget, primary_score
-            ),
+            "without_segment_budget_minus_primary": _safe_delta(no_segment_budget, primary_score),
             "without_segment_length_support_query_local_utility": ablations[
                 "MLQDS_without_segment_length_support_allocation"
             ],
@@ -557,9 +545,7 @@ def _row_ref(row: dict[str, Any]) -> dict[str, Any]:
         "source_stage": row.get("source"),
         "retained_source": row.get("source"),
         "retained_decision_type": row.get("decision"),
-        "exact_marginal_query_local_utility": _as_float(
-            row.get("marginal_query_local_utility")
-        ),
+        "exact_marginal_query_local_utility": _as_float(row.get("marginal_query_local_utility")),
         "query_point_recall_component": _as_float(component_delta.get("query_point_recall")),
         "query_local_behavior_component": behavior_component,
         "query_local_continuity_component": _as_float(
@@ -596,9 +582,7 @@ def _row_ref(row: dict[str, Any]) -> dict[str, Any]:
         "selector_score_rank_fraction": _as_float(
             row.get("selector_score_candidate_rank_fraction")
         ),
-        "segment_score_rank_fraction": _as_float(
-            row.get("segment_score_candidate_rank_fraction")
-        ),
+        "segment_score_rank_fraction": _as_float(row.get("segment_score_candidate_rank_fraction")),
         "marginal_rank_fraction": _as_float(
             row.get("marginal_query_local_utility_candidate_rank_fraction")
         ),
@@ -606,9 +590,7 @@ def _row_ref(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _missing_row_fields(
-    rows: list[dict[str, Any]], context_fields: dict[str, Any]
-) -> list[str]:
+def _missing_row_fields(rows: list[dict[str, Any]], context_fields: dict[str, Any]) -> list[str]:
     head_targets_available = _as_dict(context_fields.get("head_targets"))
     component_delta_available = context_fields.get("query_local_utility_component_delta") is True
     family_context_available = context_fields.get("query_family_hit_context") is True

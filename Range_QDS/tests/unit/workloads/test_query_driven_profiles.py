@@ -27,6 +27,7 @@ def _boundaries(trajectories: list[torch.Tensor]) -> list[tuple[int, int]]:
         cursor = end
     return out
 
+
 def test_profile_query_plan_preserves_weighted_family_quotas() -> None:
     profile = range_workload_profile("range_query_mix")
 
@@ -164,9 +165,7 @@ def test_range_acceptance_rejections_record_anchor_footprint_pair() -> None:
     _record_rejection_for_query(state, "coverage_overshoot", query)
 
     assert state["rejection_reasons"] == {"coverage_overshoot": 1}
-    assert state["rejection_reasons_by_anchor_family"] == {
-        "density": {"coverage_overshoot": 1}
-    }
+    assert state["rejection_reasons_by_anchor_family"] == {"density": {"coverage_overshoot": 1}}
     assert state["rejection_reasons_by_footprint_family"] == {
         "large_context": {"coverage_overshoot": 1}
     }
@@ -237,18 +236,20 @@ def test_profile_point_hit_targets_are_prefix_stable_within_footprint_band() -> 
         for query_index in range(20)
     ]
 
-    assert [
-        setting["target_point_hit_fraction"] for setting in settings
-    ] == [setting["target_point_hit_fraction"] for setting in same_plan_settings]
+    assert [setting["target_point_hit_fraction"] for setting in settings] == [
+        setting["target_point_hit_fraction"] for setting in same_plan_settings
+    ]
     for setting in settings:
         footprint = profile.footprint_families[str(setting["footprint_family"])]
         min_fraction = float(footprint["min_point_hit_fraction"])
         max_fraction = float(footprint["max_point_hit_fraction"])
         target = setting["target_point_hit_fraction"]
         assert isinstance(target, float)
-        assert min_fraction <= target <= min_fraction + (
-            max_fraction - min_fraction
-        ) * POINT_HIT_TARGET_BAND_FRACTION
+        assert (
+            min_fraction
+            <= target
+            <= min_fraction + (max_fraction - min_fraction) * POINT_HIT_TARGET_BAND_FRACTION
+        )
 
 
 def test_synthetic_route_families_create_same_support_trajectories() -> None:

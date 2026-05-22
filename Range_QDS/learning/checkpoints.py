@@ -109,8 +109,7 @@ def load_checkpoint(path: str) -> ModelArtifacts:
             name
             for name in model.state_dict()
             if name == "prior_feature_scale"
-            or name.startswith("prior_feature_encoder.")
-            or name.startswith("heads.path_length_support_target.")
+            or name.startswith(("prior_feature_encoder.", "heads.path_length_support_target."))
         }
         missing = set(load_result.missing_keys)
         unexpected = set(load_result.unexpected_keys)

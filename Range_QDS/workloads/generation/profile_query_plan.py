@@ -53,7 +53,7 @@ def _largest_remainder_counts(mapping: dict[str, float], count: int) -> dict[str
     keys = [str(key) for key in mapping]
     total_count = max(0, int(count))
     if total_count <= 0 or not keys:
-        return {key: 0 for key in keys}
+        return dict.fromkeys(keys, 0)
     weights = [max(0.0, float(mapping[key])) for key in keys]
     total_weight = sum(weights)
     if total_weight <= 0.0:
@@ -213,9 +213,14 @@ def _profile_query_settings(
         and isinstance(footprint_sequence, list)
         and query_index < len(footprint_sequence)
     ):
-        footprint_occurrence_index = sum(
-            1 for family in footprint_sequence[: query_index + 1] if str(family) == footprint_family
-        ) - 1
+        footprint_occurrence_index = (
+            sum(
+                1
+                for family in footprint_sequence[: query_index + 1]
+                if str(family) == footprint_family
+            )
+            - 1
+        )
     min_point_hit_fraction = footprint.get("min_point_hit_fraction")
     max_point_hit_fraction = footprint.get("max_point_hit_fraction")
     target_point_hit_fraction: float | None = None
@@ -225,12 +230,11 @@ def _profile_query_settings(
         min_fraction = float(min_point_hit_fraction)
         max_fraction = float(max_point_hit_fraction)
         if max_fraction >= min_fraction:
-            target_unit = (
-                (max(0, footprint_occurrence_index) * LOW_DISCREPANCY_STEP) + 0.5
-            ) % 1.0
-            target_point_hit_fraction = min_fraction + (
-                max_fraction - min_fraction
-            ) * POINT_HIT_TARGET_BAND_FRACTION * target_unit
+            target_unit = ((max(0, footprint_occurrence_index) * LOW_DISCREPANCY_STEP) + 0.5) % 1.0
+            target_point_hit_fraction = (
+                min_fraction
+                + (max_fraction - min_fraction) * POINT_HIT_TARGET_BAND_FRACTION * target_unit
+            )
     return {
         "anchor_family": anchor_family,
         "footprint_family": footprint_family,

@@ -1,5 +1,4 @@
 import os
-import platform
 import sys
 from pathlib import Path
 
@@ -7,12 +6,12 @@ from pathlib import Path
 def _spark_python_executable() -> str:
     python_exec = sys.executable
 
-    if platform.system() == "Windows":
+    if sys.platform == "win32":
         import ctypes
 
         # Spark workers on Windows can fail when paths contain spaces.
         buf = ctypes.create_unicode_buffer(260)
-        if ctypes.windll.kernel32.GetShortPathNameW(sys.executable, buf, 260):
+        if ctypes.windll.kernel32.GetShortPathNameW(sys.executable, buf, 260):  # type: ignore[reportAttributeAccessIssue]
             python_exec = buf.value
 
     return python_exec

@@ -533,9 +533,7 @@ def test_validation_checkpoint_scores_report_factorized_causality_deltas(
         if (
             segment_point_scores is not None
             and int(torch.count_nonzero(segment_point_scores).item()) == 0
-        ):
-            keep = 2
-        elif segment_scores is not None and int(torch.count_nonzero(segment_scores).item()) == 0:
+        ) or (segment_scores is not None and int(torch.count_nonzero(segment_scores).item()) == 0):
             keep = 2
         elif float(scores.mean().item()) < 0.0:
             keep = 3

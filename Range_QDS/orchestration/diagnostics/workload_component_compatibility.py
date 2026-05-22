@@ -193,7 +193,9 @@ def _score_from_component_weights(
     weights: dict[str, float],
 ) -> float:
     normalized = _normalized_weights(weights)
-    return sum(_as_float(components.get(component)) * weight for component, weight in normalized.items())
+    return sum(
+        _as_float(components.get(component)) * weight for component, weight in normalized.items()
+    )
 
 
 def _profile_by_family_from_rows(rows: list[dict[str, Any]]) -> dict[str, float]:
@@ -201,8 +203,7 @@ def _profile_by_family_from_rows(rows: list[dict[str, Any]]) -> dict[str, float]
     if total_queries <= 0.0:
         return {}
     return {
-        str(row.get("family")): _as_float(row.get("query_count")) / total_queries
-        for row in rows
+        str(row.get("family")): _as_float(row.get("query_count")) / total_queries for row in rows
     }
 
 
@@ -423,12 +424,8 @@ def _blocker_preserving_outcome(group_rows: dict[str, Any]) -> dict[str, Any]:
                         "group_key": group_key,
                         "family": row.get("family"),
                         "component_weighted_delta": row.get("component_weighted_delta"),
-                        "profile_weighted_contribution": row.get(
-                            "profile_weighted_contribution"
-                        ),
-                        "ship_presence_recall_delta": row.get(
-                            "ship_presence_recall_delta"
-                        ),
+                        "profile_weighted_contribution": row.get("profile_weighted_contribution"),
+                        "ship_presence_recall_delta": row.get("ship_presence_recall_delta"),
                         "missed_trajectory_hit_count_delta": row.get(
                             "missed_trajectory_hit_count_delta"
                         ),
@@ -547,9 +544,7 @@ def _recalibration_candidates(
         "blocker_preserving_outcome": _blocker_preserving_outcome(group_rows),
         "candidate_improves_score_delta": candidate_delta > active_delta,
         "masking_risk": (
-            "high"
-            if candidate_delta > active_delta
-            else "not_improved_by_candidate_weights"
+            "high" if candidate_delta > active_delta else "not_improved_by_candidate_weights"
         ),
         "masking_risk_reason": (
             "Candidate improves post-hoc score delta by downweighting currently "
@@ -563,12 +558,9 @@ def _blocking_family_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     blocking = []
     for row in rows:
         ship_deltas = _as_dict(row.get("ship_evidence_count_deltas"))
-        if (
-            _as_float(row.get("range_usefulness_delta")) < 0.0
-            and (
-                _as_float(ship_deltas.get("missed_trajectory_hit_count_total")) > 0.0
-                or _as_float(ship_deltas.get("ship_presence_recall")) < 0.0
-            )
+        if _as_float(row.get("range_usefulness_delta")) < 0.0 and (
+            _as_float(ship_deltas.get("missed_trajectory_hit_count_total")) > 0.0
+            or _as_float(ship_deltas.get("ship_presence_recall")) < 0.0
         ):
             blocking.append(
                 {
@@ -678,8 +670,9 @@ def build_workload_component_compatibility_diagnostic(
     for group_key, group in _as_dict(current.get("groups")).items():
         if group_key == "anchor_footprint_family":
             continue
-        for row in _as_dict(group).get("blocking_families", []):
-            blocking_families.append(row)
+        group_blocking_families = _as_dict(group).get("blocking_families", [])
+        if isinstance(group_blocking_families, list):
+            blocking_families.extend(group_blocking_families)
     blocking_families = _sorted_rows(blocking_families, "range_usefulness_delta")[:12]
     recalibration = _as_dict(current.get("recalibration_diagnostics"))
     candidate_rows = recalibration.get("scoring_candidates", [])
