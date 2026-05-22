@@ -17,11 +17,12 @@ known. Future queries are scored only after those masks are frozen.
 The final system must satisfy four requirements:
 
 1. **Workload-blind compression**
-   - No evaluation (thosed used in the very final benchmarking stage): 
-        1. query boxes,  
-        2. query tensors, evaluation 
-        3. query/point containment labels,
-        4. query boundary distances, or eval-query-derived features before mask freeze.
+   - No final evaluation query elements used before mask freeze, this includes:
+        1. eval query boxes
+        2. eval query tensors
+        3. eval query/point containment labels
+        4. eval query boundary distances
+        5. eval query-derived features
 
 2. **Query-driven learned behavior**
    - The model learns from generated or historical training workloads.
@@ -102,6 +103,8 @@ Correct order of work:
 workload_blind_protocol:
   enabled: true
   masks_frozen_before_eval_query_scoring: true
+  primary_masks_frozen_before_eval_query_scoring: true
+  audit_masks_frozen_before_eval_query_scoring: true
   eval_queries_seen_by_model: false
   eval_queries_seen_by_feature_builder: false
   eval_queries_seen_by_selector: false
