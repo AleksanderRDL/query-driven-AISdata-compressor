@@ -91,6 +91,8 @@ pythonVersion = "3.14"
 typeCheckingMode = "standard"
 reportMissingTypeStubs = "none"
 reportPrivateImportUsage = "none"
+venvPath = "."
+venv = ".venv"
 
 [tool.ruff]
 line-length = 100
