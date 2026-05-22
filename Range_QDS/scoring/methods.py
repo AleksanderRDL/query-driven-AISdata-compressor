@@ -82,6 +82,18 @@ class FrozenMaskMethod:
         return self.retained_mask.to(device=points.device, dtype=torch.bool)
 
 
+@dataclass(frozen=True)
+class MLQDSScoreSnapshot:
+    """Budget-independent score tensors cached by an MLQDS simplification pass."""
+
+    scores: torch.Tensor | None
+    raw_predictions: torch.Tensor | None
+    head_logits: torch.Tensor | None
+    segment_scores: torch.Tensor | None
+    path_length_support_scores: torch.Tensor | None
+    selector_segment_scores: torch.Tensor | None
+
+
 @dataclass
 class MLQDSMethod:
     """Query-aware model-based simplification method. See scoring/README.md for details."""
@@ -309,6 +321,17 @@ class MLQDSMethod:
         self._score_cache_key = cache_key
         self._score_cache = scores
         return scores
+
+    def cached_score_snapshot(self) -> MLQDSScoreSnapshot:
+        """Return cached tensors from the most recent simplification-score pass."""
+        return MLQDSScoreSnapshot(
+            scores=self._score_cache,
+            raw_predictions=self._raw_pred_cache,
+            head_logits=self._head_logit_cache,
+            segment_scores=self._segment_score_cache,
+            path_length_support_scores=self._path_length_support_score_cache,
+            selector_segment_scores=self._selector_segment_score_cache,
+        )
 
     def simplify(
         self,

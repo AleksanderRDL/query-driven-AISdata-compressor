@@ -19,7 +19,7 @@ implementation checks.
 
 | File | Purpose |
 | --- | --- |
-| `learning_scoring_cli.py` | CLI flags over shared config dataclasses. |
+| `learning_scoring_cli.py` / `learning_scoring_cli_selector_args.py` | CLI flags over shared config dataclasses, split by argument section. |
 | `learning_scoring_pipeline.py` | End-to-end single-run stage ordering and handoffs. |
 | `data_splits.py` | Train, validation, selection, and eval data splits. |
 | `workload_stage.py` | Workload generation and workload-map resolution. |
@@ -32,6 +32,7 @@ implementation checks.
 | `learning_target_stage.py` | Training-label preparation, target transforms, teacher distillation, and validation query caches. |
 | `retained_mask_stage.py` | Workload-blind primary/audit retained-mask freezing and selector-trace capture. |
 | `retained_mask_ablation_stage.py` | Query-free retained-mask ablation construction and freeze diagnostics. |
+| `learned_segment_freezing.py` | Shared learned-segment frozen-selector construction for causality and ablation stages. |
 | `final_gate_summary.py` | Final single-cell gate, final-claim, and causality summary assembly. |
 | `range_runtime_cache.py` / `workload_generation_cache.py` | Run-local range label and workload caches. |
 | `range_diagnostics.py` | Range workload, learned-fill, and gate diagnostics. |

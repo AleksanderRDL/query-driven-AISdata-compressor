@@ -24,15 +24,13 @@ from orchestration.causality import (
     prior_feature_sample_sensitivity,
     training_outputs_with_query_prior_field,
 )
+from orchestration.learned_segment_freezing import learned_segment_frozen_method_from_config
 from orchestration.mlqds_method_factory import build_mlqds_method
 from orchestration.model_ablations import (
     raw_predictions_without_factorized_head,
     reset_module_parameters,
     scores_without_factorized_head,
     shuffled_query_prior_field,
-)
-from orchestration.selector_diagnostics import (
-    learned_segment_frozen_method as _learned_segment_frozen_method,
 )
 from orchestration.selector_diagnostics import (
     neutral_segment_scores_for_ablation,
@@ -126,48 +124,11 @@ def freeze_retained_mask_ablations(
     allocation_length_support_weight = float(
         config.model.learned_segment_allocation_length_support_weight
     )
-    allocation_weight_floor = float(config.model.learned_segment_allocation_weight_floor)
-    repair_score_protection_fraction = float(
-        config.model.learned_segment_length_repair_score_protection_fraction
-    )
 
     def _selector_method(**kwargs: Any) -> FrozenMaskMethod:
         kwargs.setdefault("boundaries", test_boundaries)
-        kwargs.setdefault("compression_ratio", float(config.model.compression_ratio))
         kwargs.setdefault("points", test_points)
-        kwargs.setdefault(
-            "learned_segment_geometry_gain_weight",
-            float(config.model.learned_segment_geometry_gain_weight),
-        )
-        kwargs.setdefault(
-            "learned_segment_allocation_length_support_weight",
-            allocation_length_support_weight,
-        )
-        kwargs.setdefault(
-            "learned_segment_allocation_weight_floor",
-            allocation_weight_floor,
-        )
-        kwargs.setdefault(
-            "learned_segment_score_blend_weight",
-            float(config.model.learned_segment_score_blend_weight),
-        )
-        kwargs.setdefault(
-            "learned_segment_transfer_calibration_mode",
-            str(config.model.learned_segment_transfer_calibration_mode),
-        )
-        kwargs.setdefault(
-            "learned_segment_fairness_preallocation",
-            bool(config.model.learned_segment_fairness_preallocation),
-        )
-        kwargs.setdefault(
-            "learned_segment_length_repair_fraction",
-            float(config.model.learned_segment_length_repair_fraction),
-        )
-        kwargs.setdefault(
-            "learned_segment_length_repair_score_protection_fraction",
-            repair_score_protection_fraction,
-        )
-        return _learned_segment_frozen_method(**kwargs)
+        return learned_segment_frozen_method_from_config(config=config, **kwargs)
 
     pre_repair_diagnostic_name = "MLQDS_pre_repair_allocation_diagnostic"
     substage_started_at = time.perf_counter()
@@ -243,15 +204,19 @@ def freeze_retained_mask_ablations(
         primary_segment_scores[shuffled_order] if primary_segment_scores is not None else None
     )
     substage_started_at = time.perf_counter()
-    causality_ablation_methods.append(
-        _selector_method(
-            name="MLQDS_shuffled_scores",
-            scores=shuffled_scores,
-            segment_scores=shuffled_segment_scores,
-            segment_point_scores=shuffled_segment_point_scores,
+    try:
+        causality_ablation_methods.append(
+            _selector_method(
+                name="MLQDS_shuffled_scores",
+                scores=shuffled_scores,
+                segment_scores=shuffled_segment_scores,
+                segment_point_scores=shuffled_segment_point_scores,
+            )
         )
-    )
-    _record_substage("shuffled_scores", substage_started_at)
+    except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
+        causal_ablation_freeze_failures["MLQDS_shuffled_scores"] = str(exc)
+    finally:
+        _record_substage("shuffled_scores", substage_started_at)
     if primary_segment_scores is not None:
         substage_started_at = time.perf_counter()
         neutral_segment_scores = neutral_segment_scores_for_ablation(primary_segment_scores)
@@ -591,7 +556,6 @@ def freeze_retained_mask_ablations(
             }
         finally:
             _record_substage("behavior_utility_segment_score_ablations", substage_started_at)
-    primary_head_logits = primary_head_logits
     if primary_head_logits is not None:
         substage_started_at = time.perf_counter()
         try:
@@ -677,16 +641,20 @@ def freeze_retained_mask_ablations(
     query_prior_field = trained.feature_context.get("query_prior_field")
     if isinstance(query_prior_field, dict):
         substage_started_at = time.perf_counter()
-        prior_scores = (
-            query_prior_predictability_scores(test_points, query_prior_field).detach().cpu()
-        )
-        causality_ablation_methods.append(
-            _selector_method(
-                name="MLQDS_prior_field_only_score",
-                scores=prior_scores,
+        try:
+            prior_scores = (
+                query_prior_predictability_scores(test_points, query_prior_field).detach().cpu()
             )
-        )
-        _record_substage("prior_field_only_score", substage_started_at)
+            causality_ablation_methods.append(
+                _selector_method(
+                    name="MLQDS_prior_field_only_score",
+                    scores=prior_scores,
+                )
+            )
+        except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
+            causal_ablation_freeze_failures["MLQDS_prior_field_only_score"] = str(exc)
+        finally:
+            _record_substage("prior_field_only_score", substage_started_at)
         substage_started_at = time.perf_counter()
         try:
             shuffled_prior_field = shuffled_query_prior_field(
@@ -725,14 +693,11 @@ def freeze_retained_mask_ablations(
                 test_boundaries,
                 float(config.model.compression_ratio),
             )
-            shuffled_prior_scores = getattr(shuffled_prior_method, "_score_cache", None)
-            shuffled_prior_raw_preds = getattr(shuffled_prior_method, "_raw_pred_cache", None)
-            shuffled_prior_head_logits = getattr(shuffled_prior_method, "_head_logit_cache", None)
-            shuffled_prior_selector_segment_scores = getattr(
-                shuffled_prior_method,
-                "_selector_segment_score_cache",
-                None,
-            )
+            shuffled_prior_snapshot = shuffled_prior_method.cached_score_snapshot()
+            shuffled_prior_scores = shuffled_prior_snapshot.scores
+            shuffled_prior_raw_preds = shuffled_prior_snapshot.raw_predictions
+            shuffled_prior_head_logits = shuffled_prior_snapshot.head_logits
+            shuffled_prior_selector_segment_scores = shuffled_prior_snapshot.selector_segment_scores
             prior_sensitivity_diagnostics["shuffled_prior_fields"] = (
                 prior_ablation_sensitivity_from_tensors(
                     sampled_prior_features=shuffled_prior_feature_sensitivity,
@@ -803,14 +768,11 @@ def freeze_retained_mask_ablations(
                 test_boundaries,
                 float(config.model.compression_ratio),
             )
-            zero_prior_scores = getattr(zero_prior_method, "_score_cache", None)
-            zero_prior_raw_preds = getattr(zero_prior_method, "_raw_pred_cache", None)
-            zero_prior_head_logits = getattr(zero_prior_method, "_head_logit_cache", None)
-            zero_prior_selector_segment_scores = getattr(
-                zero_prior_method,
-                "_selector_segment_score_cache",
-                None,
-            )
+            zero_prior_snapshot = zero_prior_method.cached_score_snapshot()
+            zero_prior_scores = zero_prior_snapshot.scores
+            zero_prior_raw_preds = zero_prior_snapshot.raw_predictions
+            zero_prior_head_logits = zero_prior_snapshot.head_logits
+            zero_prior_selector_segment_scores = zero_prior_snapshot.selector_segment_scores
             prior_sensitivity_diagnostics["without_query_prior_features"] = (
                 prior_ablation_sensitivity_from_tensors(
                     sampled_prior_features=zero_prior_feature_sensitivity,
@@ -887,14 +849,11 @@ def freeze_retained_mask_ablations(
                     test_boundaries,
                     float(config.model.compression_ratio),
                 )
-                channel_scores = getattr(channel_method, "_score_cache", None)
-                channel_raw_preds = getattr(channel_method, "_raw_pred_cache", None)
-                channel_head_logits = getattr(channel_method, "_head_logit_cache", None)
-                channel_selector_segment_scores = getattr(
-                    channel_method,
-                    "_selector_segment_score_cache",
-                    None,
-                )
+                channel_snapshot = channel_method.cached_score_snapshot()
+                channel_scores = channel_snapshot.scores
+                channel_raw_preds = channel_snapshot.raw_predictions
+                channel_head_logits = channel_snapshot.head_logits
+                channel_selector_segment_scores = channel_snapshot.selector_segment_scores
                 channel_sensitivity = prior_ablation_sensitivity_from_tensors(
                     sampled_prior_features=channel_feature_sensitivity,
                     model_prior_features=channel_model_prior_sensitivity,

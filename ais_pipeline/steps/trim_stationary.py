@@ -2,6 +2,7 @@ from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 from pyspark.sql.window import Window
 
+
 def trim_stationary(df: DataFrame):
 
     stationary = df.filter(F.col("SOG") == 0).withColumn(

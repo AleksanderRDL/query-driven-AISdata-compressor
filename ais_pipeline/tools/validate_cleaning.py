@@ -1,5 +1,5 @@
 """
-Standalone validation script – runs the full pipeline UP TO the outlier
+Standalone validation script - runs the full pipeline UP TO the outlier
 detector, then runs the outlier detector, and compares before vs after.
 This isolates ONLY the rows removed by ais_pipeline.steps.remove_outliers.
 
@@ -13,6 +13,8 @@ Usage:
     python -m ais_pipeline.tools.validate_cleaning --input AISDATA/raw/other.csv --top 50 --deep 5
 """
 
+# ruff: noqa: E402
+
 import argparse
 import sys
 from pathlib import Path
@@ -22,11 +24,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from ais_pipeline.steps import remove_duplicates
-from ais_pipeline.steps import remove_outliers
-from ais_pipeline.steps import remove_shiptypes
-from ais_pipeline.steps import ship_type
-from ais_pipeline.steps import trim_stationary
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
+from pyspark.sql.window import Window
 
 from ais_pipeline.environment.hadoop_environment import configure_hadoop_environment
 from ais_pipeline.environment.java_environment import configure_java_environment
@@ -35,9 +35,13 @@ from ais_pipeline.environment.spark_environment import (
     configure_spark_environment,
 )
 from ais_pipeline.geo import KNOTS_TO_KMH, haversine_km
-from pyspark.sql import SparkSession
-from pyspark.sql import functions as F
-from pyspark.sql.window import Window
+from ais_pipeline.steps import (
+    remove_duplicates,
+    remove_outliers,
+    remove_shiptypes,
+    ship_type,
+    trim_stationary,
+)
 
 AISDATA_DIR = REPO_ROOT / "AISDATA"
 CHECKPOINT_DIR = REPO_ROOT / "spark_temp" / "checkpoints"

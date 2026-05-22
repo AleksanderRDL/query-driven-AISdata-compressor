@@ -23,9 +23,11 @@ inference helpers. Retained-mask construction belongs in `../selection/`.
 | `scaler.py` | Persisted point/query feature scaling utilities. |
 | `model_factory.py` | Shared model type validation and constructor mapping for training and checkpoint loading. |
 | `losses.py` | Budget, ranking, pointwise, and auxiliary losses. |
-| `checkpoint_validation.py` | Validation scoring and checkpoint selection support. |
+| `checkpoint_validation.py` | Exact validation scoring against held-out workloads. |
 | `checkpoint_selection.py` | Checkpoint candidate scoring and validation-stat bookkeeping. |
-| `model_training.py` | Main fitting loop, validation cadence, and checkpoint-selection orchestration. |
+| `model_training_validation.py` | Validation-scoring setup, query-cache validation, and uniform baseline setup. |
+| `model_training_loop.py` | Epoch loop, diagnostic scoring, exact validation cadence, and checkpoint promotion. |
+| `model_training.py` | Training setup, target/model construction, historical-prior handoff, and final output assembly. |
 | `factorized_target_diagnostics.py` | Factorized target support, entropy, top-k mass, and segment-position diagnostics. |
 | `factorized_head_diagnostics.py` | Factorized QueryLocalUtility head bias initialization and training-fit diagnostics. |
 | `checkpoints.py` / `inference.py` | Save/load and deterministic prediction. |

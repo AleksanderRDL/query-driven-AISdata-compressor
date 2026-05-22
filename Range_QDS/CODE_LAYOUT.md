@@ -63,13 +63,15 @@ automatic defects.
 
 | Path | Current issue | Recommended split |
 | --- | --- | --- |
-| Query-driven implementation tests | The old 6.3k-line orchestration test file has been split by owner, but several new files are still large enough to need discipline: derived diagnostics, learned-segment selection, target construction, causality/final summary, and workload gates. | Keep adding new tests to the owning split file. If any split file grows beyond roughly 1.5k lines, extract fixture builders or split by the production module under test. |
-| `orchestration/selector_diagnostics.py` | Roughly 0.9k lines after extracting selector trace payload parsing, retained-marginal alignment summaries, and teacher score-vector builders. It still owns score component vector construction and retained-decision mask scoring. | Consider score component vector helpers next. Keep exact retained-decision mask scoring in orchestration until there is a narrower behavior regression boundary; do not move query-scoring-dependent diagnostics into `selection/`. |
-| `learning/targets/query_local_utility.py` | Roughly 1.4k lines after extracting segment/path math and family evidence. It still owns active target construction, candidate diagnostics, trainability diagnostics, and experimental target helper wiring. | Keep `build_query_local_utility_targets` as the public entry point. Continue by extracting diagnostic/candidate helpers into sibling modules such as `query_local_utility_diagnostics.py` before considering a package conversion. |
-| `scoring/method_scoring.py` | Roughly 1.25k lines. It mixes legacy RangeUseful audit construction, active QueryLocalUtility input components, per-query detail rows, trajectory evidence counts, and method scoring. | Extract range-audit support construction and query-row summarization from method execution. Keep artifact field names stable and cover row payloads with regression tests before moving code. |
+| Query-driven implementation tests | The old oversized orchestration and benchmark test files have been split by owner. The largest remaining test files are under the 1k-line target but several are close enough to regress quickly. | Keep adding new tests to the owning split file. If any split file grows beyond roughly 1k lines, extract fixture builders or split by the production module under test immediately. |
+| `orchestration/retained_mask_ablation_stage.py` | Roughly 0.9k lines. Cache access now goes through public score snapshots, but ablation construction, freeze orchestration, sensitivity capture, and diagnostic payload assembly still live in one stage function. | Split ablation specs, method construction, sensitivity recording, and output payload assembly behind explicit helpers. Keep query-free mask freezing in orchestration; do not push eval-query-sensitive logic into `selection/`. |
+| `orchestration/selection_causality_diagnostics.py` | Roughly 0.75k lines. Learned-segment frozen-method construction is shared, but causality preconditions, ablation scoring, delta gates, and summary assembly are still tightly coupled. | Separate precondition evaluation, ablation execution, delta-gate policy, and report shaping. Keep gate policy near final-claim tests. |
+| `orchestration/selector_diagnostics.py` | Roughly 0.33k lines after extracting selector trace payload parsing, retained-marginal alignment summaries, and teacher score-vector builders. | Leave it alone unless score component vector construction starts growing again. Do not move query-scoring-dependent diagnostics into `selection/`. |
+| `learning/targets/query_local_utility.py` | Roughly 0.6k lines after extracting segment/path math and family evidence. It still owns active target construction, candidate diagnostics, trainability diagnostics, and experimental target helper wiring. | Keep `build_query_local_utility_targets` as the public entry point. Extract more only when a concrete target subdomain starts growing again. |
+| `scoring/method_scoring.py` | Roughly 0.25k lines after range-audit and query-row extraction. It should stay focused on method execution and stable score payload assembly. | Do not reintroduce report flattening or audit construction here. Keep row payload changes covered by regression tests before moving fields. |
 | `orchestration/diagnostics/` | Derived artifact analyzers now live outside the flat stage namespace. Keep them from becoming a second orchestration package by limiting them to completed-artifact readers and small report builders. | Keep pipeline stages, gates, and payload assembly in top-level `orchestration/`. Add new one-off artifact analyzers under `diagnostics/` instead of the flat package. |
-| `learning/model_training.py` | Roughly 1.3k lines. It owns fitting, validation cadence, checkpoint-selection orchestration, and selected-output construction. It is large but currently coherent. | Defer this split until the target/selector diagnostics stabilize. If it grows again, split validation/checkpoint-selection driver code from optimizer-loop mechanics. |
-| `benchmarking/reporting/row_fields.py` | Roughly 1k lines. Row extraction, schema defaults, diagnostic field flattening, and table compatibility sit together. | Split stable schema/key declarations from extraction helpers. Regression snapshots must be updated deliberately because report field churn is easy to miss. |
+| `learning/model_training.py` / `learning/model_training_loop.py` | Training has been split into setup/output assembly and epoch-loop orchestration. `model_training_loop.py` is still a dense orchestration module, but the worst `train_model` monolith has been removed. | Keep future training changes in the owning helper module: validation setup in `model_training_validation.py`, epoch/checkpoint behavior in `model_training_loop.py`, and target/model setup in `model_training.py`. |
+| `benchmarking/reporting/row_fields.py` | Roughly 0.37k lines after domain row builders moved to sibling modules. The remaining file should only coordinate row assembly and small cross-domain fields. | Put new diagnostic flattening in the owning `row_*_fields.py` module. Regression snapshots must be updated deliberately because report field churn is easy to miss. |
 | `Range_QDS/artifacts/` | Local generated output is intentionally ignored and can quickly dominate source scans if not pruned. | Keep artifacts out of source imports. Periodically clean smoke/manual output after the relevant metrics are captured. Do not store maintained docs under `artifacts/manual/`. |
 
 ## Recommended Refactor Order
@@ -80,19 +82,14 @@ automatic defects.
    `learning/targets/query_local_utility.py`. Segment target math and family
    evidence already live in sibling modules; next split candidate/diagnostic
    helpers while leaving the public builder in place.
-3. Continue extracting helpers from `orchestration/selector_diagnostics.py`.
-   Trace-mask and segment-context payload parsing already lives in
-   `orchestration/selector_trace_payloads.py`; retained-decision marginal
-   alignment summaries already live in
-   `orchestration/selector_marginal_alignment.py`; teacher score-vector
-   builders already live in `orchestration/selector_teacher_vectors.py`. Next
-   consider score component vector helpers or stop if the remaining file is
-   coherent enough.
-4. Split `scoring/method_scoring.py` only after row/regression tests cover the
+3. Split the remaining ablation and causality orchestration pressure points:
+   `orchestration/retained_mask_ablation_stage.py` and
+   `orchestration/selection_causality_diagnostics.py`.
+4. Leave `orchestration/selector_diagnostics.py` mostly alone unless it starts
+   growing again; the earlier trace, marginal-alignment, and teacher-vector
+   extractions were enough for now.
+5. Split `scoring/method_scoring.py` only after row/regression tests cover the
    exact payload fields that downstream reports depend on.
-5. Leave `learning/model_training.py` until the target and selector surfaces are
-   calmer. Prematurely splitting the training loop would create churn without
-   improving the current blocker diagnosis.
 
 ## Refactor Rules
 

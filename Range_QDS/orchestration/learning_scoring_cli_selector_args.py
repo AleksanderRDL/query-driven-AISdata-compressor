@@ -19,8 +19,7 @@ from selection.model_score_conversion import MLQDS_SCORE_MODES
 from selection.selector_types import SELECTOR_TYPE_CHOICES, TEMPORAL_HYBRID_SELECTOR_TYPE
 
 
-def add_selector_and_range_target_arguments(parser: argparse.ArgumentParser) -> None:
-    """Add selector controls and range-target training controls."""
+def _add_selector_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--mlqds_temporal_fraction",
         type=float,
@@ -232,6 +231,9 @@ def add_selector_and_range_target_arguments(parser: argparse.ArgumentParser) -> 
             "Default 'none' avoids accidental residual-only training in direct manual runs."
         ),
     )
+
+
+def _add_range_target_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--range_label_mode",
         type=str,
@@ -423,6 +425,9 @@ def add_selector_and_range_target_arguments(parser: argparse.ArgumentParser) -> 
             "1.0 gives in-box boundary-crossing points 2x raw weight before normalization."
         ),
     )
+
+
+def _add_teacher_distillation_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--range_teacher_distillation_mode",
         type=str,
@@ -440,3 +445,10 @@ def add_selector_and_range_target_arguments(parser: argparse.ArgumentParser) -> 
         default=4,
         help="Epochs for the query-aware range teacher when teacher distillation is enabled.",
     )
+
+
+def add_selector_and_range_target_arguments(parser: argparse.ArgumentParser) -> None:
+    """Add selector controls and range-target training controls."""
+    _add_selector_arguments(parser)
+    _add_range_target_arguments(parser)
+    _add_teacher_distillation_arguments(parser)

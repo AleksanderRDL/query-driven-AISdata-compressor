@@ -38,7 +38,7 @@ diagnostic profile or a separate artifact family.
 | `child_process.py` | Child process execution and timing parsing. |
 | `artifacts.py` | Family indexes, status files, README, CSV, and JSON writers. |
 | `report.py` | Benchmark report artifact construction and file output. |
-| `reporting/` | Child-run row fields, metric helpers, audit extractors, and report paths. |
+| `reporting/` | Child-run row assembly, domain-specific row-field builders, metric helpers, audit extractors, and report paths. |
 | `row_runtime.py` | Runtime, phase, epoch, and collapse-warning row helpers. |
 | `table.py` | Markdown table formatting for benchmark summaries. |
 | `final_grid.py` | Final-grid QueryLocalUtility acceptance evidence. |

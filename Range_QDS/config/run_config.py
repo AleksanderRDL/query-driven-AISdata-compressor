@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from inspect import signature
 from typing import Any
 
@@ -20,9 +20,7 @@ LCG_MULTIPLIER = 6364136223846793005
 DEFAULT_BUDGET_LOSS_RATIOS = [0.01, 0.02, 0.05, 0.10, 0.15, 0.20, 0.30]
 DEFAULT_BUDGET_LOSS_TEMPERATURE = 0.25
 DEFAULT_LEARNED_SEGMENT_GEOMETRY_GAIN_WEIGHT = GEOMETRY_TIE_BREAKER_WEIGHT
-DEFAULT_LEARNED_SEGMENT_ALLOCATION_LENGTH_SUPPORT_WEIGHT = (
-    SEGMENT_LENGTH_SUPPORT_ALLOCATION_WEIGHT
-)
+DEFAULT_LEARNED_SEGMENT_ALLOCATION_LENGTH_SUPPORT_WEIGHT = SEGMENT_LENGTH_SUPPORT_ALLOCATION_WEIGHT
 DEFAULT_LEARNED_SEGMENT_ALLOCATION_WEIGHT_FLOOR = SEGMENT_ALLOCATION_WEIGHT_FLOOR
 DEFAULT_LEARNED_SEGMENT_SCORE_BLEND_WEIGHT = SEGMENT_SCORE_POINT_BLEND_WEIGHT
 DEFAULT_LEARNED_SEGMENT_TRANSFER_CALIBRATION_MODE = SEGMENT_TRANSFER_CALIBRATION_MODE_NONE
@@ -188,9 +186,7 @@ class ModelConfig:
     checkpoint_candidate_pool_size: int = 1
     checkpoint_score_variant: str = "range_usefulness"
     validation_global_sanity_penalty_enabled: bool = True
-    validation_global_sanity_penalty_weight: float = (
-        DEFAULT_VALIDATION_GLOBAL_SANITY_PENALTY_WEIGHT
-    )
+    validation_global_sanity_penalty_weight: float = DEFAULT_VALIDATION_GLOBAL_SANITY_PENALTY_WEIGHT
     validation_sed_penalty_weight: float = DEFAULT_VALIDATION_SED_PENALTY_WEIGHT
     validation_endpoint_penalty_weight: float = DEFAULT_VALIDATION_ENDPOINT_PENALTY_WEIGHT
     validation_length_preservation_min: float = DEFAULT_VALIDATION_LENGTH_PRESERVATION_MIN
@@ -202,9 +198,7 @@ class ModelConfig:
     learned_segment_allocation_length_support_weight: float = (
         DEFAULT_LEARNED_SEGMENT_ALLOCATION_LENGTH_SUPPORT_WEIGHT
     )
-    learned_segment_allocation_weight_floor: float = (
-        DEFAULT_LEARNED_SEGMENT_ALLOCATION_WEIGHT_FLOOR
-    )
+    learned_segment_allocation_weight_floor: float = DEFAULT_LEARNED_SEGMENT_ALLOCATION_WEIGHT_FLOOR
     learned_segment_score_blend_weight: float = DEFAULT_LEARNED_SEGMENT_SCORE_BLEND_WEIGHT
     learned_segment_transfer_calibration_mode: str = (
         DEFAULT_LEARNED_SEGMENT_TRANSFER_CALIBRATION_MODE
@@ -315,6 +309,22 @@ class SeedBundle:
     train_query_seed: int
     eval_query_seed: int
     torch_seed: int
+
+
+def _dataclass_kwargs(
+    config_type: type[Any],
+    values: dict[str, Any],
+    overrides: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build dataclass kwargs from matching flat config names plus explicit overrides."""
+    explicit = overrides or {}
+    kwargs: dict[str, Any] = {}
+    for config_field in fields(config_type):
+        if config_field.name in explicit:
+            kwargs[config_field.name] = explicit[config_field.name]
+        elif config_field.name in values:
+            kwargs[config_field.name] = values[config_field.name]
+    return kwargs
 
 
 def build_run_config(
@@ -491,168 +501,51 @@ def build_run_config(
                 effective_range_max_coverage_overshoot = workload_profile.max_coverage_overshoot
             if effective_coverage_calibration_mode is None:
                 effective_coverage_calibration_mode = workload_profile.coverage_calibration_mode
+    values = locals()
     return RunConfig(
         data=DataConfig(
-            n_ships=None if uses_csv else n_ships,
-            n_points_per_ship=None if uses_csv else n_points,
-            synthetic_route_families=0 if uses_csv else int(synthetic_route_families),
-            min_points_per_segment=min_points_per_segment,
-            max_points_per_segment=max_points_per_segment,
-            max_time_gap_seconds=max_time_gap_seconds,
-            max_segments=max_segments,
-            train_max_segments=train_max_segments,
-            validation_max_segments=validation_max_segments,
-            eval_max_segments=eval_max_segments,
-            max_trajectories=max_trajectories,
-            train_fraction=float(train_fraction),
-            val_fraction=float(val_fraction),
-            csv_path=csv_path,
-            train_csv_path=train_csv_path,
-            validation_csv_path=validation_csv_path,
-            eval_csv_path=eval_csv_path,
-            cache_dir=cache_dir,
-            refresh_cache=refresh_cache,
-            range_diagnostics_mode=range_diagnostics_mode,
-            validation_split_mode=validation_split_mode,
-            seed=seed,
+            **_dataclass_kwargs(
+                DataConfig,
+                values,
+                {
+                    "n_ships": None if uses_csv else n_ships,
+                    "n_points_per_ship": None if uses_csv else n_points,
+                    "synthetic_route_families": 0 if uses_csv else int(synthetic_route_families),
+                },
+            )
         ),
         query=QueryConfig(
-            n_queries=n_queries,
-            target_coverage=effective_query_coverage,
-            max_queries=max_queries,
-            range_spatial_fraction=range_spatial_fraction,
-            range_time_fraction=range_time_fraction,
-            range_spatial_km=range_spatial_km,
-            range_time_hours=range_time_hours,
-            range_footprint_jitter=range_footprint_jitter,
-            range_time_domain_mode=range_time_domain_mode,
-            range_anchor_mode=range_anchor_mode,
-            range_train_anchor_modes=list(range_train_anchor_modes or []),
-            range_train_footprints=list(range_train_footprints or []),
-            range_min_point_hits=range_min_point_hits,
-            range_max_point_hit_fraction=range_max_point_hit_fraction,
-            range_min_trajectory_hits=range_min_trajectory_hits,
-            range_max_trajectory_hit_fraction=range_max_trajectory_hit_fraction,
-            range_max_box_volume_fraction=range_max_box_volume_fraction,
-            range_duplicate_iou_threshold=range_duplicate_iou_threshold,
-            range_acceptance_max_attempts=range_acceptance_max_attempts,
-            range_max_coverage_overshoot=effective_range_max_coverage_overshoot,
-            range_train_workload_replicates=range_train_workload_replicates,
-            workload_profile_id=workload_profile_id,
-            coverage_calibration_mode=effective_coverage_calibration_mode,
-            workload_stability_gate_mode=workload_stability_gate_mode,
-            workload=workload,
+            **_dataclass_kwargs(
+                QueryConfig,
+                values,
+                {
+                    "target_coverage": effective_query_coverage,
+                    "range_train_anchor_modes": list(range_train_anchor_modes or []),
+                    "range_train_footprints": list(range_train_footprints or []),
+                    "range_max_coverage_overshoot": effective_range_max_coverage_overshoot,
+                    "coverage_calibration_mode": effective_coverage_calibration_mode,
+                },
+            )
         ),
         model=ModelConfig(
-            epochs=epochs,
-            lr=lr,
-            embed_dim=embed_dim,
-            num_heads=num_heads,
-            num_layers=num_layers,
-            dropout=dropout,
-            ranking_pairs_per_type=ranking_pairs_per_type,
-            ranking_top_quantile=ranking_top_quantile,
-            pointwise_loss_weight=pointwise_loss_weight,
-            loss_objective=loss_objective,
-            budget_loss_ratios=list(budget_loss_ratios or DEFAULT_BUDGET_LOSS_RATIOS),
-            budget_loss_temperature=budget_loss_temperature,
-            query_local_utility_aux_loss_weight=query_local_utility_aux_loss_weight,
-            query_local_utility_segment_budget_head_weight=query_local_utility_segment_budget_head_weight,
-            query_local_utility_segment_level_loss_weight=query_local_utility_segment_level_loss_weight,
-            query_local_utility_behavior_rank_loss_weight=query_local_utility_behavior_rank_loss_weight,
-            query_local_utility_sparse_head_rank_loss_weight=query_local_utility_sparse_head_rank_loss_weight,
-            query_local_utility_sparse_head_bce_target_mode=query_local_utility_sparse_head_bce_target_mode,
-            query_local_utility_train_marginal_diagnostics=(
-                query_local_utility_train_marginal_diagnostics
-            ),
-            temporal_distribution_loss_weight=temporal_distribution_loss_weight,
-            gradient_clip_norm=gradient_clip_norm,
-            compression_ratio=compression_ratio,
-            model_type=model_type,
-            historical_prior_k=historical_prior_k,
-            historical_prior_clock_weight=historical_prior_clock_weight,
-            historical_prior_mmsi_weight=historical_prior_mmsi_weight,
-            historical_prior_density_weight=historical_prior_density_weight,
-            historical_prior_min_target=historical_prior_min_target,
-            historical_prior_support_ratio=historical_prior_support_ratio,
-            historical_prior_source_aggregation=historical_prior_source_aggregation,
-            early_stopping_patience=early_stopping_patience,
-            train_batch_size=train_batch_size,
-            inference_batch_size=inference_batch_size,
-            query_chunk_size=query_chunk_size,
-            diagnostic_every=diagnostic_every,
-            diagnostic_window_fraction=diagnostic_window_fraction,
-            checkpoint_selection_metric=checkpoint_selection_metric,
-            validation_score_every=0 if validation_score_every is None else validation_score_every,
-            checkpoint_uniform_gap_weight=checkpoint_uniform_gap_weight,
-            checkpoint_type_penalty_weight=checkpoint_type_penalty_weight,
-            checkpoint_smoothing_window=checkpoint_smoothing_window,
-            checkpoint_full_score_every=1
-            if checkpoint_full_score_every is None
-            else checkpoint_full_score_every,
-            checkpoint_candidate_pool_size=checkpoint_candidate_pool_size,
-            checkpoint_score_variant=checkpoint_score_variant or "range_usefulness",
-            validation_global_sanity_penalty_enabled=validation_global_sanity_penalty_enabled,
-            validation_global_sanity_penalty_weight=validation_global_sanity_penalty_weight,
-            validation_sed_penalty_weight=validation_sed_penalty_weight,
-            validation_endpoint_penalty_weight=validation_endpoint_penalty_weight,
-            validation_length_preservation_min=validation_length_preservation_min,
-            mlqds_temporal_fraction=mlqds_temporal_fraction,
-            mlqds_diversity_bonus=mlqds_diversity_bonus,
-            mlqds_hybrid_mode=mlqds_hybrid_mode,
-            selector_type=selector_type,
-            learned_segment_geometry_gain_weight=learned_segment_geometry_gain_weight,
-            learned_segment_allocation_length_support_weight=(
-                learned_segment_allocation_length_support_weight
-            ),
-            learned_segment_allocation_weight_floor=learned_segment_allocation_weight_floor,
-            learned_segment_score_blend_weight=learned_segment_score_blend_weight,
-            learned_segment_transfer_calibration_mode=(
-                learned_segment_transfer_calibration_mode
-            ),
-            learned_segment_fairness_preallocation=learned_segment_fairness_preallocation,
-            learned_segment_length_repair_fraction=learned_segment_length_repair_fraction,
-            learned_segment_length_repair_score_protection_fraction=(
-                learned_segment_length_repair_score_protection_fraction
-            ),
-            learned_segment_length_support_blend_weight=learned_segment_length_support_blend_weight,
-            mlqds_stratified_center_weight=mlqds_stratified_center_weight,
-            mlqds_min_learned_swaps=mlqds_min_learned_swaps,
-            mlqds_score_mode=mlqds_score_mode,
-            mlqds_score_temperature=mlqds_score_temperature,
-            mlqds_rank_confidence_weight=mlqds_rank_confidence_weight,
-            mlqds_range_geometry_blend=mlqds_range_geometry_blend,
-            temporal_residual_label_mode=temporal_residual_label_mode or "none",
-            range_label_mode=range_label_mode,
-            range_training_target_mode=range_training_target_mode,
-            range_target_balance_mode=range_target_balance_mode,
-            range_replicate_target_aggregation=range_replicate_target_aggregation,
-            range_component_target_blend=range_component_target_blend,
-            range_temporal_target_blend=range_temporal_target_blend,
-            range_structural_target_blend=range_structural_target_blend,
-            range_structural_target_source_mode=range_structural_target_source_mode,
-            range_target_budget_weight_power=range_target_budget_weight_power,
-            range_marginal_target_radius_scale=range_marginal_target_radius_scale,
-            range_query_spine_fraction=range_query_spine_fraction,
-            range_query_spine_mass_mode=range_query_spine_mass_mode,
-            range_query_residual_multiplier=range_query_residual_multiplier,
-            range_query_residual_mass_mode=range_query_residual_mass_mode,
-            range_set_utility_multiplier=range_set_utility_multiplier,
-            range_set_utility_candidate_limit=range_set_utility_candidate_limit,
-            range_set_utility_mass_mode=range_set_utility_mass_mode,
-            range_boundary_prior_weight=range_boundary_prior_weight,
-            range_teacher_distillation_mode=range_teacher_distillation_mode,
-            range_teacher_epochs=range_teacher_epochs,
-            range_audit_compression_ratios=list(range_audit_compression_ratios or []),
-            query_prior_grid_bins=query_prior_grid_bins,
-            query_prior_smoothing_passes=query_prior_smoothing_passes,
-            float32_matmul_precision=float32_matmul_precision,
-            allow_tf32=allow_tf32,
-            amp_mode=amp_mode,
+            **_dataclass_kwargs(
+                ModelConfig,
+                values,
+                {
+                    "budget_loss_ratios": list(budget_loss_ratios or DEFAULT_BUDGET_LOSS_RATIOS),
+                    "validation_score_every": 0
+                    if validation_score_every is None
+                    else validation_score_every,
+                    "checkpoint_full_score_every": 1
+                    if checkpoint_full_score_every is None
+                    else checkpoint_full_score_every,
+                    "checkpoint_score_variant": checkpoint_score_variant or "range_usefulness",
+                    "temporal_residual_label_mode": temporal_residual_label_mode or "none",
+                    "range_audit_compression_ratios": list(range_audit_compression_ratios or []),
+                },
+            )
         ),
-        baselines=BaselineConfig(
-            final_metrics_mode=final_metrics_mode,
-        ),
+        baselines=BaselineConfig(final_metrics_mode=final_metrics_mode),
     )
 
 

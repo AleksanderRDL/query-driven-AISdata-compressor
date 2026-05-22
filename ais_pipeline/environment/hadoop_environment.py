@@ -2,8 +2,6 @@ import os
 import platform
 import shutil
 from pathlib import Path
-from typing import Optional
-
 
 HADOOP_EXECUTABLE = "hadoop.cmd" if os.name == "nt" else "hadoop"
 
@@ -31,7 +29,7 @@ def _is_hadoop_home(candidate: Path) -> bool:
     return (candidate / "bin" / "hadoop").is_file()
 
 
-def _hadoop_home_from_path_command(hadoop_cmd: str) -> Optional[Path]:
+def _hadoop_home_from_path_command(hadoop_cmd: str) -> Path | None:
     hadoop_path = Path(hadoop_cmd).resolve()
     candidate = hadoop_path.parent.parent
     if _is_hadoop_home(candidate):
@@ -52,7 +50,7 @@ def _iter_dir_children(parent: Path) -> list[Path]:
         return []
 
 
-def _system_hadoop_home() -> Optional[Path]:
+def _system_hadoop_home() -> Path | None:
     env_hadoop_home = os.environ.get("HADOOP_HOME")
     if env_hadoop_home:
         candidate = Path(env_hadoop_home).expanduser()
@@ -105,7 +103,7 @@ def _system_hadoop_home() -> Optional[Path]:
     return None
 
 
-def _local_hadoop_home(project_dir: Path) -> Optional[Path]:
+def _local_hadoop_home(project_dir: Path) -> Path | None:
     local_root = project_dir / "local_hadoop"
     candidate_homes = [local_root / "current", local_root / "hadoop"]
     candidate_homes.extend(_iter_dir_children(local_root))

@@ -89,9 +89,7 @@ def _range_train_footprint_list(value: str) -> list[str]:
     return footprints
 
 
-def build_parser() -> argparse.ArgumentParser:
-    """Build run CLI parser. See orchestration/README.md for details."""
-    parser = argparse.ArgumentParser(description="Run AIS-QDS learning/scoring.")
+def _add_data_source_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--csv_path", type=str, default=None)
     parser.add_argument(
         "--train_csv_path",
@@ -235,6 +233,9 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional cap on loaded AIS trajectories after CSV loading, useful for smoke runs.",
     )
+
+
+def _add_query_workload_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--n_queries", type=int, default=128)
     parser.add_argument(
         "--query_coverage",
@@ -415,6 +416,9 @@ def build_parser() -> argparse.ArgumentParser:
             "is never final-success evidence."
         ),
     )
+
+
+def _add_model_training_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--epochs", type=int, default=6)
     parser.add_argument("--lr", type=float, default=5e-4)
     parser.add_argument("--embed_dim", type=int, default=64, help="Transformer hidden dimension.")
@@ -642,6 +646,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Query workload type for this model run. Only range is supported.",
     )
 
+
+def _add_checkpoint_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--results_dir", type=str, default=str(DEFAULT_RESULTS_DIR))
     parser.add_argument(
@@ -753,7 +759,9 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_VALIDATION_LENGTH_PRESERVATION_MIN,
         help="Minimum validation length preservation used by query_local_utility checkpoint penalties.",
     )
-    add_selector_and_range_target_arguments(parser)
+
+
+def _add_runtime_output_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--range_audit_compression_ratios",
         type=_compression_ratio_list,
@@ -800,4 +808,15 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Directory to save MLQDS simplified trajectories as CSV.",
     )
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Build run CLI parser. See orchestration/README.md for details."""
+    parser = argparse.ArgumentParser(description="Run AIS-QDS learning/scoring.")
+    _add_data_source_arguments(parser)
+    _add_query_workload_arguments(parser)
+    _add_model_training_arguments(parser)
+    _add_checkpoint_arguments(parser)
+    add_selector_and_range_target_arguments(parser)
+    _add_runtime_output_arguments(parser)
     return parser

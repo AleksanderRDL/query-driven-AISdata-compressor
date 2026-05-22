@@ -178,7 +178,7 @@ def test_learned_segment_budget_length_repair_spends_budget_on_global_net_gain()
     retained[flat_learned_indices] = True
     learned[flat_learned_indices] = True
     repair_fraction = 0.25
-    old_per_trajectory_cap = math.ceil(repair_fraction * len(local_learned_indices))
+    per_trajectory_repair_cap = math.ceil(repair_fraction * len(local_learned_indices))
 
     swap_count = _apply_length_repair_swaps(
         scores=scores,
@@ -191,7 +191,7 @@ def test_learned_segment_budget_length_repair_spends_budget_on_global_net_gain()
         repair_fraction=repair_fraction,
     )
 
-    assert swap_count > old_per_trajectory_cap
+    assert swap_count > per_trajectory_repair_cap
     assert int(length_repair[:points_per_trajectory].sum().item()) == swap_count
     assert int(length_repair[points_per_trajectory:].sum().item()) == 0
     assert int(retained.sum().item()) == 2 * (len(local_learned_indices) + 2)

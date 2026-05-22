@@ -9,6 +9,7 @@ from typing import Any, cast
 import pytest
 import torch
 
+import orchestration.retained_mask_ablation_stage as retained_mask_ablation_stage
 from config.run_config import build_run_config, derive_seed_bundle
 from learning.outputs import TrainingOutputs
 from learning.targets.query_local_utility import QUERY_LOCAL_UTILITY_HEAD_NAMES
@@ -18,7 +19,7 @@ from orchestration.selector_diagnostics import (
     factorized_score_component_vectors_from_logits,
     query_free_retained_removal_teacher_proxy_vectors,
 )
-from scoring.methods import FrozenMaskMethod
+from scoring.methods import FrozenMaskMethod, MLQDSScoreSnapshot
 from workloads.query_types import pad_query_features
 from workloads.typed_workload import TypedQueryWorkload
 
@@ -28,12 +29,13 @@ def _noop_phase(_name: str) -> Iterator[None]:
     yield
 
 
-class _CachingMethod:
-    def __init__(self, name: str, *, cache_offset: float = 0.0) -> None:
+class _SnapshotMethod:
+    def __init__(self, name: str, *, score_offset: float = 0.0) -> None:
         self.name = name
-        self.cache_offset = float(cache_offset)
+        self.score_offset = float(score_offset)
         self.calls: list[float] = []
         self.latency_ms = 0.0
+        self.score_snapshot: MLQDSScoreSnapshot | None = None
 
     def simplify(
         self,
@@ -46,16 +48,21 @@ class _CachingMethod:
         budget = max(1, min(point_count, round(point_count * float(compression_ratio))))
         mask = torch.zeros((point_count,), dtype=torch.bool)
         mask[:budget] = True
-        base = torch.arange(point_count, dtype=torch.float32) + self.cache_offset
+        base = torch.arange(point_count, dtype=torch.float32) + self.score_offset
         self.calls.append(float(compression_ratio))
-        self._score_cache = base
-        self._raw_pred_cache = base + 0.1
-        self._head_logit_cache = torch.stack([base + 0.1 * idx for idx in range(6)], dim=1)
-        self._segment_score_cache = base + 0.3
-        self._path_length_support_score_cache = base + 0.4
-        self._selector_segment_score_cache = base + 0.5
-        self._selector_segment_score_source_cache = "point_score_top20_mean"
+        self.score_snapshot = MLQDSScoreSnapshot(
+            scores=base,
+            raw_predictions=base + 0.1,
+            head_logits=torch.stack([base + 0.1 * idx for idx in range(6)], dim=1),
+            segment_scores=base + 0.3,
+            path_length_support_scores=base + 0.4,
+            selector_segment_scores=base + 0.5,
+        )
         return mask
+
+    def cached_score_snapshot(self) -> MLQDSScoreSnapshot:
+        assert self.score_snapshot is not None
+        return self.score_snapshot
 
 
 def _workload() -> TypedQueryWorkload:
@@ -104,7 +111,7 @@ def _trained_stub() -> TrainingOutputs:
 
 
 def test_retained_mask_freezing_is_noop_for_query_aware_runs() -> None:
-    method = _CachingMethod("MLQDS")
+    method = _SnapshotMethod("MLQDS")
 
     outputs = freeze_workload_blind_retained_masks(
         methods=[method],
@@ -129,9 +136,9 @@ def test_retained_mask_freezing_is_noop_for_query_aware_runs() -> None:
     assert method.calls == []
 
 
-def test_retained_mask_freezing_captures_primary_caches_and_audit_masks() -> None:
-    mlqds = _CachingMethod("MLQDS", cache_offset=10.0)
-    uniform = _CachingMethod("uniform", cache_offset=20.0)
+def test_retained_mask_freezing_captures_primary_score_snapshot_and_audit_masks() -> None:
+    mlqds = _SnapshotMethod("MLQDS", score_offset=10.0)
+    uniform = _SnapshotMethod("uniform", score_offset=20.0)
     points = _points()
 
     outputs = freeze_workload_blind_retained_masks(
@@ -204,7 +211,7 @@ def test_retained_mask_freezing_captures_primary_caches_and_audit_masks() -> Non
 
 
 def test_retained_mask_freezing_captures_learned_selector_trace() -> None:
-    mlqds = _CachingMethod("MLQDS")
+    mlqds = _SnapshotMethod("MLQDS")
 
     outputs = freeze_workload_blind_retained_masks(
         methods=[mlqds],
@@ -229,7 +236,9 @@ def test_retained_mask_freezing_captures_learned_selector_trace() -> None:
     assert outputs.primary_selector_trace is not None
     assert isinstance(outputs.primary_selector_trace["retained_mask_matches_frozen_primary"], bool)
     assert outputs.primary_selector_trace["frozen_primary_retained_count"] == 3
-    assert outputs.primary_selector_trace["segment_score_source"] == "point_score_top20_mean"
+    assert (
+        outputs.primary_selector_trace["segment_score_source"] == "segment_budget_head_top20_mean"
+    )
     timing = outputs.primary_selector_trace["retained_mask_freeze_timing"]
     assert timing["available"] is True
     assert timing["primary_method_simplify_seconds"]["MLQDS"] >= 0.0
@@ -241,7 +250,9 @@ def test_retained_mask_freezing_captures_learned_selector_trace() -> None:
         outputs.causality_ablation_methods
     )
     assert timing["total_seconds"] >= 0.0
-    marginal = outputs.primary_selector_trace["retained_decision_marginal_query_local_utility_alignment"]
+    marginal = outputs.primary_selector_trace[
+        "retained_decision_marginal_query_local_utility_alignment"
+    ]
     assert marginal["available"] is True
     assert marginal["diagnostic_only"] is True
     assert marginal["exact_query_local_utility_marginals"] is True
@@ -261,9 +272,10 @@ def test_retained_mask_freezing_captures_learned_selector_trace() -> None:
         marginal["score_component_fields_available"]["head_probability_query_hit_probability"]
         is True
     )
-    assert marginal["overall"]["score_component_alignment"]["factorized_composed_score"][
-        "available"
-    ] is True
+    assert (
+        marginal["overall"]["score_component_alignment"]["factorized_composed_score"]["available"]
+        is True
+    )
     assert marginal["context_fields_available"]["query_free_teacher_proxies"] == {
         "query_free_endpoint_or_path_support": True,
         "query_free_endpoint_support": True,
@@ -335,7 +347,9 @@ def test_query_free_retained_removal_teacher_proxy_vectors_report_path_and_endpo
         torch.tensor([1.0, 0.0, 0.0, 0.0, 1.0]),
     )
     assert torch.all(proxies["query_free_path_length_support_target"] >= 0.0)
-    assert torch.all(proxies["query_free_endpoint_or_path_support"] >= proxies["query_free_endpoint_support"])
+    assert torch.all(
+        proxies["query_free_endpoint_or_path_support"] >= proxies["query_free_endpoint_support"]
+    )
 
 
 def test_retained_mask_ablations_freeze_pre_repair_and_shuffled_scores() -> None:
@@ -393,6 +407,50 @@ def test_retained_mask_ablations_freeze_pre_repair_and_shuffled_scores() -> None
     }
 
 
+def test_retained_mask_ablations_do_not_abort_when_prior_only_score_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_prior_score(*_args: Any, **_kwargs: Any) -> torch.Tensor:
+        raise RuntimeError("prior score unavailable")
+
+    trained = _trained_stub()
+    trained.feature_context["query_prior_field"] = {}
+    monkeypatch.setattr(
+        retained_mask_ablation_stage,
+        "query_prior_predictability_scores",
+        fail_prior_score,
+    )
+
+    outputs = freeze_retained_mask_ablations(
+        config=build_run_config(
+            model_type="workload_blind_range",
+            selector_type="learned_segment_budget",
+            compression_ratio=0.50,
+        ),
+        trained=trained,
+        eval_workload=_workload(),
+        eval_workload_map={"range": 1.0},
+        test_mmsis=None,
+        test_points=_points(),
+        test_boundaries=[(0, 4)],
+        seeds=derive_seed_bundle(7),
+        primary_selector_trace={},
+        frozen_primary_masks={"MLQDS": torch.tensor([True, True, False, False])},
+        primary_scores=torch.tensor([0.1, 0.4, 0.3, 0.2], dtype=torch.float32),
+        primary_raw_preds=None,
+        primary_segment_scores=None,
+        primary_path_length_support_scores=None,
+        primary_selector_segment_scores=None,
+        primary_head_logits=None,
+    )
+
+    assert (
+        outputs.causal_ablation_freeze_failures["MLQDS_prior_field_only_score"]
+        == "prior score unavailable"
+    )
+    assert outputs.freeze_timing_diagnostics["substage_seconds"]["prior_field_only_score"] >= 0.0
+
+
 def test_retained_mask_ablations_include_behavior_segment_score_diagnostics() -> None:
     primary_scores = torch.tensor([0.1, 0.4, 0.3, 0.2], dtype=torch.float32)
     head_logits = torch.zeros(
@@ -431,12 +489,15 @@ def test_retained_mask_ablations_include_behavior_segment_score_diagnostics() ->
     assert "MLQDS_behavior_utility_allocation_only_diagnostic" in method_names
     assert "MLQDS_uniform_segment_allocation_only_diagnostic" in method_names
     diagnostics = outputs.head_ablation_sensitivity_diagnostics
-    assert diagnostics["MLQDS_uniform_segment_allocation_only_diagnostic"][
-        "allocation_score_source"
-    ] == "uniform_segment_scores_no_length_support"
-    assert diagnostics["MLQDS_behavior_utility_segment_head_diagnostic"][
-        "replacement_head_name"
-    ] == "conditional_behavior_utility"
-    assert diagnostics["MLQDS_behavior_utility_allocation_only_diagnostic"][
-        "ablation_mode"
-    ] == "conditional_behavior_utility_allocation_only"
+    assert (
+        diagnostics["MLQDS_uniform_segment_allocation_only_diagnostic"]["allocation_score_source"]
+        == "uniform_segment_scores_no_length_support"
+    )
+    assert (
+        diagnostics["MLQDS_behavior_utility_segment_head_diagnostic"]["replacement_head_name"]
+        == "conditional_behavior_utility"
+    )
+    assert (
+        diagnostics["MLQDS_behavior_utility_allocation_only_diagnostic"]["ablation_mode"]
+        == "conditional_behavior_utility_allocation_only"
+    )

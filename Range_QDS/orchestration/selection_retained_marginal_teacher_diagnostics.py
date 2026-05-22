@@ -91,7 +91,6 @@ def selection_retained_marginal_teacher_diagnostics(
     primary_segment_scores: Any,
     primary_path_length_support_scores: Any,
     primary_selector_segment_scores: Any,
-    primary_selector_segment_score_source: Any,
 ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
     selection_marginal_teacher_summary: dict[str, Any] = {
         "available": False,
@@ -148,14 +147,12 @@ def selection_retained_marginal_teacher_diagnostics(
                 length_support_blend_weight=float(
                     config.model.learned_segment_length_support_blend_weight
                 ),
-                base_segment_score_source=(
-                    str(primary_selector_segment_score_source)
-                    if primary_selector_segment_score_source is not None
-                    else "segment_budget_head_top20_mean"
-                ),
+                base_segment_score_source="segment_budget_head_top20_mean",
             ),
         )
-        mask_matches_primary = bool(torch.equal(trace_mask.detach().cpu(), primary_mask.detach().cpu()))
+        mask_matches_primary = bool(
+            torch.equal(trace_mask.detach().cpu(), primary_mask.detach().cpu())
+        )
         trace["retained_mask_matches_primary"] = mask_matches_primary
         if split_name == "checkpoint_selection":
             trace["retained_mask_matches_selection_primary"] = mask_matches_primary
@@ -169,7 +166,9 @@ def selection_retained_marginal_teacher_diagnostics(
             selection_boundaries,
         )
         marginal_points = (
-            selection_points if selection_query_cache is not None else selection_points.detach().cpu().float()
+            selection_points
+            if selection_query_cache is not None
+            else selection_points.detach().cpu().float()
         )
         trace["retained_decision_marginal_query_local_utility_alignment"] = (
             retained_decision_marginal_query_local_utility_diagnostics(
