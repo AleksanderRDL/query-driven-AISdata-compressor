@@ -8,53 +8,6 @@ Use this file as the handoff for the next individual task or tasks to be worked 
 
 Current status: **active, not accepted**.
 
-Latest current-code strict replay remains:
-
-```text
-artifacts/results/additive_qhit_behavior_score_composition_level2_seed2539/example_run.json
-artifacts/results/additive_qhit_behavior_score_composition_level2_seed2539/semantic_diagnostic.json
-```
-
-Latest blocker-localization artifact:
-
-```text
-artifacts/results/additive_level2_child_gate_root_localization/diagnostic.json
-```
-
-Latest rejected wiring artifact:
-
-```text
-artifacts/results/pooled_point_score_segment_allocation_level1_smoke/example_run.json
-artifacts/results/pooled_point_score_segment_allocation_level1_smoke/semantic_diagnostic.json
-artifacts/results/pooled_point_score_segment_allocation_level1_smoke/rejection_diagnostic.json
-```
-
-Latest failure-diagnosis artifact:
-
-```text
-artifacts/results/pooled_point_score_allocation_failure_diagnosis/diagnostic.json
-```
-
-Latest mask-delta diagnostic artifact:
-
-```text
-artifacts/results/segment_allocation_mask_delta_diagnostic/diagnostic.json
-```
-
-Latest segment-head compression diagnostic artifact:
-
-```text
-artifacts/results/segment_budget_head_compression_root_diagnostic/diagnostic.json
-```
-
-Latest rejected rank-loss wiring artifact:
-
-```text
-artifacts/results/segment_budget_head_topk_rank_loss_level1_wiring/example_run.json
-artifacts/results/segment_budget_head_topk_rank_loss_level1_wiring/semantic_diagnostic.json
-artifacts/results/segment_budget_head_topk_rank_loss_level1_wiring/rejection_diagnostic.json
-```
-
 Current formula:
 
 ```text
@@ -295,14 +248,6 @@ For the current code path, the immediate blockers are **learning causality** and
 diffusion and made the behavior ablation material, but this is still not an
 accepted query-driven compressor.
 
-Current reference artifacts:
-
-```text
-artifacts/results/additive_qhit_behavior_score_composition_level2_seed2539/example_run.json
-artifacts/results/additive_qhit_behavior_score_composition_level2_seed2539/semantic_diagnostic.json
-artifacts/results/additive_level2_child_gate_root_localization/diagnostic.json
-```
-
 Strict Level 2 result:
 
 ```text
@@ -395,15 +340,6 @@ Hypothesis:
 > contribution is likely too small, badly normalized, or dominated by the point
 > BCE / primary budget objective. Measure the actual loss and gradient path
 > before adding another loss term or scalar.
-
-Expected files to change:
-
-```text
-docs/Next-Iterations.md
-docs/query-driven-implementation-progress.md
-docs/query-driven-implementation-research-guide.md
-artifacts/results/segment_rank_loss_gradient_path_diagnostic/diagnostic.json
-```
 
 Evidence level / probe scale:
 
