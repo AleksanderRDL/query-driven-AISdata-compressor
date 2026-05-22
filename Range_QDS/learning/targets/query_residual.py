@@ -15,7 +15,7 @@ from selection.retained_mask_selectors import (
     deterministic_topk_with_jitter,
     evenly_spaced_indices,
 )
-from workloads.query_types import QUERY_TYPE_ID_RANGE
+from workloads.query_types import QUERY_TYPE_ID_RANGE, validated_range_query_params
 from workloads.range_geometry import points_in_range_box
 
 
@@ -131,7 +131,7 @@ def _range_query_residual_scores(
     range_queries = [
         query
         for query in typed_queries
-        if str(query.get("type", "")).lower() == "range" and isinstance(query.get("params"), dict)
+        if str(query.get("type", "")).lower() == "range"
     ]
     range_query_count = len(range_queries)
     if range_query_count <= 0:
@@ -161,9 +161,7 @@ def _range_query_residual_scores(
         budget_selected_residual_count = 0
 
         for query in range_queries:
-            params = query["params"]
-            if not isinstance(params, dict):
-                raise ValueError("Range query params must be a dictionary.")
+            params = validated_range_query_params(query)
             box_support = points_in_range_box(points, params)
             query_selected: list[torch.Tensor] = []
             for start, end in boundaries:

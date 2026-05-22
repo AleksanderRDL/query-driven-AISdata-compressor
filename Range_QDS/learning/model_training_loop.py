@@ -811,7 +811,7 @@ def run_training_epochs(plan: TrainingEpochLoopPlan) -> TrainingEpochLoopResult:
                 print(
                     f"    [{run_tag}] val_selection_score={stats['val_selection_score']:.6f}  "
                     f"range_point_f1={stats.get('val_range_point_f1', 0.0):.6f}  "
-                    f"range_usefulness={stats.get('val_range_usefulness', 0.0):.6f}  "
+                    f"query_local_utility={stats.get('val_query_local_utility', 0.0):.6f}  "
                     f"answer_f1={stats.get('val_answer_f1', 0.0):.6f}  "
                     f"combined_f1={stats.get('val_combined_f1', 0.0):.6f}",
                     flush=True,

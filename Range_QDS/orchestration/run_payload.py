@@ -12,7 +12,6 @@ from orchestration.final_gate_summary import FinalRunSummaries
 from orchestration.range_diagnostics import method_score_payload
 from runtime.torch_runtime import amp_runtime_snapshot, torch_runtime_snapshot
 from scoring.metrics import MethodScore
-from scoring.range_usefulness import range_usefulness_weight_summary
 from workloads.query_types import single_workload_type
 from workloads.typed_workload import TypedQueryWorkload
 
@@ -73,7 +72,6 @@ def build_run_payload(inputs: RunPayloadInputs) -> dict[str, Any]:
         "config": config.to_dict(),
         "final_claim_summary": final_summaries.final_claim_summary,
         "diagnostic_summary": final_summaries.diagnostic_summary,
-        "legacy_range_useful_summary": final_summaries.legacy_range_useful_summary,
         "learning_causality_summary": final_summaries.learning_causality_summary,
         "support_overlap_gate": final_summaries.support_overlap_gate,
         "global_sanity_gate": final_summaries.global_sanity_gate,
@@ -181,7 +179,6 @@ def build_run_payload(inputs: RunPayloadInputs) -> dict[str, Any]:
             "frozen_audit_ratios": sorted(inputs.frozen_audit_methods_by_ratio),
             "eval_geometry_blend_allowed": not bool(inputs.workload_blind_eval),
         },
-        "range_usefulness_weight_summary": range_usefulness_weight_summary(),
         "checkpoint_smoothing_window": config.model.checkpoint_smoothing_window,
         "mlqds_score_mode": config.model.mlqds_score_mode,
         "mlqds_score_temperature": config.model.mlqds_score_temperature,
@@ -195,7 +192,7 @@ def build_run_payload(inputs: RunPayloadInputs) -> dict[str, Any]:
             "enabled": inputs.run_oracle_baseline,
             "exact_optimum": False,
             "retained_mask_constructor": "per_trajectory_topk_with_endpoints",
-            "purpose": "diagnostic label-greedy reference, not exact retained-set RangeUseful optimum",
+            "purpose": "diagnostic label-greedy reference, not exact retained-set optimum",
         },
         "range_label_mode": config.model.range_label_mode,
         "range_boundary_prior_weight": config.model.range_boundary_prior_weight,

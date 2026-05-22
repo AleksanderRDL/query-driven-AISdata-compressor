@@ -5,8 +5,6 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any, cast
 
-import pytest
-
 from config.run_config import build_run_config
 from learning.outputs import TrainingOutputs
 from orchestration.final_gate_summary import FinalRunSummaries
@@ -27,14 +25,8 @@ def _family_component_summary(score: float) -> dict[str, Any]:
     group = {
         "query_count": 1,
         "range_components": {"range_point_f1": score},
-        "range_usefulness_score": score,
+        "query_local_utility_score": score,
         "query_local_utility_query_local_weighted_score_normalized": score,
-        "ship_evidence_counts": {
-            "full_trajectory_hit_count_total": 10,
-            "retained_trajectory_hit_count_total": int(score * 10),
-            "missed_trajectory_hit_count_total": 10 - int(score * 10),
-            "ship_presence_recall": score,
-        },
     }
     return {
         "available": True,
@@ -74,8 +66,6 @@ def test_workload_scoring_compatibility_diagnostics_compares_family_components()
         {"component": "range_point_f1", "delta": 0.19999999999999996}
     ]
     assert comparison["top_baseline_better_component_deltas"] == []
-    assert comparison["ship_evidence_count_deltas"]["ship_presence_recall"] == pytest.approx(0.2)
-    assert comparison["ship_evidence_count_deltas"]["missed_trajectory_hit_count_total"] == -2
 
 
 def test_build_run_payload_preserves_stable_artifact_fields() -> None:
@@ -98,7 +88,6 @@ def test_build_run_payload_preserves_stable_artifact_fields() -> None:
         final_candidate=False,
         final_claim_summary={"status": "blocked"},
         diagnostic_summary={"available": True},
-        legacy_range_useful_summary={"metric": "RangeUsefulLegacy"},
         learning_causality_summary={"selector_final_candidate": False},
         support_overlap_gate={"gate_pass": True},
         global_sanity_gate={"gate_pass": True},

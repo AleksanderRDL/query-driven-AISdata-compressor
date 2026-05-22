@@ -8,7 +8,7 @@ from typing import Any
 import torch
 
 from data_preparation.trajectory_index import trajectory_ids_for_points
-from workloads.query_types import QUERY_TYPE_ID_RANGE
+from workloads.query_types import QUERY_TYPE_ID_RANGE, validated_range_query_params
 from workloads.range_geometry import points_in_range_box
 
 
@@ -129,7 +129,7 @@ def range_query_diagnostic(
     trajectory_ids: torch.Tensor | None = None,
 ) -> dict[str, Any]:
     """Return JSON-safe diagnostics for one range query."""
-    params = query["params"]
+    params = validated_range_query_params(query)
     bounds = bounds or _dataset_bounds(points)
     mask = range_box_mask(points, params) if mask is None else mask
     point_hits = int(mask.sum().item())
@@ -153,7 +153,7 @@ def range_query_diagnostic(
     if duplicate_iou_threshold is not None and previous_range_queries:
         threshold = float(duplicate_iou_threshold)
         for previous in previous_range_queries:
-            previous_params = previous["params"]
+            previous_params = validated_range_query_params(previous)
             iou = range_box_iou(params, previous_params)
             if iou > near_duplicate_iou:
                 near_duplicate_iou = float(iou)
@@ -261,12 +261,11 @@ def compute_range_workload_diagnostics(
         else None
     )
     for query_index, query in enumerate(typed_queries):
-        if str(query.get("type", "")).lower() != "range":
-            continue
+        params = validated_range_query_params(query)
         mask = (
             mask_provider(query_index, query).to(device=points.device, dtype=torch.bool)
             if mask_provider is not None
-            else range_box_mask(points, query["params"])
+            else range_box_mask(points, params)
         )
         row = range_query_diagnostic(
             points,
@@ -283,7 +282,7 @@ def compute_range_workload_diagnostics(
             trajectory_ids=trajectory_ids,
         )
         rows.append(row)
-        previous.append({"params": query["params"], "query_index": query_index})
+        previous.append({"type": "range", "params": params, "query_index": query_index})
         if covered is not None:
             covered |= mask
 
@@ -303,7 +302,7 @@ def _component_label_diagnostics(
     component_labels: Mapping[str, torch.Tensor] | None,
     active: torch.Tensor,
 ) -> dict[str, Any]:
-    """Return compact per-component mass diagnostics for range usefulness labels."""
+    """Return compact per-component mass diagnostics for range point-value labels."""
     if component_labels is None:
         return {
             "component_label_mass_basis": "unavailable",

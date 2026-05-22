@@ -720,12 +720,11 @@ def _add_checkpoint_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--checkpoint_score_variant",
         type=str,
-        default="range_usefulness",
-        choices=["answer", "combined", "range_usefulness", "query_local_utility"],
+        default="query_local_utility",
+        choices=["answer", "combined", "query_local_utility"],
         help=(
             "Which validation score to use for checkpoint selection. "
             "'query_local_utility' = query-driven primary score for range_query_mix, "
-            "'range_usefulness' = legacy range-local audit score for range workloads (default), "
             "'answer' = point/query F1, 'combined' = answer_f1 * point_subset_f1."
         ),
     )
@@ -767,7 +766,7 @@ def _add_runtime_output_arguments(parser: argparse.ArgumentParser) -> None:
         type=_compression_ratio_list,
         default=None,
         help=(
-            "Optional comma-separated retained-point ratios for a multi-budget range usefulness audit, "
+            "Optional comma-separated retained-point ratios for a multi-budget range audit, "
             "for example 0.01,0.02,0.05,0.10. Disabled by default because it reruns method scoring."
         ),
     )

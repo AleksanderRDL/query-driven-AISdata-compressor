@@ -32,7 +32,7 @@ from scoring.metrics import MethodScore
 from scoring.score_tables import (
     print_geometric_distortion_table,
     print_method_comparison_table,
-    print_range_usefulness_table,
+    print_range_audit_table,
     print_shift_table,
 )
 from selection.selector_types import LEARNED_SEGMENT_BUDGET_SELECTOR_TYPE
@@ -69,16 +69,6 @@ def _top_component_deltas(
     ]
 
 
-def _safe_float(value: Any, default: float = 0.0) -> float:
-    try:
-        result = float(value)
-    except TypeError, ValueError:
-        return float(default)
-    if result != result:
-        return float(default)
-    return float(result)
-
-
 def _family_group_comparison(
     *,
     primary_group: dict[str, Any],
@@ -100,14 +90,6 @@ def _family_group_comparison(
     baseline_query_local = float(
         baseline_group.get("query_local_utility_query_local_weighted_score_normalized", 0.0)
     )
-    primary_ship_evidence = primary_group.get("ship_evidence_counts")
-    baseline_ship_evidence = baseline_group.get("ship_evidence_counts")
-    ship_evidence_deltas: dict[str, float] = {}
-    if isinstance(primary_ship_evidence, dict) and isinstance(baseline_ship_evidence, dict):
-        for key in sorted(set(primary_ship_evidence) | set(baseline_ship_evidence)):
-            ship_evidence_deltas[str(key)] = _safe_float(
-                primary_ship_evidence.get(key)
-            ) - _safe_float(baseline_ship_evidence.get(key))
     return {
         "available": True,
         "query_count": int(primary_group.get("query_count", 0) or 0),
@@ -115,12 +97,6 @@ def _family_group_comparison(
         "primary_query_local_score_normalized": primary_query_local,
         "baseline_query_local_score_normalized": baseline_query_local,
         "query_local_score_delta": float(primary_query_local - baseline_query_local),
-        "primary_range_usefulness_score": float(primary_group.get("range_usefulness_score", 0.0)),
-        "baseline_range_usefulness_score": float(baseline_group.get("range_usefulness_score", 0.0)),
-        "range_usefulness_delta": float(
-            float(primary_group.get("range_usefulness_score", 0.0))
-            - float(baseline_group.get("range_usefulness_score", 0.0))
-        ),
         "range_component_deltas": component_deltas,
         "top_primary_better_component_deltas": _top_component_deltas(
             component_deltas,
@@ -130,13 +106,6 @@ def _family_group_comparison(
             component_deltas,
             reverse=False,
         ),
-        "primary_ship_evidence_counts": (
-            primary_ship_evidence if isinstance(primary_ship_evidence, dict) else {}
-        ),
-        "baseline_ship_evidence_counts": (
-            baseline_ship_evidence if isinstance(baseline_ship_evidence, dict) else {}
-        ),
-        "ship_evidence_count_deltas": ship_evidence_deltas,
     }
 
 
@@ -221,7 +190,7 @@ class ScoringStageOutputs:
     matched: dict[str, MethodScore]
     matched_table: str
     geometric_table: str
-    range_usefulness_table: str
+    range_audit_table: str
     learned_fill_diagnostics: dict[str, MethodScore]
     learned_fill_table: str
     causality_ablation_scores: dict[str, MethodScore]
@@ -434,11 +403,11 @@ def run_scoring_stage(
                         compression_ratio=config.model.compression_ratio,
                         query_cache=eval_query_cache,
                     )
-        learned_fill_table = print_range_usefulness_table(learned_fill_diagnostics)
+        learned_fill_table = print_range_audit_table(learned_fill_diagnostics)
 
     matched_table = print_method_comparison_table(matched)
     geometric_table = print_geometric_distortion_table(matched)
-    range_usefulness_table = print_range_usefulness_table(matched)
+    range_audit_table = print_range_audit_table(matched)
     workload_scoring_compatibility_diagnostics = build_workload_scoring_compatibility_diagnostics(
         matched
     )
@@ -490,7 +459,7 @@ def run_scoring_stage(
                     name: method_score_payload(metrics) for name, metrics in ratio_results.items()
                 }
                 audit_sections.append(
-                    f"compression_ratio={ratio_key}\n{print_range_usefulness_table(ratio_results)}"
+                    f"compression_ratio={ratio_key}\n{print_range_audit_table(ratio_results)}"
                 )
         range_compression_audit_table = "\n\n".join(audit_sections)
 
@@ -512,7 +481,7 @@ def run_scoring_stage(
         matched=matched,
         matched_table=matched_table,
         geometric_table=geometric_table,
-        range_usefulness_table=range_usefulness_table,
+        range_audit_table=range_audit_table,
         learned_fill_diagnostics=learned_fill_diagnostics,
         learned_fill_table=learned_fill_table,
         causality_ablation_scores=causality_ablation_scores,

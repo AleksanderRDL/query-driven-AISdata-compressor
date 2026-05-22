@@ -146,7 +146,7 @@ def range_structural_retained_frequency_training_labels(
     model_config: object,
     type_idx: int = QUERY_TYPE_ID_RANGE,
 ) -> tuple[torch.Tensor, torch.Tensor, dict[str, object]]:
-    """Blend train workload usefulness with query-free structural scores.
+    """Blend train workload point-value labels with query-free structural scores.
 
     This is a training-only target transform. The deployed scorer still sees
     only query-free point features and final eval masks are frozen before

@@ -26,22 +26,21 @@ def _range_point_metric(metrics: MethodScore) -> float:
     return float(metrics.per_type_f1.get("range", metrics.aggregate_f1))
 
 
-def _range_usefulness_metric(metrics: MethodScore) -> float:
-    """Return the explicit range usefulness metric, falling back for synthetic/test rows."""
-    if int(metrics.range_audit.get("range_query_count", 0) or 0) > 0:
-        return float(metrics.range_usefulness_score)
-    if metrics.range_usefulness_score > 0.0:
-        return float(metrics.range_usefulness_score)
-    return float(metrics.aggregate_combined_f1 or _range_point_metric(metrics))
+def _range_secondary_metric(metrics: MethodScore) -> float:
+    """Return the active range table's secondary metric."""
+    return float(metrics.query_local_utility_score)
 
 
 def print_method_comparison_table(results: dict[str, MethodScore]) -> str:
-    """Render fixed-width method comparison table with workload-specific F1 labels."""
+    """Render fixed-width method comparison table with workload-specific labels."""
     range_focused = _range_focused_results(results)
-    col1, col2, col3, col4, col5, col6, col7 = 24, 14, 13, 12, 12, 14, 13
+    col1 = 24
+    col2 = 14
+    col3 = 18 if range_focused else 13
+    col4, col5, col6, col7 = 12, 12, 14, 13
     primary_label = "RangePointF1" if range_focused else "AnswerF1"
-    secondary_label = "RangeUseful" if range_focused else "CombinedF1"
-    boundary_label = "EntryExitF1" if range_focused else "BoundaryF1"
+    secondary_label = "QueryLocalUtility" if range_focused else "CombinedF1"
+    support_label = "QueryRecall" if range_focused else "BoundaryF1"
     lines = []
     header = (
         f"{'Method':<{col1}}"
@@ -50,7 +49,7 @@ def print_method_comparison_table(results: dict[str, MethodScore]) -> str:
         f"{'Compression':>{col4}}"
         f"{'AvgPtGap':>{col5}}"
         f"{'Latency(ms)':>{col6}}"
-        f"{boundary_label:>{col7}}"
+        f"{support_label:>{col7}}"
         f"{'Type':>{col7}}"
     )
     lines.append(header)
@@ -60,11 +59,11 @@ def print_method_comparison_table(results: dict[str, MethodScore]) -> str:
     for name, metrics in results.items():
         primary = _range_point_metric(metrics) if range_focused else float(metrics.aggregate_f1)
         secondary = (
-            _range_usefulness_metric(metrics)
+            _range_secondary_metric(metrics)
             if range_focused
             else float(metrics.aggregate_combined_f1)
         )
-        entry_exit = float(metrics.range_entry_exit_f1)
+        query_recall = float(metrics.query_point_recall) if range_focused else 0.0
         lines.append(
             f"{name:<{col1}}"
             f"{primary:>{col2}.6f}"
@@ -72,7 +71,7 @@ def print_method_comparison_table(results: dict[str, MethodScore]) -> str:
             f"{metrics.compression_ratio:>{col4}.4f}"
             f"{metrics.avg_retained_point_gap:>{col5}.2f}"
             f"{metrics.latency_ms:>{col6}.2f}"
-            f"{entry_exit:>{col7}.6f}"
+            f"{query_recall:>{col7}.6f}"
             f"{'all':>{col7}}"
         )
         lines.extend(
@@ -101,16 +100,20 @@ def print_method_comparison_table(results: dict[str, MethodScore]) -> str:
     ]
     if mlqds is not None and any(ref is not None for _, ref in diff_references):
         lines.append("-" * len(header))
-        metric_pair = "RangePointF1 / RangeUseful" if range_focused else "AnswerF1 / CombinedF1"
+        metric_pair = (
+            f"RangePointF1 / {secondary_label}" if range_focused else "AnswerF1 / CombinedF1"
+        )
         lines.append(f"{f'Diff vs MLQDS ({metric_pair}; abs and % vs baseline)':<{col1}}")
         for ref_name, ref in diff_references:
             if ref is None:
                 continue
             if range_focused:
                 agg_ans = _range_point_metric(mlqds) - _range_point_metric(ref)
-                agg_comb = _range_usefulness_metric(mlqds) - _range_usefulness_metric(ref)
+                mlqds_secondary = _range_secondary_metric(mlqds)
+                ref_secondary = _range_secondary_metric(ref)
+                agg_comb = mlqds_secondary - ref_secondary
                 agg_ans_pct = _rel_pct(agg_ans, _range_point_metric(ref))
-                agg_comb_pct = _rel_pct(agg_comb, _range_usefulness_metric(ref))
+                agg_comb_pct = _rel_pct(agg_comb, ref_secondary)
             else:
                 agg_ans = mlqds.aggregate_f1 - ref.aggregate_f1
                 agg_comb = mlqds.aggregate_combined_f1 - ref.aggregate_combined_f1
@@ -167,41 +170,28 @@ def print_method_comparison_table(results: dict[str, MethodScore]) -> str:
     return "\n".join(lines)
 
 
-def print_range_usefulness_table(results: dict[str, MethodScore]) -> str:
-    """Render detailed range usefulness audit components."""
-    col1, col2, col3, col4, col5, col6, col7 = 24, 14, 10, 10, 13, 11, 13
-    col8, col9, col10, col11, col12, col13 = 10, 10, 10, 10, 12, 13
+def print_range_audit_table(results: dict[str, MethodScore]) -> str:
+    """Render QueryLocalUtility range-audit components."""
+    col1, col2, col3, col4, col5, col6, col7 = 24, 14, 13, 18, 10, 10, 12
     header = (
         f"{'Method':<{col1}}"
         f"{'RangePointF1':>{col2}}"
-        f"{'ShipF1':>{col3}}"
-        f"{'ShipCov':>{col4}}"
-        f"{'EntryExitF1':>{col5}}"
-        f"{'CrossingF1':>{col6}}"
-        f"{'TemporalCov':>{col7}}"
-        f"{'GapCov':>{col8}}"
-        f"{'GapTime':>{col9}}"
-        f"{'GapDist':>{col10}}"
-        f"{'TurnCov':>{col11}}"
-        f"{'ShapeScore':>{col12}}"
-        f"{'RangeUseful':>{col13}}"
+        f"{'QueryRecall':>{col3}}"
+        f"{'QueryLocalUtility':>{col4}}"
+        f"{'GapMin':>{col5}}"
+        f"{'TurnCov':>{col6}}"
+        f"{'InterpFid':>{col7}}"
     )
     lines = [header, "-" * len(header)]
     for name, metrics in results.items():
         lines.append(
             f"{name:<{col1}}"
             f"{_range_point_metric(metrics):>{col2}.6f}"
-            f"{metrics.range_ship_f1:>{col3}.6f}"
-            f"{metrics.range_ship_coverage:>{col4}.6f}"
-            f"{metrics.range_entry_exit_f1:>{col5}.6f}"
-            f"{metrics.range_crossing_f1:>{col6}.6f}"
-            f"{metrics.range_temporal_coverage:>{col7}.6f}"
-            f"{metrics.range_gap_coverage:>{col8}.6f}"
-            f"{metrics.range_gap_time_coverage:>{col9}.6f}"
-            f"{metrics.range_gap_distance_coverage:>{col10}.6f}"
-            f"{metrics.range_turn_coverage:>{col11}.6f}"
-            f"{metrics.range_shape_score:>{col12}.6f}"
-            f"{_range_usefulness_metric(metrics):>{col13}.6f}"
+            f"{metrics.query_point_recall:>{col3}.6f}"
+            f"{metrics.query_local_utility_score:>{col4}.6f}"
+            f"{metrics.range_gap_min_coverage:>{col5}.6f}"
+            f"{metrics.range_turn_coverage:>{col6}.6f}"
+            f"{metrics.range_query_local_interpolation_fidelity:>{col7}.6f}"
         )
     return "\n".join(lines)
 

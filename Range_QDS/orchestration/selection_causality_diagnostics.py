@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 import torch
@@ -44,6 +46,594 @@ from selection.learned_segment_budget import blend_segment_support_scores
 from selection.selector_types import LEARNED_SEGMENT_BUDGET_SELECTOR_TYPE
 from workloads.query_types import single_workload_type
 
+_SelectorMethod = Callable[..., FrozenMaskMethod]
+_SelectionMlqdsMethodFactory = Callable[..., MLQDSMethod]
+
+
+@dataclass(frozen=True)
+class _TeacherSelectorAblations:
+    separated_method_name: str
+    separated_diagnostic: dict[str, Any]
+    hybrid_diagnostics: dict[str, Any]
+    methods: list[FrozenMaskMethod]
+    freeze_failures: dict[str, str]
+
+
+@dataclass(frozen=True)
+class _PriorFieldAblations:
+    methods: list[FrozenMaskMethod]
+    freeze_failures: dict[str, str]
+    sensitivity: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class _HeadAblations:
+    methods: list[FrozenMaskMethod]
+    freeze_failures: dict[str, str]
+    sensitivity: dict[str, Any]
+
+
+def _teacher_query_visibility(split_name: str) -> dict[str, bool]:
+    return {
+        "uses_eval_queries": False,
+        "uses_checkpoint_selection_queries": split_name == "checkpoint_selection",
+        "uses_train_queries": split_name == "train",
+    }
+
+
+def _freeze_teacher_selector_ablations(
+    *,
+    selector_method: _SelectorMethod,
+    selection_selector_trace: dict[str, Any] | None,
+    selection_points: torch.Tensor,
+    config: RunConfig,
+    split_name: str,
+    split_slug: str,
+    primary_scores: torch.Tensor | None,
+    primary_segment_scores: torch.Tensor | None,
+    primary_selector_segment_scores: torch.Tensor | None,
+) -> _TeacherSelectorAblations:
+    separated_method_name = f"MLQDS_{split_slug}_marginal_teacher_selector"
+    hybrid_teacher_weights = (0.10, 0.25)
+    hybrid_method_names = {
+        weight: f"MLQDS_{split_slug}_marginal_teacher_primary_blend_w{int(weight * 100):02d}"
+        for weight in hybrid_teacher_weights
+    }
+    separated_diagnostic: dict[str, Any] = {
+        "available": False,
+        "diagnostic_only": True,
+        "split": split_name,
+        "reason": "not_run",
+    }
+    hybrid_diagnostics: dict[str, Any] = {
+        "available": False,
+        "diagnostic_only": True,
+        "split": split_name,
+        "reason": "not_run",
+        "methods": {},
+    }
+    methods: list[FrozenMaskMethod] = []
+    freeze_failures: dict[str, str] = {}
+    if selection_selector_trace is None:
+        return _TeacherSelectorAblations(
+            separated_method_name=separated_method_name,
+            separated_diagnostic=separated_diagnostic,
+            hybrid_diagnostics=hybrid_diagnostics,
+            methods=methods,
+            freeze_failures=freeze_failures,
+        )
+
+    retained_marginal = selection_selector_trace.get(
+        "retained_decision_marginal_query_local_utility_alignment"
+    )
+    separated_summary = (
+        retained_marginal.get("separated_marginal_teacher_summary")
+        if isinstance(retained_marginal, dict)
+        else None
+    )
+    if not isinstance(separated_summary, dict):
+        missing_summary = {
+            "available": False,
+            "diagnostic_only": True,
+            "split": split_name,
+            "reason": "missing_full_separated_marginal_teacher_summary",
+        }
+        return _TeacherSelectorAblations(
+            separated_method_name=separated_method_name,
+            separated_diagnostic={**missing_summary, "method_name": separated_method_name},
+            hybrid_diagnostics={**missing_summary, "methods": {}},
+            methods=methods,
+            freeze_failures=freeze_failures,
+        )
+
+    geometry_gain_weight = float(config.model.learned_segment_geometry_gain_weight)
+    allocation_length_support_weight = float(
+        config.model.learned_segment_allocation_length_support_weight
+    )
+    try:
+        teacher_segment_scores, teacher_point_scores, vector_diagnostics = (
+            separated_marginal_teacher_selector_score_vectors(
+                separated_summary,
+                point_count=int(selection_points.shape[0]),
+            )
+        )
+        separated_diagnostic = {
+            **vector_diagnostics,
+            "split": split_name,
+            "method_name": separated_method_name,
+            "selector_diagnostic_only": True,
+        }
+        if teacher_segment_scores is None or teacher_point_scores is None:
+            return _TeacherSelectorAblations(
+                separated_method_name=separated_method_name,
+                separated_diagnostic=separated_diagnostic,
+                hybrid_diagnostics=hybrid_diagnostics,
+                methods=methods,
+                freeze_failures=freeze_failures,
+            )
+        teacher_method = selector_method(
+            name=separated_method_name,
+            scores=teacher_point_scores,
+            segment_scores=teacher_segment_scores,
+            segment_point_scores=teacher_point_scores,
+            learned_segment_geometry_gain_weight=0.0,
+            learned_segment_allocation_length_support_weight=0.0,
+            learned_segment_score_blend_weight=1.0,
+        )
+        methods.append(teacher_method)
+        separated_diagnostic.update(
+            {
+                "frozen_mask_available": True,
+                "retained_count": int(teacher_method.retained_mask.sum().item()),
+                **_teacher_query_visibility(split_name),
+                "geometry_tie_breaker_weight": 0.0,
+                "segment_length_support_weight": 0.0,
+                "segment_score_point_blend_weight": 1.0,
+            }
+        )
+        hybrid_method_diagnostics = _freeze_hybrid_teacher_selector_ablations(
+            selector_method=selector_method,
+            methods=methods,
+            freeze_failures=freeze_failures,
+            method_names=hybrid_method_names,
+            weights=hybrid_teacher_weights,
+            split_name=split_name,
+            primary_scores=primary_scores,
+            primary_segment_scores=primary_segment_scores,
+            primary_selector_segment_scores=primary_selector_segment_scores,
+            teacher_point_scores=teacher_point_scores,
+            teacher_segment_scores=teacher_segment_scores,
+            geometry_gain_weight=geometry_gain_weight,
+            allocation_length_support_weight=allocation_length_support_weight,
+            score_blend_weight=float(config.model.learned_segment_score_blend_weight),
+        )
+        hybrid_available = any(
+            bool(diag.get("available", False))
+            for diag in hybrid_method_diagnostics.values()
+            if isinstance(diag, dict)
+        )
+        hybrid_diagnostics = {
+            "available": bool(hybrid_available),
+            "diagnostic_only": True,
+            "split": split_name,
+            "reason": None if hybrid_available else "no_hybrid_teacher_selector_methods_available",
+            "teacher_weights": [float(weight) for weight in hybrid_teacher_weights],
+            "methods": hybrid_method_diagnostics,
+        }
+    except Exception as exc:  # pragma: no cover - diagnostic should not break selection.
+        freeze_failures[separated_method_name] = str(exc)
+        separated_diagnostic = {
+            "available": False,
+            "diagnostic_only": True,
+            "split": split_name,
+            "reason": "teacher_selector_diagnostic_failed",
+            "error": str(exc),
+            "method_name": separated_method_name,
+        }
+    return _TeacherSelectorAblations(
+        separated_method_name=separated_method_name,
+        separated_diagnostic=separated_diagnostic,
+        hybrid_diagnostics=hybrid_diagnostics,
+        methods=methods,
+        freeze_failures=freeze_failures,
+    )
+
+
+def _freeze_hybrid_teacher_selector_ablations(
+    *,
+    selector_method: _SelectorMethod,
+    methods: list[FrozenMaskMethod],
+    freeze_failures: dict[str, str],
+    method_names: dict[float, str],
+    weights: tuple[float, ...],
+    split_name: str,
+    primary_scores: torch.Tensor | None,
+    primary_segment_scores: torch.Tensor | None,
+    primary_selector_segment_scores: torch.Tensor | None,
+    teacher_point_scores: torch.Tensor,
+    teacher_segment_scores: torch.Tensor,
+    geometry_gain_weight: float,
+    allocation_length_support_weight: float,
+    score_blend_weight: float,
+) -> dict[str, Any]:
+    if not isinstance(primary_scores, torch.Tensor):
+        raise ValueError("missing_primary_scores_for_hybrid_teacher_selector")
+    if isinstance(primary_selector_segment_scores, torch.Tensor):
+        primary_hybrid_segment_scores = primary_selector_segment_scores
+        primary_hybrid_segment_score_source = "primary_selector_segment_scores"
+    elif isinstance(primary_segment_scores, torch.Tensor):
+        primary_hybrid_segment_scores = primary_segment_scores
+        primary_hybrid_segment_score_source = "primary_segment_scores"
+    else:
+        primary_hybrid_segment_scores = None
+        primary_hybrid_segment_score_source = "primary_point_scores"
+
+    diagnostics: dict[str, Any] = {}
+    for teacher_weight in weights:
+        method_name = method_names[teacher_weight]
+        try:
+            hybrid_segment_scores, hybrid_point_scores, hybrid_diag = (
+                hybrid_marginal_teacher_selector_score_vectors(
+                    primary_point_scores=primary_scores,
+                    primary_segment_scores=primary_hybrid_segment_scores,
+                    primary_segment_score_source_label=primary_hybrid_segment_score_source,
+                    teacher_point_scores=teacher_point_scores,
+                    teacher_segment_scores=teacher_segment_scores,
+                    teacher_weight=teacher_weight,
+                )
+            )
+            hybrid_diag = {
+                **hybrid_diag,
+                "split": split_name,
+                "method_name": method_name,
+                "selector_diagnostic_only": True,
+                **_teacher_query_visibility(split_name),
+            }
+            if hybrid_segment_scores is None or hybrid_point_scores is None:
+                diagnostics[method_name] = hybrid_diag
+                continue
+            hybrid_method = selector_method(
+                name=method_name,
+                scores=hybrid_point_scores,
+                segment_scores=hybrid_segment_scores,
+                segment_point_scores=hybrid_point_scores,
+            )
+            methods.append(hybrid_method)
+            hybrid_diag.update(
+                {
+                    "frozen_mask_available": True,
+                    "retained_count": int(hybrid_method.retained_mask.sum().item()),
+                    "geometry_tie_breaker_weight": geometry_gain_weight,
+                    "segment_length_support_weight": allocation_length_support_weight,
+                    "segment_score_point_blend_weight": score_blend_weight,
+                }
+            )
+            diagnostics[method_name] = hybrid_diag
+        except Exception as exc:  # pragma: no cover
+            freeze_failures[method_name] = str(exc)
+            diagnostics[method_name] = {
+                "available": False,
+                "diagnostic_only": True,
+                "split": split_name,
+                "reason": "hybrid_teacher_selector_diagnostic_failed",
+                "error": str(exc),
+                "method_name": method_name,
+                "teacher_weight": float(teacher_weight),
+                **_teacher_query_visibility(split_name),
+            }
+    return diagnostics
+
+
+def _freeze_prior_field_selection_ablations(
+    *,
+    selector_method: _SelectorMethod,
+    build_selection_mlqds_method: _SelectionMlqdsMethodFactory,
+    trained: TrainingOutputs,
+    selection_points: torch.Tensor,
+    selection_boundaries: list[tuple[int, int]],
+    selection_workload: Any,
+    seeds: Any,
+    config: RunConfig,
+    primary_scores: torch.Tensor | None,
+    primary_raw_preds: torch.Tensor | None,
+    primary_head_logits: torch.Tensor | None,
+    primary_mask: torch.Tensor,
+) -> _PriorFieldAblations:
+    query_prior_field = trained.feature_context.get("query_prior_field")
+    methods: list[FrozenMaskMethod] = []
+    freeze_failures: dict[str, str] = {}
+    sensitivity: dict[str, Any] = {}
+    if not isinstance(query_prior_field, dict) or not isinstance(primary_scores, torch.Tensor):
+        return _PriorFieldAblations(
+            methods=methods,
+            freeze_failures=freeze_failures,
+            sensitivity=sensitivity,
+        )
+
+    try:
+        prior_scores = (
+            query_prior_predictability_scores(selection_points, query_prior_field).detach().cpu()
+        )
+        methods.append(
+            selector_method(
+                name="MLQDS_prior_field_only_score",
+                scores=prior_scores,
+            )
+        )
+    except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
+        freeze_failures["MLQDS_prior_field_only_score"] = str(exc)
+
+    prior_ablation_fields = {
+        "MLQDS_shuffled_prior_fields": shuffled_query_prior_field(
+            query_prior_field,
+            seed=int(seeds.eval_query_seed) + 72_003,
+        ),
+        "MLQDS_without_query_prior_features": zero_query_prior_field_like(query_prior_field),
+    }
+    for ablation_name, ablation_field in prior_ablation_fields.items():
+        try:
+            prior_sensitivity_key = (
+                "shuffled_prior_fields"
+                if ablation_name == "MLQDS_shuffled_prior_fields"
+                else "without_query_prior_features"
+            )
+            prior_feature_sensitivity = prior_feature_sample_sensitivity(
+                points=selection_points,
+                primary_prior_field=query_prior_field,
+                ablation_prior_field=ablation_field,
+            )
+            model_prior_sensitivity = model_prior_feature_sensitivity(
+                points=selection_points,
+                point_dim=int(getattr(trained.model, "point_dim", selection_points.shape[1])),
+                scaler=trained.scaler,
+                primary_prior_field=query_prior_field,
+                ablation_prior_field=ablation_field,
+                boundaries=selection_boundaries,
+            )
+            ablation_trained = training_outputs_with_query_prior_field(
+                trained,
+                ablation_field,
+            )
+            ablation_method = build_selection_mlqds_method(
+                name=ablation_name,
+                trained_outputs=ablation_trained,
+                workload=selection_workload,
+            )
+            ablation_mask = ablation_method.simplify(
+                selection_points,
+                selection_boundaries,
+                float(config.model.compression_ratio),
+            )
+            ablation_snapshot = ablation_method.cached_score_snapshot()
+            ablation_point_scores = ablation_snapshot.scores
+            ablation_raw_preds = ablation_snapshot.raw_predictions
+            ablation_head_logits = ablation_snapshot.head_logits
+            sensitivity[prior_sensitivity_key] = prior_ablation_sensitivity_from_tensors(
+                sampled_prior_features=prior_feature_sensitivity,
+                model_prior_features=model_prior_sensitivity,
+                primary_scores=primary_scores,
+                ablation_scores=ablation_point_scores
+                if isinstance(ablation_point_scores, torch.Tensor)
+                else None,
+                primary_raw_predictions=primary_raw_preds
+                if isinstance(primary_raw_preds, torch.Tensor)
+                else None,
+                ablation_raw_predictions=ablation_raw_preds
+                if isinstance(ablation_raw_preds, torch.Tensor)
+                else None,
+                primary_head_logits=primary_head_logits
+                if isinstance(primary_head_logits, torch.Tensor)
+                else None,
+                ablation_head_logits=ablation_head_logits
+                if isinstance(ablation_head_logits, torch.Tensor)
+                else None,
+                primary_mask=primary_mask,
+                ablation_mask=ablation_mask,
+            )
+            methods.append(
+                FrozenMaskMethod(
+                    name=ablation_name,
+                    retained_mask=ablation_mask.detach().cpu(),
+                )
+            )
+        except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
+            freeze_failures[ablation_name] = str(exc)
+    return _PriorFieldAblations(
+        methods=methods,
+        freeze_failures=freeze_failures,
+        sensitivity=sensitivity,
+    )
+
+
+def _freeze_head_selection_ablations(
+    *,
+    selector_method: _SelectorMethod,
+    trained: TrainingOutputs,
+    config: RunConfig,
+    selection_boundaries: list[tuple[int, int]],
+    workload_type: str,
+    primary_scores: torch.Tensor | None,
+    primary_raw_preds: torch.Tensor | None,
+    primary_head_logits: torch.Tensor | None,
+    primary_segment_scores: torch.Tensor | None,
+    primary_path_length_support_scores: torch.Tensor | None,
+    primary_selector_segment_scores: torch.Tensor | None,
+    primary_mask: torch.Tensor,
+) -> _HeadAblations:
+    methods: list[FrozenMaskMethod] = []
+    freeze_failures: dict[str, str] = {}
+    sensitivity: dict[str, Any] = {}
+    geometry_gain_weight = float(config.model.learned_segment_geometry_gain_weight)
+    allocation_length_support_weight = float(
+        config.model.learned_segment_allocation_length_support_weight
+    )
+    if primary_scores is not None and geometry_gain_weight > 0.0:
+        try:
+            methods.append(
+                selector_method(
+                    name="MLQDS_without_geometry_tie_breaker",
+                    scores=primary_scores,
+                    segment_scores=primary_selector_segment_scores,
+                    segment_point_scores=primary_segment_scores,
+                    learned_segment_geometry_gain_weight=0.0,
+                )
+            )
+        except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
+            freeze_failures["MLQDS_without_geometry_tie_breaker"] = str(exc)
+
+    if primary_scores is not None and allocation_length_support_weight > 0.0:
+        try:
+            methods.append(
+                selector_method(
+                    name="MLQDS_without_segment_length_support_allocation",
+                    scores=primary_scores,
+                    segment_scores=primary_selector_segment_scores,
+                    segment_point_scores=primary_segment_scores,
+                    learned_segment_allocation_length_support_weight=0.0,
+                )
+            )
+        except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
+            freeze_failures["MLQDS_without_segment_length_support_allocation"] = str(exc)
+
+    if primary_scores is not None and primary_segment_scores is not None:
+        try:
+            neutral_segment_scores = neutral_segment_scores_for_ablation(primary_segment_scores)
+            no_segment_selector_scores = blend_segment_support_scores(
+                segment_scores=neutral_segment_scores,
+                path_length_support_scores=primary_path_length_support_scores,
+                path_length_support_weight=float(
+                    config.model.learned_segment_length_support_blend_weight
+                ),
+            )
+            no_segment = selector_method(
+                name="MLQDS_without_segment_budget_head",
+                scores=primary_scores,
+                segment_scores=no_segment_selector_scores,
+                segment_point_scores=neutral_segment_scores,
+            )
+            methods.append(no_segment)
+            sensitivity["MLQDS_without_segment_budget_head"] = {
+                **head_ablation_sensitivity(
+                    primary_scores=primary_scores,
+                    ablation_scores=primary_scores,
+                    primary_raw_predictions=primary_raw_preds,
+                    ablation_raw_predictions=primary_raw_preds,
+                    primary_segment_scores=primary_selector_segment_scores
+                    if primary_selector_segment_scores is not None
+                    else primary_segment_scores,
+                    ablation_segment_scores=no_segment_selector_scores,
+                    primary_mask=primary_mask,
+                    ablation_mask=no_segment.retained_mask,
+                ),
+                "disabled_head_name": "segment_budget_target",
+                "ablation_mode": "neutral_constant_segment_scores",
+            }
+        except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
+            freeze_failures["MLQDS_without_segment_budget_head"] = str(exc)
+
+    if primary_scores is not None and primary_path_length_support_scores is not None:
+        try:
+            path_length_segment_method = selector_method(
+                name="MLQDS_path_length_support_segment_head_diagnostic",
+                scores=primary_scores,
+                segment_scores=primary_path_length_support_scores,
+            )
+            methods.append(path_length_segment_method)
+            primary_segment_for_sensitivity = (
+                primary_selector_segment_scores
+                if primary_selector_segment_scores is not None
+                else primary_segment_scores
+            )
+            sensitivity["MLQDS_path_length_support_segment_head_diagnostic"] = {
+                **head_ablation_sensitivity(
+                    primary_scores=primary_scores,
+                    ablation_scores=primary_scores,
+                    primary_raw_predictions=primary_raw_preds,
+                    ablation_raw_predictions=primary_raw_preds,
+                    primary_segment_scores=primary_segment_for_sensitivity,
+                    ablation_segment_scores=primary_path_length_support_scores,
+                    primary_mask=primary_mask,
+                    ablation_mask=path_length_segment_method.retained_mask,
+                ),
+                "diagnostic_only": True,
+                "replacement_head_name": "path_length_support_target",
+                "ablation_mode": "path_length_support_as_segment_scores",
+            }
+            path_length_allocation_method = selector_method(
+                name="MLQDS_path_length_support_allocation_only_diagnostic",
+                scores=primary_scores,
+                segment_scores=primary_path_length_support_scores,
+                segment_point_scores=primary_segment_scores,
+            )
+            methods.append(path_length_allocation_method)
+            sensitivity["MLQDS_path_length_support_allocation_only_diagnostic"] = {
+                **head_ablation_sensitivity(
+                    primary_scores=primary_scores,
+                    ablation_scores=primary_scores,
+                    primary_raw_predictions=primary_raw_preds,
+                    ablation_raw_predictions=primary_raw_preds,
+                    primary_segment_scores=primary_segment_for_sensitivity,
+                    ablation_segment_scores=primary_path_length_support_scores,
+                    primary_mask=primary_mask,
+                    ablation_mask=path_length_allocation_method.retained_mask,
+                ),
+                "diagnostic_only": True,
+                "replacement_head_name": "path_length_support_target",
+                "ablation_mode": "path_length_support_allocation_only",
+            }
+        except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
+            freeze_failures["MLQDS_path_length_support_segment_head_diagnostic"] = str(exc)
+
+    if (
+        primary_scores is not None
+        and primary_head_logits is not None
+        and primary_selector_segment_scores is not None
+    ):
+        try:
+            behavior_raw_preds = raw_predictions_without_factorized_head(
+                model=trained.model,
+                head_logits=primary_head_logits,
+                disabled_head_name="conditional_behavior_utility",
+            )
+            behavior_scores = scores_without_factorized_head(
+                model=trained.model,
+                head_logits=primary_head_logits,
+                disabled_head_name="conditional_behavior_utility",
+                boundaries=selection_boundaries,
+                workload_type=workload_type,
+                score_mode=config.model.mlqds_score_mode,
+                score_temperature=float(config.model.mlqds_score_temperature),
+                rank_confidence_weight=float(config.model.mlqds_rank_confidence_weight),
+            )
+            no_behavior = selector_method(
+                name="MLQDS_without_behavior_utility_head",
+                scores=behavior_scores,
+                segment_scores=primary_selector_segment_scores,
+                segment_point_scores=primary_segment_scores,
+            )
+            methods.append(no_behavior)
+            sensitivity["MLQDS_without_behavior_utility_head"] = {
+                **head_ablation_sensitivity(
+                    primary_scores=primary_scores,
+                    ablation_scores=behavior_scores,
+                    primary_raw_predictions=primary_raw_preds,
+                    ablation_raw_predictions=behavior_raw_preds,
+                    primary_segment_scores=primary_selector_segment_scores,
+                    ablation_segment_scores=primary_selector_segment_scores,
+                    primary_mask=primary_mask,
+                    ablation_mask=no_behavior.retained_mask,
+                ),
+                "disabled_head_name": "conditional_behavior_utility",
+                "ablation_mode": "neutral_multiplicative_head",
+            }
+        except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
+            freeze_failures["MLQDS_without_behavior_utility_head"] = str(exc)
+    return _HeadAblations(
+        methods=methods,
+        freeze_failures=freeze_failures,
+        sensitivity=sensitivity,
+    )
+
 
 def build_selection_causality_diagnostics(
     *,
@@ -75,7 +665,7 @@ def build_selection_causality_diagnostics(
     )
     workload_type = single_workload_type(eval_workload_map)
 
-    def _mlqds_method(
+    def build_selection_mlqds_method(
         *,
         name: str,
         trained_outputs: TrainingOutputs,
@@ -90,7 +680,7 @@ def build_selection_causality_diagnostics(
             range_geometry_blend=0.0,
         )
 
-    primary_method = _mlqds_method(
+    primary_method = build_selection_mlqds_method(
         name=f"MLQDS_{split_slug}_primary",
         trained_outputs=trained,
         workload=selection_workload,
@@ -163,492 +753,76 @@ def build_selection_causality_diagnostics(
             primary_selector_segment_scores=primary_selector_segment_scores,
         )
     )
-    separated_teacher_selector_diagnostic: dict[str, Any] = {
-        "available": False,
-        "diagnostic_only": True,
-        "split": split_name,
-        "reason": "not_run",
-    }
-    separated_teacher_method_name = f"MLQDS_{split_slug}_marginal_teacher_selector"
-    hybrid_teacher_weights = (0.10, 0.25)
-    hybrid_teacher_method_names = {
-        weight: f"MLQDS_{split_slug}_marginal_teacher_primary_blend_w{int(weight * 100):02d}"
-        for weight in hybrid_teacher_weights
-    }
-    separated_teacher_hybrid_selector_diagnostics: dict[str, Any] = {
-        "available": False,
-        "diagnostic_only": True,
-        "split": split_name,
-        "reason": "not_run",
-        "methods": {},
-    }
-    ablation_methods: list[FrozenMaskMethod] = []
-    freeze_failures: dict[str, str] = {}
+    teacher_selector_ablations = _freeze_teacher_selector_ablations(
+        selector_method=_selector_method,
+        selection_selector_trace=selection_selector_trace,
+        selection_points=selection_points,
+        config=config,
+        split_name=split_name,
+        split_slug=split_slug,
+        primary_scores=primary_scores if isinstance(primary_scores, torch.Tensor) else None,
+        primary_segment_scores=primary_segment_scores
+        if isinstance(primary_segment_scores, torch.Tensor)
+        else None,
+        primary_selector_segment_scores=primary_selector_segment_scores
+        if isinstance(primary_selector_segment_scores, torch.Tensor)
+        else None,
+    )
+    separated_teacher_method_name = teacher_selector_ablations.separated_method_name
+    separated_teacher_selector_diagnostic = teacher_selector_ablations.separated_diagnostic
+    separated_teacher_hybrid_selector_diagnostics = (
+        teacher_selector_ablations.hybrid_diagnostics
+    )
+    ablation_methods = list(teacher_selector_ablations.methods)
+    freeze_failures = dict(teacher_selector_ablations.freeze_failures)
     prior_sensitivity: dict[str, Any] = {}
     head_sensitivity: dict[str, Any] = {}
 
-    geometry_gain_weight = float(config.model.learned_segment_geometry_gain_weight)
-    allocation_length_support_weight = float(
-        config.model.learned_segment_allocation_length_support_weight
+    head_ablations = _freeze_head_selection_ablations(
+        selector_method=_selector_method,
+        trained=trained,
+        config=config,
+        selection_boundaries=selection_boundaries,
+        workload_type=workload_type,
+        primary_scores=primary_scores if isinstance(primary_scores, torch.Tensor) else None,
+        primary_raw_preds=primary_raw_preds if isinstance(primary_raw_preds, torch.Tensor) else None,
+        primary_head_logits=primary_head_logits
+        if isinstance(primary_head_logits, torch.Tensor)
+        else None,
+        primary_segment_scores=primary_segment_scores
+        if isinstance(primary_segment_scores, torch.Tensor)
+        else None,
+        primary_path_length_support_scores=primary_path_length_support_scores
+        if isinstance(primary_path_length_support_scores, torch.Tensor)
+        else None,
+        primary_selector_segment_scores=primary_selector_segment_scores
+        if isinstance(primary_selector_segment_scores, torch.Tensor)
+        else None,
+        primary_mask=primary_mask,
     )
-    if selection_selector_trace is not None:
-        retained_marginal = selection_selector_trace.get(
-            "retained_decision_marginal_query_local_utility_alignment"
-        )
-        separated_summary = (
-            retained_marginal.get("separated_marginal_teacher_summary")
-            if isinstance(retained_marginal, dict)
-            else None
-        )
-        if isinstance(separated_summary, dict):
-            try:
-                teacher_segment_scores, teacher_point_scores, vector_diagnostics = (
-                    separated_marginal_teacher_selector_score_vectors(
-                        separated_summary,
-                        point_count=int(selection_points.shape[0]),
-                    )
-                )
-                separated_teacher_selector_diagnostic = {
-                    **vector_diagnostics,
-                    "split": split_name,
-                    "method_name": separated_teacher_method_name,
-                    "selector_diagnostic_only": True,
-                }
-                if teacher_segment_scores is not None and teacher_point_scores is not None:
-                    teacher_method = _selector_method(
-                        name=separated_teacher_method_name,
-                        scores=teacher_point_scores,
-                        segment_scores=teacher_segment_scores,
-                        segment_point_scores=teacher_point_scores,
-                        learned_segment_geometry_gain_weight=0.0,
-                        learned_segment_allocation_length_support_weight=0.0,
-                        learned_segment_score_blend_weight=1.0,
-                    )
-                    ablation_methods.append(teacher_method)
-                    separated_teacher_selector_diagnostic.update(
-                        {
-                            "frozen_mask_available": True,
-                            "retained_count": int(teacher_method.retained_mask.sum().item()),
-                            "uses_eval_queries": False,
-                            "uses_checkpoint_selection_queries": split_name
-                            == "checkpoint_selection",
-                            "uses_train_queries": split_name == "train",
-                            "geometry_tie_breaker_weight": 0.0,
-                            "segment_length_support_weight": 0.0,
-                            "segment_score_point_blend_weight": 1.0,
-                        }
-                    )
-                    hybrid_method_diagnostics: dict[str, Any] = {}
-                    primary_scores_for_hybrid = primary_scores
-                    if not isinstance(primary_scores_for_hybrid, torch.Tensor):
-                        raise ValueError("missing_primary_scores_for_hybrid_teacher_selector")
-                    if isinstance(primary_selector_segment_scores, torch.Tensor):
-                        primary_hybrid_segment_scores = primary_selector_segment_scores
-                        primary_hybrid_segment_score_source = "primary_selector_segment_scores"
-                    elif isinstance(primary_segment_scores, torch.Tensor):
-                        primary_hybrid_segment_scores = primary_segment_scores
-                        primary_hybrid_segment_score_source = "primary_segment_scores"
-                    else:
-                        primary_hybrid_segment_scores = None
-                        primary_hybrid_segment_score_source = "primary_point_scores"
-                    for teacher_weight in hybrid_teacher_weights:
-                        hybrid_method_name = hybrid_teacher_method_names[teacher_weight]
-                        try:
-                            hybrid_segment_scores, hybrid_point_scores, hybrid_diag = (
-                                hybrid_marginal_teacher_selector_score_vectors(
-                                    primary_point_scores=primary_scores_for_hybrid,
-                                    primary_segment_scores=primary_hybrid_segment_scores,
-                                    primary_segment_score_source_label=(
-                                        primary_hybrid_segment_score_source
-                                    ),
-                                    teacher_point_scores=teacher_point_scores,
-                                    teacher_segment_scores=teacher_segment_scores,
-                                    teacher_weight=teacher_weight,
-                                )
-                            )
-                            hybrid_diag = {
-                                **hybrid_diag,
-                                "split": split_name,
-                                "method_name": hybrid_method_name,
-                                "selector_diagnostic_only": True,
-                                "uses_eval_queries": False,
-                                "uses_checkpoint_selection_queries": split_name
-                                == "checkpoint_selection",
-                                "uses_train_queries": split_name == "train",
-                            }
-                            if hybrid_segment_scores is None or hybrid_point_scores is None:
-                                hybrid_method_diagnostics[hybrid_method_name] = hybrid_diag
-                                continue
-                            hybrid_method = _selector_method(
-                                name=hybrid_method_name,
-                                scores=hybrid_point_scores,
-                                segment_scores=hybrid_segment_scores,
-                                segment_point_scores=hybrid_point_scores,
-                            )
-                            ablation_methods.append(hybrid_method)
-                            hybrid_diag.update(
-                                {
-                                    "frozen_mask_available": True,
-                                    "retained_count": int(hybrid_method.retained_mask.sum().item()),
-                                    "geometry_tie_breaker_weight": geometry_gain_weight,
-                                    "segment_length_support_weight": (
-                                        allocation_length_support_weight
-                                    ),
-                                    "segment_score_point_blend_weight": float(
-                                        config.model.learned_segment_score_blend_weight
-                                    ),
-                                }
-                            )
-                            hybrid_method_diagnostics[hybrid_method_name] = hybrid_diag
-                        except Exception as exc:  # pragma: no cover
-                            freeze_failures[hybrid_method_name] = str(exc)
-                            hybrid_method_diagnostics[hybrid_method_name] = {
-                                "available": False,
-                                "diagnostic_only": True,
-                                "split": split_name,
-                                "reason": "hybrid_teacher_selector_diagnostic_failed",
-                                "error": str(exc),
-                                "method_name": hybrid_method_name,
-                                "teacher_weight": float(teacher_weight),
-                                "uses_eval_queries": False,
-                                "uses_checkpoint_selection_queries": split_name
-                                == "checkpoint_selection",
-                                "uses_train_queries": split_name == "train",
-                            }
-                    hybrid_available = any(
-                        bool(diag.get("available", False))
-                        for diag in hybrid_method_diagnostics.values()
-                        if isinstance(diag, dict)
-                    )
-                    separated_teacher_hybrid_selector_diagnostics = {
-                        "available": bool(hybrid_available),
-                        "diagnostic_only": True,
-                        "split": split_name,
-                        "reason": None
-                        if hybrid_available
-                        else "no_hybrid_teacher_selector_methods_available",
-                        "teacher_weights": [float(weight) for weight in hybrid_teacher_weights],
-                        "methods": hybrid_method_diagnostics,
-                    }
-            except Exception as exc:  # pragma: no cover - diagnostic should not break selection.
-                freeze_failures[separated_teacher_method_name] = str(exc)
-                separated_teacher_selector_diagnostic = {
-                    "available": False,
-                    "diagnostic_only": True,
-                    "split": split_name,
-                    "reason": "teacher_selector_diagnostic_failed",
-                    "error": str(exc),
-                    "method_name": separated_teacher_method_name,
-                }
-        else:
-            separated_teacher_selector_diagnostic = {
-                "available": False,
-                "diagnostic_only": True,
-                "split": split_name,
-                "reason": "missing_full_separated_marginal_teacher_summary",
-                "method_name": separated_teacher_method_name,
-            }
-            separated_teacher_hybrid_selector_diagnostics = {
-                "available": False,
-                "diagnostic_only": True,
-                "split": split_name,
-                "reason": "missing_full_separated_marginal_teacher_summary",
-                "methods": {},
-            }
-    if isinstance(primary_scores, torch.Tensor) and geometry_gain_weight > 0.0:
-        try:
-            selection_segment_scores = (
-                primary_selector_segment_scores
-                if isinstance(primary_selector_segment_scores, torch.Tensor)
-                else None
-            )
-            ablation_methods.append(
-                _selector_method(
-                    name="MLQDS_without_geometry_tie_breaker",
-                    scores=primary_scores,
-                    segment_scores=selection_segment_scores,
-                    segment_point_scores=primary_segment_scores,
-                    learned_segment_geometry_gain_weight=0.0,
-                )
-            )
-        except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
-            freeze_failures["MLQDS_without_geometry_tie_breaker"] = str(exc)
+    ablation_methods.extend(head_ablations.methods)
+    freeze_failures.update(head_ablations.freeze_failures)
+    head_sensitivity.update(head_ablations.sensitivity)
 
-    if isinstance(primary_scores, torch.Tensor) and allocation_length_support_weight > 0.0:
-        try:
-            selection_segment_scores = (
-                primary_selector_segment_scores
-                if isinstance(primary_selector_segment_scores, torch.Tensor)
-                else None
-            )
-            ablation_methods.append(
-                _selector_method(
-                    name="MLQDS_without_segment_length_support_allocation",
-                    scores=primary_scores,
-                    segment_scores=selection_segment_scores,
-                    segment_point_scores=primary_segment_scores,
-                    learned_segment_allocation_length_support_weight=0.0,
-                )
-            )
-        except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
-            freeze_failures["MLQDS_without_segment_length_support_allocation"] = str(exc)
-
-    if isinstance(primary_scores, torch.Tensor) and isinstance(
-        primary_segment_scores, torch.Tensor
-    ):
-        try:
-            neutral_segment_scores = neutral_segment_scores_for_ablation(primary_segment_scores)
-            no_segment_selector_scores = blend_segment_support_scores(
-                segment_scores=neutral_segment_scores,
-                path_length_support_scores=(
-                    primary_path_length_support_scores
-                    if isinstance(primary_path_length_support_scores, torch.Tensor)
-                    else None
-                ),
-                path_length_support_weight=float(
-                    config.model.learned_segment_length_support_blend_weight
-                ),
-            )
-            no_segment = _selector_method(
-                name="MLQDS_without_segment_budget_head",
-                scores=primary_scores,
-                segment_scores=no_segment_selector_scores,
-                segment_point_scores=neutral_segment_scores,
-            )
-            ablation_methods.append(no_segment)
-            head_sensitivity["MLQDS_without_segment_budget_head"] = {
-                **head_ablation_sensitivity(
-                    primary_scores=primary_scores,
-                    ablation_scores=primary_scores,
-                    primary_raw_predictions=primary_raw_preds
-                    if isinstance(primary_raw_preds, torch.Tensor)
-                    else None,
-                    ablation_raw_predictions=primary_raw_preds
-                    if isinstance(primary_raw_preds, torch.Tensor)
-                    else None,
-                    primary_segment_scores=(
-                        primary_selector_segment_scores
-                        if isinstance(primary_selector_segment_scores, torch.Tensor)
-                        else primary_segment_scores
-                    ),
-                    ablation_segment_scores=no_segment_selector_scores,
-                    primary_mask=primary_mask,
-                    ablation_mask=no_segment.retained_mask,
-                ),
-                "disabled_head_name": "segment_budget_target",
-                "ablation_mode": "neutral_constant_segment_scores",
-            }
-        except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
-            freeze_failures["MLQDS_without_segment_budget_head"] = str(exc)
-
-    if isinstance(primary_scores, torch.Tensor) and isinstance(
-        primary_path_length_support_scores, torch.Tensor
-    ):
-        try:
-            path_length_segment_method = _selector_method(
-                name="MLQDS_path_length_support_segment_head_diagnostic",
-                scores=primary_scores,
-                segment_scores=primary_path_length_support_scores,
-            )
-            ablation_methods.append(path_length_segment_method)
-            head_sensitivity["MLQDS_path_length_support_segment_head_diagnostic"] = {
-                **head_ablation_sensitivity(
-                    primary_scores=primary_scores,
-                    ablation_scores=primary_scores,
-                    primary_raw_predictions=primary_raw_preds
-                    if isinstance(primary_raw_preds, torch.Tensor)
-                    else None,
-                    ablation_raw_predictions=primary_raw_preds
-                    if isinstance(primary_raw_preds, torch.Tensor)
-                    else None,
-                    primary_segment_scores=(
-                        primary_selector_segment_scores
-                        if isinstance(primary_selector_segment_scores, torch.Tensor)
-                        else primary_segment_scores
-                        if isinstance(primary_segment_scores, torch.Tensor)
-                        else None
-                    ),
-                    ablation_segment_scores=primary_path_length_support_scores,
-                    primary_mask=primary_mask,
-                    ablation_mask=path_length_segment_method.retained_mask,
-                ),
-                "diagnostic_only": True,
-                "replacement_head_name": "path_length_support_target",
-                "ablation_mode": "path_length_support_as_segment_scores",
-            }
-            path_length_allocation_method = _selector_method(
-                name="MLQDS_path_length_support_allocation_only_diagnostic",
-                scores=primary_scores,
-                segment_scores=primary_path_length_support_scores,
-                segment_point_scores=primary_segment_scores,
-            )
-            ablation_methods.append(path_length_allocation_method)
-            head_sensitivity["MLQDS_path_length_support_allocation_only_diagnostic"] = {
-                **head_ablation_sensitivity(
-                    primary_scores=primary_scores,
-                    ablation_scores=primary_scores,
-                    primary_raw_predictions=primary_raw_preds
-                    if isinstance(primary_raw_preds, torch.Tensor)
-                    else None,
-                    ablation_raw_predictions=primary_raw_preds
-                    if isinstance(primary_raw_preds, torch.Tensor)
-                    else None,
-                    primary_segment_scores=(
-                        primary_selector_segment_scores
-                        if isinstance(primary_selector_segment_scores, torch.Tensor)
-                        else primary_segment_scores
-                        if isinstance(primary_segment_scores, torch.Tensor)
-                        else None
-                    ),
-                    ablation_segment_scores=primary_path_length_support_scores,
-                    primary_mask=primary_mask,
-                    ablation_mask=path_length_allocation_method.retained_mask,
-                ),
-                "diagnostic_only": True,
-                "replacement_head_name": "path_length_support_target",
-                "ablation_mode": "path_length_support_allocation_only",
-            }
-        except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
-            freeze_failures["MLQDS_path_length_support_segment_head_diagnostic"] = str(exc)
-
-    if (
-        isinstance(primary_scores, torch.Tensor)
-        and isinstance(primary_head_logits, torch.Tensor)
-        and isinstance(primary_selector_segment_scores, torch.Tensor)
-    ):
-        try:
-            behavior_raw_preds = raw_predictions_without_factorized_head(
-                model=trained.model,
-                head_logits=primary_head_logits,
-                disabled_head_name="conditional_behavior_utility",
-            )
-            behavior_scores = scores_without_factorized_head(
-                model=trained.model,
-                head_logits=primary_head_logits,
-                disabled_head_name="conditional_behavior_utility",
-                boundaries=selection_boundaries,
-                workload_type=workload_type,
-                score_mode=config.model.mlqds_score_mode,
-                score_temperature=float(config.model.mlqds_score_temperature),
-                rank_confidence_weight=float(config.model.mlqds_rank_confidence_weight),
-            )
-            no_behavior = _selector_method(
-                name="MLQDS_without_behavior_utility_head",
-                scores=behavior_scores,
-                segment_scores=primary_selector_segment_scores,
-                segment_point_scores=primary_segment_scores,
-            )
-            ablation_methods.append(no_behavior)
-            head_sensitivity["MLQDS_without_behavior_utility_head"] = {
-                **head_ablation_sensitivity(
-                    primary_scores=primary_scores,
-                    ablation_scores=behavior_scores,
-                    primary_raw_predictions=primary_raw_preds
-                    if isinstance(primary_raw_preds, torch.Tensor)
-                    else None,
-                    ablation_raw_predictions=behavior_raw_preds,
-                    primary_segment_scores=primary_selector_segment_scores,
-                    ablation_segment_scores=primary_selector_segment_scores,
-                    primary_mask=primary_mask,
-                    ablation_mask=no_behavior.retained_mask,
-                ),
-                "disabled_head_name": "conditional_behavior_utility",
-                "ablation_mode": "neutral_multiplicative_head",
-            }
-        except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
-            freeze_failures["MLQDS_without_behavior_utility_head"] = str(exc)
-
-    query_prior_field = trained.feature_context.get("query_prior_field")
-    if isinstance(query_prior_field, dict) and isinstance(primary_scores, torch.Tensor):
-        try:
-            prior_scores = (
-                query_prior_predictability_scores(selection_points, query_prior_field)
-                .detach()
-                .cpu()
-            )
-            ablation_methods.append(
-                _selector_method(
-                    name="MLQDS_prior_field_only_score",
-                    scores=prior_scores,
-                )
-            )
-        except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
-            freeze_failures["MLQDS_prior_field_only_score"] = str(exc)
-        prior_ablation_fields = {
-            "MLQDS_shuffled_prior_fields": shuffled_query_prior_field(
-                query_prior_field,
-                seed=int(seeds.eval_query_seed) + 72_003,
-            ),
-            "MLQDS_without_query_prior_features": zero_query_prior_field_like(query_prior_field),
-        }
-        for ablation_name, ablation_field in prior_ablation_fields.items():
-            try:
-                prior_sensitivity_key = (
-                    "shuffled_prior_fields"
-                    if ablation_name == "MLQDS_shuffled_prior_fields"
-                    else "without_query_prior_features"
-                )
-                prior_feature_sensitivity = prior_feature_sample_sensitivity(
-                    points=selection_points,
-                    primary_prior_field=query_prior_field,
-                    ablation_prior_field=ablation_field,
-                )
-                model_prior_sensitivity = model_prior_feature_sensitivity(
-                    points=selection_points,
-                    point_dim=int(getattr(trained.model, "point_dim", selection_points.shape[1])),
-                    scaler=trained.scaler,
-                    primary_prior_field=query_prior_field,
-                    ablation_prior_field=ablation_field,
-                    boundaries=selection_boundaries,
-                )
-                ablation_trained = training_outputs_with_query_prior_field(
-                    trained,
-                    ablation_field,
-                )
-                ablation_method = _mlqds_method(
-                    name=ablation_name,
-                    trained_outputs=ablation_trained,
-                    workload=selection_workload,
-                )
-                ablation_mask = ablation_method.simplify(
-                    selection_points,
-                    selection_boundaries,
-                    float(config.model.compression_ratio),
-                )
-                ablation_snapshot = ablation_method.cached_score_snapshot()
-                ablation_point_scores = ablation_snapshot.scores
-                ablation_raw_preds = ablation_snapshot.raw_predictions
-                ablation_head_logits = ablation_snapshot.head_logits
-                prior_sensitivity[prior_sensitivity_key] = prior_ablation_sensitivity_from_tensors(
-                    sampled_prior_features=prior_feature_sensitivity,
-                    model_prior_features=model_prior_sensitivity,
-                    primary_scores=primary_scores,
-                    ablation_scores=ablation_point_scores
-                    if isinstance(ablation_point_scores, torch.Tensor)
-                    else None,
-                    primary_raw_predictions=primary_raw_preds
-                    if isinstance(primary_raw_preds, torch.Tensor)
-                    else None,
-                    ablation_raw_predictions=ablation_raw_preds
-                    if isinstance(ablation_raw_preds, torch.Tensor)
-                    else None,
-                    primary_head_logits=primary_head_logits
-                    if isinstance(primary_head_logits, torch.Tensor)
-                    else None,
-                    ablation_head_logits=ablation_head_logits
-                    if isinstance(ablation_head_logits, torch.Tensor)
-                    else None,
-                    primary_mask=primary_mask,
-                    ablation_mask=ablation_mask,
-                )
-                ablation_methods.append(
-                    FrozenMaskMethod(
-                        name=ablation_name,
-                        retained_mask=ablation_mask.detach().cpu(),
-                    )
-                )
-            except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
-                freeze_failures[ablation_name] = str(exc)
+    prior_field_ablations = _freeze_prior_field_selection_ablations(
+        selector_method=_selector_method,
+        build_selection_mlqds_method=build_selection_mlqds_method,
+        trained=trained,
+        selection_points=selection_points,
+        selection_boundaries=selection_boundaries,
+        selection_workload=selection_workload,
+        seeds=seeds,
+        config=config,
+        primary_scores=primary_scores if isinstance(primary_scores, torch.Tensor) else None,
+        primary_raw_preds=primary_raw_preds if isinstance(primary_raw_preds, torch.Tensor) else None,
+        primary_head_logits=primary_head_logits
+        if isinstance(primary_head_logits, torch.Tensor)
+        else None,
+        primary_mask=primary_mask,
+    )
+    ablation_methods.extend(prior_field_ablations.methods)
+    freeze_failures.update(prior_field_ablations.freeze_failures)
+    prior_sensitivity.update(prior_field_ablations.sensitivity)
 
     if not ablation_methods:
         payload = {

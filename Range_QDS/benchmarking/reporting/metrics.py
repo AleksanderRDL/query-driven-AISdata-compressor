@@ -11,22 +11,10 @@ MIN_MATCHED_LEARNED_SLOT_FRACTION_FOR_BLIND_CLAIM = 0.25
 RANGE_COMPONENT_KEYS = (
     "query_point_recall",
     "range_point_f1",
-    "range_ship_f1",
-    "range_ship_coverage",
-    "range_entry_exit_f1",
-    "range_crossing_f1",
-    "range_temporal_coverage",
-    "range_gap_coverage",
+    "range_gap_min_coverage",
     "range_turn_coverage",
-    "range_shape_score",
     "range_query_local_interpolation_fidelity",
 )
-RANGE_USEFULNESS_GAP_VARIANT_KEYS = (
-    ("gap_time", "range_usefulness_gap_time_score"),
-    ("gap_distance", "range_usefulness_gap_distance_score"),
-    ("gap_min", "range_usefulness_gap_min_score"),
-)
-
 
 def _metric_delta(left: dict[str, Any], right: dict[str, Any], key: str) -> float | None:
     """Return left - right for one numeric metric."""
@@ -85,12 +73,13 @@ def _single_cell_range_status(
     beats_uniform: bool | None,
     beats_dp: bool | None,
     selector_claim_status: str,
+    missing_metric_status: str = "missing_query_local_utility",
 ) -> str:
-    """Classify one benchmark row against the single-cell blind RangeUseful gate."""
+    """Classify one range benchmark row against its configured single-cell metric gate."""
     if int(returncode) != 0:
         return "child_failed"
     if beats_uniform is None or beats_dp is None:
-        return "missing_range_usefulness"
+        return missing_metric_status
     if model_type == "range_aware":
         return "diagnostic_upper_bound"
     workload_blind = is_workload_blind_model_type(model_type)

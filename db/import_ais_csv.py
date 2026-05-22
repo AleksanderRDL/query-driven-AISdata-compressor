@@ -98,37 +98,37 @@ def resolve_csv_path(csv_path_arg: str, aisdata_dir: str) -> str:
     return direct
 
 
-def to_int(x: str | None):
-    if x is None:
+def to_int(raw_value: str | None):
+    if raw_value is None:
         return None
-    x = x.strip()
-    if x == "":
+    raw_value = raw_value.strip()
+    if raw_value == "":
         return None
     try:
-        return int(float(x))
+        return int(float(raw_value))
     except ValueError:
         return None
 
 
-def to_float(x: str | None):
-    if x is None:
+def to_float(raw_value: str | None):
+    if raw_value is None:
         return None
-    x = x.strip()
-    if x == "":
+    raw_value = raw_value.strip()
+    if raw_value == "":
         return None
     try:
-        return float(x)
+        return float(raw_value)
     except ValueError:
         return None
 
 
-def to_text(x: str | None):
-    if x is None:
+def to_text(raw_value: str | None):
+    if raw_value is None:
         return None
-    x = x.strip()
-    if x == "":
+    raw_value = raw_value.strip()
+    if raw_value == "":
         return None
-    return x
+    return raw_value
 
 
 @lru_cache(maxsize=250_000)

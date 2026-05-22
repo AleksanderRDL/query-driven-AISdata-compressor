@@ -6,6 +6,7 @@ from typing import Any
 
 import torch
 
+from workloads.query_types import validated_range_query_params
 from workloads.range_geometry import points_in_range_box
 from workloads.workload_diagnostics import range_query_diagnostic
 
@@ -33,12 +34,7 @@ def point_coverage_mask_for_query(points: torch.Tensor, query: dict[str, Any]) -
     if points.numel() == 0:
         return mask
 
-    query_type = str(query["type"]).lower()
-    params = query["params"]
-    if query_type == "range":
-        return points_in_range_box(points, params)
-
-    raise ValueError(f"Only range queries are supported for coverage; got query type: {query_type}")
+    return points_in_range_box(points, validated_range_query_params(query))
 
 
 def query_coverage_mask(points: torch.Tensor, typed_queries: list[dict[str, Any]]) -> torch.Tensor:

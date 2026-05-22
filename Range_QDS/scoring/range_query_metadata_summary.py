@@ -8,24 +8,14 @@ from scoring.query_local_utility import (
     QUERY_LOCAL_UTILITY_COMPONENT_WEIGHTS,
     query_local_utility_components_from_range_audit,
 )
-from scoring.range_usefulness import range_usefulness_score_from_components
 
-RANGE_QUERY_METADATA_COMPONENT_SUMMARY_SCHEMA_VERSION = 2
+RANGE_QUERY_METADATA_COMPONENT_SUMMARY_SCHEMA_VERSION = 3
 
 RANGE_QUERY_COMPONENT_KEYS: tuple[str, ...] = (
     "query_point_recall",
     "range_point_f1",
-    "range_ship_f1",
-    "range_ship_coverage",
-    "range_entry_exit_f1",
-    "range_crossing_f1",
-    "range_temporal_coverage",
-    "range_gap_coverage",
-    "range_gap_time_coverage",
-    "range_gap_distance_coverage",
     "range_gap_min_coverage",
     "range_turn_coverage",
-    "range_shape_score",
     "range_query_local_interpolation_fidelity",
 )
 
@@ -46,7 +36,7 @@ def _mean(values: list[float], default: float = 0.0) -> float:
 def _safe_float(value: Any, default: float = 0.0) -> float:
     try:
         result = float(value)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return float(default)
     if result != result:
         return float(default)
@@ -111,85 +101,15 @@ def _range_query_component_summary_for_rows(rows: list[dict[str, Any]]) -> dict[
     }
     full_point_counts = [_safe_float(row.get("full_point_hit_count")) for row in rows]
     retained_point_counts = [_safe_float(row.get("retained_point_hit_count")) for row in rows]
-    full_ship_counts = [_safe_float(row.get("full_trajectory_hit_count")) for row in rows]
-    retained_ship_counts = [_safe_float(row.get("retained_trajectory_hit_count")) for row in rows]
-    ship_evidence_rows: list[dict[str, Any]] = []
-    for row in rows:
-        ship_evidence = row.get("ship_evidence_counts")
-        if isinstance(ship_evidence, dict):
-            ship_evidence_rows.append(ship_evidence)
-    missed_ship_counts = [
-        _safe_float(row.get("missed_trajectory_hit_count")) for row in ship_evidence_rows
-    ]
-    missed_ship_fractions = [
-        _safe_float(row.get("missed_trajectory_hit_fraction")) for row in ship_evidence_rows
-    ]
-    single_full = [
-        _safe_float(row.get("single_point_full_trajectory_hit_count")) for row in ship_evidence_rows
-    ]
-    single_retained = [
-        _safe_float(row.get("single_point_retained_trajectory_hit_count"))
-        for row in ship_evidence_rows
-    ]
-    multi_full = [
-        _safe_float(row.get("multi_point_full_trajectory_hit_count")) for row in ship_evidence_rows
-    ]
-    multi_retained = [
-        _safe_float(row.get("multi_point_retained_trajectory_hit_count"))
-        for row in ship_evidence_rows
-    ]
-    full_ship_total = sum(full_ship_counts)
-    retained_ship_total = sum(retained_ship_counts)
-    single_full_total = sum(single_full)
-    single_retained_total = sum(single_retained)
-    multi_full_total = sum(multi_full)
-    multi_retained_total = sum(multi_retained)
     return {
         "query_count": len(rows),
         "hit_counts": {
             "full_point_hit_count_total": int(sum(full_point_counts)),
             "retained_point_hit_count_total": int(sum(retained_point_counts)),
-            "full_trajectory_hit_count_total": int(full_ship_total),
-            "retained_trajectory_hit_count_total": int(retained_ship_total),
-            "full_trajectory_hit_count_mean": _mean(full_ship_counts),
-            "retained_trajectory_hit_count_mean": _mean(retained_ship_counts),
             "full_point_hit_count_mean": _mean(full_point_counts),
             "retained_point_hit_count_mean": _mean(retained_point_counts),
         },
-        "ship_evidence_counts": {
-            "full_trajectory_hit_count_total": int(full_ship_total),
-            "retained_trajectory_hit_count_total": int(retained_ship_total),
-            "missed_trajectory_hit_count_total": int(sum(missed_ship_counts)),
-            "missed_trajectory_hit_count_mean": _mean(missed_ship_counts),
-            "missed_trajectory_hit_fraction_mean": _mean(missed_ship_fractions),
-            "ship_presence_recall": float(
-                retained_ship_total / full_ship_total if full_ship_total > 0.0 else 1.0
-            ),
-            "single_point_full_trajectory_hit_count_total": int(single_full_total),
-            "single_point_retained_trajectory_hit_count_total": int(single_retained_total),
-            "single_point_ship_presence_recall": float(
-                single_retained_total / single_full_total if single_full_total > 0.0 else 1.0
-            ),
-            "multi_point_full_trajectory_hit_count_total": int(multi_full_total),
-            "multi_point_retained_trajectory_hit_count_total": int(multi_retained_total),
-            "multi_point_ship_presence_recall": float(
-                multi_retained_total / multi_full_total if multi_full_total > 0.0 else 1.0
-            ),
-            "full_query_hit_points_per_hit_trajectory_mean": _mean(
-                [
-                    _safe_float(row.get("full_query_hit_points_per_hit_trajectory_mean"))
-                    for row in ship_evidence_rows
-                ]
-            ),
-            "retained_query_hit_points_per_hit_trajectory_mean": _mean(
-                [
-                    _safe_float(row.get("retained_query_hit_points_per_hit_trajectory_mean"))
-                    for row in ship_evidence_rows
-                ]
-            ),
-        },
         "range_components": range_components,
-        "range_usefulness_score": float(range_usefulness_score_from_components(range_components)),
         **_query_local_query_local_utility_summary(range_components),
     }
 

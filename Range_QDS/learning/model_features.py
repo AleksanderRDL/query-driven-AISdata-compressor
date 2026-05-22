@@ -8,6 +8,7 @@ from typing import Any
 import torch
 
 from learning.query_prior_fields import QUERY_PRIOR_FIELD_NAMES, sample_query_prior_fields
+from workloads.query_types import validated_range_query_params
 from workloads.typed_workload import TypedQueryWorkload
 
 RANGE_AWARE_EXTRA_DIM = 8
@@ -178,24 +179,32 @@ def _range_relation_features(
     query_values = torch.tensor(
         [
             [
-                float(query["params"]["t_start"]),
-                float(query["params"]["t_end"]),
-                float(query["params"]["lat_min"]),
-                float(query["params"]["lat_max"]),
-                float(query["params"]["lon_min"]),
-                float(query["params"]["lon_max"]),
+                params["t_start"],
+                params["t_end"],
+                params["lat_min"],
+                params["lat_max"],
+                params["lon_min"],
+                params["lon_max"],
             ]
             for query in range_queries
+            for params in [validated_range_query_params(query)]
         ],
         dtype=dtype,
         device=device,
     )
-    t0_all, t1_all, lat0_all, lat1_all, lon0_all, lon1_all = query_values.T
-    t_span_all = torch.clamp(t1_all - t0_all, min=1e-6)
-    lat_span_all = torch.clamp(lat1_all - lat0_all, min=1e-6)
-    lon_span_all = torch.clamp(lon1_all - lon0_all, min=1e-6)
+    (
+        query_time_start,
+        query_time_end,
+        query_lat_min,
+        query_lat_max,
+        query_lon_min,
+        query_lon_max,
+    ) = query_values.T
+    query_time_span = torch.clamp(query_time_end - query_time_start, min=1e-6)
+    query_lat_span = torch.clamp(query_lat_max - query_lat_min, min=1e-6)
+    query_lon_span = torch.clamp(query_lon_max - query_lon_min, min=1e-6)
     inv_sqrt_volume_all = torch.rsqrt(
-        torch.clamp(t_span_all * lat_span_all * lon_span_all, min=1e-12)
+        torch.clamp(query_time_span * query_lat_span * query_lon_span, min=1e-12)
     )
 
     sqrt3 = math.sqrt(3.0)
@@ -214,15 +223,21 @@ def _range_relation_features(
 
         for query_start in range(0, query_count, query_chunk_size):
             query_end = min(query_count, query_start + query_chunk_size)
-            t0 = t0_all[query_start:query_end].unsqueeze(0)
-            lat0 = lat0_all[query_start:query_end].unsqueeze(0)
-            lon0 = lon0_all[query_start:query_end].unsqueeze(0)
-            rel_t = (time - t0) / t_span_all[query_start:query_end].unsqueeze(0)
-            rel_lat = (lat - lat0) / lat_span_all[query_start:query_end].unsqueeze(0)
-            rel_lon = (lon - lon0) / lon_span_all[query_start:query_end].unsqueeze(0)
+            chunk_time_start = query_time_start[query_start:query_end].unsqueeze(0)
+            chunk_lat_min = query_lat_min[query_start:query_end].unsqueeze(0)
+            chunk_lon_min = query_lon_min[query_start:query_end].unsqueeze(0)
+            rel_time = (time - chunk_time_start) / query_time_span[
+                query_start:query_end
+            ].unsqueeze(0)
+            rel_lat = (lat - chunk_lat_min) / query_lat_span[
+                query_start:query_end
+            ].unsqueeze(0)
+            rel_lon = (lon - chunk_lon_min) / query_lon_span[
+                query_start:query_end
+            ].unsqueeze(0)
             inside = (
-                (rel_t >= 0.0)
-                & (rel_t <= 1.0)
+                (rel_time >= 0.0)
+                & (rel_time <= 1.0)
                 & (rel_lat >= 0.0)
                 & (rel_lat <= 1.0)
                 & (rel_lon >= 0.0)
@@ -235,14 +250,14 @@ def _range_relation_features(
             local[:, 1] += (inside_f * inv_sqrt_volume).sum(dim=1)
             local[:, 2] = torch.maximum(local[:, 2], (inside_f * inv_sqrt_volume).max(dim=1).values)
 
-            below_t = torch.clamp(-rel_t, min=0.0)
-            above_t = torch.clamp(rel_t - 1.0, min=0.0)
+            below_time = torch.clamp(-rel_time, min=0.0)
+            above_time = torch.clamp(rel_time - 1.0, min=0.0)
             below_lat = torch.clamp(-rel_lat, min=0.0)
             above_lat = torch.clamp(rel_lat - 1.0, min=0.0)
             below_lon = torch.clamp(-rel_lon, min=0.0)
             above_lon = torch.clamp(rel_lon - 1.0, min=0.0)
             outside_dist = torch.sqrt(
-                torch.maximum(below_t, above_t).square()
+                torch.maximum(below_time, above_time).square()
                 + torch.maximum(below_lat, above_lat).square()
                 + torch.maximum(below_lon, above_lon).square()
             )
@@ -251,20 +266,20 @@ def _range_relation_features(
             )
 
             center_dist = torch.sqrt(
-                ((rel_t - 0.5) * 2.0).square()
+                ((rel_time - 0.5) * 2.0).square()
                 + ((rel_lat - 0.5) * 2.0).square()
                 + ((rel_lon - 0.5) * 2.0).square()
             )
             center_score = torch.clamp(1.0 - center_dist / sqrt3, min=0.0, max=1.0) * inside_f
             local[:, 4] = torch.maximum(local[:, 4], center_score.max(dim=1).values)
 
-            t_face = torch.minimum(rel_t, 1.0 - rel_t)
+            time_face = torch.minimum(rel_time, 1.0 - rel_time)
             lat_face = torch.minimum(rel_lat, 1.0 - rel_lat)
             lon_face = torch.minimum(rel_lon, 1.0 - rel_lon)
-            temporal_boundary = torch.clamp(1.0 - 2.0 * t_face, min=0.0, max=1.0) * inside_f
+            temporal_boundary = torch.clamp(1.0 - 2.0 * time_face, min=0.0, max=1.0) * inside_f
             spatial_face = torch.minimum(lat_face, lon_face)
             spatial_boundary = torch.clamp(1.0 - 2.0 * spatial_face, min=0.0, max=1.0) * inside_f
-            any_face = torch.minimum(t_face, spatial_face)
+            any_face = torch.minimum(time_face, spatial_face)
             boundary = torch.clamp(1.0 - 2.0 * any_face, min=0.0, max=1.0) * inside_f
             local[:, 5] = torch.maximum(local[:, 5], boundary.max(dim=1).values)
             local[:, 6] = torch.maximum(local[:, 6], temporal_boundary.max(dim=1).values)

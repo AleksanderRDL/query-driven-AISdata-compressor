@@ -68,16 +68,7 @@ def training_target_row_fields(
         "train_positive_label_mass": train_label_diagnostics.get("positive_label_mass"),
         "train_label_mass_basis": train_label_diagnostics.get("component_label_mass_basis"),
         "train_label_mass_range_point_f1": label_mass_fraction.get("range_point_f1"),
-        "train_label_mass_range_ship_f1": label_mass_fraction.get("range_ship_f1"),
-        "train_label_mass_range_ship_coverage": label_mass_fraction.get("range_ship_coverage"),
-        "train_label_mass_range_entry_exit_f1": label_mass_fraction.get("range_entry_exit_f1"),
-        "train_label_mass_range_crossing_f1": label_mass_fraction.get("range_crossing_f1"),
-        "train_label_mass_range_temporal_coverage": label_mass_fraction.get(
-            "range_temporal_coverage"
-        ),
-        "train_label_mass_range_gap_coverage": label_mass_fraction.get("range_gap_coverage"),
         "train_label_mass_range_turn_coverage": label_mass_fraction.get("range_turn_coverage"),
-        "train_label_mass_range_shape_score": label_mass_fraction.get("range_shape_score"),
         "train_target_positive_label_mass": target_diagnostics.get("positive_label_mass"),
         "range_target_transform_mode": target_transform.get("mode"),
         "range_target_transform_target_family": target_transform.get("target_family"),

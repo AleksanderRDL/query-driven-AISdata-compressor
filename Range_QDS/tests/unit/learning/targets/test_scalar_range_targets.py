@@ -7,15 +7,10 @@ import torch
 
 from config.run_config import ModelConfig
 from learning.targets.aggregation import (
-    aggregate_range_component_label_sets,
-    aggregate_range_component_retained_frequency_training_labels,
-    aggregate_range_continuity_retained_frequency_training_labels,
     aggregate_range_global_budget_retained_frequency_training_labels,
     aggregate_range_marginal_coverage_training_labels,
     aggregate_range_retained_frequency_training_labels,
     aggregate_range_structural_retained_frequency_training_labels,
-    range_component_retained_frequency_training_labels,
-    range_continuity_retained_frequency_training_labels,
 )
 from learning.targets.common import (
     aggregate_range_label_sets,
@@ -77,12 +72,6 @@ def _diag_number(diagnostics: dict[str, object], key: str) -> float:
     value = diagnostics[key]
     assert isinstance(value, (int, float))
     return float(value)
-
-
-def _diag_dict(diagnostics: dict[str, object], key: str) -> dict[str, object]:
-    value = diagnostics[key]
-    assert isinstance(value, dict)
-    return value
 
 
 def test_range_retained_frequency_training_labels_builds_budget_frequency_target() -> None:
@@ -461,162 +450,6 @@ def test_aggregate_retained_frequency_labels_averages_workload_topk_frequency() 
     assert torch.allclose(labels[:, 0], torch.tensor([0.5, 0.5, 0.5, 0.5]))
 
 
-def test_component_retained_frequency_keeps_component_specific_targets() -> None:
-    labels = torch.zeros((6, 1), dtype=torch.float32)
-    labelled_mask = torch.ones_like(labels, dtype=torch.bool)
-    component_labels = {
-        "range_point_f1": torch.tensor([[1.0], [0.8], [0.0], [0.0], [0.0], [0.0]]),
-        "range_gap_coverage": torch.tensor([[0.0], [0.0], [0.0], [0.0], [0.9], [0.7]]),
-    }
-    config = ModelConfig(
-        budget_loss_ratios=[0.33],
-        mlqds_temporal_fraction=0.0,
-    )
-
-    transformed, transformed_mask, diagnostics = range_component_retained_frequency_training_labels(
-        labels=labels,
-        labelled_mask=labelled_mask,
-        component_labels=component_labels,
-        boundaries=[(0, 6)],
-        model_config=config,
-    )
-
-    assert transformed_mask[:, 0].all()
-    assert diagnostics["mode"] == "component_retained_frequency"
-    assert transformed[0, 0] > 0.0
-    assert transformed[1, 0] > 0.0
-    assert transformed[4, 0] > 0.0
-    assert transformed[5, 0] > 0.0
-    assert torch.allclose(transformed[2:4, 0], torch.zeros((2,)))
-
-
-def test_continuity_retained_frequency_ignores_point_only_components() -> None:
-    labels = torch.zeros((6, 1), dtype=torch.float32)
-    labelled_mask = torch.ones_like(labels, dtype=torch.bool)
-    component_labels = {
-        "range_point_f1": torch.tensor([[1.0], [0.9], [0.0], [0.0], [0.0], [0.0]]),
-        "range_gap_coverage": torch.tensor([[0.0], [0.0], [0.0], [0.0], [0.9], [0.7]]),
-        "range_entry_exit_f1": torch.tensor([[0.0], [0.0], [0.8], [0.0], [0.0], [0.0]]),
-    }
-    config = ModelConfig(
-        budget_loss_ratios=[0.33],
-        mlqds_temporal_fraction=0.0,
-        range_component_target_blend=1.0,
-    )
-
-    transformed, transformed_mask, diagnostics = (
-        range_continuity_retained_frequency_training_labels(
-            labels=labels,
-            labelled_mask=labelled_mask,
-            component_labels=component_labels,
-            boundaries=[(0, 6)],
-            model_config=config,
-        )
-    )
-
-    assert transformed_mask[:, 0].all()
-    assert diagnostics["mode"] == "continuity_retained_frequency"
-    assert "range_point_f1" not in _diag_dict(diagnostics, "component_diagnostics")
-    assert transformed[4, 0] > 0.0
-    assert transformed[5, 0] > 0.0
-    assert transformed[0, 0].item() == 0.0
-    assert transformed[1, 0].item() == 0.0
-
-
-def _component_label_dict(values: torch.Tensor) -> dict[str, torch.Tensor]:
-    return {
-        name: values.clone()
-        for name in (
-            "range_point_f1",
-            "range_ship_f1",
-            "range_ship_coverage",
-            "range_entry_exit_f1",
-            "range_crossing_f1",
-            "range_temporal_coverage",
-            "range_gap_coverage",
-            "range_turn_coverage",
-            "range_shape_score",
-        )
-    }
-
-
-def test_aggregate_component_label_sets_preserves_component_streams() -> None:
-    labels_a = torch.tensor([[1.0], [0.2], [0.0], [0.0]])
-    labels_b = torch.tensor([[0.0], [0.6], [0.5], [0.0]])
-    mask = torch.ones_like(labels_a, dtype=torch.bool)
-    component_a = _component_label_dict(torch.zeros_like(labels_a))
-    component_b = _component_label_dict(torch.zeros_like(labels_a))
-    component_a["range_crossing_f1"][:, 0] = torch.tensor([0.1, 0.0, 0.0, 0.0])
-    component_b["range_crossing_f1"][:, 0] = torch.tensor([0.0, 0.0, 0.7, 0.0])
-
-    labels, labelled_mask, components, diagnostics = aggregate_range_component_label_sets(
-        [(labels_a, mask), (labels_b, mask)],
-        [component_a, component_b],
-        aggregation="max",
-    )
-
-    assert labelled_mask[:, 0].all()
-    assert diagnostics["aggregation"] == "max"
-    assert torch.allclose(labels[:, 0], torch.tensor([1.0, 0.6, 0.5, 0.0]))
-    assert torch.allclose(components["range_crossing_f1"][:, 0], torch.tensor([0.1, 0.0, 0.7, 0.0]))
-
-
-def test_aggregate_component_retained_frequency_averages_replicate_targets() -> None:
-    labels_a = torch.zeros((4, 1), dtype=torch.float32)
-    labels_b = torch.zeros((4, 1), dtype=torch.float32)
-    labels_a[:, 0] = torch.tensor([1.0, 0.9, 0.0, 0.0])
-    labels_b[:, 0] = torch.tensor([0.0, 0.0, 0.8, 0.7])
-    mask = torch.ones_like(labels_a, dtype=torch.bool)
-    config = ModelConfig(
-        budget_loss_ratios=[0.50],
-        mlqds_temporal_fraction=0.0,
-        range_component_target_blend=1.0,
-    )
-
-    labels, labelled_mask, diagnostics = (
-        aggregate_range_component_retained_frequency_training_labels(
-            label_sets=[(labels_a, mask), (labels_b, mask)],
-            component_label_sets=[_component_label_dict(labels_a), _component_label_dict(labels_b)],
-            boundaries=[(0, 4)],
-            model_config=config,
-        )
-    )
-
-    assert labelled_mask[:, 0].all()
-    assert diagnostics["mode"] == "component_retained_frequency"
-    assert diagnostics["replicate_count"] == 2
-    assert torch.allclose(labels[:, 0], torch.tensor([0.5, 0.5, 0.5, 0.5]))
-
-
-def test_aggregate_continuity_retained_frequency_averages_replicate_targets() -> None:
-    labels_a = torch.zeros((4, 1), dtype=torch.float32)
-    labels_b = torch.zeros((4, 1), dtype=torch.float32)
-    mask = torch.ones_like(labels_a, dtype=torch.bool)
-    component_a = _component_label_dict(torch.zeros_like(labels_a))
-    component_b = _component_label_dict(torch.zeros_like(labels_b))
-    component_a["range_gap_coverage"][:, 0] = torch.tensor([1.0, 0.9, 0.0, 0.0])
-    component_b["range_temporal_coverage"][:, 0] = torch.tensor([0.0, 0.0, 0.8, 0.7])
-    config = ModelConfig(
-        budget_loss_ratios=[0.50],
-        mlqds_temporal_fraction=0.0,
-        range_component_target_blend=1.0,
-    )
-
-    labels, labelled_mask, diagnostics = (
-        aggregate_range_continuity_retained_frequency_training_labels(
-            label_sets=[(labels_a, mask), (labels_b, mask)],
-            component_label_sets=[component_a, component_b],
-            boundaries=[(0, 4)],
-            model_config=config,
-        )
-    )
-
-    assert labelled_mask[:, 0].all()
-    assert diagnostics["mode"] == "continuity_retained_frequency"
-    assert diagnostics["replicate_count"] == 2
-    assert torch.allclose(labels[:, 0], torch.tensor([0.5, 0.5, 0.5, 0.5]))
-
-
 def test_query_spine_frequency_builds_workload_blind_spine_target() -> None:
     points = _toy_points()
     workload = _toy_workload()
@@ -754,7 +587,7 @@ def test_query_residual_point_mass_mode_keeps_anchor_frequency_mass() -> None:
     )
 
 
-def test_set_utility_frequency_labels_marginal_range_usefulness_gain() -> None:
+def test_set_utility_frequency_labels_marginal_query_local_utility_gain() -> None:
     points = _toy_points()
     workload = _toy_workload()
     labels = torch.zeros((points.shape[0], 1), dtype=torch.float32)
@@ -779,7 +612,7 @@ def test_set_utility_frequency_labels_marginal_range_usefulness_gain() -> None:
     assert transformed.shape == labels.shape
     assert transformed_mask[:, 0].all()
     assert diagnostics["mode"] == "set_utility_frequency"
-    assert diagnostics["source"] == "range_train_query_marginal_usefulness_gain"
+    assert diagnostics["source"] == "range_train_query_marginal_query_local_utility_gain"
     assert diagnostics["set_utility_range_query_count"] == 1
     assert diagnostics["set_utility_used_budget_count"] == 1
     assert _diag_number(diagnostics, "set_utility_scored_candidate_count") > 0
@@ -832,7 +665,7 @@ def test_local_swap_utility_frequency_labels_replacement_gain() -> None:
     assert transformed.shape == labels.shape
     assert transformed_mask[:, 0].all()
     assert diagnostics["mode"] == "local_swap_utility_frequency"
-    assert diagnostics["source"] == "range_train_query_local_swap_usefulness_gain"
+    assert diagnostics["source"] == "range_train_query_local_swap_query_local_utility_gain"
     assert diagnostics["local_swap_utility_range_query_count"] == 1
     assert diagnostics["local_swap_utility_used_budget_count"] == 1
     assert _diag_number(diagnostics, "local_swap_utility_scored_candidate_count") > 0
@@ -895,7 +728,7 @@ def test_local_swap_gain_cost_frequency_labels_candidate_value_and_base_cost() -
     assert _diag_number(diagnostics, "local_swap_gain_cost_positive_net_gain_count") > 0
     assert _diag_number(diagnostics, "local_swap_gain_cost_selected_count") > 0
     assert _diag_number(diagnostics, "local_swap_gain_cost_selected_candidate_value_mass") > 0.0
-    assert _diag_number(diagnostics, "local_swap_gain_cost_selected_removal_cost_mass") > 0.0
-    assert transformed[2, 0] > 0.0
-    assert torch.max(transformed[3:5, 0]) > transformed[2, 0]
+    assert _diag_number(diagnostics, "local_swap_gain_cost_selected_removal_cost_mass") >= 0.0
+    assert transformed[4, 0] > 0.0
+    assert torch.count_nonzero(transformed[:, 0]).item() == 1
     assert float(transformed[:, 0].max().item()) <= 1.0

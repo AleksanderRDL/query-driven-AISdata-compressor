@@ -50,7 +50,7 @@ def _initialize_factorized_head_output_biases_from_targets(
         for head_idx, head_name in enumerate(head_names):
             try:
                 head_module = heads[head_name]
-            except KeyError, TypeError:
+            except (KeyError, TypeError):
                 rows[head_name] = {
                     "initialized": False,
                     "target_mean": None,

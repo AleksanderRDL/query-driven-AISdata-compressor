@@ -16,7 +16,7 @@ from selection.retained_mask_selectors import (
     deterministic_topk_with_jitter,
     evenly_spaced_indices,
 )
-from workloads.query_types import QUERY_TYPE_ID_RANGE
+from workloads.query_types import QUERY_TYPE_ID_RANGE, validated_range_query_params
 from workloads.range_geometry import points_in_range_box
 
 
@@ -57,9 +57,7 @@ def _range_query_spine_scores(
         if str(query.get("type", "")).lower() != "range":
             continue
         range_query_count += 1
-        params = query.get("params")
-        if not isinstance(params, dict):
-            continue
+        params = validated_range_query_params(query)
         box_support = points_in_range_box(points, params)
         query_groups: list[torch.Tensor] = []
         for trajectory_id, (start, end) in enumerate(boundaries):

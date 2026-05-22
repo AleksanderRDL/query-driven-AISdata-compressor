@@ -9,14 +9,10 @@ from typing import Any
 import torch
 
 from learning.targets.aggregation import (
-    aggregate_range_component_retained_frequency_training_labels,
-    aggregate_range_continuity_retained_frequency_training_labels,
     aggregate_range_global_budget_retained_frequency_training_labels,
     aggregate_range_marginal_coverage_training_labels,
     aggregate_range_retained_frequency_training_labels,
     aggregate_range_structural_retained_frequency_training_labels,
-    range_component_retained_frequency_training_labels,
-    range_continuity_retained_frequency_training_labels,
 )
 from learning.targets.local_swap import (
     range_local_swap_gain_cost_frequency_training_labels,
@@ -47,7 +43,6 @@ class RangeTargetModeSpec:
     aggregate_target_fn: RangeTargetCallable | None = None
     requires_points: bool = False
     requires_typed_queries: bool = False
-    requires_component_labels: bool = False
     supports_multiple_replicates: bool = True
 
     @property
@@ -76,18 +71,6 @@ RANGE_SCALAR_TARGET_MODE_SPECS: dict[str, RangeTargetModeSpec] = {
         target_fn=range_structural_retained_frequency_training_labels,
         aggregate_target_fn=aggregate_range_structural_retained_frequency_training_labels,
         requires_points=True,
-    ),
-    "component_retained_frequency": RangeTargetModeSpec(
-        mode="component_retained_frequency",
-        target_fn=range_component_retained_frequency_training_labels,
-        aggregate_target_fn=aggregate_range_component_retained_frequency_training_labels,
-        requires_component_labels=True,
-    ),
-    "continuity_retained_frequency": RangeTargetModeSpec(
-        mode="continuity_retained_frequency",
-        target_fn=range_continuity_retained_frequency_training_labels,
-        aggregate_target_fn=aggregate_range_continuity_retained_frequency_training_labels,
-        requires_component_labels=True,
     ),
     "marginal_coverage_frequency": RangeTargetModeSpec(
         mode="marginal_coverage_frequency",

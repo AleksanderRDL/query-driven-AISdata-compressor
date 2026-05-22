@@ -280,10 +280,6 @@ def _family_rows(
             str(component): _as_float(delta)
             for component, delta in _as_dict(row.get("range_component_deltas")).items()
         }
-        ship_deltas = {
-            str(component): _as_float(delta)
-            for component, delta in _as_dict(row.get("ship_evidence_count_deltas")).items()
-        }
         top_weighted_losses = _sorted_rows(
             [
                 {
@@ -303,9 +299,7 @@ def _family_rows(
                 "family": str(family),
                 "query_count": query_count,
                 "query_local_score_delta": _as_float(row.get("query_local_score_delta")),
-                "range_usefulness_delta": _as_float(row.get("range_usefulness_delta")),
                 "range_component_deltas": range_component_deltas,
-                "ship_evidence_count_deltas": ship_deltas,
                 "query_local_component_deltas": query_local_deltas,
                 "weighted_query_local_component_deltas": weighted_query_local_deltas,
                 "top_weighted_query_local_losses": top_weighted_losses,
@@ -377,18 +371,13 @@ def _group_delta_with_weights(
         )
         contribution = family_weight * component_delta
         weighted_delta += contribution
-        ship_deltas = _as_dict(row.get("ship_evidence_count_deltas"))
         family_rows.append(
             {
                 "family": family,
                 "family_weight": family_weight,
                 "component_weighted_delta": component_delta,
                 "profile_weighted_contribution": contribution,
-                "range_usefulness_delta": row.get("range_usefulness_delta"),
-                "ship_presence_recall_delta": ship_deltas.get("ship_presence_recall"),
-                "missed_trajectory_hit_count_delta": ship_deltas.get(
-                    "missed_trajectory_hit_count_total"
-                ),
+                "query_local_score_delta": row.get("query_local_score_delta"),
             }
         )
     return {
@@ -425,10 +414,6 @@ def _blocker_preserving_outcome(group_rows: dict[str, Any]) -> dict[str, Any]:
                         "family": row.get("family"),
                         "component_weighted_delta": row.get("component_weighted_delta"),
                         "profile_weighted_contribution": row.get("profile_weighted_contribution"),
-                        "ship_presence_recall_delta": row.get("ship_presence_recall_delta"),
-                        "missed_trajectory_hit_count_delta": row.get(
-                            "missed_trajectory_hit_count_delta"
-                        ),
                     }
                 )
     return {
@@ -557,28 +542,18 @@ def _recalibration_candidates(
 def _blocking_family_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     blocking = []
     for row in rows:
-        ship_deltas = _as_dict(row.get("ship_evidence_count_deltas"))
-        if _as_float(row.get("range_usefulness_delta")) < 0.0 and (
-            _as_float(ship_deltas.get("missed_trajectory_hit_count_total")) > 0.0
-            or _as_float(ship_deltas.get("ship_presence_recall")) < 0.0
-        ):
+        top_losses = row.get("top_weighted_query_local_losses", [])
+        if _as_float(row.get("query_local_score_delta")) < 0.0 and top_losses:
             blocking.append(
                 {
                     "group_key": row.get("group_key"),
                     "family": row.get("family"),
                     "query_count": row.get("query_count"),
-                    "range_usefulness_delta": row.get("range_usefulness_delta"),
                     "query_local_score_delta": row.get("query_local_score_delta"),
-                    "ship_presence_recall_delta": ship_deltas.get("ship_presence_recall"),
-                    "missed_trajectory_hit_count_delta": ship_deltas.get(
-                        "missed_trajectory_hit_count_total"
-                    ),
-                    "top_weighted_query_local_losses": row.get(
-                        "top_weighted_query_local_losses", []
-                    ),
+                    "top_weighted_query_local_losses": top_losses,
                 }
             )
-    return _sorted_rows(blocking, "range_usefulness_delta")[:12]
+    return _sorted_rows(blocking, "query_local_score_delta")[:12]
 
 
 def _artifact_summary(
@@ -673,7 +648,7 @@ def build_workload_component_compatibility_diagnostic(
         group_blocking_families = _as_dict(group).get("blocking_families", [])
         if isinstance(group_blocking_families, list):
             blocking_families.extend(group_blocking_families)
-    blocking_families = _sorted_rows(blocking_families, "range_usefulness_delta")[:12]
+    blocking_families = _sorted_rows(blocking_families, "query_local_score_delta")[:12]
     recalibration = _as_dict(current.get("recalibration_diagnostics"))
     candidate_rows = recalibration.get("scoring_candidates", [])
     if not isinstance(candidate_rows, list):
@@ -707,9 +682,9 @@ def build_workload_component_compatibility_diagnostic(
             ).get("unresolved_blocker_families"),
             "interpretation": (
                 "Grouped strict evidence points to workload/scoring compatibility, not "
-                "another segment-budget proxy. Families with negative usefulness and "
-                "missed ship evidence should drive the next workload/profile and "
-                "QueryLocalUtility component recalibration checkpoint."
+                "another segment-budget proxy. Families with negative QueryLocalUtility "
+                "should drive the next workload/profile and QueryLocalUtility component "
+                "recalibration checkpoint."
             ),
         },
     }

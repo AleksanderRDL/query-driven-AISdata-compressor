@@ -6,10 +6,24 @@ from config.run_config import build_run_config
 from orchestration.learning_scoring_pipeline import run_learning_scoring_pipeline
 
 
-def test_pipeline_reports_active_metrics_and_diagnostics(synthetic_dataset, tmp_path) -> None:
-    """Assert matched-workload metrics, diagnostics, and saved outputs use current names."""
+def test_pipeline_reports_active_query_local_metrics_and_diagnostics(
+    synthetic_dataset, tmp_path
+) -> None:
+    """Assert the active query-driven candidate emits QueryLocalUtility contracts."""
     trajectories, _ = synthetic_dataset
-    cfg = build_run_config(n_queries=64, epochs=3)
+    cfg = build_run_config(
+        n_queries=24,
+        epochs=1,
+        model_type="workload_blind_range",
+        range_training_target_mode="query_local_utility_factorized",
+        selector_type="learned_segment_budget",
+        checkpoint_score_variant="query_local_utility",
+        checkpoint_selection_metric="uniform_gap",
+        workload_profile_id="range_query_mix",
+        range_train_workload_replicates=2,
+        validation_score_every=1,
+        compression_ratio=0.10,
+    )
 
     out = run_learning_scoring_pipeline(
         config=cfg,
@@ -31,22 +45,28 @@ def test_pipeline_reports_active_metrics_and_diagnostics(synthetic_dataset, tmp_
     assert "training_target_diagnostics" in out.metrics_dump
     assert "range_learned_fill_summary" in out.metrics_dump
     assert "workload_distribution_comparison" in out.metrics_dump
-    assert "RangePointF1" in out.matched_table
-    assert "RangeUseful" in out.matched_table
+    assert "QueryLocalUtility" in out.matched_table
     assert "AggregateErr" not in out.matched_table
     assert "aggregate_error" not in out.metrics_dump["matched"]["MLQDS"]
     assert "per_type_f1" in out.metrics_dump["matched"]["MLQDS"]
-    assert "range_usefulness_score" in out.metrics_dump["matched"]["MLQDS"]
-    assert out.metrics_dump["checkpoint_selection_metric"] == "score"
-    assert out.metrics_dump["checkpoint_score_variant"] == "range_usefulness"
-    assert out.metrics_dump["learning_causality_summary"]["selector_final_candidate"] is False
+    assert "query_local_utility_score" in out.metrics_dump["matched"]["MLQDS"]
+    assert out.metrics_dump["checkpoint_selection_metric"] == "uniform_gap"
+    assert out.metrics_dump["checkpoint_score_variant"] == "query_local_utility"
+    assert out.metrics_dump["final_claim_summary"]["primary_metric"] == "QueryLocalUtility"
+    assert out.metrics_dump["workload_blind_protocol"]["enabled"] is True
+    assert (
+        out.metrics_dump["workload_blind_protocol"][
+            "primary_masks_frozen_before_eval_query_scoring"
+        ]
+        is True
+    )
+    assert out.metrics_dump["learning_causality_summary"]["selector_final_candidate"] is True
     assert "legacy_temporal_hybrid_selector" not in out.metrics_dump["learning_causality_summary"]
-    assert abs(out.metrics_dump["range_usefulness_weight_summary"]["total_weight"] - 1.0) < 1e-9
     assert out.metrics_dump["checkpoint_smoothing_window"] == 1
     learned_fill_summary = out.metrics_dump["range_learned_fill_summary"]
     assert learned_fill_summary["summary_version"] == 1
     assert learned_fill_summary["oracle_notes"]["exact_optimum"] is False
-    assert "mlqds_vs_temporal_random_fill_range_usefulness" in learned_fill_summary
+    assert "mlqds_vs_temporal_random_fill_query_local_utility" in learned_fill_summary
     assert "target_residual_label_mass_fraction" in learned_fill_summary
     assert "train_label_component_mass_fraction" in learned_fill_summary
     assert (

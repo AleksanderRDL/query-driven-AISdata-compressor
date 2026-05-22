@@ -115,7 +115,6 @@ def _range_target_config_fields(ctx: RowContext) -> RowFields:
         "range_replicate_target_aggregation": model_config.get(
             "range_replicate_target_aggregation"
         ),
-        "range_component_target_blend": model_config.get("range_component_target_blend"),
         "range_temporal_target_blend": model_config.get("range_temporal_target_blend"),
         "range_structural_target_blend": model_config.get("range_structural_target_blend"),
         "range_structural_target_source_mode": model_config.get(

@@ -94,22 +94,14 @@ def test_workload_component_compatibility_diagnostic_finds_blocking_families() -
                         "density": {
                             "query_count": 10,
                             "query_local_score_delta": -0.02,
-                            "range_usefulness_delta": -0.03,
-                            "range_component_deltas": {"range_ship_f1": -0.20},
-                            "ship_evidence_count_deltas": {
-                                "missed_trajectory_hit_count_total": 3,
-                                "ship_presence_recall": -0.10,
-                            },
+                            "query_local_utility_delta": -0.03,
+                            "range_component_deltas": {"query_point_recall": -0.20},
                         },
                         "sparse_background_control": {
                             "query_count": 5,
                             "query_local_score_delta": -0.01,
-                            "range_usefulness_delta": -0.01,
-                            "range_component_deltas": {"range_ship_f1": -0.10},
-                            "ship_evidence_count_deltas": {
-                                "missed_trajectory_hit_count_total": 1,
-                                "ship_presence_recall": -0.05,
-                            },
+                            "query_local_utility_delta": -0.01,
+                            "range_component_deltas": {"query_point_recall": -0.10},
                         },
                     }
                 }
@@ -124,7 +116,7 @@ def test_workload_component_compatibility_diagnostic_finds_blocking_families() -
     )
     blocking = diagnostic["summary"]["blocking_families"]
     assert blocking[0]["family"] == "density"
-    assert blocking[0]["missed_trajectory_hit_count_delta"] == 3
+    assert blocking[0]["query_local_score_delta"] == pytest.approx(-0.02)
     components = diagnostic["summary"]["persistent_negative_query_local_components"]
     assert components[0]["component"] == "query_point_recall"
     assert components[0]["negative_family_count"] == 2

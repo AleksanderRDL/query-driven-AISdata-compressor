@@ -7,14 +7,16 @@ import math
 import torch
 
 from learning.targets.common import target_budget_ratios, target_budget_weights
-from learning.targets.set_utility import _range_set_utility_candidates
-from scoring.method_scoring import score_range_usefulness
+from learning.targets.set_utility import (
+    _query_local_utility_score_for_mask,
+    _range_set_utility_candidates,
+)
 from scoring.query_cache import ScoringQueryCache
 from selection.retained_mask_selectors import (
     deterministic_topk_with_jitter,
     evenly_spaced_indices,
 )
-from workloads.query_types import QUERY_TYPE_ID_RANGE
+from workloads.query_types import QUERY_TYPE_ID_RANGE, validated_range_query_params
 from workloads.range_geometry import points_in_range_box
 
 
@@ -107,7 +109,7 @@ def _range_local_swap_utility_scores(
     range_queries = [
         query
         for query in typed_queries
-        if str(query.get("type", "")).lower() == "range" and isinstance(query.get("params"), dict)
+        if str(query.get("type", "")).lower() == "range"
     ]
     range_query_count = len(range_queries)
     if range_query_count <= 0:
@@ -165,8 +167,9 @@ def _range_local_swap_utility_scores(
         budget_gain_mass = 0.0
 
         for query_index, query in enumerate(range_queries):
-            params = query.get("params")
-            if not isinstance(params, dict):
+            try:
+                params = validated_range_query_params(query)
+            except ValueError:
                 continue
             range_mask = points_in_range_box(points, params)
             hit_count = int(range_mask.sum().item())
@@ -187,14 +190,12 @@ def _range_local_swap_utility_scores(
 
             query_list = [query]
             query_cache = ScoringQueryCache.for_workload(points, boundaries, query_list)
-            base_score = float(
-                score_range_usefulness(
-                    points=points,
-                    boundaries=boundaries,
-                    retained_mask=base_mask,
-                    typed_queries=query_list,
-                    query_cache=query_cache,
-                )["range_usefulness_score"]
+            base_score = _query_local_utility_score_for_mask(
+                points=points,
+                boundaries=boundaries,
+                retained_mask=base_mask,
+                typed_queries=query_list,
+                query_cache=query_cache,
             )
             scored_indices: list[int] = []
             gains: list[float] = []
@@ -210,14 +211,12 @@ def _range_local_swap_utility_scores(
                     continue
                 retained[remove_idx] = False
                 retained[candidate_idx] = True
-                score = float(
-                    score_range_usefulness(
-                        points=points,
-                        boundaries=boundaries,
-                        retained_mask=retained,
-                        typed_queries=query_list,
-                        query_cache=query_cache,
-                    )["range_usefulness_score"]
+                score = _query_local_utility_score_for_mask(
+                    points=points,
+                    boundaries=boundaries,
+                    retained_mask=retained,
+                    typed_queries=query_list,
+                    query_cache=query_cache,
                 )
                 retained[candidate_idx] = bool(base_mask[candidate_idx].item())
                 retained[remove_idx] = True
@@ -328,7 +327,7 @@ def range_local_swap_utility_frequency_training_labels(
     model_config: object,
     type_idx: int = QUERY_TYPE_ID_RANGE,
 ) -> tuple[torch.Tensor, torch.Tensor, dict[str, object]]:
-    """Build train-query labels from positive local-swap RangeUseful gains."""
+    """Build train-query labels from positive local-swap QueryLocalUtility gains."""
     if labels.ndim != 2 or labelled_mask.shape != labels.shape:
         raise ValueError("labels and labelled_mask must have matching shape [n_points, n_types].")
     if type_idx < 0 or type_idx >= labels.shape[1]:
@@ -357,7 +356,7 @@ def range_local_swap_utility_frequency_training_labels(
     positive_count = int(positive.sum().item())
     diagnostics: dict[str, object] = {
         "mode": "local_swap_utility_frequency",
-        "source": "range_train_query_local_swap_usefulness_gain",
+        "source": "range_train_query_local_swap_query_local_utility_gain",
         "budget_loss_ratios": list(ratios),
         "budget_weights": list(target_budget_weights(model_config, ratios)),
         "budget_weight_power": float(
@@ -395,7 +394,7 @@ def _range_local_swap_gain_cost_scores(
     The local-delta selector accepts a replacement when candidate score exceeds
     the paired anchor score, so these labels directly encode the desired gate:
     candidate value > anchor cost iff the exact one-step replacement improves
-    train-query RangeUseful.
+    train-query QueryLocalUtility.
     """
     hybrid_mode = str(getattr(model_config, "mlqds_hybrid_mode", "fill")).lower()
     if hybrid_mode != "local_delta_swap":
@@ -419,7 +418,7 @@ def _range_local_swap_gain_cost_scores(
     range_queries = [
         query
         for query in typed_queries
-        if str(query.get("type", "")).lower() == "range" and isinstance(query.get("params"), dict)
+        if str(query.get("type", "")).lower() == "range"
     ]
     range_query_count = len(range_queries)
     if range_query_count <= 0:
@@ -481,8 +480,9 @@ def _range_local_swap_gain_cost_scores(
         budget_removal_cost_mass = 0.0
 
         for query_index, query in enumerate(range_queries):
-            params = query.get("params")
-            if not isinstance(params, dict):
+            try:
+                params = validated_range_query_params(query)
+            except ValueError:
                 continue
             range_mask = points_in_range_box(points, params)
             hit_count = int(range_mask.sum().item())
@@ -503,14 +503,12 @@ def _range_local_swap_gain_cost_scores(
 
             query_list = [query]
             query_cache = ScoringQueryCache.for_workload(points, boundaries, query_list)
-            base_score = float(
-                score_range_usefulness(
-                    points=points,
-                    boundaries=boundaries,
-                    retained_mask=base_mask,
-                    typed_queries=query_list,
-                    query_cache=query_cache,
-                )["range_usefulness_score"]
+            base_score = _query_local_utility_score_for_mask(
+                points=points,
+                boundaries=boundaries,
+                retained_mask=base_mask,
+                typed_queries=query_list,
+                query_cache=query_cache,
             )
             removal_score_cache: dict[int, float] = {}
             removal_cost_cache: dict[int, float] = {}
@@ -528,14 +526,12 @@ def _range_local_swap_gain_cost_scores(
                 if remove_idx not in removal_score_cache:
                     retained_without = base_mask.clone()
                     retained_without[remove_idx] = False
-                    removal_score = float(
-                        score_range_usefulness(
-                            points=points,
-                            boundaries=boundaries,
-                            retained_mask=retained_without,
-                            typed_queries=query_list,
-                            query_cache=query_cache,
-                        )["range_usefulness_score"]
+                    removal_score = _query_local_utility_score_for_mask(
+                        points=points,
+                        boundaries=boundaries,
+                        retained_mask=retained_without,
+                        typed_queries=query_list,
+                        query_cache=query_cache,
                     )
                     removal_score_cache[remove_idx] = removal_score
                     removal_cost_cache[remove_idx] = max(0.0, base_score - removal_score)
@@ -543,14 +539,12 @@ def _range_local_swap_gain_cost_scores(
                 retained_replacement = base_mask.clone()
                 retained_replacement[remove_idx] = False
                 retained_replacement[candidate_idx] = True
-                replacement_score = float(
-                    score_range_usefulness(
-                        points=points,
-                        boundaries=boundaries,
-                        retained_mask=retained_replacement,
-                        typed_queries=query_list,
-                        query_cache=query_cache,
-                    )["range_usefulness_score"]
+                replacement_score = _query_local_utility_score_for_mask(
+                    points=points,
+                    boundaries=boundaries,
+                    retained_mask=retained_replacement,
+                    typed_queries=query_list,
+                    query_cache=query_cache,
                 )
                 candidate_value = max(0.0, replacement_score - removal_score)
                 removal_cost = removal_cost_cache[remove_idx]

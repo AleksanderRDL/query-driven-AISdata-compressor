@@ -1,4 +1,4 @@
-"""Tests required query_type_ids path for model training mode. See models/README.md for details."""
+"""Tests query-conditioned model input contracts. See models/README.md for details."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ import torch
 from models.trajectory_qds_model import TrajectoryQDSModel
 
 
-def test_query_type_ids_required() -> None:
-    """Assert training forward fails without query_type_ids. See models/README.md for details."""
+def test_query_conditioned_model_requires_query_type_ids() -> None:
+    """Assert query-conditioned attention rejects missing query type IDs."""
     model = TrajectoryQDSModel(point_dim=7, query_dim=12)
     model.train()
     points = torch.randn(1, 32, 7)

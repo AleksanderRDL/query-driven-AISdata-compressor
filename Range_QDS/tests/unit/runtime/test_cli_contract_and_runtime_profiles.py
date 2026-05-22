@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from inspect import signature
-
 import pytest
 import torch
 
@@ -17,6 +15,7 @@ from benchmarking.runtime_benchmark import (
 )
 from config.run_config import (
     RUN_CONFIG_NAMESPACE_ALIASES,
+    RUN_CONFIG_OVERRIDE_NAMES,
     RunConfig,
     build_run_config,
     build_run_config_from_namespace,
@@ -53,7 +52,7 @@ def test_cli_parser_covers_run_config_builder_contract() -> None:
     args = build_parser().parse_args([])
     missing = [
         name
-        for name in signature(build_run_config).parameters
+        for name in RUN_CONFIG_OVERRIDE_NAMES
         if not hasattr(args, RUN_CONFIG_NAMESPACE_ALIASES.get(name, name))
     ]
 
@@ -249,7 +248,7 @@ def test_runtime_profile_uses_workload_aware_diagnostic_shape(tmp_path) -> None:
     assert args[args.index("--mlqds_hybrid_mode") + 1] == "fill"
     assert args[args.index("--mlqds_stratified_center_weight") + 1] == "0.00"
     assert args[args.index("--temporal_residual_label_mode") + 1] == "none"
-    assert args[args.index("--range_label_mode") + 1] == "usefulness"
+    assert args[args.index("--range_label_mode") + 1] == "point_f1"
     assert args[args.index("--range_temporal_target_blend") + 1] == "0.000"
     assert args[args.index("--range_target_budget_weight_power") + 1] == "0.00"
     assert args[args.index("--range_marginal_target_radius_scale") + 1] == "0.50"
@@ -310,12 +309,9 @@ def test_batch_size_sweep_summary_extracts_timing_memory_and_score() -> None:
             "peak_reserved_mb": 256.0,
             "best_selection_score": 0.4,
             "mlqds_aggregate_f1": 0.5,
-            "mlqds_range_usefulness_score": None,
-            "mlqds_range_ship_coverage": None,
-            "mlqds_range_crossing_f1": None,
-            "mlqds_range_gap_coverage": None,
-            "mlqds_range_gap_time_coverage": None,
-            "mlqds_range_gap_distance_coverage": None,
+            "mlqds_query_local_utility_score": None,
+            "mlqds_range_gap_min_coverage": None,
             "mlqds_range_turn_coverage": None,
+            "mlqds_range_query_local_interpolation_fidelity": None,
         }
     ]

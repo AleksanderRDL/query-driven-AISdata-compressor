@@ -115,7 +115,7 @@ def selector_segment_context_rows_from_trace(
         try:
             start = int(raw_row["start"])
             end = int(raw_row["end"])
-        except KeyError, TypeError, ValueError:
+        except (KeyError, TypeError, ValueError):
             continue
         if start < 0 or end > int(point_count) or end <= start:
             continue
@@ -128,7 +128,7 @@ def optional_int(value: Any) -> int | None:
         return None
     try:
         return int(value)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return None
 
 
@@ -137,7 +137,7 @@ def optional_float(value: Any) -> float | None:
         return None
     try:
         number = float(value)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return None
     return number if math.isfinite(number) else None
 

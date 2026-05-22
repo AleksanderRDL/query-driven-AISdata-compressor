@@ -180,12 +180,11 @@ def _final_summary_workload() -> SimpleNamespace:
     )
 
 
-def _final_summary_metrics(score: float, *, range_score: float = 0.2) -> MethodScore:
+def _final_summary_metrics(score: float) -> MethodScore:
     return MethodScore(
         aggregate_f1=0.0,
         per_type_f1={},
         query_local_utility_score=score,
-        range_usefulness_score=range_score,
         avg_length_preserved=0.9,
         geometric_distortion={"avg_sed_km": 1.0},
         range_audit={"endpoint_sanity": 1.0},

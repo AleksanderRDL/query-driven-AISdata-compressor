@@ -109,7 +109,7 @@ def prepare_eval_labels(
             points=test_points,
             boundaries=test_boundaries,
             typed_queries=eval_workload.typed_queries,
-            range_label_mode=str(getattr(config.model, "range_label_mode", "usefulness")),
+            range_label_mode=str(getattr(config.model, "range_label_mode", "point_f1")),
             range_boundary_prior_weight=float(
                 getattr(config.model, "range_boundary_prior_weight", 0.0)
             ),

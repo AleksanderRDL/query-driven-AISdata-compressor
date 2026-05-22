@@ -13,11 +13,11 @@ from learning.targets.query_local_utility import (
     build_query_local_utility_targets,
 )
 from orchestration import selector_marginal_alignment, selector_trace_payloads
-from scoring.method_scoring import endpoint_sanity, score_range_usefulness
+from scoring.method_scoring import endpoint_sanity, score_range_audit
 from scoring.metrics import compute_geometric_distortion, compute_length_preservation
 from scoring.query_cache import ScoringQueryCache
 from scoring.query_local_utility import query_local_utility_from_range_audit
-from workloads.query_types import QUERY_TYPE_ID_RANGE
+from workloads.query_types import QUERY_TYPE_ID_RANGE, validated_range_query_params
 from workloads.range_geometry import points_in_range_box
 
 
@@ -299,7 +299,7 @@ def _query_local_utility_payload_for_mask(
     retained_mask: torch.Tensor,
     query_cache: ScoringQueryCache | None,
 ) -> tuple[float, dict[str, float]]:
-    range_audit = score_range_usefulness(
+    range_audit = score_range_audit(
         points=points,
         boundaries=boundaries,
         retained_mask=retained_mask,
@@ -399,12 +399,10 @@ def _query_family_records(
     for query_index, query in enumerate(typed_queries):
         if str(query.get("type", "")).lower() != "range":
             continue
-        params = query.get("params")
-        if not isinstance(params, dict):
-            continue
         try:
+            params = validated_range_query_params(query)
             mask = points_in_range_box(points_cpu, params).detach().cpu().bool().flatten()
-        except Exception:
+        except ValueError:
             continue
         metadata = query.get("_metadata")
         metadata_dict = metadata if isinstance(metadata, dict) else {}
@@ -822,10 +820,6 @@ def retained_decision_marginal_query_local_utility_diagnostics(
             len(effective_query_cache.range_audit_supports)
             if effective_query_cache is not None
             else 0
-        ),
-        "query_cache_range_segment_geometry_available": bool(
-            effective_query_cache is not None
-            and effective_query_cache.range_segment_geometry is not None
         ),
         "masks_frozen_before_query_scoring_required": True,
         "description": (

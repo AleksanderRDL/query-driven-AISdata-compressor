@@ -155,7 +155,7 @@ def main() -> None:
 
     print(format_run_config_log_line(config, runtime_settings), flush=True)
 
-    t0 = time.perf_counter()
+    load_started_at = time.perf_counter()
     mmsis: list[int] | None = None
     validation_trajectories = None
     eval_trajectories = None
@@ -328,7 +328,8 @@ def main() -> None:
             ]
     if eval_trajectories is None:
         print(
-            f"[load-data] {len(trajectories)} trajectories loaded in {time.perf_counter() - t0:.2f}s",
+            f"[load-data] {len(trajectories)} trajectories loaded in "
+            f"{time.perf_counter() - load_started_at:.2f}s",
             flush=True,
         )
     else:
@@ -339,7 +340,7 @@ def main() -> None:
         )
         print(
             f"[load-data] train={len(trajectories)}{validation_part} eval={len(eval_trajectories)} trajectories "
-            f"loaded in {time.perf_counter() - t0:.2f}s",
+            f"loaded in {time.perf_counter() - load_started_at:.2f}s",
             flush=True,
         )
 

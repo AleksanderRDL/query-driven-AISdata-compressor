@@ -300,28 +300,14 @@ def _matched_summary(run_json: dict[str, Any] | None) -> dict[str, Any]:
             "compression_ratio": payload.get("compression_ratio"),
             "avg_length_preserved": payload.get("avg_length_preserved"),
             "combined_query_shape_score": payload.get("combined_query_shape_score"),
+            "query_point_recall": payload.get("query_point_recall"),
             "range_point_f1": payload.get("range_point_f1"),
-            "range_ship_f1": payload.get("range_ship_f1"),
-            "range_ship_coverage": payload.get("range_ship_coverage"),
-            "range_entry_exit_f1": payload.get("range_entry_exit_f1"),
-            "range_crossing_f1": payload.get("range_crossing_f1"),
-            "range_temporal_coverage": payload.get("range_temporal_coverage"),
-            "range_gap_coverage": payload.get("range_gap_coverage"),
-            "range_gap_time_coverage": payload.get("range_gap_time_coverage"),
-            "range_gap_distance_coverage": payload.get("range_gap_distance_coverage"),
             "range_gap_min_coverage": payload.get("range_gap_min_coverage"),
             "range_turn_coverage": payload.get("range_turn_coverage"),
-            "range_shape_score": payload.get("range_shape_score"),
-            "range_usefulness_score": payload.get("range_usefulness_score"),
-            "range_usefulness_gap_time_score": payload.get("range_usefulness_gap_time_score"),
-            "range_usefulness_gap_distance_score": payload.get(
-                "range_usefulness_gap_distance_score"
+            "range_query_local_interpolation_fidelity": payload.get(
+                "range_query_local_interpolation_fidelity"
             ),
-            "range_usefulness_gap_min_score": payload.get("range_usefulness_gap_min_score"),
-            "range_usefulness_schema_version": payload.get("range_usefulness_schema_version"),
-            "range_usefulness_gap_ablation_version": payload.get(
-                "range_usefulness_gap_ablation_version"
-            ),
+            "query_local_utility_score": payload.get("query_local_utility_score"),
         }
     config = run_json.get("config", {})
     model_config = config.get("model", {}) if isinstance(config, dict) else {}
@@ -421,26 +407,19 @@ def _batch_size_sweep_summary(steps: list[dict[str, Any]]) -> list[dict[str, Any
                 "mlqds_aggregate_f1": mlqds.get("aggregate_f1")
                 if isinstance(mlqds, dict)
                 else None,
-                "mlqds_range_usefulness_score": (
-                    mlqds.get("range_usefulness_score") if isinstance(mlqds, dict) else None
+                "mlqds_query_local_utility_score": (
+                    mlqds.get("query_local_utility_score") if isinstance(mlqds, dict) else None
                 ),
-                "mlqds_range_ship_coverage": (
-                    mlqds.get("range_ship_coverage") if isinstance(mlqds, dict) else None
-                ),
-                "mlqds_range_crossing_f1": (
-                    mlqds.get("range_crossing_f1") if isinstance(mlqds, dict) else None
-                ),
-                "mlqds_range_gap_coverage": (
-                    mlqds.get("range_gap_coverage") if isinstance(mlqds, dict) else None
-                ),
-                "mlqds_range_gap_time_coverage": (
-                    mlqds.get("range_gap_time_coverage") if isinstance(mlqds, dict) else None
-                ),
-                "mlqds_range_gap_distance_coverage": (
-                    mlqds.get("range_gap_distance_coverage") if isinstance(mlqds, dict) else None
+                "mlqds_range_gap_min_coverage": (
+                    mlqds.get("range_gap_min_coverage") if isinstance(mlqds, dict) else None
                 ),
                 "mlqds_range_turn_coverage": (
                     mlqds.get("range_turn_coverage") if isinstance(mlqds, dict) else None
+                ),
+                "mlqds_range_query_local_interpolation_fidelity": (
+                    mlqds.get("range_query_local_interpolation_fidelity")
+                    if isinstance(mlqds, dict)
+                    else None
                 ),
             }
         )

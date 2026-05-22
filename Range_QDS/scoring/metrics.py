@@ -48,24 +48,9 @@ class MethodScore:
     combined_query_shape_score: float = 0.0
     query_point_recall: float = 0.0
     range_point_f1: float = 0.0
-    range_ship_f1: float = 0.0
-    range_ship_coverage: float = 0.0
-    range_entry_exit_f1: float = 0.0
-    range_crossing_f1: float = 0.0
-    range_temporal_coverage: float = 0.0
-    range_gap_coverage: float = 0.0
-    range_gap_time_coverage: float = 0.0
-    range_gap_distance_coverage: float = 0.0
     range_gap_min_coverage: float = 0.0
     range_turn_coverage: float = 0.0
-    range_shape_score: float = 0.0
     range_query_local_interpolation_fidelity: float = 0.0
-    range_usefulness_score: float = 0.0
-    range_usefulness_gap_time_score: float = 0.0
-    range_usefulness_gap_distance_score: float = 0.0
-    range_usefulness_gap_min_score: float = 0.0
-    range_usefulness_schema_version: int = 0
-    range_usefulness_gap_ablation_version: int = 0
     query_local_utility_score: float = 0.0
     query_local_utility_schema_version: int = 0
     query_local_utility_components: dict[str, float] = field(default_factory=dict)

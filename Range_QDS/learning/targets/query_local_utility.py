@@ -37,7 +37,7 @@ from learning.targets.query_local_utility_target_diagnostics import (
 from learning.targets.query_local_utility_target_diagnostics import (
     _topk_overlap_and_mass_recall as _topk_overlap_and_mass_recall,
 )
-from workloads.query_types import NUM_QUERY_TYPES, QUERY_TYPE_ID_RANGE
+from workloads.query_types import NUM_QUERY_TYPES, QUERY_TYPE_ID_RANGE, validated_range_query_params
 from workloads.range_geometry import points_in_range_box, segment_box_bracket_indices
 
 QUERY_LOCAL_UTILITY_FACTORIZED_TARGET_MODE = "query_local_utility_factorized"
@@ -326,7 +326,8 @@ def build_query_local_utility_targets(
 
     points_cpu = points.detach().cpu()
     for query in range_queries:
-        mask = points_in_range_box(points, query["params"]).to(device=device, dtype=torch.bool)
+        params = validated_range_query_params(query)
+        mask = points_in_range_box(points, params).to(device=device, dtype=torch.bool)
         if not bool(mask.any().item()):
             continue
         query_hit_masks.append(mask)
@@ -344,7 +345,7 @@ def build_query_local_utility_targets(
         boundary_idx = _boundary_indices_for_query(mask, boundaries)
         if int(boundary_idx.numel()) > 0:
             boundary_mass[boundary_idx] += 1.0
-        crossing_idx = segment_box_bracket_indices(points_cpu, boundaries, query["params"]).to(
+        crossing_idx = segment_box_bracket_indices(points_cpu, boundaries, params).to(
             device=device
         )
         if int(crossing_idx.numel()) > 0:

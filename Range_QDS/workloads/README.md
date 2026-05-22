@@ -11,7 +11,7 @@ the supported training, scoring, or benchmark contract.
 | File | Purpose |
 | --- | --- |
 | `typed_workload.py` | `TypedQueryWorkload` container. |
-| `query_types.py` | Query IDs, pure workload validation, feature padding. |
+| `query_types.py` | Query IDs, canonical range-query validation, pure workload validation, feature padding. |
 | `generation/generator.py` | Public workload generator and query assembly. |
 | `generation/anchors.py` | Anchor priors and weighted point sampling. |
 | `generation/profile_query_plan.py` | Deterministic profile family quota planning and per-query settings. |
@@ -113,7 +113,8 @@ unless a future checkpoint deliberately reintroduces one with new evidence.
 ## Execution
 
 - `execute_range_query`: trajectory IDs with points inside the box.
-- `execute_typed_query`: dispatch by the query `type` field.
+- `execute_typed_query`: validate a typed range query and execute it. Non-range
+  query types fail at validation.
 
 The generator defines the future-query prior for workload-blind learning. Do
 not tune final claims only to one narrow generator setting.

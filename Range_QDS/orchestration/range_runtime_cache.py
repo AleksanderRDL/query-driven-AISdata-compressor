@@ -11,18 +11,12 @@ from typing import Any
 import torch
 
 from config.run_config import RunConfig
-from learning.importance_labels import (
-    compute_typed_importance_labels,
-    compute_typed_importance_labels_with_range_components,
-)
+from learning.importance_labels import compute_typed_importance_labels
 from orchestration.workload_generation_cache import tensor_cache_digest
 from scoring.query_cache import ScoringQueryCache
 from workloads.typed_workload import TypedQueryWorkload
 
 RANGE_DIAGNOSTICS_CACHE_SCHEMA_VERSION = 2
-RANGE_COMPONENT_LABEL_MODES = frozenset(
-    {"usefulness", "usefulness_balanced", "usefulness_ship_balanced"}
-)
 
 
 @dataclass
@@ -31,7 +25,6 @@ class RangeRuntimeCache:
 
     labels: torch.Tensor | None = None
     labelled_mask: torch.Tensor | None = None
-    component_labels: dict[str, torch.Tensor] | None = None
     query_cache: ScoringQueryCache | None = None
 
 
@@ -74,30 +67,17 @@ def ensure_range_runtime_labels(
         return runtime_cache.labels, runtime_cache.labelled_mask
 
     range_label_mode = str(range_label_mode).lower()
-    if range_label_mode in RANGE_COMPONENT_LABEL_MODES:
-        labels, labelled_mask, component_labels = (
-            compute_typed_importance_labels_with_range_components(
-                points=points,
-                boundaries=boundaries,
-                typed_queries=range_queries,
-                range_boundary_prior_weight=range_boundary_prior_weight,
-                range_label_mode=range_label_mode,
-            )
-        )
-    else:
-        labels, labelled_mask = compute_typed_importance_labels(
-            points=points,
-            boundaries=boundaries,
-            typed_queries=range_queries,
-            range_label_mode=range_label_mode,
-            range_boundary_prior_weight=range_boundary_prior_weight,
-        )
-        component_labels = None
+    labels, labelled_mask = compute_typed_importance_labels(
+        points=points,
+        boundaries=boundaries,
+        typed_queries=range_queries,
+        range_label_mode=range_label_mode,
+        range_boundary_prior_weight=range_boundary_prior_weight,
+    )
 
     if runtime_cache is not None:
         runtime_cache.labels = labels
         runtime_cache.labelled_mask = labelled_mask
-        runtime_cache.component_labels = component_labels
     return labels, labelled_mask
 
 
@@ -142,7 +122,7 @@ def range_diagnostics_cache_payload(
     label_mode = str(
         range_label_mode
         if range_label_mode is not None
-        else getattr(config.model, "range_label_mode", "usefulness")
+        else getattr(config.model, "range_label_mode", "point_f1")
     )
     prior_weight = float(
         range_boundary_prior_weight
@@ -228,24 +208,6 @@ def load_range_diagnostics_cache(
         if runtime_cache is not None:
             runtime_cache.labels = labels
             runtime_cache.labelled_mask = labelled_mask
-            component_labels = tensors.get("component_labels")
-            runtime_cache.component_labels = (
-                {
-                    str(key): value
-                    for key, value in component_labels.items()
-                    if isinstance(value, torch.Tensor)
-                }
-                if isinstance(component_labels, dict)
-                else None
-            )
-            range_label_mode = str(getattr(config.model, "range_label_mode", "usefulness")).lower()
-            if (
-                range_label_mode in RANGE_COMPONENT_LABEL_MODES
-                and runtime_cache.component_labels is None
-            ):
-                runtime_cache.labels = None
-                runtime_cache.labelled_mask = None
-                return None
             runtime_cache.query_cache = ScoringQueryCache.for_workload(
                 points, boundaries, scored_queries
             )
@@ -253,18 +215,6 @@ def load_range_diagnostics_cache(
         rows = cached["rows"]
         if not isinstance(summary, dict) or not isinstance(rows, list):
             return None
-        range_label_mode = str(getattr(config.model, "range_label_mode", "usefulness")).lower()
-        if range_label_mode in RANGE_COMPONENT_LABEL_MODES:
-            label_summary = (
-                summary.get("range_signal", {}).get("labels", {})
-                if isinstance(summary.get("range_signal"), dict)
-                else {}
-            )
-            if (
-                not isinstance(label_summary, dict)
-                or label_summary.get("component_label_mass_basis") == "unavailable"
-            ):
-                return None
         summary = dict(summary)
         cache_info = dict(summary.get("range_diagnostics_cache") or {})
         cache_info.update(
@@ -303,24 +253,6 @@ def _load_range_label_tensor_cache(
             return False
         runtime_cache.labels = labels
         runtime_cache.labelled_mask = labelled_mask
-        component_labels = tensors.get("component_labels")
-        runtime_cache.component_labels = (
-            {
-                str(key): value
-                for key, value in component_labels.items()
-                if isinstance(value, torch.Tensor)
-            }
-            if isinstance(component_labels, dict)
-            else None
-        )
-        range_label_mode = str(getattr(config.model, "range_label_mode", "usefulness")).lower()
-        if (
-            range_label_mode in RANGE_COMPONENT_LABEL_MODES
-            and runtime_cache.component_labels is None
-        ):
-            runtime_cache.labels = None
-            runtime_cache.labelled_mask = None
-            return False
         print(f"  range label cache hit: {tensor_path}", flush=True)
         return True
     except (OSError, TypeError, RuntimeError) as exc:
@@ -346,10 +278,6 @@ def _write_range_label_tensor_cache(
             "labels": runtime_cache.labels.cpu(),
             "labelled_mask": runtime_cache.labelled_mask.cpu(),
         }
-        if runtime_cache.component_labels is not None:
-            payload["component_labels"] = {
-                key: value.cpu() for key, value in runtime_cache.component_labels.items()
-            }
         torch.save(payload, tensor_path)
         print(f"  range label cache wrote: {tensor_path}", flush=True)
     except OSError as exc:
@@ -381,10 +309,6 @@ def write_range_diagnostics_cache(
             "labels": runtime_cache.labels.cpu(),
             "labelled_mask": runtime_cache.labelled_mask.cpu(),
         }
-        if runtime_cache.component_labels is not None:
-            payload["component_labels"] = {
-                key: value.cpu() for key, value in runtime_cache.component_labels.items()
-            }
         torch.save(payload, tensor_path)
         cache_summary = dict(summary)
         cache_info = dict(cache_summary.get("range_diagnostics_cache") or {})
@@ -449,32 +373,19 @@ def prepare_range_label_cache(
             raise RuntimeError("Range label tensor cache loaded without labels and labelled_mask.")
         return runtime_cache.labels, runtime_cache.labelled_mask
 
-    range_label_mode = str(getattr(config.model, "range_label_mode", "usefulness")).lower()
+    range_label_mode = str(getattr(config.model, "range_label_mode", "point_f1")).lower()
     prior_weight = float(
         range_boundary_prior_weight
         if range_boundary_prior_weight is not None
         else getattr(config.model, "range_boundary_prior_weight", 0.0)
     )
-    if range_label_mode in RANGE_COMPONENT_LABEL_MODES:
-        labels, labelled_mask, component_labels = (
-            compute_typed_importance_labels_with_range_components(
-                points=points,
-                boundaries=boundaries,
-                typed_queries=range_queries,
-                range_boundary_prior_weight=prior_weight,
-                range_label_mode=range_label_mode,
-            )
-        )
-        runtime_cache.component_labels = component_labels
-    else:
-        labels, labelled_mask = compute_typed_importance_labels(
-            points=points,
-            boundaries=boundaries,
-            typed_queries=range_queries,
-            range_label_mode=range_label_mode,
-            range_boundary_prior_weight=prior_weight,
-        )
-        runtime_cache.component_labels = None
+    labels, labelled_mask = compute_typed_importance_labels(
+        points=points,
+        boundaries=boundaries,
+        typed_queries=range_queries,
+        range_label_mode=range_label_mode,
+        range_boundary_prior_weight=prior_weight,
+    )
 
     runtime_cache.labels = labels
     runtime_cache.labelled_mask = labelled_mask

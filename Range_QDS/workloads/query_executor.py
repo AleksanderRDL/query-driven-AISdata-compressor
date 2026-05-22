@@ -2,18 +2,21 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import torch
 
 from data_preparation.trajectory_index import (
     default_boundaries,
     trajectory_ids_intersecting_indices,
 )
+from workloads.query_types import TypedQuery, validated_range_query_params
 from workloads.range_geometry import points_in_range_box
 
 
 def execute_range_query(
     points: torch.Tensor,
-    params: dict[str, float],
+    params: Mapping[str, float],
     boundaries: list[tuple[int, int]] | None = None,
 ) -> set[int]:
     """Execute a range query returning matching trajectory IDs. See workloads/README.md for details."""
@@ -27,12 +30,8 @@ def execute_range_query(
 
 def execute_typed_query(
     points: torch.Tensor,
-    query: dict,
+    query: TypedQuery,
     boundaries: list[tuple[int, int]] | None = None,
 ) -> set[int]:
     """Execute one typed query and return type-specific result object. See workloads/README.md for details."""
-    query_type = query["type"]
-    params = query["params"]
-    if query_type == "range":
-        return execute_range_query(points, params, boundaries)
-    raise ValueError(f"Only range queries are supported; got query type: {query_type}")
+    return execute_range_query(points, validated_range_query_params(query), boundaries)

@@ -14,6 +14,8 @@ from typing import Any
 
 import torch
 
+from workloads.query_types import validated_range_query_params
+
 
 def _bbox_polygon(
     lon_min: float, lat_min: float, lon_max: float, lat_max: float
@@ -41,16 +43,11 @@ def _query_to_feature(query: dict[str, Any]) -> dict[str, Any]:
 
     Range queries are rendered as their native axis-aligned lat/lon boxes.
     """
-    query_type = str(query["type"]).lower()
-    params = query["params"]
-    if query_type == "range":
-        coords = _bbox_polygon(
-            params["lon_min"], params["lat_min"], params["lon_max"], params["lat_max"]
-        )
-    else:
-        raise ValueError(
-            f"Only range queries are supported for GeoJSON export; got query type: {query_type}"
-        )
+    query_type = "range"
+    params = validated_range_query_params(query)
+    coords = _bbox_polygon(
+        params["lon_min"], params["lat_min"], params["lon_max"], params["lat_max"]
+    )
     geometry = {"type": "Polygon", "coordinates": coords}
     properties: dict[str, Any] = {
         "query_type": query_type,
@@ -74,14 +71,14 @@ def write_queries_geojson(out_dir: str, typed_queries: list[dict[str, Any]]) -> 
     output_dir.mkdir(parents=True, exist_ok=True)
     by_type: dict[str, list[dict[str, Any]]] = {"range": []}
     for query in typed_queries:
-        query_type = str(query["type"]).lower()
-        if query_type in by_type:
-            by_type[query_type].append(_query_to_feature(query))
+        feature = _query_to_feature(query)
+        query_type = str(feature["properties"]["query_type"])
+        by_type.setdefault(query_type, []).append(feature)
     for query_type, features in by_type.items():
         output_path = output_dir / f"queries_{query_type}.geojson"
-        payload = {"type": "FeatureCollection", "features": features}
+        feature_collection = {"type": "FeatureCollection", "features": features}
         with open(output_path, "w", encoding="utf-8") as file:
-            json.dump(payload, file)
+            json.dump(feature_collection, file)
         print(f"  wrote {len(features):>4d} {query_type} queries to {output_path}", flush=True)
 
 

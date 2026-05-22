@@ -74,7 +74,6 @@ def test_run_config_roundtrips_precision_controls() -> None:
         range_label_mode="point_f1",
         range_target_balance_mode="trajectory_unit_mass",
         range_replicate_target_aggregation="frequency_mean",
-        range_component_target_blend=0.35,
         range_temporal_target_blend=0.20,
         range_target_budget_weight_power=0.75,
         range_marginal_target_radius_scale=0.75,
@@ -155,7 +154,6 @@ def test_run_config_roundtrips_precision_controls() -> None:
     assert restored.model.range_label_mode == "point_f1"
     assert restored.model.range_target_balance_mode == "trajectory_unit_mass"
     assert restored.model.range_replicate_target_aggregation == "frequency_mean"
-    assert restored.model.range_component_target_blend == 0.35
     assert restored.model.range_temporal_target_blend == 0.20
     assert restored.model.range_target_budget_weight_power == 0.75
     assert restored.model.range_marginal_target_radius_scale == 0.75
@@ -254,8 +252,6 @@ def test_cli_exposes_training_and_scoring_tuning_controls() -> None:
             "0.02",
             "--range_replicate_target_aggregation",
             "frequency_mean",
-            "--range_component_target_blend",
-            "0.40",
             "--range_temporal_target_blend",
             "0.15",
             "--range_structural_target_blend",
@@ -363,7 +359,6 @@ def test_cli_exposes_training_and_scoring_tuning_controls() -> None:
         range_train_footprints=args.range_train_footprints,
         range_max_coverage_overshoot=args.range_max_coverage_overshoot,
         range_replicate_target_aggregation=args.range_replicate_target_aggregation,
-        range_component_target_blend=args.range_component_target_blend,
         range_temporal_target_blend=args.range_temporal_target_blend,
         range_structural_target_blend=args.range_structural_target_blend,
         range_structural_target_source_mode=args.range_structural_target_source_mode,
@@ -432,7 +427,6 @@ def test_cli_exposes_training_and_scoring_tuning_controls() -> None:
     assert args.range_train_footprints == ["1.1:2.5", "2.2:5"]
     assert args.range_max_coverage_overshoot == 0.02
     assert args.range_replicate_target_aggregation == "frequency_mean"
-    assert args.range_component_target_blend == 0.40
     assert args.range_temporal_target_blend == 0.15
     assert args.range_structural_target_blend == 0.35
     assert args.range_structural_target_source_mode == "boost"
@@ -496,7 +490,6 @@ def test_cli_exposes_training_and_scoring_tuning_controls() -> None:
     assert cfg.query.range_train_footprints == ["1.1:2.5", "2.2:5"]
     assert cfg.query.range_max_coverage_overshoot == 0.02
     assert cfg.model.range_replicate_target_aggregation == "frequency_mean"
-    assert cfg.model.range_component_target_blend == 0.40
     assert cfg.model.range_temporal_target_blend == 0.15
     assert cfg.model.range_structural_target_blend == 0.35
     assert cfg.model.range_structural_target_source_mode == "boost"
@@ -555,7 +548,6 @@ def test_run_config_loads_missing_runtime_and_mlqds_defaults() -> None:
     payload["model"].pop("range_label_mode")
     payload["model"].pop("range_target_balance_mode")
     payload["model"].pop("range_replicate_target_aggregation")
-    payload["model"].pop("range_component_target_blend")
     payload["model"].pop("range_temporal_target_blend")
     payload["model"].pop("range_structural_target_blend")
     payload["model"].pop("range_structural_target_source_mode")
@@ -610,10 +602,9 @@ def test_run_config_loads_missing_runtime_and_mlqds_defaults() -> None:
     assert restored.model.historical_prior_support_ratio == 1.0
     assert restored.model.historical_prior_source_aggregation == "none"
     assert restored.model.range_boundary_prior_weight == 0.0
-    assert restored.model.range_label_mode == "usefulness"
+    assert restored.model.range_label_mode == "point_f1"
     assert restored.model.range_target_balance_mode == "none"
     assert restored.model.range_replicate_target_aggregation == "label_mean"
-    assert restored.model.range_component_target_blend == 1.0
     assert restored.model.range_temporal_target_blend == 0.0
     assert restored.model.range_structural_target_blend == 0.25
     assert restored.model.range_structural_target_source_mode == "blend"
@@ -638,7 +629,7 @@ def test_run_config_loads_missing_runtime_and_mlqds_defaults() -> None:
     assert restored.model.mlqds_min_learned_swaps == 0
     assert restored.model.mlqds_range_geometry_blend == 0.0
     assert restored.model.checkpoint_selection_metric == "score"
-    assert restored.model.checkpoint_score_variant == "range_usefulness"
+    assert restored.model.checkpoint_score_variant == "query_local_utility"
     assert restored.model.checkpoint_full_score_every == 1
     assert restored.model.checkpoint_candidate_pool_size == 1
     assert restored.model.query_prior_grid_bins == 64

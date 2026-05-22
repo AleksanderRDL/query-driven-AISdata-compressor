@@ -15,10 +15,10 @@ POINT_HIT_TARGET_BAND_FRACTION = 0.25
 LOW_DISCREPANCY_STEP = 0.6180339887498949
 
 
-def _deterministic_unit_from_payload(*parts: object) -> float:
+def _deterministic_unit_from_key_parts(*parts: object) -> float:
     """Return a deterministic unit-uniform-like value from arbitrary key material."""
-    payload = "|".join(str(part) for part in parts)
-    digest = hashlib.sha256(payload.encode("utf-8")).digest()
+    key_material = "|".join(str(part) for part in parts)
+    digest = hashlib.sha256(key_material.encode("utf-8")).digest()
     raw = int.from_bytes(digest[:8], byteorder="big", signed=False)
     return raw / float(1 << 64)
 
@@ -95,7 +95,7 @@ def _quota_sequence(
             quota = int(quotas[family])
             desired = float(slot_index + 1) * float(quota) / float(total_count)
             deficit = desired - float(used[family])
-            tie_breaker = _deterministic_unit_from_payload(namespace, seed, slot_index, family)
+            tie_breaker = _deterministic_unit_from_key_parts(namespace, seed, slot_index, family)
             return deficit, quota, tie_breaker
 
         chosen = max(candidates, key=candidate_key)
@@ -162,10 +162,10 @@ def _profile_query_settings(
         anchor_value: float | None = None
         footprint_value: float | None = None
     else:
-        anchor_value = _deterministic_unit_from_payload(
+        anchor_value = _deterministic_unit_from_key_parts(
             profile.profile_id, "anchor", query_key, query_index
         )
-        footprint_value = _deterministic_unit_from_payload(
+        footprint_value = _deterministic_unit_from_key_parts(
             profile.profile_id,
             "footprint",
             query_key,

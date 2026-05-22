@@ -12,7 +12,6 @@ import torch
 from config.run_config import RunConfig, SeedBundle
 from learning.model_features import is_workload_blind_model_type
 from learning.model_training import train_model
-from learning.targets.aggregation import aggregate_range_component_label_sets
 from learning.targets.common import (
     aggregate_range_label_sets,
     balance_range_training_target_by_trajectory,
@@ -68,18 +67,6 @@ def _target_summary_line(target_phase: str, diagnostics: dict[str, Any]) -> str:
     )
 
 
-def _component_labels_required(
-    mode: str,
-    component_label_sets: list[dict[str, torch.Tensor] | None],
-) -> None:
-    if not component_label_sets or any(
-        component_labels is None for component_labels in component_label_sets
-    ):
-        raise RuntimeError(
-            f"{mode} requires range component labels; use range_label_mode=usefulness."
-        )
-
-
 def _run_range_target_transform(
     *,
     spec: RangeTargetModeSpec,
@@ -89,7 +76,6 @@ def _run_range_target_transform(
     train_boundaries: list[tuple[int, int]],
     train_workload: TypedQueryWorkload,
     model_config: object,
-    component_labels: dict[str, torch.Tensor] | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor, dict[str, Any]]:
     target_kwargs: dict[str, Any] = {
         "labels": labels,
@@ -101,10 +87,6 @@ def _run_range_target_transform(
         target_kwargs["points"] = train_points
     if spec.requires_typed_queries:
         target_kwargs["typed_queries"] = train_workload.typed_queries
-    if spec.requires_component_labels:
-        if component_labels is None:
-            raise RuntimeError(f"{spec.mode} requires component labels.")
-        target_kwargs["component_labels"] = component_labels
     return spec.target_fn(**target_kwargs)
 
 
@@ -112,7 +94,6 @@ def _run_frequency_mean_range_target(
     *,
     spec: RangeTargetModeSpec,
     train_label_sets: list[RangeLabels],
-    train_component_label_sets: list[dict[str, torch.Tensor] | None],
     train_points: torch.Tensor,
     train_boundaries: list[tuple[int, int]],
     model_config: object,
@@ -133,8 +114,6 @@ def _run_frequency_mean_range_target(
     }
     if spec.requires_points:
         aggregate_target_kwargs["points"] = train_points
-    if spec.requires_component_labels:
-        aggregate_target_kwargs["component_label_sets"] = train_component_label_sets
     return spec.aggregate_target_fn(**aggregate_target_kwargs)
 
 
@@ -142,7 +121,6 @@ def _run_label_aggregated_range_target(
     *,
     spec: RangeTargetModeSpec,
     train_label_sets: list[RangeLabels],
-    train_component_label_sets: list[dict[str, torch.Tensor] | None],
     train_points: torch.Tensor,
     train_boundaries: list[tuple[int, int]],
     train_workload: TypedQueryWorkload,
@@ -150,21 +128,11 @@ def _run_label_aggregated_range_target(
     replicate_target_aggregation: str,
 ) -> tuple[torch.Tensor, torch.Tensor, dict[str, Any], dict[str, Any]]:
     aggregation_mode = _label_aggregation_mode(replicate_target_aggregation)
-    if spec.requires_component_labels:
-        labels, labelled_mask, component_labels, aggregation_diagnostics = (
-            aggregate_range_component_label_sets(
-                label_sets=train_label_sets,
-                component_label_sets=train_component_label_sets,
-                aggregation=aggregation_mode,
-            )
-        )
-    else:
-        labels, labelled_mask, aggregation_diagnostics = aggregate_range_label_sets(
-            label_sets=train_label_sets,
-            source=f"range_label_{aggregation_mode}_before_{spec.mode}",
-            aggregation=aggregation_mode,
-        )
-        component_labels = None
+    labels, labelled_mask, aggregation_diagnostics = aggregate_range_label_sets(
+        label_sets=train_label_sets,
+        source=f"range_label_{aggregation_mode}_before_{spec.mode}",
+        aggregation=aggregation_mode,
+    )
 
     labels, labelled_mask, target_transform = _run_range_target_transform(
         spec=spec,
@@ -174,7 +142,6 @@ def _run_label_aggregated_range_target(
         train_boundaries=train_boundaries,
         train_workload=train_workload,
         model_config=model_config,
-        component_labels=component_labels,
     )
     target_transform["label_aggregation"] = aggregation_diagnostics
     return labels, labelled_mask, target_transform, aggregation_diagnostics
@@ -185,7 +152,6 @@ def _prepare_scalar_range_target(
     spec: RangeTargetModeSpec,
     train_labels: RangeLabels | None,
     train_label_sets: list[RangeLabels],
-    train_component_label_sets: list[dict[str, torch.Tensor] | None],
     train_points: torch.Tensor,
     train_boundaries: list[tuple[int, int]],
     train_workload: TypedQueryWorkload,
@@ -198,8 +164,6 @@ def _prepare_scalar_range_target(
         raise RuntimeError(f"{spec.mode} target mode requires precomputed range training labels.")
     if len(train_label_sets) > 1 and not spec.supports_multiple_replicates:
         raise RuntimeError(f"{spec.mode} does not yet support multiple train workload replicates.")
-    if spec.requires_component_labels:
-        _component_labels_required(spec.mode, train_component_label_sets)
 
     target_phase = spec.mode.replace("_", "-")
     with phase(f"range-{target_phase}-target"):
@@ -208,7 +172,6 @@ def _prepare_scalar_range_target(
                 labels, labelled_mask, target_transform = _run_frequency_mean_range_target(
                     spec=spec,
                     train_label_sets=train_label_sets,
-                    train_component_label_sets=train_component_label_sets,
                     train_points=train_points,
                     train_boundaries=train_boundaries,
                     model_config=model_config,
@@ -221,7 +184,6 @@ def _prepare_scalar_range_target(
                     _run_label_aggregated_range_target(
                         spec=spec,
                         train_label_sets=train_label_sets,
-                        train_component_label_sets=train_component_label_sets,
                         train_points=train_points,
                         train_boundaries=train_boundaries,
                         train_workload=train_workload,
@@ -238,9 +200,6 @@ def _prepare_scalar_range_target(
             target_transform["replicate_target_aggregation"] = replicate_target_aggregation
         else:
             labels, labelled_mask = train_labels
-            component_labels = (
-                train_component_label_sets[0] if spec.requires_component_labels else None
-            )
             labels, labelled_mask, target_transform = _run_range_target_transform(
                 spec=spec,
                 labels=labels,
@@ -249,12 +208,9 @@ def _prepare_scalar_range_target(
                 train_boundaries=train_boundaries,
                 train_workload=train_workload,
                 model_config=model_config,
-                component_labels=component_labels,
             )
         target_transform["enabled"] = True
         target_transform["replicate_count"] = len(train_label_sets)
-        if spec.requires_component_labels:
-            target_transform["replicate_target_aggregation"] = replicate_target_aggregation
         print(_target_summary_line(target_phase, target_transform), flush=True)
         return (labels, labelled_mask), target_transform
 
@@ -334,7 +290,6 @@ def prepare_training_targets(
     )
     with phase("range-training-prep"):
         train_label_sets: list[RangeLabels] = []
-        train_component_label_sets: list[dict[str, torch.Tensor] | None] = []
         if (
             range_training_target_mode not in QUERY_LOCAL_UTILITY_TARGET_MODES
             or range_teacher_distillation_enabled(config.model)
@@ -359,7 +314,6 @@ def prepare_training_targets(
                 )
                 if label_result is not None:
                     train_label_sets.append(label_result)
-                    train_component_label_sets.append(runtime_cache.component_labels)
         if train_label_sets:
             train_labels = train_label_sets[0]
             if (
@@ -533,7 +487,6 @@ def prepare_training_targets(
             spec=spec,
             train_labels=train_labels,
             train_label_sets=train_label_sets,
-            train_component_label_sets=train_component_label_sets,
             train_points=train_points,
             train_boundaries=train_boundaries,
             train_workload=train_workload,
@@ -569,12 +522,11 @@ def prepare_training_targets(
                 flush=True,
             )
     if range_training_target_mode not in QUERY_LOCAL_UTILITY_TARGET_MODES:
-        range_training_target_transform.setdefault("target_family", "legacy_range_useful_scalar")
+        range_training_target_transform.setdefault("target_family", "scalar_range_target")
         range_training_target_transform.setdefault("final_success_allowed", False)
         range_training_target_transform.setdefault(
-            "legacy_reason",
-            "Old RangeUseful/scalar-target diagnostic path. "
-            "Not valid for QueryLocalUtility final acceptance.",
+            "diagnostic_reason",
+            "Scalar range target is diagnostic-only.",
         )
     return TargetPreparationOutputs(
         train_labels=train_labels,

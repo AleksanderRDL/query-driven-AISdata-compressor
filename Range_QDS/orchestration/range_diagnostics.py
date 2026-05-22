@@ -23,6 +23,7 @@ from scoring.method_scoring import score_retained_mask
 from scoring.methods import DouglasPeuckerMethod, Method, OracleMethod, UniformTemporalMethod
 from scoring.metrics import MethodScore
 from scoring.query_cache import ScoringQueryCache
+from workloads.query_types import validated_range_query_params
 from workloads.typed_workload import TypedQueryWorkload
 from workloads.workload_diagnostics import (
     compute_range_label_diagnostics,
@@ -38,7 +39,7 @@ def _range_signal_diagnostics(
     workload_map: dict[str, float],
     compression_ratio: float,
     seed: int,
-    range_label_mode: str = "usefulness",
+    range_label_mode: str = "point_f1",
     range_boundary_prior_weight: float = 0.0,
     runtime_cache: RangeRuntimeCache | None = None,
     cache_typed_queries: list[dict[str, Any]] | None = None,
@@ -59,7 +60,6 @@ def _range_signal_diagnostics(
             "oracle_gap_over_best_baseline": 0.0,
         }
 
-    component_labels: dict[str, torch.Tensor] | None = None
     if (
         runtime_cache is not None
         and runtime_cache.labels is not None
@@ -67,7 +67,6 @@ def _range_signal_diagnostics(
     ):
         labels = runtime_cache.labels
         labelled_mask = runtime_cache.labelled_mask
-        component_labels = runtime_cache.component_labels
     else:
         labels, labelled_mask = ensure_range_runtime_labels(
             points=points,
@@ -78,8 +77,7 @@ def _range_signal_diagnostics(
             range_boundary_prior_weight=range_boundary_prior_weight,
             runtime_cache=runtime_cache,
         )
-        component_labels = runtime_cache.component_labels if runtime_cache is not None else None
-    label_diagnostics = compute_range_label_diagnostics(labels, labelled_mask, component_labels)
+    label_diagnostics = compute_range_label_diagnostics(labels, labelled_mask)
     oracle_labels = labels
     methods: list[Method] = [
         UniformTemporalMethod(),
@@ -164,9 +162,10 @@ def range_workload_diagnostics(
             raise RuntimeError("Pure range diagnostics expected a prepared query cache.")
 
         def _mask_provider(query_index: int, query: dict[str, Any]) -> torch.Tensor:
+            params = validated_range_query_params(query)
             return query_cache.get_support_mask(
                 query_index,
-                lambda query=query: range_box_mask(points, query["params"]),
+                lambda params=params: range_box_mask(points, params),
             )
 
         mask_provider = _mask_provider
@@ -210,7 +209,7 @@ def range_workload_diagnostics(
         workload_map=workload_map,
         compression_ratio=config.model.compression_ratio,
         seed=seed,
-        range_label_mode=str(getattr(config.model, "range_label_mode", "usefulness")),
+        range_label_mode=str(getattr(config.model, "range_label_mode", "point_f1")),
         range_boundary_prior_weight=float(
             getattr(config.model, "range_boundary_prior_weight", 0.0)
         ),
@@ -719,24 +718,9 @@ def method_score_payload(metrics: MethodScore) -> dict[str, Any]:
         "combined_query_shape_score": metrics.combined_query_shape_score,
         "query_point_recall": metrics.query_point_recall,
         "range_point_f1": metrics.range_point_f1,
-        "range_ship_f1": metrics.range_ship_f1,
-        "range_ship_coverage": metrics.range_ship_coverage,
-        "range_entry_exit_f1": metrics.range_entry_exit_f1,
-        "range_crossing_f1": metrics.range_crossing_f1,
-        "range_temporal_coverage": metrics.range_temporal_coverage,
-        "range_gap_coverage": metrics.range_gap_coverage,
-        "range_gap_time_coverage": metrics.range_gap_time_coverage,
-        "range_gap_distance_coverage": metrics.range_gap_distance_coverage,
         "range_gap_min_coverage": metrics.range_gap_min_coverage,
         "range_turn_coverage": metrics.range_turn_coverage,
-        "range_shape_score": metrics.range_shape_score,
         "range_query_local_interpolation_fidelity": metrics.range_query_local_interpolation_fidelity,
-        "range_usefulness_score": metrics.range_usefulness_score,
-        "range_usefulness_gap_time_score": metrics.range_usefulness_gap_time_score,
-        "range_usefulness_gap_distance_score": metrics.range_usefulness_gap_distance_score,
-        "range_usefulness_gap_min_score": metrics.range_usefulness_gap_min_score,
-        "range_usefulness_schema_version": metrics.range_usefulness_schema_version,
-        "range_usefulness_gap_ablation_version": metrics.range_usefulness_gap_ablation_version,
         "query_local_utility_score": metrics.query_local_utility_score,
         "query_local_utility_schema_version": metrics.query_local_utility_schema_version,
         "query_local_utility_components": metrics.query_local_utility_components,
@@ -761,7 +745,7 @@ def _target_budget_row(
             continue
         try:
             ratio = float(raw_ratio)
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             continue
         distance = abs(ratio - float(compression_ratio))
         if distance < best_distance:
@@ -796,9 +780,9 @@ def build_range_learned_fill_summary(
     mlqds = learned_fill_diagnostics.get("MLQDS")
     random_fill = learned_fill_diagnostics.get("TemporalRandomFill")
     oracle_fill = learned_fill_diagnostics.get("TemporalOracleFill")
-    mlqds_usefulness = _metric_value(mlqds, "range_usefulness_score")
-    random_usefulness = _metric_value(random_fill, "range_usefulness_score")
-    oracle_usefulness = _metric_value(oracle_fill, "range_usefulness_score")
+    mlqds_query_local = _metric_value(mlqds, "query_local_utility_score")
+    random_query_local = _metric_value(random_fill, "query_local_utility_score")
+    oracle_query_local = _metric_value(oracle_fill, "query_local_utility_score")
     mlqds_point = _metric_value(mlqds, "range_point_f1")
     random_point = _metric_value(random_fill, "range_point_f1")
     oracle_point = _metric_value(oracle_fill, "range_point_f1")
@@ -810,27 +794,27 @@ def build_range_learned_fill_summary(
     )
     train_labels = train_signal.get("labels", {}) if isinstance(train_signal, dict) else {}
     target_row = _target_budget_row(training_target_diagnostics, float(compression_ratio))
-    usefulness_delta = _optional_delta(mlqds_usefulness, random_usefulness)
+    query_local_delta = _optional_delta(mlqds_query_local, random_query_local)
     point_delta = _optional_delta(mlqds_point, random_point)
 
     return {
         "summary_version": 1,
         "compression_ratio": float(compression_ratio),
         "methods": sorted(learned_fill_diagnostics.keys()),
-        "mlqds_range_usefulness_score": mlqds_usefulness,
-        "temporal_random_fill_range_usefulness_score": random_usefulness,
-        "temporal_oracle_fill_range_usefulness_score": oracle_usefulness,
-        "mlqds_vs_temporal_random_fill_range_usefulness": usefulness_delta,
-        "temporal_oracle_fill_gap_range_usefulness": _optional_delta(
-            oracle_usefulness, mlqds_usefulness
+        "mlqds_query_local_utility_score": mlqds_query_local,
+        "temporal_random_fill_query_local_utility_score": random_query_local,
+        "temporal_oracle_fill_query_local_utility_score": oracle_query_local,
+        "mlqds_vs_temporal_random_fill_query_local_utility": query_local_delta,
+        "temporal_oracle_fill_gap_query_local_utility": _optional_delta(
+            oracle_query_local, mlqds_query_local
         ),
         "mlqds_range_point_f1": mlqds_point,
         "temporal_random_fill_range_point_f1": random_point,
         "temporal_oracle_fill_range_point_f1": oracle_point,
         "mlqds_vs_temporal_random_fill_range_point_f1": point_delta,
         "temporal_oracle_fill_gap_range_point_f1": _optional_delta(oracle_point, mlqds_point),
-        "learned_fill_beats_temporal_random_usefulness": (
-            bool(usefulness_delta > 0.0) if usefulness_delta is not None else None
+        "learned_fill_beats_temporal_random_query_local_utility": (
+            bool(query_local_delta > 0.0) if query_local_delta is not None else None
         ),
         "learned_fill_beats_temporal_random_point_f1": bool(point_delta > 0.0)
         if point_delta is not None
@@ -840,7 +824,7 @@ def build_range_learned_fill_summary(
             "exact_optimum": False,
             "purpose": (
                 "diagnostic upper reference for learned residual fill, "
-                "not exact retained-set RangeUseful optimum"
+                "not an exact retained-set optimum"
             ),
         },
         "train_positive_label_mass": (

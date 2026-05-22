@@ -25,7 +25,7 @@ def _java_command_is_usable(java_cmd: str) -> bool:
             check=False,
             timeout=10,
         )
-    except OSError, subprocess.SubprocessError:
+    except (OSError, subprocess.SubprocessError):
         return False
     return completed.returncode == 0
 

@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 from benchmarking.common import LOW_COMPRESSION_THRESHOLD, as_float, audit_ratio_prefix
-from benchmarking.reporting.metrics import RANGE_USEFULNESS_GAP_VARIANT_KEYS
 
 
 def _csv_path_list(raw: Any) -> tuple[str, ...]:
@@ -40,27 +39,17 @@ def _data_source_row_fields(data_sources: dict[str, Any] | None) -> dict[str, An
 
 
 def _audit_summary(run_json: dict[str, Any] | None) -> dict[str, Any]:
-    """Summarize multi-compression RangeUseful audit wins and low-ratio failures."""
+    """Summarize multi-compression QueryLocalUtility audit wins and low-ratio failures."""
     audit = (run_json or {}).get("range_compression_audit") or {}
     if not isinstance(audit, dict):
         audit = {}
     ratios: list[float] = []
-    uniform_deltas: list[float] = []
-    dp_deltas: list[float] = []
-    random_fill_deltas: list[float] = []
     query_uniform_deltas: list[float] = []
     query_dp_deltas: list[float] = []
-    low_uniform_deltas: list[float] = []
-    low_dp_deltas: list[float] = []
-    low_random_fill_deltas: list[float] = []
+    query_random_fill_deltas: list[float] = []
     low_query_uniform_deltas: list[float] = []
     low_query_dp_deltas: list[float] = []
-    variant_uniform_deltas: dict[str, list[float]] = {
-        suffix: [] for suffix, _metric_key in RANGE_USEFULNESS_GAP_VARIANT_KEYS
-    }
-    variant_low_uniform_deltas: dict[str, list[float]] = {
-        suffix: [] for suffix, _metric_key in RANGE_USEFULNESS_GAP_VARIANT_KEYS
-    }
+    low_query_random_fill_deltas: list[float] = []
     missing_baseline_count = 0
     missing_temporal_random_fill_count = 0
     missing_query_local_utility_count = 0
@@ -72,7 +61,7 @@ def _audit_summary(run_json: dict[str, Any] | None) -> dict[str, Any]:
             continue
         try:
             ratio = float(raw_ratio)
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             missing_baseline_count += 1
             continue
         ratio_rows.append((ratio, methods))
@@ -82,97 +71,49 @@ def _audit_summary(run_json: dict[str, Any] | None) -> dict[str, Any]:
         uniform = methods.get("uniform") or {}
         dp = methods.get("DouglasPeucker") or {}
         random_fill = methods.get("TemporalRandomFill") or {}
-        mlqds_score = as_float(mlqds.get("range_usefulness_score"))
-        uniform_score = as_float(uniform.get("range_usefulness_score"))
-        dp_score = as_float(dp.get("range_usefulness_score"))
-        random_fill_score = as_float(random_fill.get("range_usefulness_score"))
-        if mlqds_score is None or uniform_score is None or dp_score is None:
-            missing_baseline_count += 1
-            continue
         prefix = audit_ratio_prefix(ratio)
-        ratios.append(ratio)
-        uniform_delta = mlqds_score - uniform_score
-        dp_delta = mlqds_score - dp_score
-        uniform_deltas.append(uniform_delta)
-        dp_deltas.append(dp_delta)
-        random_fill_delta: float | None = None
-        if random_fill_score is None:
-            missing_temporal_random_fill_count += 1
-        else:
-            random_fill_delta = mlqds_score - random_fill_score
-            random_fill_deltas.append(random_fill_delta)
         mlqds_query_score = as_float(mlqds.get("query_local_utility_score"))
         uniform_query_score = as_float(uniform.get("query_local_utility_score"))
         dp_query_score = as_float(dp.get("query_local_utility_score"))
-        query_uniform_delta: float | None = None
-        query_dp_delta: float | None = None
-        query_fields: dict[str, Any] = {}
         if mlqds_query_score is None or uniform_query_score is None or dp_query_score is None:
             missing_query_local_utility_count += 1
+            missing_baseline_count += 1
+            continue
+        ratios.append(ratio)
+        query_uniform_delta = float(mlqds_query_score - uniform_query_score)
+        query_dp_delta = float(mlqds_query_score - dp_query_score)
+        query_uniform_deltas.append(query_uniform_delta)
+        query_dp_deltas.append(query_dp_delta)
+        random_query_score = as_float(random_fill.get("query_local_utility_score"))
+        query_random_fill_delta: float | None = None
+        if random_query_score is None:
+            missing_temporal_random_fill_count += 1
         else:
-            query_uniform_delta = float(mlqds_query_score - uniform_query_score)
-            query_dp_delta = float(mlqds_query_score - dp_query_score)
-            query_uniform_deltas.append(query_uniform_delta)
-            query_dp_deltas.append(query_dp_delta)
-            query_fields = {
-                f"{prefix}_mlqds_query_local_utility": float(mlqds_query_score),
-                f"{prefix}_uniform_query_local_utility": float(uniform_query_score),
-                f"{prefix}_douglas_peucker_query_local_utility": float(dp_query_score),
-                f"{prefix}_mlqds_vs_uniform_query_local_utility": query_uniform_delta,
-                f"{prefix}_mlqds_vs_douglas_peucker_query_local_utility": query_dp_delta,
-            }
-        variant_fields: dict[str, Any] = {}
-        for suffix, metric_key in RANGE_USEFULNESS_GAP_VARIANT_KEYS:
-            mlqds_variant = as_float(mlqds.get(metric_key))
-            uniform_variant = as_float(uniform.get(metric_key))
-            if mlqds_variant is None or uniform_variant is None:
-                continue
-            variant_delta = mlqds_variant - uniform_variant
-            variant_uniform_deltas[suffix].append(float(variant_delta))
-            if ratio <= LOW_COMPRESSION_THRESHOLD:
-                variant_low_uniform_deltas[suffix].append(float(variant_delta))
-            variant_fields.update(
-                {
-                    f"{prefix}_mlqds_vs_uniform_range_usefulness_{suffix}": float(variant_delta),
-                }
-            )
+            query_random_fill_delta = float(mlqds_query_score - random_query_score)
+            query_random_fill_deltas.append(query_random_fill_delta)
         per_ratio_fields.update(
             {
                 f"{prefix}_compression_ratio": float(ratio),
-                f"{prefix}_mlqds_range_usefulness": float(mlqds_score),
-                f"{prefix}_uniform_range_usefulness": float(uniform_score),
-                f"{prefix}_douglas_peucker_range_usefulness": float(dp_score),
-                f"{prefix}_temporal_random_fill_range_usefulness": random_fill_score,
-                f"{prefix}_mlqds_vs_uniform_range_usefulness": float(uniform_delta),
-                f"{prefix}_mlqds_vs_douglas_peucker_range_usefulness": float(dp_delta),
-                f"{prefix}_mlqds_vs_temporal_random_fill_range_usefulness": random_fill_delta,
-                **query_fields,
-                **variant_fields,
+                f"{prefix}_mlqds_query_local_utility": float(mlqds_query_score),
+                f"{prefix}_uniform_query_local_utility": float(uniform_query_score),
+                f"{prefix}_douglas_peucker_query_local_utility": float(dp_query_score),
+                f"{prefix}_temporal_random_fill_query_local_utility": random_query_score,
+                f"{prefix}_mlqds_vs_uniform_query_local_utility": query_uniform_delta,
+                f"{prefix}_mlqds_vs_douglas_peucker_query_local_utility": query_dp_delta,
+                f"{prefix}_mlqds_vs_temporal_random_fill_query_local_utility": (
+                    query_random_fill_delta
+                ),
             }
         )
         if ratio <= LOW_COMPRESSION_THRESHOLD:
-            low_uniform_deltas.append(uniform_delta)
-            low_dp_deltas.append(dp_delta)
-            if random_fill_delta is not None:
-                low_random_fill_deltas.append(random_fill_delta)
-            if query_uniform_delta is not None:
-                low_query_uniform_deltas.append(query_uniform_delta)
-            if query_dp_delta is not None:
-                low_query_dp_deltas.append(query_dp_delta)
+            low_query_uniform_deltas.append(query_uniform_delta)
+            low_query_dp_deltas.append(query_dp_delta)
+            if query_random_fill_delta is not None:
+                low_query_random_fill_deltas.append(query_random_fill_delta)
 
     def _mean(values: list[float]) -> float | None:
         return float(sum(values) / len(values)) if values else None
 
-    low_both = [
-        1
-        for uniform_delta, dp_delta in zip(low_uniform_deltas, low_dp_deltas, strict=True)
-        if uniform_delta > 0.0 and dp_delta > 0.0
-    ]
-    all_both = [
-        1
-        for uniform_delta, dp_delta in zip(uniform_deltas, dp_deltas, strict=True)
-        if uniform_delta > 0.0 and dp_delta > 0.0
-    ]
     query_low_both = [
         1
         for uniform_delta, dp_delta in zip(
@@ -189,30 +130,10 @@ def _audit_summary(run_json: dict[str, Any] | None) -> dict[str, Any]:
     ]
     summary: dict[str, Any] = {
         "audit_compression_ratio_count": len(ratios),
-        "audit_low_compression_ratio_count": len(low_uniform_deltas),
+        "audit_low_compression_ratio_count": len(low_query_uniform_deltas),
         "audit_missing_baseline_count": int(missing_baseline_count),
         "audit_missing_temporal_random_fill_count": int(missing_temporal_random_fill_count),
         "audit_missing_query_local_utility_count": int(missing_query_local_utility_count),
-        "audit_beats_uniform_range_usefulness_count": sum(
-            1 for value in uniform_deltas if value > 0.0
-        ),
-        "audit_beats_douglas_peucker_range_usefulness_count": sum(
-            1 for value in dp_deltas if value > 0.0
-        ),
-        "audit_beats_temporal_random_fill_range_usefulness_count": sum(
-            1 for value in random_fill_deltas if value > 0.0
-        ),
-        "audit_beats_both_range_usefulness_count": len(all_both),
-        "audit_low_beats_uniform_range_usefulness_count": sum(
-            1 for value in low_uniform_deltas if value > 0.0
-        ),
-        "audit_low_beats_douglas_peucker_range_usefulness_count": sum(
-            1 for value in low_dp_deltas if value > 0.0
-        ),
-        "audit_low_beats_temporal_random_fill_range_usefulness_count": sum(
-            1 for value in low_random_fill_deltas if value > 0.0
-        ),
-        "audit_low_beats_both_range_usefulness_count": len(low_both),
         "audit_beats_uniform_query_local_utility_count": sum(
             1 for value in query_uniform_deltas if value > 0.0
         ),
@@ -220,6 +141,9 @@ def _audit_summary(run_json: dict[str, Any] | None) -> dict[str, Any]:
             1 for value in query_dp_deltas if value > 0.0
         ),
         "audit_beats_both_query_local_utility_count": len(query_all_both),
+        "audit_beats_temporal_random_fill_query_local_utility_count": sum(
+            1 for value in query_random_fill_deltas if value > 0.0
+        ),
         "audit_low_beats_uniform_query_local_utility_count": sum(
             1 for value in low_query_uniform_deltas if value > 0.0
         ),
@@ -227,48 +151,30 @@ def _audit_summary(run_json: dict[str, Any] | None) -> dict[str, Any]:
             1 for value in low_query_dp_deltas if value > 0.0
         ),
         "audit_low_beats_both_query_local_utility_count": len(query_low_both),
-        "audit_min_vs_uniform_range_usefulness": min(uniform_deltas) if uniform_deltas else None,
-        "audit_mean_vs_uniform_range_usefulness": _mean(uniform_deltas),
+        "audit_low_beats_temporal_random_fill_query_local_utility_count": sum(
+            1 for value in low_query_random_fill_deltas if value > 0.0
+        ),
         "audit_min_vs_uniform_query_local_utility": min(query_uniform_deltas)
         if query_uniform_deltas
         else None,
         "audit_mean_vs_uniform_query_local_utility": _mean(query_uniform_deltas),
-        "audit_min_vs_temporal_random_fill_range_usefulness": (
-            min(random_fill_deltas) if random_fill_deltas else None
+        "audit_min_vs_temporal_random_fill_query_local_utility": (
+            min(query_random_fill_deltas) if query_random_fill_deltas else None
         ),
-        "audit_mean_vs_temporal_random_fill_range_usefulness": _mean(random_fill_deltas),
-        "audit_min_low_vs_uniform_range_usefulness": min(low_uniform_deltas)
-        if low_uniform_deltas
-        else None,
-        "audit_mean_low_vs_uniform_range_usefulness": _mean(low_uniform_deltas),
+        "audit_mean_vs_temporal_random_fill_query_local_utility": _mean(
+            query_random_fill_deltas
+        ),
         "audit_min_low_vs_uniform_query_local_utility": (
             min(low_query_uniform_deltas) if low_query_uniform_deltas else None
         ),
         "audit_mean_low_vs_uniform_query_local_utility": _mean(low_query_uniform_deltas),
-        "audit_min_low_vs_temporal_random_fill_range_usefulness": (
-            min(low_random_fill_deltas) if low_random_fill_deltas else None
+        "audit_min_low_vs_temporal_random_fill_query_local_utility": (
+            min(low_query_random_fill_deltas) if low_query_random_fill_deltas else None
         ),
-        "audit_mean_low_vs_temporal_random_fill_range_usefulness": _mean(low_random_fill_deltas),
+        "audit_mean_low_vs_temporal_random_fill_query_local_utility": _mean(
+            low_query_random_fill_deltas
+        ),
     }
-    for suffix, _metric_key in RANGE_USEFULNESS_GAP_VARIANT_KEYS:
-        deltas = variant_uniform_deltas[suffix]
-        low_deltas = variant_low_uniform_deltas[suffix]
-        summary.update(
-            {
-                f"audit_beats_uniform_range_usefulness_{suffix}_count": sum(
-                    1 for value in deltas if value > 0.0
-                ),
-                f"audit_low_beats_uniform_range_usefulness_{suffix}_count": sum(
-                    1 for value in low_deltas if value > 0.0
-                ),
-                f"audit_min_vs_uniform_range_usefulness_{suffix}": min(deltas) if deltas else None,
-                f"audit_mean_vs_uniform_range_usefulness_{suffix}": _mean(deltas),
-                f"audit_min_low_vs_uniform_range_usefulness_{suffix}": (
-                    min(low_deltas) if low_deltas else None
-                ),
-                f"audit_mean_low_vs_uniform_range_usefulness_{suffix}": _mean(low_deltas),
-            }
-        )
     summary.update(per_ratio_fields)
     return summary
 
@@ -282,7 +188,7 @@ def _target_budget_row(
         return {}
     try:
         target_ratio = float(compression_ratio)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         last_row = rows[-1]
         return last_row if isinstance(last_row, dict) else {}
 
@@ -296,7 +202,7 @@ def _target_budget_row(
             continue
         try:
             ratio = float(raw_ratio)
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             continue
         distance = abs(ratio - target_ratio)
         if distance < best_distance:
@@ -314,7 +220,7 @@ def _selector_budget_row(
         return {}
     try:
         target_ratio = float(compression_ratio)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         last_row = rows[-1]
         return last_row if isinstance(last_row, dict) else {}
 
@@ -328,7 +234,7 @@ def _selector_budget_row(
             continue
         try:
             ratio = float(raw_ratio)
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             continue
         distance = abs(ratio - target_ratio)
         if distance < best_distance:

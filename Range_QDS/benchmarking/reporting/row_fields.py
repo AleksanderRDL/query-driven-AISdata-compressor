@@ -36,9 +36,10 @@ def _single_cell_status(ctx: RowContext) -> str:
         ),
         audit_frozen=workload_blind_protocol.get("audit_masks_frozen_before_eval_query_scoring"),
         audit_ratio_count=int(ctx.audit["audit_compression_ratio_count"]),
-        beats_uniform=_metric_beats(ctx.mlqds, ctx.uniform, "range_usefulness_score"),
-        beats_dp=_metric_beats(ctx.mlqds, ctx.douglas_peucker, "range_usefulness_score"),
+        beats_uniform=_metric_beats(ctx.mlqds, ctx.uniform, "query_local_utility_score"),
+        beats_dp=_metric_beats(ctx.mlqds, ctx.douglas_peucker, "query_local_utility_score"),
         selector_claim_status=str(ctx.selector_claim_evidence["selector_claim_status"]),
+        missing_metric_status="missing_query_local_utility",
     )
 
 
@@ -280,16 +281,16 @@ def _protocol_audit_fields(ctx: RowContext) -> RowFields:
             "audit_masks_frozen_before_eval_query_scoring"
         ),
         "eval_geometry_blend_allowed": workload_blind_protocol.get("eval_geometry_blend_allowed"),
-        "beats_uniform_range_usefulness": _metric_beats(
-            ctx.mlqds, ctx.uniform, "range_usefulness_score"
+        "beats_uniform_query_local_utility": _metric_beats(
+            ctx.mlqds, ctx.uniform, "query_local_utility_score"
         ),
-        "beats_douglas_peucker_range_usefulness": _metric_beats(
-            ctx.mlqds, ctx.douglas_peucker, "range_usefulness_score"
+        "beats_douglas_peucker_query_local_utility": _metric_beats(
+            ctx.mlqds, ctx.douglas_peucker, "query_local_utility_score"
         ),
-        "beats_temporal_random_fill_range_usefulness": _metric_beats(
+        "beats_temporal_random_fill_query_local_utility": _metric_beats(
             ctx.mlqds,
             ctx.temporal_random_fill,
-            "range_usefulness_score",
+            "query_local_utility_score",
         ),
         **ctx.audit,
         **dominant_runtime_phase_fields(ctx.timings, ctx.elapsed_seconds),

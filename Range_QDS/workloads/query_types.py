@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+from collections.abc import Mapping
 from typing import Any
 
 import torch
@@ -13,6 +15,38 @@ QUERY_NAME_TO_ID = {
     "range": QUERY_TYPE_ID_RANGE,
 }
 ID_TO_QUERY_NAME = {v: k for k, v in QUERY_NAME_TO_ID.items()}
+RANGE_QUERY_PARAM_KEYS = ("lat_min", "lat_max", "lon_min", "lon_max", "t_start", "t_end")
+RangeQueryParams = dict[str, float]
+TypedQuery = dict[str, Any]
+
+
+def validated_range_query_params(query: Mapping[str, Any]) -> RangeQueryParams:
+    """Return normalized range-query params after schema and bounds validation."""
+    if str(query.get("type", "")).lower() != "range":
+        raise ValueError(f"Only range queries are supported; got query type: {query.get('type')!r}")
+    raw_params = query.get("params")
+    if not isinstance(raw_params, Mapping):
+        raise ValueError("Range query must contain a params mapping.")
+    missing = [key for key in RANGE_QUERY_PARAM_KEYS if key not in raw_params]
+    if missing:
+        raise ValueError(f"Range query params missing required keys: {missing}")
+    params: RangeQueryParams = {}
+    for key in RANGE_QUERY_PARAM_KEYS:
+        raw_value = raw_params[key]
+        try:
+            value = float(raw_value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Range query param {key!r} must be numeric.") from exc
+        if not math.isfinite(value):
+            raise ValueError(f"Range query param {key!r} must be finite.")
+        params[key] = value
+    if (
+        params["lat_min"] > params["lat_max"]
+        or params["lon_min"] > params["lon_max"]
+        or params["t_start"] > params["t_end"]
+    ):
+        raise ValueError("Range query lower bounds must not exceed upper bounds.")
+    return params
 
 
 def normalize_pure_workload_map(workload_map: dict[str, float]) -> dict[str, float]:
@@ -35,16 +69,16 @@ def single_workload_type(workload_map: dict[str, float]) -> str:
     return next(iter(normalized))
 
 
-def pad_query_features(typed_queries: list[dict[str, Any]]) -> tuple[torch.Tensor, torch.Tensor]:
-    """Convert heterogeneous typed queries to padded numeric features + type IDs. See workloads/README.md for details."""
+def pad_query_features(typed_queries: list[TypedQuery]) -> tuple[torch.Tensor, torch.Tensor]:
+    """Convert range query dicts to padded numeric features + type IDs. See workloads/README.md for details."""
     feature_dim = 12
     feats = torch.zeros((len(typed_queries), feature_dim), dtype=torch.float32)
     type_ids = torch.zeros((len(typed_queries),), dtype=torch.long)
 
     for i, query in enumerate(typed_queries):
         qtype = str(query["type"]).lower()
-        params = query["params"]
         if qtype == "range":
+            params = validated_range_query_params(query)
             type_ids[i] = QUERY_TYPE_ID_RANGE
             feats[i, :6] = torch.tensor(
                 [

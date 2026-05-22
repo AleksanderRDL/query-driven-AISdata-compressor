@@ -10,7 +10,12 @@ import torch
 from config.run_config import build_run_config
 from data_preparation.ais_loader import generate_synthetic_ais_data
 from data_preparation.trajectory_dataset import TrajectoryDataset
-from learning.checkpoint_validation import _validation_checkpoint_scores, _validation_query_score
+from learning.checkpoint_validation import (
+    _validation_checkpoint_scores,
+    _validation_query_local_utility_score_for_mask,
+    _validation_query_local_utility_selection_score,
+    _validation_query_score,
+)
 from learning.importance_labels import compute_typed_importance_labels
 from learning.model_training import train_model
 from learning.outputs import TrainingOutputs
@@ -18,7 +23,7 @@ from learning.scaler import FeatureScaler
 from learning.targets.query_local_utility import QUERY_LOCAL_UTILITY_HEAD_NAMES
 from models.historical_prior_qds_model import HistoricalPriorRangeQDSModel
 from models.trajectory_qds_model import TrajectoryQDSModel
-from scoring.method_scoring import score_range_usefulness, score_retained_mask
+from scoring.method_scoring import score_range_audit, score_retained_mask
 from scoring.methods import MLQDSMethod
 from workloads.generation.generator import generate_typed_query_workload
 from workloads.query_types import NUM_QUERY_TYPES, QUERY_TYPE_ID_RANGE
@@ -81,7 +86,7 @@ def test_training_records_validation_selection_score() -> None:
     assert [int(row["epoch"]) for row in score_rows] == [0, 1, 3, 5, 7]
     assert all(0.0 <= row["val_selection_score"] <= 1.0 for row in score_rows)
     assert all("val_range_point_f1" in row for row in score_rows)
-    assert all("val_range_usefulness" in row for row in score_rows)
+    assert all("val_query_local_utility" in row for row in score_rows)
     assert all("val_query_f1" not in row for row in score_rows)
     assert all(
         "selection_score" not in row for row in out.history if "val_selection_score" not in row
@@ -263,7 +268,7 @@ def test_validation_query_score_matches_final_mlqds_scoring(
     assert validation_per_type["range"] == pytest.approx(final_per_type["range"])
 
 
-def test_validation_range_usefulness_matches_final_audit(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_validation_query_local_utility_matches_final_audit(monkeypatch: pytest.MonkeyPatch) -> None:
     trajectories = generate_synthetic_ais_data(n_ships=2, n_points_per_ship=12, seed=615)
     ds = TrajectoryDataset(trajectories)
     points = ds.get_all_points()
@@ -283,7 +288,7 @@ def test_validation_range_usefulness_matches_final_audit(monkeypatch: pytest.Mon
         mlqds_diversity_bonus=0.0,
         mlqds_hybrid_mode="swap",
         mlqds_score_mode="rank",
-        checkpoint_score_variant="range_usefulness",
+        checkpoint_score_variant="query_local_utility",
     )
     predictions = torch.linspace(-1.0, 1.0, steps=points.shape[0])
 
@@ -333,15 +338,25 @@ def test_validation_range_usefulness_matches_final_audit(monkeypatch: pytest.Mon
         inference_device="cpu",
         inference_batch_size=cfg.model.inference_batch_size,
     ).simplify(points, boundaries, cfg.model.compression_ratio)
-    audit = score_range_usefulness(
+    audit = score_range_audit(
         points=points,
         boundaries=boundaries,
         retained_mask=retained,
         typed_queries=workload.typed_queries,
     )
+    raw_score, validation_audit, sanity = _validation_query_local_utility_score_for_mask(
+        points=points,
+        boundaries=boundaries,
+        retained_mask=retained,
+        workload=workload,
+        query_cache=None,
+        model_config=cfg.model,
+    )
+    selection_score = _validation_query_local_utility_selection_score(raw_score, sanity, cfg.model)
 
-    assert validation_score == pytest.approx(audit["range_usefulness_score"])
-    assert validation_per_type["range"] == pytest.approx(audit["range_usefulness_score"])
+    assert validation_audit == audit
+    assert validation_score == pytest.approx(selection_score)
+    assert validation_per_type["range"] == pytest.approx(selection_score)
 
 
 def test_validation_selection_passes_segment_head_to_learned_selector(
@@ -541,30 +556,25 @@ def test_validation_checkpoint_scores_report_factorized_causality_deltas(
         retained[:keep] = True
         return retained
 
-    def fake_range_usefulness(**kwargs: object) -> dict[str, float]:
+    def fake_query_local_utility(**kwargs: object) -> dict[str, float]:
         retained_mask = cast(torch.Tensor, kwargs["retained_mask"])
         score = float(retained_mask.float().mean().item())
         return {
-            "range_usefulness_score": score,
+            "query_local_utility_score": score,
+            "query_point_recall": score,
             "range_point_f1": score,
-            "range_ship_f1": score,
-            "range_ship_coverage": score,
-            "range_entry_exit_f1": score,
-            "range_crossing_f1": score,
-            "range_temporal_coverage": score,
-            "range_gap_coverage": score,
+            "range_gap_min_coverage": score,
             "range_turn_coverage": score,
-            "range_shape_score": score,
             "range_query_local_interpolation_fidelity": score,
         }
 
     monkeypatch.setattr("learning.checkpoint_validation.simplify_mlqds_predictions", fake_simplify)
     monkeypatch.setattr(
-        "learning.checkpoint_validation.score_range_usefulness", fake_range_usefulness
+        "learning.checkpoint_validation.score_range_audit", fake_query_local_utility
     )
     monkeypatch.setattr(
         "learning.checkpoint_validation.query_local_utility_from_range_audit",
-        lambda audit, **_kwargs: {"query_local_utility_score": audit["range_usefulness_score"]},
+        lambda audit, **_kwargs: {"query_local_utility_score": audit["query_local_utility_score"]},
     )
 
     validation_score, per_type_score, metrics = _validation_checkpoint_scores(

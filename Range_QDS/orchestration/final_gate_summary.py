@@ -45,7 +45,6 @@ class FinalRunSummaries:
     final_candidate: bool
     final_claim_summary: dict[str, Any]
     diagnostic_summary: dict[str, Any]
-    legacy_range_useful_summary: dict[str, Any]
     learning_causality_summary: dict[str, Any]
     support_overlap_gate: dict[str, Any]
     global_sanity_gate: dict[str, Any]
@@ -118,20 +117,6 @@ def build_final_run_summaries(
         and str(getattr(config.model, "selector_type", "")).lower()
         == LEARNED_SEGMENT_BUDGET_SELECTOR_TYPE
     )
-    legacy_range_useful_summary = {
-        "metric": "RangeUsefulLegacy",
-        "schema": "range_usefulness_schema_version",
-        "diagnostic_only": True,
-        "mlqds_score": matched["MLQDS"].range_usefulness_score,
-        "uniform_score": (
-            uniform_score.range_usefulness_score if uniform_score is not None else None
-        ),
-        "douglas_peucker_score": (
-            douglas_peucker_score.range_usefulness_score
-            if douglas_peucker_score is not None
-            else None
-        ),
-    }
     learned_slot_summary = build_learned_slot_summary(
         selector_budget_diagnostics,
         float(config.model.compression_ratio),
@@ -450,7 +435,6 @@ def build_final_run_summaries(
         final_candidate and not blocking_gates
     )
     diagnostic_summary = {
-        "legacy_range_useful_available": True,
         "query_local_utility_available": True,
         "range_component_diagnostics_available": True,
         "workload_blind_protocol_available": True,
@@ -471,7 +455,6 @@ def build_final_run_summaries(
         final_candidate=final_candidate,
         final_claim_summary=final_claim_summary,
         diagnostic_summary=diagnostic_summary,
-        legacy_range_useful_summary=legacy_range_useful_summary,
         learning_causality_summary=learning_causality_summary,
         support_overlap_gate=support_overlap_gate,
         global_sanity_gate=global_sanity_gate,

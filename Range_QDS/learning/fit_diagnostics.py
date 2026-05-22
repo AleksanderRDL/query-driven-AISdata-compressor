@@ -71,12 +71,9 @@ def _training_target_diagnostics(
     else:
         diagnostics.update(
             {
-                "target_family": "legacy_range_useful_scalar",
+                "target_family": "scalar_range_target",
                 "final_success_allowed": False,
-                "legacy_reason": (
-                    "Old RangeUseful/scalar-target diagnostic path. "
-                    "Not valid for QueryLocalUtility final acceptance."
-                ),
+                "diagnostic_reason": "Scalar range target is diagnostic-only.",
             }
         )
 

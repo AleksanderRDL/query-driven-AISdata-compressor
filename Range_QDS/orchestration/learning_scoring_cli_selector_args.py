@@ -217,7 +217,7 @@ def _add_selector_arguments(parser: argparse.ArgumentParser) -> None:
         type=float,
         default=0.0,
         help=(
-            "Blend model scores with cached range usefulness labels before MLQDS retention. "
+            "Blend model scores with cached range-geometry scores before MLQDS retention. "
             "0.0 uses model scores only; 1.0 uses range-geometry labels only."
         ),
     )
@@ -237,13 +237,11 @@ def _add_range_target_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--range_label_mode",
         type=str,
-        default="usefulness",
+        default="point_f1",
         choices=RANGE_LABEL_MODES,
         help=(
-            "Range label construction mode. 'point_f1' is the old in-box point proxy; "
-            "'usefulness' adds audit-proxy signal; 'usefulness_balanced' rescales component "
-            "mass toward RangeUseful audit weights; 'usefulness_ship_balanced' reduces dense "
-            "query-hit ship dominance in point, entry/exit, and crossing support labels."
+            "Range label construction mode. 'point_f1' assigns expected in-box point-F1 "
+            "contribution. QueryLocalUtility training uses its dedicated factorized target mode."
         ),
     )
     parser.add_argument(
@@ -253,19 +251,18 @@ def _add_range_target_arguments(parser: argparse.ArgumentParser) -> None:
         choices=RANGE_TRAINING_TARGET_MODES,
         help=(
             "Transform training range labels before fitting the model. 'point_value' uses the raw "
-            "expected-usefulness values; 'retained_frequency' trains on oracle retained-set membership "
+            "expected point-value labels; 'retained_frequency' trains on oracle retained-set membership "
             "frequency across configured budgets; 'global_budget_retained_frequency' trains on "
             "training-only global-budget oracle membership; 'historical_prior_retained_frequency' "
             "distills that target through a leave-one-out query-free historical KNN teacher; "
             "'marginal_coverage_frequency' trains on set-aware "
             "neighborhood coverage targets; 'query_spine_frequency' trains on query-derived temporal "
             "support anchors; 'query_residual_frequency' trains on train-query residual fill anchors; "
-            "'set_utility_frequency' trains on one-step train-query RangeUseful gain; "
-            "'local_swap_utility_frequency' trains on one-step train-query local-swap RangeUseful gain; "
+            "'set_utility_frequency' trains on one-step train-query QueryLocalUtility gain; "
+            "'local_swap_utility_frequency' trains on one-step train-query local-swap QueryLocalUtility gain; "
             "'local_swap_gain_cost_frequency' trains local-delta candidate value against removal cost; "
-            "'structural_retained_frequency' blends train workload usefulness with query-free "
-            "globality/uniqueness scores; "
-            "'continuity_retained_frequency' trains from boundary, temporal, gap, turn, and shape components."
+            "'structural_retained_frequency' blends train workload target labels with query-free "
+            "globality/uniqueness scores."
         ),
     )
     parser.add_argument(
@@ -285,18 +282,9 @@ def _add_range_target_arguments(parser: argparse.ArgumentParser) -> None:
         choices=["label_mean", "label_max", "frequency_mean"],
         help=(
             "How multiple train range workloads become retained-frequency targets. "
-            "'label_mean' averages raw usefulness labels before target selection; "
-            "'label_max' takes the max raw usefulness label before target selection; "
+            "'label_mean' averages raw point-value labels before target selection; "
+            "'label_max' takes the max raw point-value label before target selection; "
             "'frequency_mean' averages per-workload retained-frequency targets."
-        ),
-    )
-    parser.add_argument(
-        "--range_component_target_blend",
-        type=float,
-        default=1.0,
-        help=(
-            "When range_training_target_mode is component_retained_frequency or continuity_retained_frequency, "
-            "blend component-wise retained targets with the ordinary retained-frequency target. 1.0 uses components only."
         ),
     )
     parser.add_argument(
@@ -314,7 +302,7 @@ def _add_range_target_arguments(parser: argparse.ArgumentParser) -> None:
         default=0.25,
         help=(
             "Training-only blend weight for structural_retained_frequency. "
-            "0.0 uses train workload usefulness only; 1.0 uses query-free structural scores only."
+            "0.0 uses train workload target labels only; 1.0 uses query-free structural scores only."
         ),
     )
     parser.add_argument(
@@ -400,7 +388,7 @@ def _add_range_target_arguments(parser: argparse.ArgumentParser) -> None:
         type=int,
         default=128,
         help=(
-            "Maximum candidates per train query and budget for one-step marginal RangeUseful scoring. "
+            "Maximum candidates per train query and budget for one-step marginal QueryLocalUtility scoring. "
             "Used by set_utility_frequency, local_swap_utility_frequency, and "
             "local_swap_gain_cost_frequency. Use 0 to score every candidate."
         ),

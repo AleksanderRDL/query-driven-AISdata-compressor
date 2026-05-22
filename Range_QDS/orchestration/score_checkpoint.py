@@ -55,7 +55,7 @@ from scoring.query_cache import ScoringQueryCache
 from scoring.score_tables import (
     print_geometric_distortion_table,
     print_method_comparison_table,
-    print_range_usefulness_table,
+    print_range_audit_table,
 )
 from selection.model_score_conversion import workload_type_head
 from workloads.generation.anchors import RANGE_ANCHOR_MODES
@@ -300,7 +300,7 @@ def main() -> None:
         flush=True,
     )
 
-    t0 = time.perf_counter()
+    load_started_at = time.perf_counter()
     print(f"[load-data] reading CSV: {args.csv_path}", flush=True)
     load_kwargs = {
         "min_points_per_segment": args.min_points_per_segment,
@@ -342,7 +342,8 @@ def main() -> None:
         trajectory_mmsis = trajectory_mmsis[: args.max_trajectories]
         print(f"[load-data] capped trajectories to {args.max_trajectories}", flush=True)
     print(
-        f"[load-data] {len(trajectories)} trajectories in {time.perf_counter() - t0:.2f}s",
+        f"[load-data] {len(trajectories)} trajectories in "
+        f"{time.perf_counter() - load_started_at:.2f}s",
         flush=True,
     )
 
@@ -351,7 +352,7 @@ def main() -> None:
     boundaries = dataset.get_trajectory_boundaries()
     print(f"[dataset] points={points.shape[0]}  trajectories={len(boundaries)}", flush=True)
 
-    t0 = time.perf_counter()
+    workload_started_at = time.perf_counter()
     workload = generate_typed_query_workload(
         trajectories=trajectories,
         n_queries=int(args.n_queries),
@@ -376,7 +377,7 @@ def main() -> None:
         )
     print(
         f"[workload] generated {len(workload.typed_queries)} queries in "
-        f"{time.perf_counter() - t0:.2f}s{coverage_msg}",
+        f"{time.perf_counter() - workload_started_at:.2f}s{coverage_msg}",
         flush=True,
     )
 
@@ -408,7 +409,7 @@ def main() -> None:
             points=points,
             boundaries=boundaries,
             typed_queries=workload.typed_queries,
-            range_label_mode=str(getattr(saved_cfg.model, "range_label_mode", "usefulness")),
+            range_label_mode=str(getattr(saved_cfg.model, "range_label_mode", "point_f1")),
             range_boundary_prior_weight=float(
                 getattr(saved_cfg.model, "range_boundary_prior_weight", 0.0)
             ),
@@ -438,7 +439,7 @@ def main() -> None:
     save_masks = bool(args.save_simplified_dir)
     query_cache = ScoringQueryCache.for_workload(points, boundaries, workload.typed_queries)
     for method in methods:
-        t0 = time.perf_counter()
+        method_started_at = time.perf_counter()
         print(f"[eval] {method.name} ...", flush=True)
         results[method.name] = score_method(
             method=method,
@@ -450,35 +451,38 @@ def main() -> None:
             return_mask=method.name == "MLQDS" or save_masks,
             query_cache=query_cache,
         )
-        print(f"[eval] {method.name} done in {time.perf_counter() - t0:.2f}s", flush=True)
+        print(
+            f"[eval] {method.name} done in {time.perf_counter() - method_started_at:.2f}s",
+            flush=True,
+        )
 
     mlqds_mask = results["MLQDS"].retained_mask
     if mlqds_mask is None:
         raise RuntimeError("MLQDS retained mask was not captured during inference scoring.")
 
-    table = print_method_comparison_table(results)
+    matched_table = print_method_comparison_table(results)
     geometric_table = print_geometric_distortion_table(results)
-    range_usefulness_table = print_range_usefulness_table(results)
+    range_audit_table = print_range_audit_table(results)
     print("\nMatched-workload table (inference on new CSV)")
-    print(table)
+    print(matched_table)
     print(
         "\nGeometric-distortion table (lower is better; SED = time-synchronous, PED = perpendicular, in km)"
     )
     print(geometric_table)
-    print("\nRange-usefulness audit table")
-    print(range_usefulness_table)
+    print("\nRange audit table")
+    print(range_audit_table)
 
-    out_dir = Path(args.results_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "matched_table.txt").write_text(table + "\n", encoding="utf-8")
-    (out_dir / "geometric_distortion_table.txt").write_text(
+    results_dir = Path(args.results_dir)
+    results_dir.mkdir(parents=True, exist_ok=True)
+    (results_dir / "matched_table.txt").write_text(matched_table + "\n", encoding="utf-8")
+    (results_dir / "geometric_distortion_table.txt").write_text(
         geometric_table + "\n", encoding="utf-8"
     )
-    (out_dir / "range_usefulness_table.txt").write_text(
-        range_usefulness_table + "\n", encoding="utf-8"
+    (results_dir / "range_audit_table.txt").write_text(
+        range_audit_table + "\n", encoding="utf-8"
     )
 
-    dump = {
+    inference_run_payload = {
         "checkpoint": str(args.checkpoint),
         "csv_path": str(args.csv_path),
         "n_trajectories": len(trajectories),
@@ -524,53 +528,51 @@ def main() -> None:
                 "geometric_distortion": m.geometric_distortion,
                 "avg_length_preserved": m.avg_length_preserved,
                 "combined_query_shape_score": m.combined_query_shape_score,
+                "query_point_recall": m.query_point_recall,
                 "range_point_f1": m.range_point_f1,
-                "range_ship_f1": m.range_ship_f1,
-                "range_ship_coverage": m.range_ship_coverage,
-                "range_entry_exit_f1": m.range_entry_exit_f1,
-                "range_crossing_f1": m.range_crossing_f1,
-                "range_temporal_coverage": m.range_temporal_coverage,
-                "range_gap_coverage": m.range_gap_coverage,
-                "range_gap_time_coverage": m.range_gap_time_coverage,
-                "range_gap_distance_coverage": m.range_gap_distance_coverage,
                 "range_gap_min_coverage": m.range_gap_min_coverage,
                 "range_turn_coverage": m.range_turn_coverage,
-                "range_shape_score": m.range_shape_score,
-                "range_usefulness_score": m.range_usefulness_score,
-                "range_usefulness_gap_time_score": m.range_usefulness_gap_time_score,
-                "range_usefulness_gap_distance_score": m.range_usefulness_gap_distance_score,
-                "range_usefulness_gap_min_score": m.range_usefulness_gap_min_score,
-                "range_usefulness_schema_version": m.range_usefulness_schema_version,
-                "range_usefulness_gap_ablation_version": m.range_usefulness_gap_ablation_version,
+                "range_query_local_interpolation_fidelity": (
+                    m.range_query_local_interpolation_fidelity
+                ),
+                "query_local_utility_score": m.query_local_utility_score,
+                "query_local_utility_schema_version": m.query_local_utility_schema_version,
                 "range_audit": m.range_audit,
             }
             for name, m in results.items()
         },
     }
-    with open(out_dir / "inference_run.json", "w", encoding="utf-8") as f:
-        json.dump(dump, f, indent=2)
-    print(f"[write] results -> {out_dir}", flush=True)
+    with open(results_dir / "inference_run.json", "w", encoding="utf-8") as f:
+        json.dump(inference_run_payload, f, indent=2)
+    print(f"[write] results -> {results_dir}", flush=True)
 
-    t0 = time.perf_counter()
+    length_loss_started_at = time.perf_counter()
     print("[trajectory-length-loss] starting...", flush=True)
     try:
         report_trajectory_length_loss(
             points, boundaries, mlqds_mask, top_k=25, trajectory_mmsis=trajectory_mmsis
         )
     finally:
-        print(f"[trajectory-length-loss] done in {time.perf_counter() - t0:.2f}s", flush=True)
+        print(
+            "[trajectory-length-loss] done in "
+            f"{time.perf_counter() - length_loss_started_at:.2f}s",
+            flush=True,
+        )
 
     if args.save_simplified_dir:
-        out_dir_simp = Path(args.save_simplified_dir)
-        out_dir_simp.mkdir(parents=True, exist_ok=True)
+        simplified_output_dir = Path(args.save_simplified_dir)
+        simplified_output_dir.mkdir(parents=True, exist_ok=True)
         write_simplified_csv(
-            str(out_dir_simp / "ML_simplified.csv"),
+            str(simplified_output_dir / "ML_simplified.csv"),
             points,
             boundaries,
             mlqds_mask,
             trajectory_mmsis=trajectory_mmsis,
         )
-        print(f"[write] simplified CSV -> {out_dir_simp / 'ML_simplified.csv'}", flush=True)
+        print(
+            f"[write] simplified CSV -> {simplified_output_dir / 'ML_simplified.csv'}",
+            flush=True,
+        )
         for ref_name, csv_name in (
             ("uniform", "uniform_simplified.csv"),
             ("DouglasPeucker", "DP_simplified.csv"),
@@ -578,13 +580,13 @@ def main() -> None:
             ref_eval = results.get(ref_name)
             if ref_eval is not None and ref_eval.retained_mask is not None:
                 write_simplified_csv(
-                    str(out_dir_simp / csv_name),
+                    str(simplified_output_dir / csv_name),
                     points,
                     boundaries,
                     ref_eval.retained_mask,
                     trajectory_mmsis=trajectory_mmsis,
                 )
-                print(f"[write] simplified CSV -> {out_dir_simp / csv_name}", flush=True)
+                print(f"[write] simplified CSV -> {simplified_output_dir / csv_name}", flush=True)
 
 
 if __name__ == "__main__":

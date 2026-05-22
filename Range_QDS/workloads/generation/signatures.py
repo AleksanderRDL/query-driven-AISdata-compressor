@@ -6,6 +6,7 @@ from typing import Any
 
 import torch
 
+from workloads.query_types import validated_range_query_params
 from workloads.workload_diagnostics import compute_range_workload_diagnostics
 
 
@@ -66,7 +67,7 @@ def _range_workload_signature(
     time_spans = []
     for query in typed_queries:
         metadata = query.get("_metadata") or {}
-        params = query["params"]
+        params = validated_range_query_params(query)
         spatial_radii.append(
             float(metadata.get("spatial_radius_km", metadata.get("range_spatial_km", 0.0)) or 0.0)
         )

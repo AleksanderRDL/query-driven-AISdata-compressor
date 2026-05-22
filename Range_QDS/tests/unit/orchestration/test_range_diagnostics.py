@@ -10,10 +10,7 @@ import torch
 
 from config.run_config import build_run_config
 from data_preparation.ais_loader import generate_synthetic_ais_data
-from learning.importance_labels import (
-    compute_typed_importance_labels,
-    compute_typed_importance_labels_with_range_components,
-)
+from learning.importance_labels import compute_typed_importance_labels
 from orchestration.range_diagnostics import range_workload_diagnostics
 from orchestration.range_runtime_cache import RangeRuntimeCache
 from orchestration.range_runtime_cache import (
@@ -259,24 +256,6 @@ def test_range_label_diagnostics_reports_positive_fraction() -> None:
     assert diagnostics["positive_label_max"] > 0.0
 
 
-def test_range_label_diagnostics_reports_component_mass() -> None:
-    points, boundaries = _points_and_boundaries()
-    queries = [_range_query(-1.0, 1.0, -1.0, 1.0, -1.0, 2.5)]
-
-    labels, labelled_mask, component_labels = compute_typed_importance_labels_with_range_components(
-        points,
-        boundaries,
-        queries,
-    )
-    diagnostics = compute_range_label_diagnostics(labels, labelled_mask, component_labels)
-    fractions = diagnostics["component_positive_label_mass_fraction"]
-
-    assert diagnostics["positive_label_mass"] > 0.0
-    assert fractions["range_point_f1"] > 0.0
-    assert fractions["range_ship_f1"] > 0.0
-    assert sum(float(value) for value in fractions.values()) == pytest.approx(1.0)
-
-
 def test_range_diagnostics_dump_is_json_serializable() -> None:
     points, boundaries = _points_and_boundaries()
     queries = [_range_query(-1.0, 1.0, -1.0, 1.0, -1.0, 2.5)]
@@ -375,7 +354,6 @@ def test_range_workload_diagnostics_populates_runtime_query_cache_masks(tmp_path
     assert set(runtime_cache.query_cache.support_masks) == {0}
     assert runtime_cache.labels is not None
     assert runtime_cache.labelled_mask is not None
-    assert runtime_cache.component_labels is not None
 
 
 def test_eval_range_label_cache_reuses_tensor_cache(tmp_path: Path) -> None:
@@ -411,7 +389,6 @@ def test_eval_range_label_cache_reuses_tensor_cache(tmp_path: Path) -> None:
     )
     assert first is not None
     assert first_cache.labels is not None
-    assert first_cache.component_labels is not None
 
     second_cache = RangeRuntimeCache()
     second = _prepare_range_label_cache(
@@ -428,64 +405,8 @@ def test_eval_range_label_cache_reuses_tensor_cache(tmp_path: Path) -> None:
 
     assert second is not None
     assert second_cache.labels is not None
-    assert second_cache.component_labels is not None
     assert torch.equal(second_cache.labels, first_cache.labels)
     assert second_cache.labelled_mask is not None
-
-
-def test_ship_balanced_range_label_cache_keeps_component_labels(tmp_path: Path) -> None:
-    points, boundaries = _points_and_boundaries()
-    queries = [_range_query(-1.0, 1.0, -1.0, 1.0, -1.0, 2.5)]
-    features, type_ids = pad_query_features(queries)
-    workload = TypedQueryWorkload(
-        query_features=features,
-        typed_queries=queries,
-        type_ids=type_ids,
-        coverage_fraction=0.60,
-        covered_points=3,
-        total_points=5,
-    )
-    cfg = build_run_config(
-        cache_dir=str(tmp_path / "cache"),
-        range_diagnostics_mode="cached",
-        compression_ratio=0.4,
-        workload="range",
-        range_label_mode="usefulness_ship_balanced",
-    )
-
-    first_cache = RangeRuntimeCache()
-    assert (
-        _prepare_range_label_cache(
-            cache_label="eval",
-            points=points,
-            boundaries=boundaries,
-            workload=workload,
-            workload_map={"range": 1.0},
-            config=cfg,
-            seed=123,
-            runtime_cache=first_cache,
-            range_boundary_prior_weight=0.0,
-        )
-        is not None
-    )
-    assert first_cache.component_labels is not None
-
-    second_cache = RangeRuntimeCache()
-    assert (
-        _prepare_range_label_cache(
-            cache_label="eval",
-            points=points,
-            boundaries=boundaries,
-            workload=workload,
-            workload_map={"range": 1.0},
-            config=cfg,
-            seed=123,
-            runtime_cache=second_cache,
-            range_boundary_prior_weight=0.0,
-        )
-        is not None
-    )
-    assert second_cache.component_labels is not None
 
 
 def test_range_label_cache_key_ignores_compression_ratio(tmp_path: Path) -> None:

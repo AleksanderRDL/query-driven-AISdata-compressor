@@ -10,7 +10,7 @@ import pytest
 
 import learning.targets.query_local_utility as query_local_utility_targets
 from benchmarking.profiles import (
-    BLIND_EXPECTED_USEFULNESS_PROFILE,
+    BLIND_EXPECTED_QUERY_LOCAL_UTILITY_PROFILE,
     BLIND_RETAINED_FREQUENCY_PROFILE,
     BLIND_TEACHER_DISTILL_PROFILE,
     DEFAULT_PROFILE,
@@ -29,6 +29,25 @@ from learning.targets.query_local_utility import (
 from learning.targets.registry import RANGE_SCALAR_TARGET_MODE_SPECS
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+MAX_PRODUCTION_FILE_LINES = 1000
+MAX_PRODUCTION_FUNCTION_LINES = 350
+KNOWN_LARGE_FUNCTION_BUDGETS = {
+    (
+        "Range_QDS/learning/factorized_prior_transfer_diagnostics.py",
+        "_prior_to_head_transfer_sensitivity_diagnostics",
+    ): 540,
+    ("Range_QDS/learning/model_training.py", "train_model"): 399,
+    ("Range_QDS/learning/model_training_loop.py", "run_training_epochs"): 363,
+    ("Range_QDS/orchestration/final_gate_summary.py", "build_final_run_summaries"): 425,
+    (
+        "Range_QDS/orchestration/selector_marginal_diagnostics.py",
+        "retained_decision_marginal_query_local_utility_diagnostics",
+    ): 353,
+    (
+        "Range_QDS/selection/learned_segment_budget/core.py",
+        "simplify_with_learned_segment_budget_with_trace",
+    ): 355,
+}
 
 
 @pytest.mark.parametrize(
@@ -48,6 +67,39 @@ def test_removed_compatibility_shims_stay_removed(module_name: str) -> None:
 
 def test_removed_query_local_utility_target_build_alias_stays_removed() -> None:
     assert not hasattr(query_local_utility_targets, "build")
+
+
+def test_production_files_stay_under_1000_lines() -> None:
+    violations = []
+    for path in sorted((REPO_ROOT / "Range_QDS").rglob("*.py")):
+        relative = path.relative_to(REPO_ROOT).as_posix()
+        if relative.startswith("Range_QDS/tests/"):
+            continue
+        line_count = len(path.read_text(encoding="utf-8").splitlines())
+        if line_count > MAX_PRODUCTION_FILE_LINES:
+            violations.append(f"{relative}:{line_count}")
+
+    assert violations == []
+
+
+def test_large_production_functions_do_not_grow_without_explicit_budget() -> None:
+    violations = []
+    for path in sorted((REPO_ROOT / "Range_QDS").rglob("*.py")):
+        relative = path.relative_to(REPO_ROOT).as_posix()
+        if relative.startswith("Range_QDS/tests/"):
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+                continue
+            span = int(node.end_lineno or node.lineno) - int(node.lineno) + 1
+            budget = KNOWN_LARGE_FUNCTION_BUDGETS.get((relative, node.name))
+            if budget is None and span > MAX_PRODUCTION_FUNCTION_LINES:
+                violations.append(f"{relative}:{node.lineno}:{node.name}:{span}")
+            elif budget is not None and span > budget:
+                violations.append(f"{relative}:{node.lineno}:{node.name}:{span}>{budget}")
+
+    assert violations == []
 
 
 def test_orchestration_production_modules_do_not_cross_import_private_helpers() -> None:
@@ -95,7 +147,7 @@ def test_pyproject_uses_range_qds_paths() -> None:
     "profile_name",
     [
         DEFAULT_PROFILE,
-        BLIND_EXPECTED_USEFULNESS_PROFILE,
+        BLIND_EXPECTED_QUERY_LOCAL_UTILITY_PROFILE,
         BLIND_RETAINED_FREQUENCY_PROFILE,
         BLIND_TEACHER_DISTILL_PROFILE,
     ],
@@ -106,7 +158,7 @@ def test_diagnostic_profiles_block_final_success(profile_name: str) -> None:
 
     assert profile.final_success_allowed is False
     assert settings["profile_diagnostic_only"] is True
-    assert settings["primary_metric_family"] == "RangeUsefulLegacy"
+    assert settings["primary_metric_family"] == "QueryLocalUtility"
     assert settings["final_success_allowed"] is False
     assert settings["final_product_candidate"] is False
     assert "profile_legacy_diagnostic" not in settings
@@ -181,11 +233,20 @@ def test_historical_prior_metadata_blocks_success() -> None:
     assert student_metadata["final_success_allowed"] is False
 
 
-def test_benchmark_row_separates_final_claim_from_legacy_range_useful(tmp_path: Path) -> None:
+def test_benchmark_row_uses_final_claim_status_for_query_local_utility(tmp_path: Path) -> None:
     row = _row_from_run(
         workload="range",
-        run_label="range_useful_diagnostic",
-        command=["python", "-m", "orchestration.train_and_score"],
+        run_label="range_audit_diagnostic",
+        command=[
+            "uv",
+            "run",
+            "--group",
+            "dev",
+            "--",
+            "python",
+            "-m",
+            "orchestration.train_and_score",
+        ],
         returncode=0,
         elapsed_seconds=1.0,
         run_dir=tmp_path,
@@ -198,14 +259,10 @@ def test_benchmark_row_separates_final_claim_from_legacy_range_useful(tmp_path: 
                 "status": "not_available_until_query_local_utility",
                 "final_success_allowed": False,
             },
-            "legacy_range_useful_summary": {
-                "metric": "RangeUsefulLegacy",
-                "diagnostic_only": True,
-            },
             "matched": {
-                "MLQDS": {"range_usefulness_score": 0.7, "range_point_f1": 0.6},
-                "uniform": {"range_usefulness_score": 0.5, "range_point_f1": 0.4},
-                "DouglasPeucker": {"range_usefulness_score": 0.4, "range_point_f1": 0.3},
+                "MLQDS": {"query_local_utility_score": 0.7, "range_point_f1": 0.6},
+                "uniform": {"query_local_utility_score": 0.5, "range_point_f1": 0.4},
+                "DouglasPeucker": {"query_local_utility_score": 0.4, "range_point_f1": 0.3},
             },
             "config": {
                 "model": {
@@ -227,5 +284,4 @@ def test_benchmark_row_separates_final_claim_from_legacy_range_useful(tmp_path: 
 
     assert row["final_claim_status"] == "not_available_until_query_local_utility"
     assert row["final_success_allowed"] is False
-    assert row["legacy_range_useful_diagnostic_only"] is True
     assert row["model_metadata_model_family"] == "historical_prior_knn"

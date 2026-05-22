@@ -111,7 +111,7 @@ def build_training_target_inputs(
             points=all_points,
             boundaries=train_boundaries,
             typed_queries=workload.typed_queries,
-            range_label_mode=str(getattr(model_config, "range_label_mode", "usefulness")),
+            range_label_mode=str(getattr(model_config, "range_label_mode", "point_f1")),
             range_boundary_prior_weight=float(
                 getattr(model_config, "range_boundary_prior_weight", 0.0)
             ),

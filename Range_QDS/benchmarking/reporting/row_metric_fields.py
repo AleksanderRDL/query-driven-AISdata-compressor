@@ -29,55 +29,32 @@ def _matched_metric_values(ctx: RowContext) -> RowFields:
     uniform = ctx.uniform
     dp = ctx.douglas_peucker
     mlqds_aggregate_f1 = mlqds.get("aggregate_f1")
-    mlqds_range_usefulness = mlqds.get("range_usefulness_score")
     mlqds_range_point_f1 = mlqds.get("range_point_f1", mlqds_aggregate_f1)
     mlqds_query_local_utility = mlqds.get("query_local_utility_score")
-    final_claim_summary = _mapping(ctx.run.get("final_claim_summary"))
-    if (
-        final_claim_summary.get("primary_metric") == "QueryLocalUtility"
-        and mlqds_query_local_utility is not None
-    ):
-        mlqds_primary_metric = "query_local_utility"
-        mlqds_primary_score = mlqds_query_local_utility
-    else:
-        mlqds_primary_metric = (
-            "range_usefulness" if mlqds_range_usefulness is not None else "range_point_f1"
-        )
-        mlqds_primary_score = (
-            mlqds_range_usefulness if mlqds_range_usefulness is not None else mlqds_range_point_f1
-        )
     uniform_aggregate_f1 = uniform.get("aggregate_f1")
     dp_aggregate_f1 = dp.get("aggregate_f1")
     return {
-        "mlqds_primary_metric": mlqds_primary_metric,
-        "mlqds_primary_score": mlqds_primary_score,
+        "mlqds_primary_metric": "query_local_utility",
+        "mlqds_primary_score": mlqds_query_local_utility,
         "mlqds_aggregate_f1": mlqds_aggregate_f1,
         "mlqds_query_point_recall": mlqds.get("query_point_recall"),
         "mlqds_range_point_f1": mlqds_range_point_f1,
-        "mlqds_range_usefulness": mlqds_range_usefulness,
         "mlqds_query_local_utility": mlqds_query_local_utility,
-        "mlqds_gap_time_usefulness": mlqds.get("range_usefulness_gap_time_score"),
-        "mlqds_gap_distance_usefulness": mlqds.get("range_usefulness_gap_distance_score"),
-        "mlqds_gap_min_usefulness": mlqds.get("range_usefulness_gap_min_score"),
         "mlqds_inference_only_latency_ms": mlqds.get("latency_ms"),
         "uniform_aggregate_f1": uniform_aggregate_f1,
         "uniform_query_point_recall": uniform.get("query_point_recall"),
         "uniform_range_point_f1": uniform.get("range_point_f1", uniform_aggregate_f1),
-        "uniform_range_usefulness": uniform.get("range_usefulness_score"),
         "uniform_query_local_utility": uniform.get("query_local_utility_score"),
-        "uniform_gap_time_usefulness": uniform.get("range_usefulness_gap_time_score"),
-        "uniform_gap_distance_usefulness": uniform.get("range_usefulness_gap_distance_score"),
-        "uniform_gap_min_usefulness": uniform.get("range_usefulness_gap_min_score"),
         "dp_aggregate_f1": dp_aggregate_f1,
         "dp_query_point_recall": dp.get("query_point_recall"),
         "dp_range_point_f1": dp.get("range_point_f1", dp_aggregate_f1),
-        "dp_range_usefulness": dp.get("range_usefulness_score"),
         "dp_query_local_utility": dp.get("query_local_utility_score"),
-        "dp_gap_time_usefulness": dp.get("range_usefulness_gap_time_score"),
-        "dp_gap_distance_usefulness": dp.get("range_usefulness_gap_distance_score"),
-        "dp_gap_min_usefulness": dp.get("range_usefulness_gap_min_score"),
-        "random_fill_range_usefulness": ctx.temporal_random_fill.get("range_usefulness_score"),
-        "oracle_fill_range_usefulness": ctx.temporal_oracle_fill.get("range_usefulness_score"),
+        "random_fill_query_local_utility": ctx.temporal_random_fill.get(
+            "query_local_utility_score"
+        ),
+        "oracle_fill_query_local_utility": ctx.temporal_oracle_fill.get(
+            "query_local_utility_score"
+        ),
     }
 
 
@@ -89,27 +66,14 @@ def _mlqds_metric_fields(ctx: RowContext, values: RowFields) -> RowFields:
         "mlqds_aggregate_f1": values["mlqds_aggregate_f1"],
         "mlqds_query_point_recall": values["mlqds_query_point_recall"],
         "mlqds_range_point_f1": values["mlqds_range_point_f1"],
-        "mlqds_range_usefulness": values["mlqds_range_usefulness"],
-        "mlqds_range_usefulness_score": values["mlqds_range_usefulness"],
         "mlqds_query_local_utility_score": values["mlqds_query_local_utility"],
-        "mlqds_range_usefulness_gap_time_score": values["mlqds_gap_time_usefulness"],
-        "mlqds_range_usefulness_gap_distance_score": values["mlqds_gap_distance_usefulness"],
-        "mlqds_range_usefulness_gap_min_score": values["mlqds_gap_min_usefulness"],
         "mlqds_type_f1": _mapping(mlqds.get("per_type_f1")).get(ctx.workload),
-        "mlqds_range_ship_f1": mlqds.get("range_ship_f1"),
-        "mlqds_range_ship_coverage": mlqds.get("range_ship_coverage"),
-        "mlqds_range_entry_exit_f1": mlqds.get("range_entry_exit_f1"),
-        "mlqds_range_crossing_f1": mlqds.get("range_crossing_f1"),
-        "mlqds_range_temporal_coverage": mlqds.get("range_temporal_coverage"),
-        "mlqds_range_gap_coverage": mlqds.get("range_gap_coverage"),
-        "mlqds_range_gap_time_coverage": mlqds.get("range_gap_time_coverage"),
-        "mlqds_range_gap_distance_coverage": mlqds.get("range_gap_distance_coverage"),
         "mlqds_range_gap_min_coverage": mlqds.get("range_gap_min_coverage"),
         "mlqds_range_turn_coverage": mlqds.get("range_turn_coverage"),
-        "mlqds_range_shape_score": mlqds.get("range_shape_score"),
+        "mlqds_range_query_local_interpolation_fidelity": mlqds.get(
+            "range_query_local_interpolation_fidelity"
+        ),
         **_geometry_fields("mlqds", mlqds),
-        "range_usefulness_schema_version": mlqds.get("range_usefulness_schema_version"),
-        "range_usefulness_gap_ablation_version": mlqds.get("range_usefulness_gap_ablation_version"),
         "final_metrics_mode": ctx.run.get(
             "final_metrics_mode", ctx.baseline_config.get("final_metrics_mode")
         ),
@@ -135,38 +99,22 @@ def _baseline_metric_fields(ctx: RowContext, values: RowFields) -> RowFields:
         "uniform_aggregate_f1": values["uniform_aggregate_f1"],
         "uniform_query_point_recall": values["uniform_query_point_recall"],
         "uniform_range_point_f1": values["uniform_range_point_f1"],
-        "uniform_range_usefulness": values["uniform_range_usefulness"],
-        "uniform_range_usefulness_score": values["uniform_range_usefulness"],
         "uniform_query_local_utility_score": values["uniform_query_local_utility"],
-        "uniform_range_usefulness_gap_time_score": values["uniform_gap_time_usefulness"],
-        "uniform_range_usefulness_gap_distance_score": values["uniform_gap_distance_usefulness"],
-        "uniform_range_usefulness_gap_min_score": values["uniform_gap_min_usefulness"],
-        "uniform_range_ship_f1": uniform.get("range_ship_f1"),
-        "uniform_range_ship_coverage": uniform.get("range_ship_coverage"),
-        "uniform_range_entry_exit_f1": uniform.get("range_entry_exit_f1"),
-        "uniform_range_crossing_f1": uniform.get("range_crossing_f1"),
-        "uniform_range_temporal_coverage": uniform.get("range_temporal_coverage"),
-        "uniform_range_gap_coverage": uniform.get("range_gap_coverage"),
+        "uniform_range_gap_min_coverage": uniform.get("range_gap_min_coverage"),
         "uniform_range_turn_coverage": uniform.get("range_turn_coverage"),
-        "uniform_range_shape_score": uniform.get("range_shape_score"),
+        "uniform_range_query_local_interpolation_fidelity": uniform.get(
+            "range_query_local_interpolation_fidelity"
+        ),
         **_geometry_fields("uniform", uniform),
         "douglas_peucker_aggregate_f1": values["dp_aggregate_f1"],
         "douglas_peucker_query_point_recall": values["dp_query_point_recall"],
         "douglas_peucker_range_point_f1": values["dp_range_point_f1"],
-        "douglas_peucker_range_usefulness": values["dp_range_usefulness"],
-        "douglas_peucker_range_usefulness_score": values["dp_range_usefulness"],
         "douglas_peucker_query_local_utility_score": values["dp_query_local_utility"],
-        "douglas_peucker_range_usefulness_gap_time_score": values["dp_gap_time_usefulness"],
-        "douglas_peucker_range_usefulness_gap_distance_score": values["dp_gap_distance_usefulness"],
-        "douglas_peucker_range_usefulness_gap_min_score": values["dp_gap_min_usefulness"],
-        "douglas_peucker_range_ship_f1": dp.get("range_ship_f1"),
-        "douglas_peucker_range_ship_coverage": dp.get("range_ship_coverage"),
-        "douglas_peucker_range_entry_exit_f1": dp.get("range_entry_exit_f1"),
-        "douglas_peucker_range_crossing_f1": dp.get("range_crossing_f1"),
-        "douglas_peucker_range_temporal_coverage": dp.get("range_temporal_coverage"),
-        "douglas_peucker_range_gap_coverage": dp.get("range_gap_coverage"),
+        "douglas_peucker_range_gap_min_coverage": dp.get("range_gap_min_coverage"),
         "douglas_peucker_range_turn_coverage": dp.get("range_turn_coverage"),
-        "douglas_peucker_range_shape_score": dp.get("range_shape_score"),
+        "douglas_peucker_range_query_local_interpolation_fidelity": dp.get(
+            "range_query_local_interpolation_fidelity"
+        ),
         **_geometry_fields("douglas_peucker", dp),
     }
 
@@ -186,35 +134,11 @@ def _comparison_metric_fields(ctx: RowContext, values: RowFields) -> RowFields:
         "mlqds_vs_douglas_peucker_range_point_f1": _metric_difference(
             values["mlqds_range_point_f1"], values["dp_range_point_f1"]
         ),
-        "mlqds_vs_uniform_range_usefulness": _metric_difference(
-            values["mlqds_range_usefulness"], values["uniform_range_usefulness"]
-        ),
         "mlqds_vs_uniform_query_local_utility": _metric_difference(
             values["mlqds_query_local_utility"], values["uniform_query_local_utility"]
         ),
-        "mlqds_vs_douglas_peucker_range_usefulness": _metric_difference(
-            values["mlqds_range_usefulness"], values["dp_range_usefulness"]
-        ),
         "mlqds_vs_douglas_peucker_query_local_utility": _metric_difference(
             values["mlqds_query_local_utility"], values["dp_query_local_utility"]
-        ),
-        "mlqds_vs_uniform_range_usefulness_gap_time": _metric_difference(
-            values["mlqds_gap_time_usefulness"], values["uniform_gap_time_usefulness"]
-        ),
-        "mlqds_vs_uniform_range_usefulness_gap_distance": _metric_difference(
-            values["mlqds_gap_distance_usefulness"], values["uniform_gap_distance_usefulness"]
-        ),
-        "mlqds_vs_uniform_range_usefulness_gap_min": _metric_difference(
-            values["mlqds_gap_min_usefulness"], values["uniform_gap_min_usefulness"]
-        ),
-        "mlqds_vs_douglas_peucker_range_usefulness_gap_time": _metric_difference(
-            values["mlqds_gap_time_usefulness"], values["dp_gap_time_usefulness"]
-        ),
-        "mlqds_vs_douglas_peucker_range_usefulness_gap_distance": _metric_difference(
-            values["mlqds_gap_distance_usefulness"], values["dp_gap_distance_usefulness"]
-        ),
-        "mlqds_vs_douglas_peucker_range_usefulness_gap_min": _metric_difference(
-            values["mlqds_gap_min_usefulness"], values["dp_gap_min_usefulness"]
         ),
         **component_deltas,
         **_worst_uniform_component_delta(component_deltas),
@@ -240,14 +164,18 @@ def _fill_and_collapse_fields(ctx: RowContext, values: RowFields) -> RowFields:
     collapse_summary = collapse_warning_summary(ctx.run_json)
     return {
         "temporal_random_fill_range_point_f1": ctx.temporal_random_fill.get("range_point_f1"),
-        "temporal_random_fill_range_usefulness_score": values["random_fill_range_usefulness"],
+        "temporal_random_fill_query_local_utility_score": values[
+            "random_fill_query_local_utility"
+        ],
         "temporal_oracle_fill_range_point_f1": ctx.temporal_oracle_fill.get("range_point_f1"),
-        "temporal_oracle_fill_range_usefulness_score": values["oracle_fill_range_usefulness"],
-        "mlqds_vs_temporal_random_fill_range_usefulness": _metric_difference(
-            values["mlqds_range_usefulness"], values["random_fill_range_usefulness"]
+        "temporal_oracle_fill_query_local_utility_score": values[
+            "oracle_fill_query_local_utility"
+        ],
+        "mlqds_vs_temporal_random_fill_query_local_utility": _metric_difference(
+            values["mlqds_query_local_utility"], values["random_fill_query_local_utility"]
         ),
-        "temporal_oracle_fill_gap_range_usefulness": _metric_difference(
-            values["oracle_fill_range_usefulness"], values["mlqds_range_usefulness"]
+        "temporal_oracle_fill_gap_query_local_utility": _metric_difference(
+            values["oracle_fill_query_local_utility"], values["mlqds_query_local_utility"]
         ),
         "collapse_warning": collapse_summary["collapse_warning_any"],
         "collapse_warning_any": collapse_summary["collapse_warning_any"],

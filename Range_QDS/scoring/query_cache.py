@@ -27,23 +27,7 @@ class RangeQueryAuditSupport:
     """Retained-independent support reused across range audit methods and ratios."""
 
     range_mask: torch.Tensor
-    boundary_indices_cpu: torch.Tensor
-    crossing_bracket_indices_cpu: torch.Tensor
-    full_trajectory_ids: tuple[int, ...]
     trajectories: tuple[RangeTrajectoryAuditSupport, ...]
-
-
-@dataclass(frozen=True)
-class RangeSegmentAuditGeometry:
-    """Retained-independent segment geometry for fast range crossing checks."""
-
-    start_indices_cpu: torch.Tensor
-    time_min_cpu: torch.Tensor
-    time_max_cpu: torch.Tensor
-    lat_min_cpu: torch.Tensor
-    lat_max_cpu: torch.Tensor
-    lon_min_cpu: torch.Tensor
-    lon_max_cpu: torch.Tensor
 
 
 def _points_cache_token(points: torch.Tensor) -> tuple[int, int, tuple[int, ...], str, str]:
@@ -72,7 +56,6 @@ class ScoringQueryCache:
     queries_token: tuple[int, int, tuple[int, ...]]
     support_masks: dict[int, torch.Tensor] = field(default_factory=dict)
     range_audit_supports: dict[int, RangeQueryAuditSupport] = field(default_factory=dict)
-    range_segment_geometry: RangeSegmentAuditGeometry | None = None
 
     @classmethod
     def for_workload(
@@ -121,41 +104,3 @@ class ScoringQueryCache:
         if query_index not in self.range_audit_supports:
             self.range_audit_supports[query_index] = builder()
         return self.range_audit_supports[query_index]
-
-    def get_range_segment_geometry(
-        self,
-        points_cpu: torch.Tensor,
-        boundaries: list[tuple[int, int]],
-    ) -> RangeSegmentAuditGeometry:
-        """Return retained-independent adjacent-segment geometry for range audits."""
-        if self.range_segment_geometry is None:
-            start_parts = [
-                torch.arange(int(start), int(end) - 1, dtype=torch.long)
-                for start, end in boundaries
-                if int(end) - int(start) >= 2
-            ]
-            if start_parts:
-                starts = torch.cat(start_parts).to(dtype=torch.long)
-                p0 = points_cpu[starts]
-                p1 = points_cpu[starts + 1]
-                self.range_segment_geometry = RangeSegmentAuditGeometry(
-                    start_indices_cpu=starts,
-                    time_min_cpu=torch.minimum(p0[:, 0], p1[:, 0]).contiguous(),
-                    time_max_cpu=torch.maximum(p0[:, 0], p1[:, 0]).contiguous(),
-                    lat_min_cpu=torch.minimum(p0[:, 1], p1[:, 1]).contiguous(),
-                    lat_max_cpu=torch.maximum(p0[:, 1], p1[:, 1]).contiguous(),
-                    lon_min_cpu=torch.minimum(p0[:, 2], p1[:, 2]).contiguous(),
-                    lon_max_cpu=torch.maximum(p0[:, 2], p1[:, 2]).contiguous(),
-                )
-            else:
-                empty_float = torch.empty((0,), dtype=torch.float32)
-                self.range_segment_geometry = RangeSegmentAuditGeometry(
-                    start_indices_cpu=torch.empty((0,), dtype=torch.long),
-                    time_min_cpu=empty_float,
-                    time_max_cpu=empty_float,
-                    lat_min_cpu=empty_float,
-                    lat_max_cpu=empty_float,
-                    lon_min_cpu=empty_float,
-                    lon_max_cpu=empty_float,
-                )
-        return self.range_segment_geometry

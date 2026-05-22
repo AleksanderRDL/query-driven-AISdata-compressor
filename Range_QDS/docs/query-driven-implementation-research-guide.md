@@ -29,7 +29,7 @@ The final system must satisfy four requirements:
    - It learns stable workload priors and query-local behavior value.
    - Learned scores, priors, and heads materially affect retained masks.
 
-3. **Future-query usefulness**
+3. **Future-query local utility**
    - Compressed trajectories preserve likely in-query point mass.
    - Within likely query ranges, retained points preserve enough local evidence
      for interpolation, turns/behavior changes, continuity, and movement
@@ -61,9 +61,9 @@ time.
 Correct order of work:
 
 1. Stabilize workload generation and signatures.
-2. Verify train-derived priors predict held-out query usefulness.
+2. Verify train-derived priors predict held-out QueryLocalUtility.
 3. Improve target/model only after useful signal exists.
-4. Improve selector only when learned scores are useful but retained masks are
+4. Improve selector only when learned scores improve QueryLocalUtility but retained masks are
    poor.
 5. Run real-AIS probes only after synthetic/debug probes have clean workload
    health.

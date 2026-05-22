@@ -155,37 +155,39 @@ def _factorized_head_scores_from_logits(
 
 
 def _freeze_segment_budget_ablations(
-    ctx: _RetainedMaskAblationContext,
+    ablation_context: _RetainedMaskAblationContext,
     state: _RetainedMaskAblationState,
 ) -> None:
-    if ctx.primary_segment_scores is None:
+    if ablation_context.primary_segment_scores is None:
         return
 
     substage_started_at = time.perf_counter()
-    neutral_segment_scores = neutral_segment_scores_for_ablation(ctx.primary_segment_scores)
+    neutral_segment_scores = neutral_segment_scores_for_ablation(
+        ablation_context.primary_segment_scores
+    )
     no_segment_selector_scores = blend_segment_support_scores(
         segment_scores=neutral_segment_scores,
-        path_length_support_scores=ctx.primary_path_length_support_scores,
+        path_length_support_scores=ablation_context.primary_path_length_support_scores,
         path_length_support_weight=float(
-            ctx.config.model.learned_segment_length_support_blend_weight
+            ablation_context.config.model.learned_segment_length_support_blend_weight
         ),
     )
     state.segment_budget_head_ablation_mode = "neutral_constant_segment_scores"
-    segment_budget_ablation_method = ctx.selector_method(
+    segment_budget_ablation_method = ablation_context.selector_method(
         name="MLQDS_without_segment_budget_head",
-        scores=ctx.primary_scores,
+        scores=ablation_context.primary_scores,
         segment_scores=no_segment_selector_scores,
         segment_point_scores=neutral_segment_scores,
     )
     state.causality_ablation_methods.append(segment_budget_ablation_method)
     segment_budget_sensitivity = head_ablation_sensitivity(
-        primary_scores=ctx.primary_scores,
-        ablation_scores=ctx.primary_scores,
-        primary_raw_predictions=ctx.primary_raw_preds,
-        ablation_raw_predictions=ctx.primary_raw_preds,
-        primary_segment_scores=ctx.primary_selector_segment_scores,
+        primary_scores=ablation_context.primary_scores,
+        ablation_scores=ablation_context.primary_scores,
+        primary_raw_predictions=ablation_context.primary_raw_preds,
+        ablation_raw_predictions=ablation_context.primary_raw_preds,
+        primary_segment_scores=ablation_context.primary_selector_segment_scores,
         ablation_segment_scores=no_segment_selector_scores,
-        primary_mask=ctx.frozen_primary_masks.get("MLQDS"),
+        primary_mask=ablation_context.frozen_primary_masks.get("MLQDS"),
         ablation_mask=segment_budget_ablation_method.retained_mask,
     )
     segment_budget_sensitivity["disabled_head_name"] = "segment_budget_target"
@@ -193,22 +195,22 @@ def _freeze_segment_budget_ablations(
     state.head_ablation_sensitivity_diagnostics["MLQDS_without_segment_budget_head"] = (
         segment_budget_sensitivity
     )
-    if ctx.primary_selector_segment_scores is not None:
-        segment_allocation_ablation_method = ctx.selector_method(
+    if ablation_context.primary_selector_segment_scores is not None:
+        segment_allocation_ablation_method = ablation_context.selector_method(
             name="MLQDS_without_segment_budget_allocation_only",
-            scores=ctx.primary_scores,
+            scores=ablation_context.primary_scores,
             segment_scores=no_segment_selector_scores,
-            segment_point_scores=ctx.primary_segment_scores,
+            segment_point_scores=ablation_context.primary_segment_scores,
         )
         state.causality_ablation_methods.append(segment_allocation_ablation_method)
         allocation_sensitivity = head_ablation_sensitivity(
-            primary_scores=ctx.primary_scores,
-            ablation_scores=ctx.primary_scores,
-            primary_raw_predictions=ctx.primary_raw_preds,
-            ablation_raw_predictions=ctx.primary_raw_preds,
-            primary_segment_scores=ctx.primary_selector_segment_scores,
+            primary_scores=ablation_context.primary_scores,
+            ablation_scores=ablation_context.primary_scores,
+            primary_raw_predictions=ablation_context.primary_raw_preds,
+            ablation_raw_predictions=ablation_context.primary_raw_preds,
+            primary_segment_scores=ablation_context.primary_selector_segment_scores,
             ablation_segment_scores=no_segment_selector_scores,
-            primary_mask=ctx.frozen_primary_masks.get("MLQDS"),
+            primary_mask=ablation_context.frozen_primary_masks.get("MLQDS"),
             ablation_mask=segment_allocation_ablation_method.retained_mask,
         )
         allocation_sensitivity["disabled_head_name"] = "segment_budget_target"
@@ -220,22 +222,22 @@ def _freeze_segment_budget_ablations(
             "MLQDS_without_segment_budget_allocation_only"
         ] = allocation_sensitivity
 
-        uniform_segment_allocation_method = ctx.selector_method(
+        uniform_segment_allocation_method = ablation_context.selector_method(
             name="MLQDS_uniform_segment_allocation_only_diagnostic",
-            scores=ctx.primary_scores,
+            scores=ablation_context.primary_scores,
             segment_scores=neutral_segment_scores,
-            segment_point_scores=ctx.primary_segment_scores,
+            segment_point_scores=ablation_context.primary_segment_scores,
             learned_segment_allocation_length_support_weight=0.0,
         )
         state.causality_ablation_methods.append(uniform_segment_allocation_method)
         uniform_allocation_sensitivity = head_ablation_sensitivity(
-            primary_scores=ctx.primary_scores,
-            ablation_scores=ctx.primary_scores,
-            primary_raw_predictions=ctx.primary_raw_preds,
-            ablation_raw_predictions=ctx.primary_raw_preds,
-            primary_segment_scores=ctx.primary_selector_segment_scores,
+            primary_scores=ablation_context.primary_scores,
+            ablation_scores=ablation_context.primary_scores,
+            primary_raw_predictions=ablation_context.primary_raw_preds,
+            ablation_raw_predictions=ablation_context.primary_raw_preds,
+            primary_segment_scores=ablation_context.primary_selector_segment_scores,
             ablation_segment_scores=neutral_segment_scores,
-            primary_mask=ctx.frozen_primary_masks.get("MLQDS"),
+            primary_mask=ablation_context.frozen_primary_masks.get("MLQDS"),
             ablation_mask=uniform_segment_allocation_method.retained_mask,
         )
         uniform_allocation_sensitivity["disabled_head_name"] = "segment_budget_target"
@@ -250,21 +252,21 @@ def _freeze_segment_budget_ablations(
             "MLQDS_uniform_segment_allocation_only_diagnostic"
         ] = uniform_allocation_sensitivity
 
-        point_score_allocation_method = ctx.selector_method(
+        point_score_allocation_method = ablation_context.selector_method(
             name="MLQDS_point_score_allocation_diagnostic",
-            scores=ctx.primary_scores,
+            scores=ablation_context.primary_scores,
             segment_scores=None,
-            segment_point_scores=ctx.primary_segment_scores,
+            segment_point_scores=ablation_context.primary_segment_scores,
         )
         state.causality_ablation_methods.append(point_score_allocation_method)
         point_score_allocation_sensitivity = head_ablation_sensitivity(
-            primary_scores=ctx.primary_scores,
-            ablation_scores=ctx.primary_scores,
-            primary_raw_predictions=ctx.primary_raw_preds,
-            ablation_raw_predictions=ctx.primary_raw_preds,
-            primary_segment_scores=ctx.primary_selector_segment_scores,
-            ablation_segment_scores=ctx.primary_scores,
-            primary_mask=ctx.frozen_primary_masks.get("MLQDS"),
+            primary_scores=ablation_context.primary_scores,
+            ablation_scores=ablation_context.primary_scores,
+            primary_raw_predictions=ablation_context.primary_raw_preds,
+            ablation_raw_predictions=ablation_context.primary_raw_preds,
+            primary_segment_scores=ablation_context.primary_selector_segment_scores,
+            ablation_segment_scores=ablation_context.primary_scores,
+            primary_mask=ablation_context.frozen_primary_masks.get("MLQDS"),
             ablation_mask=point_score_allocation_method.retained_mask,
         )
         point_score_allocation_sensitivity["disabled_head_name"] = "segment_budget_target"
@@ -281,8 +283,8 @@ def _freeze_segment_budget_ablations(
             (
                 "MLQDS_segment_allocation_top25_band_diagnostic",
                 segment_score_top_band_for_ablation(
-                    ctx.primary_selector_segment_scores,
-                    ctx.test_boundaries,
+                    ablation_context.primary_selector_segment_scores,
+                    ablation_context.test_boundaries,
                     top_fraction=0.25,
                 ),
                 "top25_binary_selector_segment_scores_for_allocation_only",
@@ -290,8 +292,8 @@ def _freeze_segment_budget_ablations(
             (
                 "MLQDS_segment_allocation_top50_band_diagnostic",
                 segment_score_top_band_for_ablation(
-                    ctx.primary_selector_segment_scores,
-                    ctx.test_boundaries,
+                    ablation_context.primary_selector_segment_scores,
+                    ablation_context.test_boundaries,
                     top_fraction=0.50,
                 ),
                 "top50_binary_selector_segment_scores_for_allocation_only",
@@ -299,29 +301,29 @@ def _freeze_segment_budget_ablations(
             (
                 "MLQDS_segment_allocation_quartile_band_diagnostic",
                 segment_score_quantile_bands_for_ablation(
-                    ctx.primary_selector_segment_scores,
-                    ctx.test_boundaries,
+                    ablation_context.primary_selector_segment_scores,
+                    ablation_context.test_boundaries,
                     band_count=4,
                 ),
                 "quartile_banded_selector_segment_scores_for_allocation_only",
             ),
         ]
         for diagnostic_name, authority_scores, authority_mode in allocation_authority_variants:
-            authority_method = ctx.selector_method(
+            authority_method = ablation_context.selector_method(
                 name=diagnostic_name,
-                scores=ctx.primary_scores,
+                scores=ablation_context.primary_scores,
                 segment_scores=authority_scores,
-                segment_point_scores=ctx.primary_segment_scores,
+                segment_point_scores=ablation_context.primary_segment_scores,
             )
             state.causality_ablation_methods.append(authority_method)
             authority_sensitivity = head_ablation_sensitivity(
-                primary_scores=ctx.primary_scores,
-                ablation_scores=ctx.primary_scores,
-                primary_raw_predictions=ctx.primary_raw_preds,
-                ablation_raw_predictions=ctx.primary_raw_preds,
-                primary_segment_scores=ctx.primary_selector_segment_scores,
+                primary_scores=ablation_context.primary_scores,
+                ablation_scores=ablation_context.primary_scores,
+                primary_raw_predictions=ablation_context.primary_raw_preds,
+                ablation_raw_predictions=ablation_context.primary_raw_preds,
+                primary_segment_scores=ablation_context.primary_selector_segment_scores,
                 ablation_segment_scores=authority_scores,
-                primary_mask=ctx.frozen_primary_masks.get("MLQDS"),
+                primary_mask=ablation_context.frozen_primary_masks.get("MLQDS"),
                 ablation_mask=authority_method.retained_mask,
             )
             authority_sensitivity["disabled_head_name"] = "segment_budget_target"
@@ -331,22 +333,22 @@ def _freeze_segment_budget_ablations(
             authority_sensitivity["allocation_score_source"] = "selector_segment_score_bands"
             state.head_ablation_sensitivity_diagnostics[diagnostic_name] = authority_sensitivity
 
-        segment_point_blend_ablation_method = ctx.selector_method(
+        segment_point_blend_ablation_method = ablation_context.selector_method(
             name="MLQDS_without_segment_budget_point_blend_only",
-            scores=ctx.primary_scores,
-            segment_scores=ctx.primary_selector_segment_scores,
-            segment_point_scores=ctx.primary_segment_scores,
+            scores=ablation_context.primary_scores,
+            segment_scores=ablation_context.primary_selector_segment_scores,
+            segment_point_scores=ablation_context.primary_segment_scores,
             learned_segment_score_blend_weight=0.0,
         )
         state.causality_ablation_methods.append(segment_point_blend_ablation_method)
         point_blend_sensitivity = head_ablation_sensitivity(
-            primary_scores=ctx.primary_scores,
-            ablation_scores=ctx.primary_scores,
-            primary_raw_predictions=ctx.primary_raw_preds,
-            ablation_raw_predictions=ctx.primary_raw_preds,
-            primary_segment_scores=ctx.primary_selector_segment_scores,
-            ablation_segment_scores=ctx.primary_selector_segment_scores,
-            primary_mask=ctx.frozen_primary_masks.get("MLQDS"),
+            primary_scores=ablation_context.primary_scores,
+            ablation_scores=ablation_context.primary_scores,
+            primary_raw_predictions=ablation_context.primary_raw_preds,
+            ablation_raw_predictions=ablation_context.primary_raw_preds,
+            primary_segment_scores=ablation_context.primary_selector_segment_scores,
+            ablation_segment_scores=ablation_context.primary_selector_segment_scores,
+            primary_mask=ablation_context.frozen_primary_masks.get("MLQDS"),
             ablation_mask=segment_point_blend_ablation_method.retained_mask,
         )
         point_blend_sensitivity["disabled_head_name"] = "segment_budget_target"
@@ -356,14 +358,14 @@ def _freeze_segment_budget_ablations(
             "MLQDS_without_segment_budget_point_blend_only"
         ] = point_blend_sensitivity
     state.record_substage("segment_budget_head_and_allocation_ablations", substage_started_at)
-    if bool(ctx.config.model.learned_segment_fairness_preallocation):
+    if bool(ablation_context.config.model.learned_segment_fairness_preallocation):
         substage_started_at = time.perf_counter()
         state.causality_ablation_methods.append(
-            ctx.selector_method(
+            ablation_context.selector_method(
                 name="MLQDS_without_trajectory_fairness_preallocation",
-                scores=ctx.primary_scores,
-                segment_scores=ctx.primary_selector_segment_scores,
-                segment_point_scores=ctx.primary_segment_scores,
+                scores=ablation_context.primary_scores,
+                segment_scores=ablation_context.primary_selector_segment_scores,
+                segment_point_scores=ablation_context.primary_segment_scores,
                 learned_segment_fairness_preallocation=False,
             )
         )
@@ -371,7 +373,7 @@ def _freeze_segment_budget_ablations(
 
 
 def _freeze_prior_field_variant(
-    ctx: _RetainedMaskAblationContext,
+    ablation_context: _RetainedMaskAblationContext,
     state: _RetainedMaskAblationState,
     *,
     query_prior_field: dict[str, Any],
@@ -379,36 +381,42 @@ def _freeze_prior_field_variant(
     method_name: str,
 ) -> dict[str, Any]:
     feature_sensitivity = prior_feature_sample_sensitivity(
-        points=ctx.test_points,
+        points=ablation_context.test_points,
         primary_prior_field=query_prior_field,
         ablation_prior_field=ablation_prior_field,
     )
     model_sensitivity = model_prior_feature_sensitivity(
-        points=ctx.test_points,
-        point_dim=int(getattr(ctx.trained.model, "point_dim", ctx.test_points.shape[1])),
-        scaler=ctx.trained.scaler,
+        points=ablation_context.test_points,
+        point_dim=int(
+            getattr(
+                ablation_context.trained.model,
+                "point_dim",
+                ablation_context.test_points.shape[1],
+            )
+        ),
+        scaler=ablation_context.trained.scaler,
         primary_prior_field=query_prior_field,
         ablation_prior_field=ablation_prior_field,
-        boundaries=ctx.test_boundaries,
-        trajectory_mmsis=ctx.test_mmsis,
+        boundaries=ablation_context.test_boundaries,
+        trajectory_mmsis=ablation_context.test_mmsis,
     )
     ablation_trained = training_outputs_with_query_prior_field(
-        ctx.trained,
+        ablation_context.trained,
         ablation_prior_field,
     )
     ablation_method = build_mlqds_method(
         name=method_name,
         trained=ablation_trained,
-        workload=ctx.eval_workload,
-        workload_map=ctx.eval_workload_map,
-        config=ctx.config,
+        workload=ablation_context.eval_workload,
+        workload_map=ablation_context.eval_workload_map,
+        config=ablation_context.config,
         range_geometry_blend=0.0,
-        trajectory_mmsis=ctx.test_mmsis,
+        trajectory_mmsis=ablation_context.test_mmsis,
     )
     ablation_mask = ablation_method.simplify(
-        ctx.test_points,
-        ctx.test_boundaries,
-        float(ctx.config.model.compression_ratio),
+        ablation_context.test_points,
+        ablation_context.test_boundaries,
+        float(ablation_context.config.model.compression_ratio),
     )
     ablation_snapshot = ablation_method.cached_score_snapshot()
     ablation_scores = ablation_snapshot.scores
@@ -418,20 +426,20 @@ def _freeze_prior_field_variant(
     sensitivity = prior_ablation_sensitivity_from_tensors(
         sampled_prior_features=feature_sensitivity,
         model_prior_features=model_sensitivity,
-        primary_scores=ctx.primary_scores,
+        primary_scores=ablation_context.primary_scores,
         ablation_scores=ablation_scores if isinstance(ablation_scores, torch.Tensor) else None,
-        primary_raw_predictions=ctx.primary_raw_preds,
+        primary_raw_predictions=ablation_context.primary_raw_preds,
         ablation_raw_predictions=ablation_raw_preds
         if isinstance(ablation_raw_preds, torch.Tensor)
         else None,
-        primary_head_logits=ctx.primary_head_logits,
+        primary_head_logits=ablation_context.primary_head_logits,
         ablation_head_logits=ablation_head_logits
         if isinstance(ablation_head_logits, torch.Tensor)
         else None,
-        primary_mask=ctx.frozen_primary_masks.get("MLQDS"),
+        primary_mask=ablation_context.frozen_primary_masks.get("MLQDS"),
         ablation_mask=ablation_mask,
         selector_trace=state.trace,
-        primary_segment_scores=ctx.primary_selector_segment_scores,
+        primary_segment_scores=ablation_context.primary_selector_segment_scores,
         ablation_segment_scores=ablation_selector_segment_scores
         if isinstance(ablation_selector_segment_scores, torch.Tensor)
         else None,
@@ -446,20 +454,20 @@ def _freeze_prior_field_variant(
 
 
 def _freeze_prior_field_ablations(
-    ctx: _RetainedMaskAblationContext,
+    ablation_context: _RetainedMaskAblationContext,
     state: _RetainedMaskAblationState,
 ) -> None:
-    query_prior_field = ctx.trained.feature_context.get("query_prior_field")
+    query_prior_field = ablation_context.trained.feature_context.get("query_prior_field")
     if not isinstance(query_prior_field, dict):
         return
 
     substage_started_at = time.perf_counter()
     try:
         prior_scores = (
-            query_prior_predictability_scores(ctx.test_points, query_prior_field).detach().cpu()
+            query_prior_predictability_scores(ablation_context.test_points, query_prior_field).detach().cpu()
         )
         state.causality_ablation_methods.append(
-            ctx.selector_method(
+            ablation_context.selector_method(
                 name="MLQDS_prior_field_only_score",
                 scores=prior_scores,
             )
@@ -473,11 +481,11 @@ def _freeze_prior_field_ablations(
     try:
         shuffled_prior_field = shuffled_query_prior_field(
             query_prior_field,
-            seed=int(ctx.seeds.eval_query_seed) + 71_003,
+            seed=int(ablation_context.seeds.eval_query_seed) + 71_003,
         )
         state.prior_sensitivity_diagnostics["shuffled_prior_fields"] = (
             _freeze_prior_field_variant(
-                ctx,
+                ablation_context,
                 state,
                 query_prior_field=query_prior_field,
                 ablation_prior_field=shuffled_prior_field,
@@ -494,7 +502,7 @@ def _freeze_prior_field_ablations(
         zero_prior_field = zero_query_prior_field_like(query_prior_field)
         state.prior_sensitivity_diagnostics["without_query_prior_features"] = (
             _freeze_prior_field_variant(
-                ctx,
+                ablation_context,
                 state,
                 query_prior_field=query_prior_field,
                 ablation_prior_field=zero_prior_field,
@@ -516,7 +524,7 @@ def _freeze_prior_field_ablations(
                 [prior_channel_name],
             )
             channel_sensitivity = _freeze_prior_field_variant(
-                ctx,
+                ablation_context,
                 state,
                 query_prior_field=query_prior_field,
                 ablation_prior_field=channel_prior_field,
@@ -557,43 +565,7 @@ def freeze_retained_mask_ablations(
     primary_head_logits: torch.Tensor | None,
 ) -> RetainedMaskAblationOutputs:
     """Freeze query-free ablation retained masks before eval query scoring."""
-    stage_started_at = time.perf_counter()
-    trace = primary_selector_trace
-    causality_ablation_methods: list[FrozenMaskMethod] = []
-    causal_ablation_freeze_failures: dict[str, str] = {}
-    prior_sensitivity_diagnostics: dict[str, Any] = {}
-    prior_channel_ablation_diagnostics: dict[str, Any] = {}
-    head_ablation_sensitivity_diagnostics: dict[str, Any] = {}
-    segment_budget_head_ablation_mode: str | None = None
-    freeze_timing_diagnostics: dict[str, Any] = {
-        "available": True,
-        "diagnostic_only": True,
-        "query_free": True,
-        "stage": "freeze_retained_mask_ablations",
-        "substage_seconds": {},
-        "prior_channel_seconds": {},
-    }
-
-    def _record_substage(name: str, started_at: float) -> None:
-        substage_seconds = freeze_timing_diagnostics["substage_seconds"]
-        previous = float(substage_seconds.get(name, 0.0))
-        substage_seconds[name] = previous + float(time.perf_counter() - started_at)
-
-    def _record_prior_channel(name: str, started_at: float) -> None:
-        freeze_timing_diagnostics["prior_channel_seconds"][name] = float(
-            time.perf_counter() - started_at
-        )
-
-    allocation_length_support_weight = float(
-        config.model.learned_segment_allocation_length_support_weight
-    )
-
-    def _selector_method(**kwargs: Any) -> FrozenMaskMethod:
-        kwargs.setdefault("boundaries", test_boundaries)
-        kwargs.setdefault("points", test_points)
-        return learned_segment_frozen_method_from_config(config=config, **kwargs)
-
-    ctx = _RetainedMaskAblationContext(
+    ablation_context = _RetainedMaskAblationContext(
         config=config,
         trained=trained,
         eval_workload=eval_workload,
@@ -610,16 +582,9 @@ def freeze_retained_mask_ablations(
         primary_selector_segment_scores=primary_selector_segment_scores,
         primary_head_logits=primary_head_logits,
     )
-    state = _RetainedMaskAblationState(
-        trace=trace,
-        stage_started_at=stage_started_at,
-        causality_ablation_methods=causality_ablation_methods,
-        causal_ablation_freeze_failures=causal_ablation_freeze_failures,
-        prior_sensitivity_diagnostics=prior_sensitivity_diagnostics,
-        prior_channel_ablation_diagnostics=prior_channel_ablation_diagnostics,
-        head_ablation_sensitivity_diagnostics=head_ablation_sensitivity_diagnostics,
-        segment_budget_head_ablation_mode=segment_budget_head_ablation_mode,
-        freeze_timing_diagnostics=freeze_timing_diagnostics,
+    state = _RetainedMaskAblationState(trace=primary_selector_trace)
+    allocation_length_support_weight = float(
+        config.model.learned_segment_allocation_length_support_weight
     )
 
     pre_repair_diagnostic_name = "MLQDS_pre_repair_allocation_diagnostic"
@@ -627,11 +592,11 @@ def freeze_retained_mask_ablations(
     try:
         pre_repair_method = pre_repair_frozen_method_from_trace(
             name=pre_repair_diagnostic_name,
-            selector_trace=trace,
+            selector_trace=state.trace,
             point_count=int(test_points.shape[0]),
         )
-        causality_ablation_methods.append(pre_repair_method)
-        trace["pre_repair_frozen_method_diagnostic"] = {
+        state.causality_ablation_methods.append(pre_repair_method)
+        state.trace["pre_repair_frozen_method_diagnostic"] = {
             "available": True,
             "diagnostic_only": True,
             "query_free": True,
@@ -640,7 +605,7 @@ def freeze_retained_mask_ablations(
             "retained_count": int(pre_repair_method.retained_mask.sum().item()),
         }
     except Exception as exc:  # pragma: no cover - optional diagnostic should not gate eval.
-        trace["pre_repair_frozen_method_diagnostic"] = {
+        state.trace["pre_repair_frozen_method_diagnostic"] = {
             "available": False,
             "diagnostic_only": True,
             "query_free": True,
@@ -649,12 +614,12 @@ def freeze_retained_mask_ablations(
             "error": str(exc),
         }
     finally:
-        _record_substage("pre_repair_from_trace", substage_started_at)
+        state.record_substage("pre_repair_from_trace", substage_started_at)
     if float(config.model.learned_segment_geometry_gain_weight) > 0.0:
         substage_started_at = time.perf_counter()
         try:
-            causality_ablation_methods.append(
-                _selector_method(
+            state.causality_ablation_methods.append(
+                ablation_context.selector_method(
                     name="MLQDS_without_geometry_tie_breaker",
                     scores=primary_scores,
                     segment_scores=primary_selector_segment_scores,
@@ -663,14 +628,14 @@ def freeze_retained_mask_ablations(
                 )
             )
         except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
-            causal_ablation_freeze_failures["MLQDS_without_geometry_tie_breaker"] = str(exc)
+            state.causal_ablation_freeze_failures["MLQDS_without_geometry_tie_breaker"] = str(exc)
         finally:
-            _record_substage("without_geometry_tie_breaker", substage_started_at)
+            state.record_substage("without_geometry_tie_breaker", substage_started_at)
     if allocation_length_support_weight > 0.0:
         substage_started_at = time.perf_counter()
         try:
-            causality_ablation_methods.append(
-                _selector_method(
+            state.causality_ablation_methods.append(
+                ablation_context.selector_method(
                     name="MLQDS_without_segment_length_support_allocation",
                     scores=primary_scores,
                     segment_scores=primary_selector_segment_scores,
@@ -679,11 +644,13 @@ def freeze_retained_mask_ablations(
                 )
             )
         except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
-            causal_ablation_freeze_failures["MLQDS_without_segment_length_support_allocation"] = (
-                str(exc)
-            )
+            state.causal_ablation_freeze_failures[
+                "MLQDS_without_segment_length_support_allocation"
+            ] = str(exc)
         finally:
-            _record_substage("without_segment_length_support_allocation", substage_started_at)
+            state.record_substage(
+                "without_segment_length_support_allocation", substage_started_at
+            )
     generator = torch.Generator().manual_seed(int(seeds.eval_query_seed) + 91_337)
     shuffled_order = torch.randperm(int(primary_scores.numel()), generator=generator)
     shuffled_scores = primary_scores[shuffled_order]
@@ -697,8 +664,8 @@ def freeze_retained_mask_ablations(
     )
     substage_started_at = time.perf_counter()
     try:
-        causality_ablation_methods.append(
-            _selector_method(
+        state.causality_ablation_methods.append(
+            ablation_context.selector_method(
                 name="MLQDS_shuffled_scores",
                 scores=shuffled_scores,
                 segment_scores=shuffled_segment_scores,
@@ -706,21 +673,21 @@ def freeze_retained_mask_ablations(
             )
         )
     except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
-        causal_ablation_freeze_failures["MLQDS_shuffled_scores"] = str(exc)
+        state.causal_ablation_freeze_failures["MLQDS_shuffled_scores"] = str(exc)
     finally:
-        _record_substage("shuffled_scores", substage_started_at)
-    _freeze_segment_budget_ablations(ctx, state)
+        state.record_substage("shuffled_scores", substage_started_at)
+    _freeze_segment_budget_ablations(ablation_context, state)
     path_length_support_scores = primary_path_length_support_scores
     if path_length_support_scores is not None:
         substage_started_at = time.perf_counter()
         try:
-            path_length_segment_method = _selector_method(
+            path_length_segment_method = ablation_context.selector_method(
                 name="MLQDS_path_length_support_segment_head_diagnostic",
                 scores=primary_scores,
                 segment_scores=path_length_support_scores,
             )
-            causality_ablation_methods.append(path_length_segment_method)
-            head_ablation_sensitivity_diagnostics[
+            state.causality_ablation_methods.append(path_length_segment_method)
+            state.head_ablation_sensitivity_diagnostics[
                 "MLQDS_path_length_support_segment_head_diagnostic"
             ] = {
                 **head_ablation_sensitivity(
@@ -737,14 +704,14 @@ def freeze_retained_mask_ablations(
                 "replacement_head_name": "path_length_support_target",
                 "ablation_mode": "path_length_support_as_segment_scores",
             }
-            path_length_allocation_method = _selector_method(
+            path_length_allocation_method = ablation_context.selector_method(
                 name="MLQDS_path_length_support_allocation_only_diagnostic",
                 scores=primary_scores,
                 segment_scores=path_length_support_scores,
                 segment_point_scores=primary_segment_scores,
             )
-            causality_ablation_methods.append(path_length_allocation_method)
-            head_ablation_sensitivity_diagnostics[
+            state.causality_ablation_methods.append(path_length_allocation_method)
+            state.head_ablation_sensitivity_diagnostics[
                 "MLQDS_path_length_support_allocation_only_diagnostic"
             ] = {
                 **head_ablation_sensitivity(
@@ -762,7 +729,7 @@ def freeze_retained_mask_ablations(
                 "ablation_mode": "path_length_support_allocation_only",
             }
         except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
-            head_ablation_sensitivity_diagnostics[
+            state.head_ablation_sensitivity_diagnostics[
                 "MLQDS_path_length_support_segment_head_diagnostic"
             ] = {
                 "available": False,
@@ -771,7 +738,7 @@ def freeze_retained_mask_ablations(
                 "error": str(exc),
             }
         finally:
-            _record_substage("path_length_support_ablations", substage_started_at)
+            state.record_substage("path_length_support_ablations", substage_started_at)
     behavior_segment_scores = _factorized_head_scores_from_logits(
         primary_head_logits,
         "conditional_behavior_utility",
@@ -779,13 +746,13 @@ def freeze_retained_mask_ablations(
     if behavior_segment_scores is not None:
         substage_started_at = time.perf_counter()
         try:
-            behavior_segment_method = _selector_method(
+            behavior_segment_method = ablation_context.selector_method(
                 name="MLQDS_behavior_utility_segment_head_diagnostic",
                 scores=primary_scores,
                 segment_scores=behavior_segment_scores,
             )
-            causality_ablation_methods.append(behavior_segment_method)
-            head_ablation_sensitivity_diagnostics[
+            state.causality_ablation_methods.append(behavior_segment_method)
+            state.head_ablation_sensitivity_diagnostics[
                 "MLQDS_behavior_utility_segment_head_diagnostic"
             ] = {
                 **head_ablation_sensitivity(
@@ -802,14 +769,14 @@ def freeze_retained_mask_ablations(
                 "replacement_head_name": "conditional_behavior_utility",
                 "ablation_mode": "conditional_behavior_utility_as_segment_scores",
             }
-            behavior_allocation_method = _selector_method(
+            behavior_allocation_method = ablation_context.selector_method(
                 name="MLQDS_behavior_utility_allocation_only_diagnostic",
                 scores=primary_scores,
                 segment_scores=behavior_segment_scores,
                 segment_point_scores=primary_segment_scores,
             )
-            causality_ablation_methods.append(behavior_allocation_method)
-            head_ablation_sensitivity_diagnostics[
+            state.causality_ablation_methods.append(behavior_allocation_method)
+            state.head_ablation_sensitivity_diagnostics[
                 "MLQDS_behavior_utility_allocation_only_diagnostic"
             ] = {
                 **head_ablation_sensitivity(
@@ -827,7 +794,7 @@ def freeze_retained_mask_ablations(
                 "ablation_mode": "conditional_behavior_utility_allocation_only",
             }
         except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
-            head_ablation_sensitivity_diagnostics[
+            state.head_ablation_sensitivity_diagnostics[
                 "MLQDS_behavior_utility_segment_head_diagnostic"
             ] = {
                 "available": False,
@@ -836,7 +803,9 @@ def freeze_retained_mask_ablations(
                 "error": str(exc),
             }
         finally:
-            _record_substage("behavior_utility_segment_score_ablations", substage_started_at)
+            state.record_substage(
+                "behavior_utility_segment_score_ablations", substage_started_at
+            )
     if primary_head_logits is not None:
         substage_started_at = time.perf_counter()
         try:
@@ -855,13 +824,13 @@ def freeze_retained_mask_ablations(
                 score_temperature=float(config.model.mlqds_score_temperature),
                 rank_confidence_weight=float(config.model.mlqds_rank_confidence_weight),
             )
-            behavior_ablation_method = _selector_method(
+            behavior_ablation_method = ablation_context.selector_method(
                 name="MLQDS_without_behavior_utility_head",
                 scores=behavior_scores,
                 segment_scores=primary_selector_segment_scores,
                 segment_point_scores=primary_segment_scores,
             )
-            causality_ablation_methods.append(behavior_ablation_method)
+            state.causality_ablation_methods.append(behavior_ablation_method)
             behavior_sensitivity = head_ablation_sensitivity(
                 primary_scores=primary_scores,
                 ablation_scores=behavior_scores,
@@ -874,13 +843,15 @@ def freeze_retained_mask_ablations(
             )
             behavior_sensitivity["disabled_head_name"] = "conditional_behavior_utility"
             behavior_sensitivity["ablation_mode"] = "neutral_multiplicative_head"
-            head_ablation_sensitivity_diagnostics["MLQDS_without_behavior_utility_head"] = (
+            state.head_ablation_sensitivity_diagnostics["MLQDS_without_behavior_utility_head"] = (
                 behavior_sensitivity
             )
         except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
-            causal_ablation_freeze_failures["MLQDS_without_behavior_utility_head"] = str(exc)
+            state.causal_ablation_freeze_failures["MLQDS_without_behavior_utility_head"] = (
+                str(exc)
+            )
         finally:
-            _record_substage("without_behavior_utility_head", substage_started_at)
+            state.record_substage("without_behavior_utility_head", substage_started_at)
     substage_started_at = time.perf_counter()
     try:
         untrained_model = reset_module_parameters(
@@ -909,15 +880,15 @@ def freeze_retained_mask_ablations(
             test_boundaries,
             float(config.model.compression_ratio),
         )
-        causality_ablation_methods.append(
+        state.causality_ablation_methods.append(
             FrozenMaskMethod(
                 name="MLQDS_untrained_model",
                 retained_mask=untrained_mask.detach().cpu(),
             )
         )
     except Exception as exc:  # pragma: no cover - diagnostic should not break final eval.
-        causal_ablation_freeze_failures["MLQDS_untrained_model"] = str(exc)
+        state.causal_ablation_freeze_failures["MLQDS_untrained_model"] = str(exc)
     finally:
-        _record_substage("untrained_model", substage_started_at)
-    _freeze_prior_field_ablations(ctx, state)
+        state.record_substage("untrained_model", substage_started_at)
+    _freeze_prior_field_ablations(ablation_context, state)
     return state.outputs()

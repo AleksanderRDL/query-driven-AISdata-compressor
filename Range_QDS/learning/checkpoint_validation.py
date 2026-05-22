@@ -38,7 +38,7 @@ from scoring.geometry_thresholds import (
     FINAL_AVG_SED_RATIO_MAX_DEFAULT,
     max_sed_ratio_for_compression,
 )
-from scoring.method_scoring import score_range_usefulness, score_retained_mask
+from scoring.method_scoring import score_range_audit, score_retained_mask
 from scoring.methods import UniformTemporalMethod
 from scoring.metrics import compute_geometric_distortion, compute_length_preservation
 from scoring.query_local_utility import query_local_utility_from_range_audit
@@ -528,7 +528,7 @@ def _validation_query_local_utility_score_for_mask(
     model_config: ModelConfig,
 ) -> tuple[float, dict[str, Any], dict[str, float]]:
     """Return raw QueryLocalUtility plus supporting audit/sanity payloads for a validation mask."""
-    range_audit = score_range_usefulness(
+    range_audit = score_range_audit(
         points=points,
         boundaries=boundaries,
         retained_mask=retained_mask,
@@ -734,7 +734,6 @@ def _validation_checkpoint_scores(
         )
         metrics.update(
             {
-                "range_usefulness": float(range_audit["range_usefulness_score"]),
                 "query_local_utility": raw_query_local_utility_score,
                 "query_local_utility_selection_score": penalized_query_local_utility_score,
                 "validation_global_sanity_penalty": _validation_global_sanity_penalty(
@@ -748,14 +747,9 @@ def _validation_checkpoint_scores(
                 "validation_uniform_avg_sed_km": sanity["uniform_avg_sed_km"],
                 "validation_avg_sed_ratio_vs_uniform": sanity["avg_sed_ratio_vs_uniform"],
                 "validation_avg_sed_ratio_vs_uniform_max": sanity["avg_sed_ratio_vs_uniform_max"],
-                "range_ship_f1": float(range_audit["range_ship_f1"]),
-                "range_ship_coverage": float(range_audit["range_ship_coverage"]),
-                "range_entry_exit_f1": float(range_audit["range_entry_exit_f1"]),
-                "range_crossing_f1": float(range_audit["range_crossing_f1"]),
-                "range_temporal_coverage": float(range_audit["range_temporal_coverage"]),
-                "range_gap_coverage": float(range_audit["range_gap_coverage"]),
+                "query_point_recall": float(range_audit["query_point_recall"]),
+                "range_gap_min_coverage": float(range_audit["range_gap_min_coverage"]),
                 "range_turn_coverage": float(range_audit["range_turn_coverage"]),
-                "range_shape_score": float(range_audit["range_shape_score"]),
                 "range_query_local_interpolation_fidelity": float(
                     range_audit.get("range_query_local_interpolation_fidelity", 0.0)
                 ),
@@ -780,12 +774,7 @@ def _validation_checkpoint_scores(
             )
         )
         metrics.update(validation_factorized_fit_metrics)
-    variant = str(getattr(model_config, "checkpoint_score_variant", "range_usefulness")).lower()
-    if variant == "range_usefulness":
-        if range_audit is None:
-            return float(answer_agg), answer_pt, metrics
-        score = float(range_audit["range_usefulness_score"])
-        return score, {"range": score}, metrics
+    variant = str(getattr(model_config, "checkpoint_score_variant", "query_local_utility")).lower()
     if variant == "query_local_utility":
         if range_audit is None:
             return float(answer_agg), answer_pt, metrics
@@ -853,19 +842,9 @@ def _validation_uniform_score(
         workload_map=workload_map,
         query_cache=query_cache,
     )
-    variant = str(getattr(model_config, "checkpoint_score_variant", "range_usefulness")).lower()
-    if variant == "range_usefulness":
-        audit = score_range_usefulness(
-            points=points,
-            boundaries=boundaries,
-            retained_mask=retained_mask,
-            typed_queries=workload.typed_queries,
-            query_cache=query_cache,
-        )
-        score = float(audit["range_usefulness_score"])
-        return score, {"range": score}
+    variant = str(getattr(model_config, "checkpoint_score_variant", "query_local_utility")).lower()
     if variant == "query_local_utility":
-        audit = score_range_usefulness(
+        audit = score_range_audit(
             points=points,
             boundaries=boundaries,
             retained_mask=retained_mask,

@@ -18,6 +18,7 @@ from learning.targets.query_local_utility_family import (
     FAMILY_TRAINABILITY_GROUP_KEYS,
     _range_query_family_evidence,
 )
+from workloads.query_types import validated_range_query_params
 
 PREDICTABILITY_AUDIT_SCHEMA_VERSION = 3
 PREDICTABILITY_GATE_THRESHOLDS = {
@@ -606,7 +607,7 @@ def _prior_predictability_score(
     crossing_likelihood = sampled[:, 3].clamp(0.0, 1.0)
     behavior_utility_prior = sampled[:, 4].clamp(0.0, 1.0)
 
-    # The aggregate target is query-local usefulness. Behavior utility is useful
+    # The aggregate target is QueryLocalUtility. Behavior utility contributes
     # only where future query mass is plausible; do not let query-free behavior
     # bypass the query-hit prior and dominate final-target predictability.
     query_mass = torch.clamp(
@@ -637,7 +638,7 @@ def query_prior_predictability_audit(
     query_prior_field: dict[str, Any] | None,
     target_mode: str = "query_local_utility_factorized",
 ) -> dict[str, Any]:
-    """Measure whether train-derived query-prior fields predict held-out eval usefulness."""
+    """Measure whether train-derived query-prior fields predict held-out QueryLocalUtility."""
     if query_prior_field is None:
         return {
             "schema_version": PREDICTABILITY_AUDIT_SCHEMA_VERSION,
@@ -710,11 +711,15 @@ def query_prior_predictability_audit(
         head_targets=eval_targets.head_targets.detach().cpu().float(),
         head_mask=eval_targets.head_mask.detach().cpu().bool(),
     )
-    range_queries = [
-        query
-        for query in eval_typed_queries
-        if str(query.get("type", "")).lower() == "range" and isinstance(query.get("params"), dict)
-    ]
+    range_queries: list[dict[str, Any]] = []
+    for query in eval_typed_queries:
+        if str(query.get("type", "")).lower() != "range":
+            continue
+        try:
+            validated_range_query_params(query)
+        except ValueError:
+            continue
+        range_queries.append(query)
     family_prior_predictability = _family_conditioned_prior_predictability(
         points=points,
         boundaries=boundaries,

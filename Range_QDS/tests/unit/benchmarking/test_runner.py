@@ -8,7 +8,7 @@ import pytest
 
 from benchmarking.final_grid import query_driven_final_grid_summary
 from benchmarking.profiles import (
-    BLIND_EXPECTED_USEFULNESS_PROFILE,
+    BLIND_EXPECTED_QUERY_LOCAL_UTILITY_PROFILE,
     BLIND_RETAINED_FREQUENCY_PROFILE,
     BLIND_TEACHER_DISTILL_PROFILE,
     DEFAULT_PROFILE,
@@ -119,7 +119,7 @@ def _profile_core_args() -> list[str]:
         "--temporal_residual_label_mode",
         "none",
         "--range_label_mode",
-        "usefulness",
+        "point_f1",
         "--range_training_target_mode",
         "point_value",
         "--range_temporal_target_blend",
@@ -151,7 +151,7 @@ def _profile_core_args() -> list[str]:
         "--checkpoint_selection_metric",
         "uniform_gap",
         "--checkpoint_score_variant",
-        "range_usefulness",
+        "query_local_utility",
     ]
 
 
@@ -261,7 +261,7 @@ def test_run_config_records_profile_checkpoint_selection_metric(tmp_path) -> Non
 def test_blind_profiles_use_small_query_floor_for_coverage_control() -> None:
     """Blind profiles should not force dense duplicate workloads after target coverage is met."""
     for profile in (
-        BLIND_EXPECTED_USEFULNESS_PROFILE,
+        BLIND_EXPECTED_QUERY_LOCAL_UTILITY_PROFILE,
         BLIND_RETAINED_FREQUENCY_PROFILE,
         BLIND_TEACHER_DISTILL_PROFILE,
     ):
@@ -424,9 +424,9 @@ def test_benchmark_row_reports_zero_effective_diversity_for_stratified(tmp_path)
             "audit_masks_frozen_before_eval_query_scoring": True,
         },
         "matched": {
-            "MLQDS": {"range_usefulness_score": 0.2},
-            "uniform": {"range_usefulness_score": 0.1},
-            "DouglasPeucker": {"range_usefulness_score": 0.1},
+            "MLQDS": {"query_local_utility_score": 0.2},
+            "uniform": {"query_local_utility_score": 0.1},
+            "DouglasPeucker": {"query_local_utility_score": 0.1},
         },
     }
 
@@ -456,9 +456,9 @@ def test_benchmark_row_marks_blind_protocol_fail_even_with_good_score(tmp_path) 
             "audit_masks_frozen_before_eval_query_scoring": False,
         },
         "matched": {
-            "MLQDS": {"range_usefulness_score": 0.50, "range_point_f1": 0.40},
-            "uniform": {"range_usefulness_score": 0.40, "range_point_f1": 0.30},
-            "DouglasPeucker": {"range_usefulness_score": 0.30, "range_point_f1": 0.20},
+            "MLQDS": {"query_local_utility_score": 0.50, "range_point_f1": 0.40},
+            "uniform": {"query_local_utility_score": 0.40, "range_point_f1": 0.30},
+            "DouglasPeucker": {"query_local_utility_score": 0.30, "range_point_f1": 0.20},
         },
     }
 
@@ -476,8 +476,8 @@ def test_benchmark_row_marks_blind_protocol_fail_even_with_good_score(tmp_path) 
     )
 
     assert row["workload_blind_candidate"] is True
-    assert row["beats_uniform_range_usefulness"] is True
-    assert row["beats_douglas_peucker_range_usefulness"] is True
+    assert row["beats_uniform_query_local_utility"] is True
+    assert row["beats_douglas_peucker_query_local_utility"] is True
     assert row["single_cell_range_status"] == "protocol_fail"
 
 
@@ -490,9 +490,9 @@ def test_benchmark_row_blocks_blind_success_when_selector_scaffold_dominated(tmp
             "audit_masks_frozen_before_eval_query_scoring": True,
         },
         "matched": {
-            "MLQDS": {"range_usefulness_score": 0.50},
-            "uniform": {"range_usefulness_score": 0.40},
-            "DouglasPeucker": {"range_usefulness_score": 0.30},
+            "MLQDS": {"query_local_utility_score": 0.50},
+            "uniform": {"query_local_utility_score": 0.40},
+            "DouglasPeucker": {"query_local_utility_score": 0.30},
         },
         "selector_budget_diagnostics": {
             "eval": {
@@ -519,8 +519,8 @@ def test_benchmark_row_blocks_blind_success_when_selector_scaffold_dominated(tmp
         run_json=run_json,
     )
 
-    assert row["beats_uniform_range_usefulness"] is True
-    assert row["beats_douglas_peucker_range_usefulness"] is True
+    assert row["beats_uniform_query_local_utility"] is True
+    assert row["beats_douglas_peucker_query_local_utility"] is True
     assert row["selector_claim_status"] == "selector_scaffold_dominated"
     assert row["selector_claim_has_material_learned_budget"] is False
     assert row["selector_claim_min_learned_slot_fraction"] == (
@@ -538,9 +538,9 @@ def test_benchmark_row_allows_blind_success_with_material_learned_budget(tmp_pat
             "audit_masks_frozen_before_eval_query_scoring": True,
         },
         "matched": {
-            "MLQDS": {"range_usefulness_score": 0.50},
-            "uniform": {"range_usefulness_score": 0.40},
-            "DouglasPeucker": {"range_usefulness_score": 0.30},
+            "MLQDS": {"query_local_utility_score": 0.50},
+            "uniform": {"query_local_utility_score": 0.40},
+            "DouglasPeucker": {"query_local_utility_score": 0.30},
         },
         "selector_budget_diagnostics": {
             "eval": {
@@ -572,6 +572,50 @@ def test_benchmark_row_allows_blind_success_with_material_learned_budget(tmp_pat
     assert row["single_cell_range_status"] == "beats_uniform_and_douglas_peucker"
 
 
+def test_benchmark_row_uses_query_local_utility_for_final_candidate_status(tmp_path) -> None:
+    run_json = {
+        "config": {"model": {"model_type": "range_prior", "compression_ratio": 0.05}},
+        "final_claim_summary": {"primary_metric": "QueryLocalUtility"},
+        "workload_blind_protocol": {
+            "enabled": True,
+            "primary_masks_frozen_before_eval_query_scoring": True,
+            "audit_masks_frozen_before_eval_query_scoring": True,
+        },
+        "matched": {
+            "MLQDS": {"query_local_utility_score": 0.50},
+            "uniform": {"query_local_utility_score": 0.40},
+            "DouglasPeucker": {"query_local_utility_score": 0.30},
+        },
+        "selector_budget_diagnostics": {
+            "eval": {
+                "budget_rows": [
+                    {
+                        "compression_ratio": 0.05,
+                        "learned_slot_fraction_of_budget": 0.35,
+                    }
+                ]
+            }
+        },
+    }
+
+    row = _row_from_run(
+        workload="range",
+        run_label="query_local_candidate",
+        command=[],
+        returncode=0,
+        elapsed_seconds=1.0,
+        run_dir=tmp_path,
+        stdout_path=tmp_path / "stdout.log",
+        run_json_path=tmp_path / "example_run.json",
+        timings={"phase_timings": [], "epoch_timings": [], "inference_step_timings": []},
+        run_json=run_json,
+    )
+
+    assert row["beats_uniform_query_local_utility"] is True
+    assert row["beats_douglas_peucker_query_local_utility"] is True
+    assert row["single_cell_range_status"] == "beats_uniform_and_douglas_peucker"
+
+
 def test_benchmark_row_records_data_source_metadata(tmp_path) -> None:
     run_json = {
         "config": {"model": {"model_type": "historical_prior", "compression_ratio": 0.05}},
@@ -581,9 +625,9 @@ def test_benchmark_row_records_data_source_metadata(tmp_path) -> None:
             "audit_masks_frozen_before_eval_query_scoring": True,
         },
         "matched": {
-            "MLQDS": {"range_usefulness_score": 0.50},
-            "uniform": {"range_usefulness_score": 0.40},
-            "DouglasPeucker": {"range_usefulness_score": 0.30},
+            "MLQDS": {"query_local_utility_score": 0.50},
+            "uniform": {"query_local_utility_score": 0.40},
+            "DouglasPeucker": {"query_local_utility_score": 0.30},
         },
         "selector_budget_diagnostics": {
             "eval": {

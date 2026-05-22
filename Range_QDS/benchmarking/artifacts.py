@@ -31,7 +31,7 @@ RUN_INDEX_FIELDS = [
     "best_mlqds_primary_score",
     "best_mlqds_aggregate_f1",
     "best_mlqds_range_point_f1",
-    "best_mlqds_range_usefulness",
+    "best_mlqds_query_local_utility",
     "best_mlqds_run_label",
     "git_commit",
     "git_dirty",
@@ -108,7 +108,7 @@ def _first_float(row: dict[str, Any], keys: tuple[str, ...]) -> float | None:
             continue
         try:
             return float(value)
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             continue
     return None
 
@@ -130,8 +130,7 @@ def _best_mlqds(rows: list[dict[str, Any]]) -> dict[str, Any]:
             row,
             (
                 "mlqds_primary_score",
-                "mlqds_range_usefulness",
-                "mlqds_range_usefulness_score",
+                "mlqds_query_local_utility_score",
                 "mlqds_range_point_f1",
                 "mlqds_aggregate_f1",
             ),
@@ -147,7 +146,7 @@ def _best_mlqds(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "primary_score": None,
             "aggregate_f1": None,
             "range_point_f1": None,
-            "range_usefulness": None,
+            "query_local_utility": None,
             "run_label": None,
         }
     aggregate_f1 = _first_float(best_row, ("mlqds_aggregate_f1",))
@@ -156,10 +155,7 @@ def _best_mlqds(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "primary_score": best_score,
         "aggregate_f1": aggregate_f1,
         "range_point_f1": _first_float(best_row, ("mlqds_range_point_f1",)),
-        "range_usefulness": _first_float(
-            best_row,
-            ("mlqds_range_usefulness", "mlqds_range_usefulness_score"),
-        ),
+        "query_local_utility": _first_float(best_row, ("mlqds_query_local_utility_score",)),
         "run_label": str(best_row.get("run_label"))
         if best_row.get("run_label") is not None
         else None,
@@ -203,7 +199,7 @@ def index_entry(
         "best_mlqds_primary_score": best["primary_score"],
         "best_mlqds_aggregate_f1": best["aggregate_f1"],
         "best_mlqds_range_point_f1": best["range_point_f1"],
-        "best_mlqds_range_usefulness": best["range_usefulness"],
+        "best_mlqds_query_local_utility": best["query_local_utility"],
         "best_mlqds_run_label": best["run_label"],
         "git_commit": git.get("commit"),
         "git_dirty": git.get("dirty"),

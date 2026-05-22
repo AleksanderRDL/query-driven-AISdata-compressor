@@ -15,8 +15,8 @@ inference helpers. Retained-mask construction belongs in `../selection/`.
 | `targets/structural.py` / `targets/marginal_coverage.py` | Query-free structural and neighborhood-marginal scalar diagnostics. |
 | `targets/query_spine.py` / `targets/query_residual.py` | Train-query spine and residual-anchor scalar diagnostics. |
 | `targets/set_utility.py` / `targets/local_swap.py` | Train-query set-utility and local-swap scalar diagnostics. |
-| `targets/aggregation.py` | Multi-workload and component target aggregation. |
-| `importance_labels.py` | Legacy typed F1/usefulness label construction for diagnostics. |
+| `targets/aggregation.py` | Multi-workload scalar target aggregation. |
+| `importance_labels.py` | Point-F1 typed label construction for scalar diagnostics. |
 | `teacher_distillation.py` | Query-aware teacher-to-student label diagnostics. |
 | `query_prior_fields.py` | Train-only query-prior field construction and sampling. |
 | `model_features.py` | Query-free and query-conditioned point feature builders. |
@@ -75,7 +75,7 @@ matching workload prior is the two-footprint `range_query_mix` profile:
 
 `query_local_utility_factorized` is the active target family. It keeps query-hit,
 behavior, replacement, segment-budget, and prior-related signals separate
-instead of collapsing them into one RangeUseful scalar.
+instead of collapsing them into one scalar.
 
 The active replacement target keeps the top `0.35` of each contiguous
 query-hit run as representative support. This keeps

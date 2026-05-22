@@ -82,7 +82,7 @@ def main() -> int:
         "best_metric",
         "best_score",
         "range_point_f1",
-        "range_useful",
+        "query_local_utility",
         "best_label",
         "results_dir",
     ]
@@ -97,10 +97,10 @@ def main() -> int:
                 _short(row.get("profile"), 8),
                 _short(best_metric, 16),
                 _format_score(
-                    _first(row, "best_mlqds_primary_score", "best_mlqds_range_usefulness")
+                    _first(row, "best_mlqds_primary_score", "best_mlqds_query_local_utility")
                 ),
                 _format_score(_first(row, "best_mlqds_range_point_f1")),
-                _format_score(_first(row, "best_mlqds_range_usefulness")),
+                _format_score(_first(row, "best_mlqds_query_local_utility")),
                 _short(row.get("best_mlqds_run_label"), 16),
                 _short(row.get("results_dir"), 72),
             ]

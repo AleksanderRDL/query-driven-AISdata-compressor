@@ -14,7 +14,16 @@ def test_benchmark_row_records_effective_child_torch_runtime(tmp_path) -> None:
     row = _row_from_run(
         workload="range",
         run_label="custom_runtime",
-        command=["python", "-m", "orchestration.train_and_score"],
+        command=[
+            "uv",
+            "run",
+            "--group",
+            "dev",
+            "--",
+            "python",
+            "-m",
+            "orchestration.train_and_score",
+        ],
         returncode=0,
         elapsed_seconds=10.0,
         run_dir=tmp_path,
@@ -38,7 +47,7 @@ def test_benchmark_row_records_effective_child_torch_runtime(tmp_path) -> None:
     assert row["child_tf32_matmul_allowed"] is True
     assert row["child_amp_enabled"] is True
     assert row["child_amp_dtype"] == "bfloat16"
-    assert row["model_type"] == "range_aware"
+    assert row["model_type"] == "workload_blind_range"
     assert row["historical_prior_k"] == 7
     assert row["historical_prior_mmsi_weight"] == 2.5
     assert row["historical_prior_source_aggregation"] == "mean"
@@ -50,20 +59,19 @@ def test_benchmark_row_records_effective_child_torch_runtime(tmp_path) -> None:
     assert row["query_target_coverage"] == 0.30
     assert row["range_spatial_km"] == 2.2
     assert row["range_time_hours"] == 5.0
-    assert row["mlqds_temporal_fraction"] == 0.25
-    assert row["mlqds_diversity_bonus"] == 0.05
-    assert row["mlqds_effective_diversity_bonus"] == 0.05
-    assert row["mlqds_hybrid_mode"] == "swap"
+    assert row["mlqds_temporal_fraction"] == 0.0
+    assert row["mlqds_diversity_bonus"] == 0.0
+    assert row["mlqds_effective_diversity_bonus"] == 0.0
+    assert row["mlqds_hybrid_mode"] == "global_budget"
     assert row["mlqds_stratified_center_weight"] == 0.45
     assert row["mlqds_min_learned_swaps"] == 1
     assert row["mlqds_score_mode"] == "rank"
     assert row["mlqds_score_temperature"] == 1.0
     assert row["mlqds_rank_confidence_weight"] == 0.15
-    assert row["mlqds_range_geometry_blend"] == 0.25
-    assert row["temporal_residual_label_mode"] == "temporal"
-    assert row["range_label_mode"] == "usefulness"
+    assert row["mlqds_range_geometry_blend"] == 0.0
+    assert row["temporal_residual_label_mode"] == "none"
+    assert row["range_label_mode"] == "point_f1"
     assert row["range_replicate_target_aggregation"] == "label_mean"
-    assert row["range_component_target_blend"] == 0.75
     assert row["range_temporal_target_blend"] == 0.15
     assert row["range_target_budget_weight_power"] == 0.50
     assert row["range_marginal_target_radius_scale"] == 0.65
@@ -127,7 +135,7 @@ def test_benchmark_row_records_effective_child_torch_runtime(tmp_path) -> None:
     assert row["mlqds_latency_ms"] == 8.0
     assert row["mlqds_inference_only_latency_ms"] == 8.0
     assert row["mlqds_inference_only_latency_seconds"] == pytest.approx(0.008)
-    assert row["single_cell_range_status"] == "diagnostic_upper_bound"
+    assert row["single_cell_range_status"] == "beats_uniform_and_douglas_peucker"
     assert row["final_claim_status"] == "candidate_blocked_by_required_gates"
     assert row["final_success_allowed"] is False
     assert row["final_claim_blocking_gates"] == ["predictability_gate"]
@@ -255,52 +263,53 @@ def test_benchmark_row_records_effective_child_torch_runtime(tmp_path) -> None:
     assert row["no_prior_score_output_mean_abs_delta"] == 0.0
     assert row["no_prior_score_output_max_abs_delta"] == 0.0
     assert row["no_prior_score_output_topk_jaccard_at_retained_count"] == 1.0
-    assert row["workload_blind_candidate"] is False
-    assert row["workload_blind_protocol_enabled"] is False
-    assert row["primary_masks_frozen_before_eval_query_scoring"] is False
-    assert row["audit_masks_frozen_before_eval_query_scoring"] is False
-    assert row["eval_geometry_blend_allowed"] is True
-    assert row["beats_uniform_range_usefulness"] is True
-    assert row["beats_douglas_peucker_range_usefulness"] is True
-    assert row["beats_temporal_random_fill_range_usefulness"] is True
+    assert row["workload_blind_candidate"] is True
+    assert row["selector_claim_status"] == "model_has_material_budget"
+    assert row["selector_claim_has_material_learned_budget"] is True
+    assert row["workload_blind_protocol_enabled"] is True
+    assert row["primary_masks_frozen_before_eval_query_scoring"] is True
+    assert row["audit_masks_frozen_before_eval_query_scoring"] is True
+    assert row["eval_geometry_blend_allowed"] is False
+    assert row["beats_uniform_query_local_utility"] is True
+    assert row["beats_douglas_peucker_query_local_utility"] is True
+    assert row["beats_temporal_random_fill_query_local_utility"] is True
     assert row["audit_compression_ratio_count"] == 3
     assert row["audit_low_compression_ratio_count"] == 2
-    assert row["audit_beats_uniform_range_usefulness_count"] == 2
-    assert row["audit_beats_douglas_peucker_range_usefulness_count"] == 3
-    assert row["audit_beats_temporal_random_fill_range_usefulness_count"] == 1
-    assert row["audit_beats_both_range_usefulness_count"] == 2
-    assert row["audit_low_beats_uniform_range_usefulness_count"] == 1
-    assert row["audit_low_beats_temporal_random_fill_range_usefulness_count"] == 1
-    assert row["audit_low_beats_both_range_usefulness_count"] == 1
+    assert row["audit_beats_uniform_query_local_utility_count"] == 2
+    assert row["audit_beats_douglas_peucker_query_local_utility_count"] == 3
+    assert row["audit_beats_temporal_random_fill_query_local_utility_count"] == 1
+    assert row["audit_beats_both_query_local_utility_count"] == 2
+    assert row["audit_low_beats_uniform_query_local_utility_count"] == 1
+    assert row["audit_low_beats_temporal_random_fill_query_local_utility_count"] == 1
+    assert row["audit_low_beats_both_query_local_utility_count"] == 1
     assert row["audit_beats_uniform_query_local_utility_count"] == 2
     assert row["audit_beats_douglas_peucker_query_local_utility_count"] == 3
     assert row["audit_low_beats_uniform_query_local_utility_count"] == 1
-    assert row["audit_min_low_vs_uniform_range_usefulness"] == pytest.approx(-0.02)
     assert row["audit_min_low_vs_uniform_query_local_utility"] == pytest.approx(-0.02)
-    assert row["audit_mean_low_vs_uniform_range_usefulness"] == pytest.approx(0.015)
     assert row["audit_mean_low_vs_uniform_query_local_utility"] == pytest.approx(0.025)
-    assert row["audit_min_low_vs_temporal_random_fill_range_usefulness"] == pytest.approx(-0.01)
-    assert row["audit_mean_vs_temporal_random_fill_range_usefulness"] == pytest.approx(-0.02 / 3.0)
-    assert row["audit_mean_low_vs_temporal_random_fill_range_usefulness"] == pytest.approx(0.0)
+    assert row["audit_min_low_vs_temporal_random_fill_query_local_utility"] == pytest.approx(0.0)
+    assert row["audit_mean_vs_temporal_random_fill_query_local_utility"] == pytest.approx(
+        0.05 / 3.0
+    )
+    assert row["audit_mean_low_vs_temporal_random_fill_query_local_utility"] == pytest.approx(
+        0.025
+    )
     assert row["audit_ratio_0p0100_compression_ratio"] == pytest.approx(0.01)
-    assert row["audit_ratio_0p0100_mlqds_range_usefulness"] == pytest.approx(0.10)
-    assert row["audit_ratio_0p0100_uniform_range_usefulness"] == pytest.approx(0.12)
     assert row["audit_ratio_0p0100_mlqds_query_local_utility"] == pytest.approx(0.11)
     assert row["audit_ratio_0p0100_uniform_query_local_utility"] == pytest.approx(0.13)
     assert row["audit_ratio_0p0100_mlqds_vs_uniform_query_local_utility"] == pytest.approx(-0.02)
-    assert row["audit_ratio_0p0100_douglas_peucker_range_usefulness"] == pytest.approx(0.09)
-    assert row["audit_ratio_0p0100_temporal_random_fill_range_usefulness"] == pytest.approx(0.11)
-    assert row["audit_ratio_0p0100_mlqds_vs_uniform_range_usefulness"] == pytest.approx(-0.02)
-    assert row["audit_ratio_0p0100_mlqds_vs_douglas_peucker_range_usefulness"] == pytest.approx(
+    assert row["audit_ratio_0p0100_douglas_peucker_query_local_utility"] == pytest.approx(0.10)
+    assert row["audit_ratio_0p0100_temporal_random_fill_query_local_utility"] == pytest.approx(0.11)
+    assert row["audit_ratio_0p0100_mlqds_vs_douglas_peucker_query_local_utility"] == pytest.approx(
         0.01
     )
     assert row[
-        "audit_ratio_0p0100_mlqds_vs_temporal_random_fill_range_usefulness"
-    ] == pytest.approx(-0.01)
-    assert row["audit_ratio_0p0500_mlqds_vs_uniform_range_usefulness"] == pytest.approx(0.05)
+        "audit_ratio_0p0100_mlqds_vs_temporal_random_fill_query_local_utility"
+    ] == pytest.approx(0.0)
+    assert row["audit_ratio_0p0500_mlqds_vs_uniform_query_local_utility"] == pytest.approx(0.07)
     assert row[
-        "audit_ratio_0p1000_mlqds_vs_temporal_random_fill_range_usefulness"
-    ] == pytest.approx(-0.02)
+        "audit_ratio_0p1000_mlqds_vs_temporal_random_fill_query_local_utility"
+    ] == pytest.approx(0.0)
     assert row["range_boundary_prior_weight"] == 0.0
     assert row["range_boundary_prior_enabled"] is False
     assert row["teacher_distillation_enabled"] is True
@@ -312,14 +321,7 @@ def test_benchmark_row_records_effective_child_torch_runtime(tmp_path) -> None:
     assert row["train_positive_label_mass"] == 12.5
     assert row["train_label_mass_basis"] == "pre_clamp_component_contributions"
     assert row["train_label_mass_range_point_f1"] == 0.22
-    assert row["train_label_mass_range_ship_f1"] == 0.13
-    assert row["train_label_mass_range_ship_coverage"] == 0.12
-    assert row["train_label_mass_range_entry_exit_f1"] == 0.09
-    assert row["train_label_mass_range_crossing_f1"] == 0.04
-    assert row["train_label_mass_range_temporal_coverage"] == 0.11
-    assert row["train_label_mass_range_gap_coverage"] == 0.10
     assert row["train_label_mass_range_turn_coverage"] == 0.08
-    assert row["train_label_mass_range_shape_score"] == 0.11
     assert row["train_target_positive_label_mass"] == 11.0
     assert row["train_target_budget_ratio"] == 0.05
     assert row["train_target_effective_fill_budget_ratio"] == 0.041
@@ -350,22 +352,13 @@ def test_benchmark_row_records_effective_child_torch_runtime(tmp_path) -> None:
     assert row["mlqds_aggregate_f1"] == 0.40
     assert row["mlqds_query_point_recall"] == 0.31
     assert row["mlqds_range_point_f1"] == 0.40
-    assert row["mlqds_range_usefulness"] == 0.42
-    assert row["mlqds_range_usefulness_score"] == 0.42
     assert row["mlqds_query_local_utility_score"] == 0.46
-    assert row["mlqds_range_usefulness_gap_time_score"] == 0.429
-    assert row["mlqds_range_usefulness_gap_distance_score"] == 0.4245
-    assert row["mlqds_range_usefulness_gap_min_score"] == 0.4245
     assert row["uniform_range_point_f1"] == 0.35
     assert row["uniform_query_point_recall"] == 0.26
-    assert row["uniform_range_usefulness"] == 0.37
     assert row["uniform_query_local_utility_score"] == 0.39
-    assert row["uniform_range_usefulness_gap_time_score"] == 0.379
     assert row["douglas_peucker_range_point_f1"] == 0.36
     assert row["douglas_peucker_query_point_recall"] == 0.29
-    assert row["douglas_peucker_range_usefulness"] == 0.39
     assert row["douglas_peucker_query_local_utility_score"] == 0.41
-    assert row["douglas_peucker_range_usefulness_gap_min_score"] == 0.3936
     assert row["mlqds_avg_sed_km"] == 0.60
     assert row["uniform_avg_sed_km"] == 0.55
     assert row["douglas_peucker_avg_sed_km"] == 0.45
@@ -375,28 +368,20 @@ def test_benchmark_row_records_effective_child_torch_runtime(tmp_path) -> None:
     assert row["mlqds_vs_uniform_avg_sed_km"] == pytest.approx(0.05)
     assert row["mlqds_vs_uniform_avg_ped_km"] == pytest.approx(0.02)
     assert row["mlqds_vs_uniform_avg_length_preserved"] == pytest.approx(-0.03)
-    assert row["mlqds_range_ship_coverage"] == 0.64
-    assert row["mlqds_range_entry_exit_f1"] == 0.25
-    assert row["mlqds_range_crossing_f1"] == 0.48
-    assert row["mlqds_range_gap_coverage"] == 0.31
-    assert row["mlqds_range_gap_time_coverage"] == 0.41
-    assert row["mlqds_range_gap_distance_coverage"] == 0.36
     assert row["mlqds_range_gap_min_coverage"] == 0.36
     assert row["mlqds_range_turn_coverage"] == 0.52
-    assert row["mlqds_vs_uniform_range_entry_exit_f1"] == pytest.approx(-0.05)
-    assert row["mlqds_vs_uniform_range_temporal_coverage"] == pytest.approx(-0.04)
-    assert row["mlqds_vs_uniform_range_gap_coverage"] == pytest.approx(-0.09)
-    assert row["mlqds_vs_uniform_range_shape_score"] == pytest.approx(-0.06)
-    assert row["worst_uniform_component_delta_metric"] == "mlqds_vs_uniform_range_gap_coverage"
-    assert row["worst_uniform_component_delta"] == pytest.approx(-0.09)
-    assert row["range_usefulness_schema_version"] == 7
-    assert row["range_usefulness_gap_ablation_version"] == 1
+    assert row["mlqds_range_query_local_interpolation_fidelity"] == 0.62
+    assert row["mlqds_vs_uniform_range_gap_min_coverage"] == pytest.approx(-0.12)
+    assert row["mlqds_vs_uniform_range_turn_coverage"] == pytest.approx(0.01)
+    assert row["mlqds_vs_uniform_range_query_local_interpolation_fidelity"] == pytest.approx(0.04)
+    assert row["worst_uniform_component_delta_metric"] == "mlqds_vs_uniform_range_gap_min_coverage"
+    assert row["worst_uniform_component_delta"] == pytest.approx(-0.12)
     assert row["temporal_random_fill_range_point_f1"] == 0.38
-    assert row["temporal_random_fill_range_usefulness_score"] == 0.41
+    assert row["temporal_random_fill_query_local_utility_score"] == 0.41
     assert row["temporal_oracle_fill_range_point_f1"] == 0.55
-    assert row["temporal_oracle_fill_range_usefulness_score"] == 0.70
-    assert row["mlqds_vs_temporal_random_fill_range_usefulness"] == pytest.approx(0.01)
-    assert row["temporal_oracle_fill_gap_range_usefulness"] == pytest.approx(0.28)
+    assert row["temporal_oracle_fill_query_local_utility_score"] == 0.70
+    assert row["mlqds_vs_temporal_random_fill_query_local_utility"] == pytest.approx(0.05)
+    assert row["temporal_oracle_fill_gap_query_local_utility"] == pytest.approx(0.24)
     assert row["collapse_warning_any"] is True
     assert row["collapse_warning_count"] == 1
     assert row["best_epoch_collapse_warning"] is False
@@ -408,15 +393,5 @@ def test_benchmark_row_records_effective_child_torch_runtime(tmp_path) -> None:
     assert row["mlqds_vs_uniform_query_point_recall"] == pytest.approx(0.05)
     assert row["mlqds_vs_douglas_peucker_range_point_f1"] == pytest.approx(0.04)
     assert row["mlqds_vs_douglas_peucker_query_point_recall"] == pytest.approx(0.02)
-    assert row["mlqds_vs_uniform_range_usefulness"] == pytest.approx(0.05)
     assert row["mlqds_vs_uniform_query_local_utility"] == pytest.approx(0.07)
-    assert row["mlqds_vs_douglas_peucker_range_usefulness"] == pytest.approx(0.03)
     assert row["mlqds_vs_douglas_peucker_query_local_utility"] == pytest.approx(0.05)
-    assert row["mlqds_vs_uniform_range_usefulness_gap_time"] == pytest.approx(0.05)
-    assert row["mlqds_vs_uniform_range_usefulness_gap_distance"] == pytest.approx(0.0473)
-    assert row["mlqds_vs_uniform_range_usefulness_gap_min"] == pytest.approx(0.0473)
-    assert row["mlqds_vs_douglas_peucker_range_usefulness_gap_time"] == pytest.approx(0.0318)
-    assert row["mlqds_vs_douglas_peucker_range_usefulness_gap_distance"] == pytest.approx(0.0309)
-    assert row["mlqds_vs_douglas_peucker_range_usefulness_gap_min"] == pytest.approx(0.0309)
-    assert row["audit_beats_uniform_range_usefulness_gap_time_count"] == 2
-    assert row["audit_low_beats_uniform_range_usefulness_gap_time_count"] == 2

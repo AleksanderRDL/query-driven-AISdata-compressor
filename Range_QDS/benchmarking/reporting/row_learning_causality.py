@@ -261,13 +261,9 @@ def _prior_ablation_fields(learning_causality: RowFields) -> RowFields:
 
 def _learning_causality_fields(ctx: RowContext) -> RowFields:
     learning_causality = _mapping(ctx.run.get("learning_causality_summary"))
-    legacy_range_useful_summary = _mapping(ctx.run.get("legacy_range_useful_summary"))
     fields: RowFields = {}
     fields.update(_learning_summary_fields(learning_causality))
     fields.update(_ablation_mask_fields(learning_causality))
     fields.update(_delta_gate_and_selector_config_fields(ctx, learning_causality))
     fields.update(_prior_ablation_fields(learning_causality))
-    fields["legacy_range_useful_diagnostic_only"] = bool(
-        legacy_range_useful_summary.get("diagnostic_only", True)
-    )
     return fields

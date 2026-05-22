@@ -45,18 +45,15 @@ def _minimal_query_driven_run_json_fixture() -> dict[str, Any]:
     return {
         "matched": {
             "MLQDS": {
-                "query_local_utility_score": 0.70,
-                "range_usefulness_score": 0.65,
+                "query_local_utility_score": 0.65,
                 "range_point_f1": 0.60,
             },
             "uniform": {
-                "query_local_utility_score": 0.60,
-                "range_usefulness_score": 0.55,
+                "query_local_utility_score": 0.55,
                 "range_point_f1": 0.50,
             },
             "DouglasPeucker": {
-                "query_local_utility_score": 0.50,
-                "range_usefulness_score": 0.45,
+                "query_local_utility_score": 0.45,
                 "range_point_f1": 0.40,
             },
         },

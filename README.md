@@ -48,7 +48,8 @@ make db-query QUERY_ARGS="--help"
 
 - [`Range_QDS/README.md`](Range_QDS/README.md): QDS usage and where to look next.
 - [`Range_QDS/docs/query-driven-implementation-research-guide.md`](Range_QDS/docs/query-driven-implementation-research-guide.md): canonical query-driven implementation source of truth.
-- [`Range_QDS/docs/query-driven-implementation-progress.md`](Range_QDS/docs/query-driven-implementation-progress.md): checkpoint progress log.
+- [`Range_QDS/docs/query-driven-implementation-progress.md`](Range_QDS/docs/query-driven-implementation-progress.md): research checkpoint progress log.
+- [`Range_QDS/docs/Next-Iterations.md`](Range_QDS/docs/Next-Iterations.md): query-driven research handoff snapshot, not a general project backlog.
 - [`AISDATA/README.md`](AISDATA/README.md): data folder conventions.
 - [`ais_pipeline/README.md`](ais_pipeline/README.md): cleaning pipeline layout.
 - [`db/README.md`](db/README.md): database lifecycle and scripts.

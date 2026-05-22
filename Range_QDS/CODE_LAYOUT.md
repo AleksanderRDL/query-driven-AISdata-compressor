@@ -64,13 +64,15 @@ automatic defects.
 | Path | Current issue | Recommended split |
 | --- | --- | --- |
 | Query-driven implementation tests | The old oversized orchestration and benchmark test files have been split by owner. The largest remaining test files are under the 1k-line target but several are close enough to regress quickly. | Keep adding new tests to the owning split file. If any split file grows beyond roughly 1k lines, extract fixture builders or split by the production module under test immediately. |
-| `orchestration/retained_mask_ablation_stage.py` | Roughly 900 lines. Cache access now goes through public score snapshots, but ablation construction, freeze orchestration, sensitivity capture, and diagnostic payload assembly still live in one stage function. | Split ablation specs, method construction, sensitivity recording, and output payload assembly behind explicit helpers. Keep query-free mask freezing in orchestration; do not push eval-query-sensitive logic into `selection/`. |
-| `orchestration/selection_causality_diagnostics.py` | Roughly 750 lines. Learned-segment frozen-method construction is shared, but causality preconditions, ablation scoring, delta gates, and summary assembly are still tightly coupled. | Separate precondition evaluation, ablation execution, delta-gate policy, and report shaping. Keep gate policy near final-claim tests. |
+| `config/run_config.py` | Roughly 790 lines. Builder argument explosion has been removed, but the flat override boundary is still broad and easy to drift from the CLI/parser fields. | Keep override ownership in `RunConfigOverrides`, `RUN_CONFIG_DEFAULT_OVERRIDES`, and `build_run_config`. Add fields through the dataclass-driven path; do not reintroduce giant signatures. |
+| `workloads/generation/generator.py` | Roughly 850 lines. Coverage loops, fixed-count top-up, diagnostics, and signature payloads have owners, but the public generator still coordinates many subdomains. | Keep profile planning, coverage, signatures, and validation in their owner modules. Extract only when a new generation subdomain starts accumulating policy. |
+| `orchestration/retained_mask_ablation_stage.py` | Roughly 900 lines. Context/state helpers now keep the public freeze function bounded, but the file still owns ablation orchestration and payload assembly. | Split any new ablation family into focused helpers. Keep query-free mask freezing in orchestration; do not push eval-query-sensitive logic into `selection/`. |
+| `orchestration/selection_causality_diagnostics.py` | Roughly 925 lines. Teacher-selector, prior-field, and segment-head ablations are helper-owned, but the module still combines scoring, gates, and report payload assembly. | Separate scoring/report shaping if new diagnostics are added. Keep final-claim gate policy near its tests. |
 | `orchestration/selector_diagnostics.py` | Roughly 330 lines after extracting selector trace payload parsing, retained-marginal alignment summaries, and teacher score-vector builders. | Leave it alone unless score component vector construction starts growing again. Do not move query-scoring-dependent diagnostics into `selection/`. |
 | `learning/targets/query_local_utility.py` | Roughly 600 lines after extracting segment/path math and family evidence. It still owns active target construction, candidate diagnostics, trainability diagnostics, and experimental target helper wiring. | Keep `build_query_local_utility_targets` as the public entry point. Extract more only when a concrete target subdomain starts growing again. |
 | `scoring/method_scoring.py` | Roughly 250 lines after range-audit and query-row extraction. It should stay focused on method execution and stable score payload assembly. | Do not reintroduce report flattening or audit construction here. Keep row payload changes covered by regression tests before moving fields. |
 | `orchestration/diagnostics/` | Derived artifact analyzers now live outside the flat stage namespace. Keep them from becoming a second orchestration package by limiting them to completed-artifact readers and small report builders. | Keep pipeline stages, gates, and payload assembly in top-level `orchestration/`. Add new one-off artifact analyzers under `diagnostics/` instead of the flat package. |
-| `learning/model_training.py` / `learning/model_training_loop.py` | Training has been split into setup/output assembly and epoch-loop orchestration. `model_training_loop.py` is still a dense orchestration module, but the worst `train_model` monolith has been removed. | Keep future training changes in the owning helper module: validation setup in `model_training_validation.py`, epoch/checkpoint behavior in `model_training_loop.py`, and target/model setup in `model_training.py`. |
+| `learning/model_training.py` / `learning/model_training_loop.py` | Training is split into setup/output assembly and epoch-loop orchestration. `train_model` and the epoch loop remain large explicit orchestration functions under known guardrail budgets. | Keep future training changes in the owning helper module: validation setup in `model_training_validation.py`, epoch/checkpoint behavior in `model_training_loop.py`, and target/model setup in `model_training.py`. |
 | `benchmarking/reporting/row_fields.py` | Roughly 370 lines after domain row builders moved to sibling modules. The remaining file should only coordinate row assembly and small cross-domain fields. | Put new diagnostic flattening in the owning `row_*_fields.py` module. Regression snapshots must be updated deliberately because report field churn is easy to miss. |
 | `Range_QDS/artifacts/` | Local generated output is intentionally ignored and can quickly dominate source scans if not pruned. | Keep artifacts out of source imports. Periodically clean smoke/manual output after the relevant metrics are captured. Do not store maintained docs under `artifacts/manual/`. |
 
@@ -78,17 +80,21 @@ automatic defects.
 
 1. Keep the query-driven test split intact. Do not recreate a catch-all
    orchestration test file for cross-module behavior.
-2. Continue extracting pure helper modules from
+2. Keep `config/run_config.py` on the dataclass-driven builder path. New run
+   fields should update override tests and parser/config boundaries together.
+3. Keep workload-generation policy out of `generation/generator.py` when a
+   direct owner already exists under `workloads/generation/`.
+4. Split the remaining ablation and causality orchestration pressure points:
+   `orchestration/retained_mask_ablation_stage.py` and
+   `orchestration/selection_causality_diagnostics.py`.
+5. Continue extracting pure helper modules from
    `learning/targets/query_local_utility.py`. Segment target math and family
    evidence already live in sibling modules; next split candidate/diagnostic
    helpers while leaving the public builder in place.
-3. Split the remaining ablation and causality orchestration pressure points:
-   `orchestration/retained_mask_ablation_stage.py` and
-   `orchestration/selection_causality_diagnostics.py`.
-4. Leave `orchestration/selector_diagnostics.py` mostly alone unless it starts
+6. Leave `orchestration/selector_diagnostics.py` mostly alone unless it starts
    growing again; the earlier trace, marginal-alignment, and teacher-vector
    extractions were enough for now.
-5. Split `scoring/method_scoring.py` only after row/regression tests cover the
+7. Split `scoring/method_scoring.py` only after row/regression tests cover the
    exact payload fields that downstream reports depend on.
 
 ## Refactor Rules

@@ -31,7 +31,7 @@ from learning.targets.query_local_utility import (
 from scoring.geometry_thresholds import (
     max_sed_ratio_for_compression,
 )
-from scoring.method_scoring import score_range_usefulness
+from scoring.method_scoring import score_range_audit
 from scoring.query_local_utility import query_local_utility_from_range_audit
 from workloads.generation.generator import generate_typed_query_workload
 from workloads.query_types import QUERY_TYPE_ID_RANGE
@@ -52,24 +52,17 @@ def _boundaries(trajectories: list[torch.Tensor]) -> list[tuple[int, int]]:
 def test_query_local_utility_prioritizes_query_local_components() -> None:
     weak = {
         "query_point_recall": 0.1,
-        "range_ship_coverage": 0.1,
-        "range_ship_f1": 0.1,
         "range_turn_coverage": 0.1,
         "range_gap_min_coverage": 0.1,
-        "range_shape_score": 0.1,
         "range_query_local_interpolation_fidelity": 0.1,
-        "range_entry_exit_f1": 0.1,
-        "range_crossing_f1": 0.1,
     }
     strong = dict(weak)
     strong.update(
         {
             "query_point_recall": 0.7,
             "range_query_local_interpolation_fidelity": 0.7,
-            "range_ship_coverage": 0.6,
             "range_turn_coverage": 0.8,
             "range_gap_min_coverage": 0.6,
-            "range_shape_score": 0.7,
         }
     )
 
@@ -106,7 +99,7 @@ def test_query_local_utility_has_true_query_local_interpolation_component() -> N
         },
     }
 
-    audit = score_range_usefulness(
+    audit = score_range_audit(
         points=points,
         boundaries=[(0, 5)],
         retained_mask=retained,
@@ -115,7 +108,6 @@ def test_query_local_utility_has_true_query_local_interpolation_component() -> N
     useful = query_local_utility_from_range_audit(audit)
     components = cast(dict[str, float], useful["query_local_utility_components"])
 
-    assert audit["range_shape_score"] == 0.0
     assert audit["range_query_local_interpolation_fidelity"] == 0.0
     assert components["query_local_interpolation_fidelity"] == 0.0
     assert (

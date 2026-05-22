@@ -7,13 +7,15 @@ from typing import Any
 
 import torch
 
+from workloads.query_types import TypedQuery
+
 
 @dataclass
 class TypedQueryWorkload:
     """Typed query workload container."""
 
     query_features: torch.Tensor
-    typed_queries: list[dict[str, Any]]
+    typed_queries: list[TypedQuery]
     type_ids: torch.Tensor
     coverage_fraction: float | None = None
     covered_points: int | None = None

@@ -6,6 +6,7 @@ from typing import Any
 
 import torch
 
+from workloads.query_types import validated_range_query_params
 from workloads.range_geometry import points_in_range_box
 
 FAMILY_TRAINABILITY_GROUP_KEYS = ("anchor_family", "footprint_family")
@@ -49,7 +50,8 @@ def _range_query_family_evidence(
             ship_query_evidence_mass = torch.zeros_like(query_hit_count)
             query_hit_masks: list[torch.Tensor] = []
             for query in family_queries:
-                mask = points_in_range_box(points, query["params"]).to(
+                params = validated_range_query_params(query)
+                mask = points_in_range_box(points, params).to(
                     device=device,
                     dtype=torch.bool,
                 )

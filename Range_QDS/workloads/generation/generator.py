@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
+from dataclasses import dataclass, replace
 from typing import Any
 
 import torch
@@ -33,7 +35,11 @@ from workloads.generation.workload_profiles import (
     range_workload_profile,
     workload_profile_metadata,
 )
-from workloads.query_types import normalize_pure_workload_map, pad_query_features
+from workloads.query_types import (
+    normalize_pure_workload_map,
+    pad_query_features,
+    validated_range_query_params,
+)
 from workloads.range_geometry import KM_PER_DEG_LAT, MIN_EQUIRECTANGULAR_COS_LAT
 from workloads.typed_workload import TypedQueryWorkload
 
@@ -45,6 +51,90 @@ DEFAULT_RANGE_ANCHOR_MODE = "mixed_density"
 RANGE_TIME_DOMAIN_MODES = ("dataset", "anchor_day")
 SECONDS_PER_DAY = 24.0 * 3600.0
 EPOCH_LIKE_SECONDS = 366.0 * SECONDS_PER_DAY
+
+_BuildCandidateRangeQuery = Callable[[torch.Tensor | None, int | None], dict[str, Any] | None]
+_RecordAcceptedRangeQuery = Callable[[dict[str, Any]], None]
+
+
+@dataclass(frozen=True)
+class _GenerationDiagnosticConfig:
+    """Shared fields for query-generation diagnostics."""
+
+    mode: str
+    profile_id: str
+    query_count_mode: str
+    coverage_calibration_mode: str
+    requested_queries: int
+    max_queries: int
+    target_coverage: float | None
+    range_time_domain_mode: str
+    range_anchor_mode: str
+    range_spatial_fraction: float
+    range_time_fraction: float
+    range_spatial_km: float | None
+    range_time_hours: float | None
+    range_footprint_jitter: float
+    range_max_coverage_overshoot: float | None
+    coverage_guard_enabled: bool
+    max_allowed_coverage: float | None
+    profile_query_plan: dict[str, Any]
+
+
+def _query_generation_diagnostics(
+    config: _GenerationDiagnosticConfig,
+    *,
+    stop_reason: str,
+    target_reached_query_count: int | None = None,
+    coverage_at_target_reached: float | None = None,
+    final_query_count: int | None = None,
+) -> dict[str, Any]:
+    """Build common query-generation diagnostics for fixed and coverage modes."""
+    diagnostics: dict[str, Any] = {
+        "mode": config.mode,
+        "workload_profile_id": config.profile_id,
+        "query_count_mode": config.query_count_mode,
+        "coverage_calibration_mode": config.coverage_calibration_mode,
+        "minimum_queries": int(config.requested_queries),
+        "requested_queries": int(config.requested_queries),
+        "max_queries": int(config.max_queries),
+        "target_coverage": config.target_coverage,
+        "range_time_domain_mode": config.range_time_domain_mode,
+        "range_anchor_mode": config.range_anchor_mode,
+        "range_spatial_fraction": float(config.range_spatial_fraction),
+        "range_time_fraction": float(config.range_time_fraction),
+        "range_spatial_km": config.range_spatial_km,
+        "range_time_hours": config.range_time_hours,
+        "range_footprint_jitter": float(config.range_footprint_jitter),
+        "range_max_coverage_overshoot": config.range_max_coverage_overshoot,
+        "coverage_guard_enabled": bool(config.coverage_guard_enabled),
+        "max_allowed_coverage": config.max_allowed_coverage,
+        "stop_reason": stop_reason,
+        "profile_query_plan": {
+            "enabled": bool(config.profile_query_plan.get("enabled", False)),
+            "requested_queries": int(
+                config.profile_query_plan.get("requested_queries", config.requested_queries)
+            ),
+            "anchor_family_planned_counts": dict(
+                config.profile_query_plan.get("anchor_family_planned_counts") or {}
+            ),
+            "footprint_family_planned_counts": dict(
+                config.profile_query_plan.get("footprint_family_planned_counts") or {}
+            ),
+        },
+    }
+    if config.mode == "target_coverage":
+        diagnostics.update(
+            {
+                "target_reached_query_count": target_reached_query_count,
+                "coverage_at_target_reached": coverage_at_target_reached,
+                "extra_queries_after_target_reached": (
+                    int((final_query_count or 0) - target_reached_query_count)
+                    if target_reached_query_count is not None
+                    else None
+                ),
+            }
+        )
+    return diagnostics
 
 
 def _dataset_bounds(points: torch.Tensor) -> dict[str, float]:
@@ -327,6 +417,123 @@ def _finalize_workload(
     )
 
 
+def _generate_target_coverage_queries(
+    *,
+    points: torch.Tensor,
+    build_candidate_range_query: _BuildCandidateRangeQuery,
+    record_accepted_range_query: _RecordAcceptedRangeQuery,
+    range_acceptance: dict[str, Any],
+    coverage_target: float,
+    query_limit: int,
+    requested_queries: int,
+    coverage_mode: str,
+    coverage_guard_enabled: bool,
+    max_allowed_coverage: float | None,
+    max_range_attempts: int | None,
+    calibrated_query_count_mode: bool,
+) -> tuple[list[dict[str, Any]], str, int | None, float | None]:
+    """Generate accepted range queries until coverage or attempt limits stop the loop."""
+    generated_queries: list[dict[str, Any]] = []
+    covered = torch.zeros((points.shape[0],), dtype=torch.bool, device=points.device)
+    target_reached_query_count: int | None = None
+    coverage_at_target_reached: float | None = None
+    stop_reason = "max_queries_reached"
+
+    while len(generated_queries) < query_limit:
+        current_coverage = float(covered.float().mean().item()) if points.shape[0] > 0 else 0.0
+        if (
+            not calibrated_query_count_mode
+            and len(generated_queries) >= requested_queries
+            and current_coverage >= coverage_target
+        ):
+            stop_reason = "target_coverage_reached"
+            break
+        anchor_mask = (
+            (~covered)
+            if coverage_mode == "uncovered_anchor_chasing"
+            and current_coverage < coverage_target
+            else None
+        )
+        query = build_candidate_range_query(anchor_mask, len(generated_queries))
+        if query is None:
+            if range_acceptance.get("exhausted"):
+                stop_reason = "range_acceptance_exhausted"
+                break
+            continue
+        query_mask = point_coverage_mask_for_query(points, query)
+        if coverage_guard_enabled and max_allowed_coverage is not None:
+            candidate_coverage = (
+                float((covered | query_mask).float().mean().item())
+                if points.shape[0] > 0
+                else 0.0
+            )
+            if candidate_coverage > max_allowed_coverage:
+                _record_rejection_for_query(range_acceptance, "coverage_overshoot", query)
+                if (
+                    max_range_attempts is not None
+                    and int(range_acceptance.get("attempts", 0)) >= max_range_attempts
+                ):
+                    range_acceptance["exhausted"] = True
+                    stop_reason = "range_coverage_guard_exhausted"
+                    break
+                continue
+        record_accepted_range_query(query)
+        generated_queries.append(query)
+        covered |= query_mask
+        new_coverage = float(covered.float().mean().item()) if points.shape[0] > 0 else 0.0
+        if target_reached_query_count is None and new_coverage >= coverage_target:
+            target_reached_query_count = len(generated_queries)
+            coverage_at_target_reached = float(new_coverage)
+            if calibrated_query_count_mode and len(generated_queries) >= requested_queries:
+                stop_reason = "target_coverage_reached"
+                break
+
+        final_coverage = float(covered.float().mean().item()) if points.shape[0] > 0 else 0.0
+        if (
+            stop_reason == "max_queries_reached"
+            and len(generated_queries) >= requested_queries
+            and final_coverage >= coverage_target
+        ):
+            stop_reason = "target_coverage_reached"
+            break
+
+    final_coverage = float(covered.float().mean().item()) if points.shape[0] > 0 else 0.0
+    if (
+        stop_reason == "max_queries_reached"
+        and len(generated_queries) >= requested_queries
+        and final_coverage >= coverage_target
+    ):
+        stop_reason = "target_coverage_reached"
+    return (
+        generated_queries,
+        stop_reason,
+        target_reached_query_count,
+        coverage_at_target_reached,
+    )
+
+
+def _generate_fixed_count_queries(
+    *,
+    build_candidate_range_query: _BuildCandidateRangeQuery,
+    record_accepted_range_query: _RecordAcceptedRangeQuery,
+    range_acceptance: dict[str, Any],
+    requested_queries: int,
+) -> tuple[list[dict[str, Any]], str]:
+    """Generate accepted range queries until the fixed query count is reached."""
+    generated_queries: list[dict[str, Any]] = []
+    stop_reason = "fixed_count_completed"
+    while len(generated_queries) < requested_queries:
+        query = build_candidate_range_query(None, len(generated_queries))
+        if query is None:
+            if range_acceptance.get("exhausted"):
+                stop_reason = "range_acceptance_exhausted"
+                break
+            continue
+        record_accepted_range_query(query)
+        generated_queries.append(query)
+    return generated_queries, stop_reason
+
+
 def generate_typed_query_workload(
     trajectories: list[torch.Tensor],
     n_queries: int,
@@ -428,17 +635,41 @@ def generate_typed_query_workload(
     profile_query_plan = _profile_query_plan(
         profile, requested_queries=profile_query_plan_slots, workload_seed=int(seed)
     )
+    diagnostic_config = _GenerationDiagnosticConfig(
+        mode="target_coverage" if coverage_target is not None else "fixed_count",
+        profile_id=profile.profile_id,
+        query_count_mode=profile.query_count_mode,
+        coverage_calibration_mode=coverage_mode,
+        requested_queries=requested_for_attempts,
+        max_queries=requested_for_attempts,
+        target_coverage=coverage_target,
+        range_time_domain_mode=time_domain_mode,
+        range_anchor_mode=anchor_mode,
+        range_spatial_fraction=float(range_spatial_fraction),
+        range_time_fraction=float(range_time_fraction),
+        range_spatial_km=None if range_spatial_km is None else float(range_spatial_km),
+        range_time_hours=None if range_time_hours is None else float(range_time_hours),
+        range_footprint_jitter=float(range_footprint_jitter),
+        range_max_coverage_overshoot=coverage_overshoot,
+        coverage_guard_enabled=bool(coverage_guard_enabled),
+        max_allowed_coverage=max_allowed_coverage,
+        profile_query_plan=profile_query_plan,
+    )
 
-    def commit_query(query: dict[str, Any]) -> None:
+    def record_accepted_range_query(query: dict[str, Any]) -> None:
         """Record a query as accepted after all filters have passed."""
         if not acceptance_enabled:
             return
         range_acceptance["accepted"] = int(range_acceptance["accepted"]) + 1
         accepted_range_queries.append(
-            {"params": query["params"], "query_index": len(accepted_range_queries)}
+            {
+                "type": "range",
+                "params": validated_range_query_params(query),
+                "query_index": len(accepted_range_queries),
+            }
         )
 
-    def build_query(
+    def build_candidate_range_query(
         anchor_mask: torch.Tensor | None = None,
         query_index: int | None = None,
     ) -> dict[str, Any] | None:
@@ -545,125 +776,35 @@ def generate_typed_query_workload(
         return query
 
     if coverage_target is not None:
-        requested_queries = max(1, int(n_queries))
+        requested_queries = requested_for_attempts
         if max_queries is not None and int(max_queries) <= 0:
             raise ValueError("max_queries must be positive when target_coverage is set.")
-        generated_queries: list[dict[str, Any]] = []
-        covered = torch.zeros((points.shape[0],), dtype=torch.bool, device=points.device)
-        target_reached_query_count: int | None = None
-        coverage_at_target_reached: float | None = None
-
         query_limit = max(
             requested_queries, int(max_queries) if max_queries is not None else requested_queries
         )
-        stop_reason = "max_queries_reached"
-        calibrated_query_count_mode = profile.query_count_mode == "calibrated_to_coverage"
-
-        while len(generated_queries) < query_limit:
-            current_coverage = float(covered.float().mean().item()) if points.shape[0] > 0 else 0.0
-            if (
-                not calibrated_query_count_mode
-                and len(generated_queries) >= requested_queries
-                and current_coverage >= coverage_target
-            ):
-                stop_reason = "target_coverage_reached"
-                break
-            anchor_mask = (
-                (~covered)
-                if coverage_mode == "uncovered_anchor_chasing"
-                and current_coverage < coverage_target
-                else None
+        generated_queries, stop_reason, target_reached_query_count, coverage_at_target_reached = (
+            _generate_target_coverage_queries(
+                points=points,
+                build_candidate_range_query=build_candidate_range_query,
+                record_accepted_range_query=record_accepted_range_query,
+                range_acceptance=range_acceptance,
+                coverage_target=float(coverage_target),
+                query_limit=query_limit,
+                requested_queries=requested_queries,
+                coverage_mode=coverage_mode,
+                coverage_guard_enabled=coverage_guard_enabled,
+                max_allowed_coverage=max_allowed_coverage,
+                max_range_attempts=max_range_attempts,
+                calibrated_query_count_mode=profile.query_count_mode == "calibrated_to_coverage",
             )
-            query = build_query(anchor_mask=anchor_mask, query_index=len(generated_queries))
-            if query is None:
-                if range_acceptance.get("exhausted"):
-                    stop_reason = "range_acceptance_exhausted"
-                    break
-                continue
-            query_mask = point_coverage_mask_for_query(points, query)
-            if coverage_guard_enabled and max_allowed_coverage is not None:
-                candidate_coverage = (
-                    float((covered | query_mask).float().mean().item())
-                    if points.shape[0] > 0
-                    else 0.0
-                )
-                if candidate_coverage > max_allowed_coverage:
-                    _record_rejection_for_query(range_acceptance, "coverage_overshoot", query)
-                    if (
-                        max_range_attempts is not None
-                        and int(range_acceptance.get("attempts", 0)) >= max_range_attempts
-                    ):
-                        range_acceptance["exhausted"] = True
-                        stop_reason = "range_coverage_guard_exhausted"
-                        break
-                    continue
-            commit_query(query)
-            generated_queries.append(query)
-            covered |= query_mask
-            new_coverage = float(covered.float().mean().item()) if points.shape[0] > 0 else 0.0
-            if target_reached_query_count is None and new_coverage >= coverage_target:
-                target_reached_query_count = len(generated_queries)
-                coverage_at_target_reached = float(new_coverage)
-                if calibrated_query_count_mode and len(generated_queries) >= requested_queries:
-                    stop_reason = "target_coverage_reached"
-                    break
-
-            final_coverage = float(covered.float().mean().item()) if points.shape[0] > 0 else 0.0
-            if (
-                stop_reason == "max_queries_reached"
-                and len(generated_queries) >= requested_queries
-                and final_coverage >= coverage_target
-            ):
-                stop_reason = "target_coverage_reached"
-                break
-
-        final_coverage = float(covered.float().mean().item()) if points.shape[0] > 0 else 0.0
-        if (
-            stop_reason == "max_queries_reached"
-            and len(generated_queries) >= requested_queries
-            and final_coverage >= coverage_target
-        ):
-            stop_reason = "target_coverage_reached"
-        query_generation = {
-            "mode": "target_coverage",
-            "workload_profile_id": profile.profile_id,
-            "query_count_mode": profile.query_count_mode,
-            "coverage_calibration_mode": coverage_mode,
-            "minimum_queries": int(requested_queries),
-            "requested_queries": int(requested_queries),
-            "max_queries": int(query_limit),
-            "target_coverage": float(coverage_target),
-            "range_time_domain_mode": time_domain_mode,
-            "range_anchor_mode": anchor_mode,
-            "range_spatial_fraction": float(range_spatial_fraction),
-            "range_time_fraction": float(range_time_fraction),
-            "range_spatial_km": None if range_spatial_km is None else float(range_spatial_km),
-            "range_time_hours": None if range_time_hours is None else float(range_time_hours),
-            "range_footprint_jitter": float(range_footprint_jitter),
-            "range_max_coverage_overshoot": coverage_overshoot,
-            "coverage_guard_enabled": bool(coverage_guard_enabled),
-            "max_allowed_coverage": max_allowed_coverage,
-            "stop_reason": stop_reason,
-            "target_reached_query_count": target_reached_query_count,
-            "coverage_at_target_reached": coverage_at_target_reached,
-            "extra_queries_after_target_reached": (
-                int(len(generated_queries) - target_reached_query_count)
-                if target_reached_query_count is not None
-                else None
-            ),
-            "profile_query_plan": {
-                "enabled": bool(profile_query_plan.get("enabled", False)),
-                "requested_queries": int(
-                    profile_query_plan.get("requested_queries", requested_queries)
-                ),
-                "anchor_family_planned_counts": dict(
-                    profile_query_plan.get("anchor_family_planned_counts") or {}
-                ),
-                "footprint_family_planned_counts": dict(
-                    profile_query_plan.get("footprint_family_planned_counts") or {}
-                ),
-            },
-        }
+        )
+        query_generation = _query_generation_diagnostics(
+            replace(diagnostic_config, max_queries=query_limit),
+            stop_reason=stop_reason,
+            target_reached_query_count=target_reached_query_count,
+            coverage_at_target_reached=coverage_at_target_reached,
+            final_query_count=len(generated_queries),
+        )
         return _finalize_workload(
             points,
             boundaries,
@@ -676,18 +817,13 @@ def generate_typed_query_workload(
             },
         )
 
-    generated_queries: list[dict[str, Any]] = []
     requested_queries = max(0, int(n_queries))
-    stop_reason = "fixed_count_completed"
-    while len(generated_queries) < requested_queries:
-        query = build_query(query_index=len(generated_queries))
-        if query is None:
-            if range_acceptance.get("exhausted"):
-                stop_reason = "range_acceptance_exhausted"
-                break
-            continue
-        commit_query(query)
-        generated_queries.append(query)
+    generated_queries, stop_reason = _generate_fixed_count_queries(
+        build_candidate_range_query=build_candidate_range_query,
+        record_accepted_range_query=record_accepted_range_query,
+        range_acceptance=range_acceptance,
+        requested_queries=requested_queries,
+    )
 
     return _finalize_workload(
         points,
@@ -697,38 +833,16 @@ def generate_typed_query_workload(
         generation_diagnostics={
             "range_acceptance": range_acceptance,
             "workload_profile": workload_profile_metadata(profile),
-            "query_generation": {
-                "mode": "fixed_count",
-                "workload_profile_id": profile.profile_id,
-                "query_count_mode": profile.query_count_mode,
-                "coverage_calibration_mode": coverage_mode,
-                "minimum_queries": requested_queries,
-                "requested_queries": requested_queries,
-                "max_queries": requested_queries,
-                "target_coverage": None,
-                "range_time_domain_mode": time_domain_mode,
-                "range_anchor_mode": anchor_mode,
-                "range_spatial_fraction": float(range_spatial_fraction),
-                "range_time_fraction": float(range_time_fraction),
-                "range_spatial_km": None if range_spatial_km is None else float(range_spatial_km),
-                "range_time_hours": None if range_time_hours is None else float(range_time_hours),
-                "range_footprint_jitter": float(range_footprint_jitter),
-                "range_max_coverage_overshoot": coverage_overshoot,
-                "coverage_guard_enabled": False,
-                "max_allowed_coverage": None,
-                "stop_reason": stop_reason,
-                "profile_query_plan": {
-                    "enabled": bool(profile_query_plan.get("enabled", False)),
-                    "requested_queries": int(
-                        profile_query_plan.get("requested_queries", requested_queries)
-                    ),
-                    "anchor_family_planned_counts": dict(
-                        profile_query_plan.get("anchor_family_planned_counts") or {}
-                    ),
-                    "footprint_family_planned_counts": dict(
-                        profile_query_plan.get("footprint_family_planned_counts") or {}
-                    ),
-                },
-            },
+            "query_generation": _query_generation_diagnostics(
+                replace(
+                    diagnostic_config,
+                    requested_queries=requested_queries,
+                    max_queries=requested_queries,
+                    target_coverage=None,
+                    coverage_guard_enabled=False,
+                    max_allowed_coverage=None,
+                ),
+                stop_reason=stop_reason,
+            ),
         },
     )

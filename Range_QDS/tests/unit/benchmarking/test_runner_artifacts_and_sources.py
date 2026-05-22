@@ -82,13 +82,13 @@ def test_family_index_upserts_current_status_and_appends_events(tmp_path) -> Non
             rows=[
                 {
                     "run_label": "custom_run",
-                    "mlqds_primary_metric": "range_usefulness",
-                    "mlqds_primary_score": 0.42,
-                    "mlqds_aggregate_f1": 0.4,
-                    "mlqds_range_point_f1": 0.4,
-                    "mlqds_range_usefulness": 0.42,
-                }
-            ],
+                    "mlqds_primary_metric": "query_local_utility",
+                        "mlqds_primary_score": 0.42,
+                        "mlqds_aggregate_f1": 0.4,
+                        "mlqds_range_point_f1": 0.4,
+                        "mlqds_query_local_utility_score": 0.42,
+                    }
+                ],
             git=git,
         ),
     )
@@ -100,11 +100,11 @@ def test_family_index_upserts_current_status_and_appends_events(tmp_path) -> Non
     assert index_rows[0]["run_id"] == "run-a"
     assert index_rows[0]["status"] == "completed"
     assert index_rows[0]["run_label"] == "custom_run"
-    assert index_rows[0]["best_mlqds_primary_metric"] == "range_usefulness"
+    assert index_rows[0]["best_mlqds_primary_metric"] == "query_local_utility"
     assert index_rows[0]["best_mlqds_primary_score"] == "0.42"
     assert index_rows[0]["best_mlqds_aggregate_f1"] == "0.4"
     assert index_rows[0]["best_mlqds_range_point_f1"] == "0.4"
-    assert index_rows[0]["best_mlqds_range_usefulness"] == "0.42"
+    assert index_rows[0]["best_mlqds_query_local_utility"] == "0.42"
     assert index_rows[0]["best_mlqds_run_label"] == "custom_run"
     assert events_text.count('"run_id": "run-a"') == 2
 
@@ -134,7 +134,7 @@ def test_benchmark_report_records_concrete_family_root(
             json.dumps(
                 {
                     "config": {"model": {"model_type": "range_aware", "compression_ratio": 0.05}},
-                    "matched": {"MLQDS": {"range_point_f1": 0.4, "range_usefulness_score": 0.5}},
+                    "matched": {"MLQDS": {"range_point_f1": 0.4, "query_local_utility_score": 0.5}},
                 }
             ),
             encoding="utf-8",
@@ -347,24 +347,24 @@ def test_benchmark_markdown_table_is_compact() -> None:
                 "peak_allocated_mb": 123.0,
                 "best_selection_score": 0.5,
                 "single_cell_range_status": "fails_uniform",
-                "audit_low_beats_uniform_range_usefulness_count": 0,
-                "worst_uniform_component_delta_metric": "mlqds_vs_uniform_range_gap_coverage",
+                "audit_low_beats_uniform_query_local_utility_count": 0,
+                "worst_uniform_component_delta_metric": "mlqds_vs_uniform_range_gap_min_coverage",
                 "runtime_bottleneck_phase": "train-model",
                 "eval_query_extra_after_target_reached": 100,
                 "eval_query_floor_dominated": True,
-                "mlqds_primary_metric": "range_usefulness",
+                "mlqds_primary_metric": "query_local_utility",
                 "mlqds_primary_score": 0.41,
                 "mlqds_aggregate_f1": 0.4,
                 "mlqds_range_point_f1": 0.4,
-                "mlqds_range_usefulness": 0.41,
+                "mlqds_query_local_utility": 0.41,
                 "uniform_range_point_f1": 0.3,
-                "uniform_range_usefulness": 0.32,
+                "uniform_query_local_utility": 0.32,
                 "douglas_peucker_range_point_f1": 0.2,
-                "douglas_peucker_range_usefulness": 0.22,
+                "douglas_peucker_query_local_utility": 0.22,
                 "mlqds_vs_uniform_range_point_f1": 0.1,
-                "mlqds_vs_uniform_range_usefulness": 0.09,
+                "mlqds_vs_uniform_query_local_utility": 0.09,
                 "mlqds_vs_douglas_peucker_range_point_f1": 0.2,
-                "mlqds_vs_douglas_peucker_range_usefulness": 0.19,
+                "mlqds_vs_douglas_peucker_query_local_utility": 0.19,
                 "mlqds_latency_ms": 10.0,
                 "mlqds_inference_only_latency_ms": 10.0,
                 "collapse_warning": False,
@@ -375,13 +375,13 @@ def test_benchmark_markdown_table_is_compact() -> None:
     assert "| workload | run_label |" in table
     assert "train_label_mass_range_point_f1" in table
     assert "single_cell_range_status" in table
-    assert "audit_low_beats_uniform_range_usefulness_count" in table
+    assert "audit_low_beats_uniform_query_local_utility_count" in table
     assert "runtime_bottleneck_phase" in table
     assert "eval_query_extra_after_target_reached" in table
     assert "eval_query_floor_dominated" in table
     assert "mlqds_avg_sed_km" in table
     assert "mlqds_primary_score" in table
-    assert "mlqds_range_usefulness" in table
+    assert "mlqds_query_local_utility" in table
     assert "mlqds_inference_only_latency_ms" in table
     assert "| range | custom | 0 | 12.3457 |" in table
 

@@ -144,7 +144,7 @@ def test_workload_blind_validation_scoring_does_not_read_validation_query_featur
     cfg = build_run_config(
         model_type="scalar_workload_blind_range",
         compression_ratio=0.4,
-        checkpoint_score_variant="range_usefulness",
+        checkpoint_score_variant="query_local_utility",
     )
 
     score, per_type = _validation_query_score(

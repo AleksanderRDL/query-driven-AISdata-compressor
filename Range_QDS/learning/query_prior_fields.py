@@ -10,6 +10,7 @@ import torch
 import torch.nn.functional as F
 
 from workloads.generation.workload_profiles import RANGE_QUERY_MIX_PROFILE_ID
+from workloads.query_types import validated_range_query_params
 from workloads.range_geometry import points_in_range_box, segment_box_bracket_indices
 
 QUERY_PRIOR_FIELD_SCHEMA_VERSION = 3
@@ -96,15 +97,15 @@ def _bounds(
     for query in typed_queries or []:
         if str(query.get("type", "")).lower() != "range":
             continue
-        params = query.get("params") or {}
         try:
+            params = validated_range_query_params(query)
             bounds["t_min"] = min(bounds["t_min"], float(params["t_start"]))
             bounds["t_max"] = max(bounds["t_max"], float(params["t_end"]))
             bounds["lat_min"] = min(bounds["lat_min"], float(params["lat_min"]))
             bounds["lat_max"] = max(bounds["lat_max"], float(params["lat_max"]))
             bounds["lon_min"] = min(bounds["lon_min"], float(params["lon_min"]))
             bounds["lon_max"] = max(bounds["lon_max"], float(params["lon_max"]))
-        except KeyError, TypeError, ValueError:
+        except ValueError:
             continue
     return bounds
 
@@ -227,8 +228,8 @@ def _query_box_prior_grids(
         float(extent["lon_min"]), float(extent["lon_max"]), steps=bins + 1, dtype=torch.float32
     )
     for query in range_queries:
-        params = query.get("params") or {}
         try:
+            params = validated_range_query_params(query)
             lat_mask = _interval_overlap_mask(
                 lat_edges, float(params["lat_min"]), float(params["lat_max"])
             )
@@ -238,7 +239,7 @@ def _query_box_prior_grids(
             time_mask = _clock_overlap_mask(
                 clock_bins, float(params["t_start"]), float(params["t_end"])
             )
-        except KeyError, TypeError, ValueError:
+        except ValueError:
             continue
         spatial_mask = lat_mask[:, None] & lon_mask[None, :]
         spatial += spatial_mask.float()
@@ -329,13 +330,14 @@ def build_train_query_prior_fields(
     points_cpu = points.detach().cpu()
 
     for query in range_queries:
-        mask = points_in_range_box(points, query["params"])
+        params = validated_range_query_params(query)
+        mask = points_in_range_box(points, params)
         if bool(mask.any().item()):
             query_hits[mask] += 1.0
         boundary_idx = _boundary_indices(mask, boundaries)
         if int(boundary_idx.numel()) > 0:
             boundary_hits[boundary_idx] += 1.0
-        crossing_idx = segment_box_bracket_indices(points_cpu, boundaries, query["params"]).to(
+        crossing_idx = segment_box_bracket_indices(points_cpu, boundaries, params).to(
             device=points.device
         )
         if int(crossing_idx.numel()) > 0:

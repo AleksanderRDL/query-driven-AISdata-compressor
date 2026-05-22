@@ -23,12 +23,9 @@ from scoring.range_audit_scoring import (
     _range_point_f1,
 )
 from scoring.range_audit_scoring import (
-    score_range_boundary_preservation as score_range_boundary_preservation,
+    score_range_audit as score_range_audit,
 )
-from scoring.range_audit_scoring import (
-    score_range_usefulness as score_range_usefulness,
-)
-from workloads.query_types import normalize_pure_workload_map
+from workloads.query_types import normalize_pure_workload_map, validated_range_query_params
 from workloads.range_geometry import points_in_range_box
 
 
@@ -52,18 +49,14 @@ def score_retained_mask(
     workload_weights = normalize_pure_workload_map(workload_map)
     scores: list[float] = []
     for query_index, query in enumerate(typed_queries):
-        qtype = str(query.get("type", "")).lower()
-        if qtype != "range":
-            raise ValueError(
-                f"Only range queries are supported for range scoring; got query type: {qtype}"
-            )
+        params = validated_range_query_params(query)
         if query_cache is not None:
             range_mask = query_cache.get_support_mask(
                 query_index,
-                lambda query=query: points_in_range_box(points, query["params"]),
+                lambda params=params: points_in_range_box(points, params),
             )
         else:
-            range_mask = points_in_range_box(points, query["params"])
+            range_mask = points_in_range_box(points, params)
         scores.append(_range_point_f1(retained_mask, range_mask))
 
     range_score = _mean(scores)
@@ -133,17 +126,17 @@ def score_method(
     query_cache: ScoringQueryCache | None = None,
 ) -> MethodScore:
     """Evaluate one simplification method on typed queries at matched ratio. See scoring/README.md for details."""
-    t0 = time.time()
+    scoring_started_at = time.time()
     retained_mask = method.simplify(points, boundaries, compression_ratio)
-    measured_latency_ms = (time.time() - t0) * 1000.0
+    measured_latency_ms = (time.time() - scoring_started_at) * 1000.0
     latency_ms = float(getattr(method, "latency_ms", measured_latency_ms) or measured_latency_ms)
 
-    range_only = bool(typed_queries) and all(
+    is_range_only_workload = bool(typed_queries) and all(
         str(query.get("type", "")).lower() == "range" for query in typed_queries
     )
     range_audit: dict[str, Any] | None = None
-    if range_only:
-        range_audit = score_range_usefulness(
+    if is_range_only_workload:
+        range_audit = score_range_audit(
             points=points,
             boundaries=boundaries,
             retained_mask=retained_mask,
@@ -170,7 +163,7 @@ def score_method(
     avg_length_preserved = compute_length_preservation(points, boundaries, retained_mask)
     combined = float(aggregate) * max(0.0, min(1.0, avg_length_preserved))
     if range_audit is None:
-        range_audit = score_range_usefulness(
+        range_audit = score_range_audit(
             points=points,
             boundaries=boundaries,
             retained_mask=retained_mask,
@@ -179,7 +172,6 @@ def score_method(
         )
     endpoint_sanity_score = endpoint_sanity(retained_mask, boundaries)
     range_audit["endpoint_sanity"] = endpoint_sanity_score
-    boundary_f1 = float(range_audit.get("range_entry_exit_f1", 0.0))
     query_local_utility = query_local_utility_from_range_audit(
         range_audit,
         length_preservation=avg_length_preserved,
@@ -217,35 +209,10 @@ def score_method(
         combined_query_shape_score=combined,
         query_point_recall=float(range_audit.get("query_point_recall", 0.0)),
         range_point_f1=float(range_audit.get("range_point_f1", per_type.get("range", 0.0))),
-        range_ship_f1=float(range_audit.get("range_ship_f1", 0.0)),
-        range_ship_coverage=float(range_audit.get("range_ship_coverage", 0.0)),
-        range_entry_exit_f1=boundary_f1,
-        range_crossing_f1=float(range_audit.get("range_crossing_f1", 0.0)),
-        range_temporal_coverage=float(range_audit.get("range_temporal_coverage", 0.0)),
-        range_gap_coverage=float(range_audit.get("range_gap_coverage", 0.0)),
-        range_gap_time_coverage=float(range_audit.get("range_gap_time_coverage", 0.0)),
-        range_gap_distance_coverage=float(range_audit.get("range_gap_distance_coverage", 0.0)),
         range_gap_min_coverage=float(range_audit.get("range_gap_min_coverage", 0.0)),
         range_turn_coverage=float(range_audit.get("range_turn_coverage", 0.0)),
-        range_shape_score=float(range_audit.get("range_shape_score", 0.0)),
         range_query_local_interpolation_fidelity=float(
             range_audit.get("range_query_local_interpolation_fidelity", 0.0)
-        ),
-        range_usefulness_score=float(range_audit.get("range_usefulness_score", 0.0)),
-        range_usefulness_gap_time_score=float(
-            range_audit.get("range_usefulness_gap_time_score", 0.0)
-        ),
-        range_usefulness_gap_distance_score=float(
-            range_audit.get("range_usefulness_gap_distance_score", 0.0)
-        ),
-        range_usefulness_gap_min_score=float(
-            range_audit.get("range_usefulness_gap_min_score", 0.0)
-        ),
-        range_usefulness_schema_version=int(
-            range_audit.get("range_usefulness_schema_version", 0) or 0
-        ),
-        range_usefulness_gap_ablation_version=int(
-            range_audit.get("range_usefulness_gap_ablation_version", 0) or 0
         ),
         query_local_utility_score=query_local_utility_score,
         query_local_utility_schema_version=query_local_utility_schema,

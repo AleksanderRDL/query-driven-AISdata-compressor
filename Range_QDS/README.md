@@ -7,7 +7,8 @@ eval queries are known, then score the frozen retained set.
 Current source of truth:
 
 - implementation/research protocol and gates: [`docs/query-driven-implementation-research-guide.md`](docs/query-driven-implementation-research-guide.md)
-- checkpoint log: [`docs/query-driven-implementation-progress.md`](docs/query-driven-implementation-progress.md)
+- research checkpoint log: [`docs/query-driven-implementation-progress.md`](docs/query-driven-implementation-progress.md)
+- research handoff snapshot: [`docs/Next-Iterations.md`](docs/Next-Iterations.md)
 - tooling commands: [`docs/dev-tooling-guide.md`](docs/dev-tooling-guide.md)
 
 ## Current Defaults

@@ -404,10 +404,10 @@ If new instrumentation is genuinely required, validate only the touched
 instrumentation path first:
 
 ```bash
-python -m py_compile <changed files>
-ruff check <changed files>
-pyright <changed files>
-pytest <focused unit tests> -q
+uv run --group dev -- python -m py_compile <changed files>
+uv run --group dev -- ruff check <changed files>
+uv run --group dev -- pyright <changed files>
+uv run --group dev -- pytest <focused unit tests> -q
 ```
 
 For later replay only after a new root fix is justified:

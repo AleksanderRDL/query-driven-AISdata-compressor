@@ -20,14 +20,14 @@ from workloads.generation.workload_profiles import (
 )
 
 DEFAULT_PROFILE = "range_workload_aware_diagnostic"
-BLIND_EXPECTED_USEFULNESS_PROFILE = "range_workload_blind_expected_usefulness"
+BLIND_EXPECTED_QUERY_LOCAL_UTILITY_PROFILE = "range_workload_blind_expected_query_local_utility"
 BLIND_RETAINED_FREQUENCY_PROFILE = "range_workload_blind_retained_frequency"
 BLIND_TEACHER_DISTILL_PROFILE = "range_workload_blind_teacher_distill"
-LEGACY_DIAGNOSTIC_PROFILE_NOTE = "Old RangeUseful/scalar-target diagnostic path. Not valid for QueryLocalUtility final acceptance."
+LEGACY_DIAGNOSTIC_PROFILE_NOTE = "QueryLocalUtility diagnostic profile."
 RANGE_QUERY_MIX_WORKLOAD_BLIND_PROFILE = "range_query_mix_workload_blind"
 PROFILE_CHOICES = (
     DEFAULT_PROFILE,
-    BLIND_EXPECTED_USEFULNESS_PROFILE,
+    BLIND_EXPECTED_QUERY_LOCAL_UTILITY_PROFILE,
     BLIND_RETAINED_FREQUENCY_PROFILE,
     BLIND_TEACHER_DISTILL_PROFILE,
     RANGE_QUERY_MIX_WORKLOAD_BLIND_PROFILE,
@@ -145,7 +145,7 @@ RANGE_WORKLOAD_AWARE_DIAGNOSTIC_PROFILE = BenchmarkProfile(
     mlqds_temporal_fraction=0.25,
     workload="range",
     checkpoint_selection_metric="uniform_gap",
-    checkpoint_score_variant="range_usefulness",
+    checkpoint_score_variant="query_local_utility",
     float32_matmul_precision="high",
     allow_tf32=True,
     amp_mode="bf16",
@@ -161,7 +161,7 @@ RANGE_WORKLOAD_AWARE_DIAGNOSTIC_PROFILE = BenchmarkProfile(
     mlqds_hybrid_mode="fill",
     temporal_residual_label_mode="none",
     validation_score_every=1,
-    range_label_mode="usefulness",
+    range_label_mode="point_f1",
     range_training_target_mode="point_value",
     range_temporal_target_blend=0.0,
     range_target_budget_weight_power=0.0,
@@ -178,8 +178,8 @@ RANGE_WORKLOAD_AWARE_DIAGNOSTIC_PROFILE = BenchmarkProfile(
     range_teacher_epochs=4,
 )
 
-RANGE_WORKLOAD_BLIND_EXPECTED_USEFULNESS_PROFILE = BenchmarkProfile(
-    name=BLIND_EXPECTED_USEFULNESS_PROFILE,
+RANGE_WORKLOAD_BLIND_EXPECTED_QUERY_LOCAL_UTILITY_PROFILE = BenchmarkProfile(
+    name=BLIND_EXPECTED_QUERY_LOCAL_UTILITY_PROFILE,
     n_queries=RANGE_BLIND_COVERAGE_MIN_QUERY_FLOOR,
     query_coverage=0.20,
     range_spatial_fraction=0.0165,
@@ -207,7 +207,7 @@ RANGE_WORKLOAD_BLIND_EXPECTED_USEFULNESS_PROFILE = BenchmarkProfile(
     mlqds_temporal_fraction=0.10,
     workload="range",
     checkpoint_selection_metric="uniform_gap",
-    checkpoint_score_variant="range_usefulness",
+    checkpoint_score_variant="query_local_utility",
     float32_matmul_precision="high",
     allow_tf32=True,
     amp_mode="bf16",
@@ -223,7 +223,7 @@ RANGE_WORKLOAD_BLIND_EXPECTED_USEFULNESS_PROFILE = BenchmarkProfile(
     mlqds_hybrid_mode="fill",
     temporal_residual_label_mode="none",
     validation_score_every=1,
-    range_label_mode="usefulness",
+    range_label_mode="point_f1",
     range_training_target_mode="point_value",
     range_temporal_target_blend=0.0,
     range_target_budget_weight_power=0.0,
@@ -269,7 +269,7 @@ RANGE_WORKLOAD_BLIND_RETAINED_FREQUENCY_PROFILE = BenchmarkProfile(
     mlqds_temporal_fraction=0.30,
     workload="range",
     checkpoint_selection_metric="uniform_gap",
-    checkpoint_score_variant="range_usefulness",
+    checkpoint_score_variant="query_local_utility",
     float32_matmul_precision="high",
     allow_tf32=True,
     amp_mode="bf16",
@@ -285,7 +285,7 @@ RANGE_WORKLOAD_BLIND_RETAINED_FREQUENCY_PROFILE = BenchmarkProfile(
     mlqds_hybrid_mode="fill",
     temporal_residual_label_mode="none",
     validation_score_every=1,
-    range_label_mode="usefulness",
+    range_label_mode="point_f1",
     range_training_target_mode="retained_frequency",
     range_temporal_target_blend=0.0,
     range_target_budget_weight_power=0.0,
@@ -331,7 +331,7 @@ RANGE_WORKLOAD_BLIND_TEACHER_DISTILL_PROFILE = BenchmarkProfile(
     mlqds_temporal_fraction=0.25,
     workload="range",
     checkpoint_selection_metric="uniform_gap",
-    checkpoint_score_variant="range_usefulness",
+    checkpoint_score_variant="query_local_utility",
     float32_matmul_precision="high",
     allow_tf32=True,
     amp_mode="bf16",
@@ -347,7 +347,7 @@ RANGE_WORKLOAD_BLIND_TEACHER_DISTILL_PROFILE = BenchmarkProfile(
     mlqds_hybrid_mode="fill",
     temporal_residual_label_mode="temporal",
     validation_score_every=1,
-    range_label_mode="usefulness",
+    range_label_mode="point_f1",
     range_training_target_mode="point_value",
     range_temporal_target_blend=0.0,
     range_target_budget_weight_power=0.0,
@@ -409,7 +409,7 @@ RANGE_QUERY_MIX_WORKLOAD_BLIND_BENCHMARK_PROFILE = BenchmarkProfile(
     mlqds_hybrid_mode="global_budget",
     temporal_residual_label_mode="none",
     validation_score_every=1,
-    range_label_mode="usefulness",
+    range_label_mode="point_f1",
     range_training_target_mode=QUERY_LOCAL_UTILITY_FACTORIZED_TARGET_MODE,
     range_temporal_target_blend=0.0,
     range_target_budget_weight_power=0.0,
@@ -433,7 +433,7 @@ RANGE_QUERY_MIX_WORKLOAD_BLIND_BENCHMARK_PROFILE = BenchmarkProfile(
 
 _PROFILES = {
     RANGE_WORKLOAD_AWARE_DIAGNOSTIC_PROFILE.name: RANGE_WORKLOAD_AWARE_DIAGNOSTIC_PROFILE,
-    RANGE_WORKLOAD_BLIND_EXPECTED_USEFULNESS_PROFILE.name: RANGE_WORKLOAD_BLIND_EXPECTED_USEFULNESS_PROFILE,
+    RANGE_WORKLOAD_BLIND_EXPECTED_QUERY_LOCAL_UTILITY_PROFILE.name: RANGE_WORKLOAD_BLIND_EXPECTED_QUERY_LOCAL_UTILITY_PROFILE,
     RANGE_WORKLOAD_BLIND_RETAINED_FREQUENCY_PROFILE.name: RANGE_WORKLOAD_BLIND_RETAINED_FREQUENCY_PROFILE,
     RANGE_WORKLOAD_BLIND_TEACHER_DISTILL_PROFILE.name: RANGE_WORKLOAD_BLIND_TEACHER_DISTILL_PROFILE,
     RANGE_QUERY_MIX_WORKLOAD_BLIND_BENCHMARK_PROFILE.name: RANGE_QUERY_MIX_WORKLOAD_BLIND_BENCHMARK_PROFILE,
@@ -468,7 +468,7 @@ def _profile_role(profile: BenchmarkProfile, *, workload_blind: bool) -> str:
     if workload_blind and profile.range_training_target_mode == "retained_frequency":
         return "workload_blind_retained_frequency"
     if workload_blind:
-        return "workload_blind_expected_usefulness"
+        return "workload_blind_expected_query_local_utility"
     return "workload_aware_diagnostic"
 
 
@@ -659,7 +659,7 @@ def benchmark_profile_settings(name: str) -> dict[str, ProfileSetting]:
         "profile_role": _profile_role(profile, workload_blind=workload_blind),
         "profile_diagnostic_only": not final_candidate,
         "profile_note": profile.profile_note,
-        "primary_metric_family": "QueryLocalUtility" if final_candidate else "RangeUsefulLegacy",
+        "primary_metric_family": "QueryLocalUtility",
         "final_success_allowed": bool(profile.final_success_allowed),
         "final_product_candidate": final_candidate,
         "final_product_claim": False,

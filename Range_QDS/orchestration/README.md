@@ -65,9 +65,8 @@ false.
 
 `QueryLocalUtility` is the active primary metric for the project. It
 uses direct `query_point_recall` for point mass and direct query-local
-interpolation, turn coverage, and continuity for behavior. RangeUseful outputs
-must remain under `legacy_range_useful_summary` or diagnostic fields, not
-`final_claim_summary`.
+interpolation, turn coverage, and continuity for behavior. `final_claim_summary`
+must be based on QueryLocalUtility protocol gates.
 
 Default workload-blind runs should pair that metric with the active
 `range_query_mix` profile: anchors `density=0.80` and
