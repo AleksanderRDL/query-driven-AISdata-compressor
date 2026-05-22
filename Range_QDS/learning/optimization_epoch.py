@@ -56,6 +56,29 @@ class TrainingEpochResult:
     timing: dict[str, float]
 
 
+@dataclass(frozen=True)
+class SegmentBudgetHeadLossParts:
+    """Decomposed segment-budget head losses for training and diagnostics."""
+
+    total: torch.Tensor
+    pooled_bce: torch.Tensor
+    pairwise_rank: torch.Tensor
+    pooled_bce_count: int
+    pairwise_rank_count: int
+
+
+@dataclass(frozen=True)
+class FactorizedQueryLocalUtilityLossParts:
+    """Decomposed factorized QueryLocalUtility auxiliary loss."""
+
+    total: torch.Tensor
+    point_bce: torch.Tensor
+    segment_point_bce_contribution: torch.Tensor
+    segment_level: SegmentBudgetHeadLossParts
+    behavior_rank: torch.Tensor
+    sparse_head_rank: torch.Tensor
+
+
 def _factorized_query_local_utility_loss(
     *,
     head_logits: torch.Tensor,
@@ -71,11 +94,55 @@ def _factorized_query_local_utility_loss(
     sparse_head_bce_target_mode: str = "raw",
 ) -> torch.Tensor:
     """Return auxiliary multi-head QueryLocalUtility loss for the range model."""
+    return _factorized_query_local_utility_loss_parts(
+        head_logits=head_logits,
+        head_targets=head_targets,
+        head_mask=head_mask,
+        global_indices=global_indices,
+        segment_ids=segment_ids,
+        segment_size=segment_size,
+        segment_budget_head_weight=segment_budget_head_weight,
+        segment_level_loss_weight=segment_level_loss_weight,
+        behavior_rank_loss_weight=behavior_rank_loss_weight,
+        sparse_head_rank_loss_weight=sparse_head_rank_loss_weight,
+        sparse_head_bce_target_mode=sparse_head_bce_target_mode,
+    ).total
+
+
+def _factorized_query_local_utility_loss_parts(
+    *,
+    head_logits: torch.Tensor,
+    head_targets: torch.Tensor,
+    head_mask: torch.Tensor,
+    global_indices: torch.Tensor | None = None,
+    segment_ids: torch.Tensor | None = None,
+    segment_size: int = 32,
+    segment_budget_head_weight: float = 0.10,
+    segment_level_loss_weight: float = 0.25,
+    behavior_rank_loss_weight: float = DEFAULT_QUERY_LOCAL_UTILITY_BEHAVIOR_RANK_LOSS_WEIGHT,
+    sparse_head_rank_loss_weight: float = 0.0,
+    sparse_head_bce_target_mode: str = "raw",
+) -> FactorizedQueryLocalUtilityLossParts:
+    """Return factorized loss parts without changing the production objective."""
     if head_logits.shape != head_targets.shape or head_mask.shape != head_logits.shape:
         raise ValueError("factorized head logits, targets, and mask must have matching shape.")
     valid = head_mask.to(dtype=torch.bool)
     if not bool(valid.any().item()):
-        return head_logits.new_tensor(0.0)
+        zero = head_logits.new_tensor(0.0)
+        return FactorizedQueryLocalUtilityLossParts(
+            total=zero,
+            point_bce=zero,
+            segment_point_bce_contribution=zero,
+            segment_level=SegmentBudgetHeadLossParts(
+                total=zero,
+                pooled_bce=zero,
+                pairwise_rank=zero,
+                pooled_bce_count=0,
+                pairwise_rank_count=0,
+            ),
+            behavior_rank=zero,
+            sparse_head_rank=zero,
+        )
     # q_hit, boundary, and segment budget are probability-like.  Behavior and
     # replacement are smooth utilities but BCE keeps useful gradients near 0/1.
     bce_targets = _calibrated_sparse_head_bce_targets(
@@ -102,10 +169,14 @@ def _factorized_query_local_utility_loss(
     else:
         weights = [1.0 for _idx in range(int(head_logits.shape[-1]))]
     head_weights = head_logits.new_tensor(weights).view(1, 1, -1)
-    weighted = per_element * head_weights * valid.to(dtype=per_element.dtype)
-    denom = (head_weights * valid.to(dtype=per_element.dtype)).sum().clamp(min=1.0)
+    valid_float = valid.to(dtype=per_element.dtype)
+    weighted = per_element * head_weights * valid_float
+    denom = (head_weights * valid_float).sum().clamp(min=1.0)
     point_loss = weighted.sum() / denom
-    segment_loss = _segment_budget_head_segment_level_loss(
+    segment_point_bce_contribution = head_logits.new_tensor(0.0)
+    if int(head_logits.shape[-1]) > 4:
+        segment_point_bce_contribution = weighted[..., 4].sum() / denom
+    segment_loss = _segment_budget_head_segment_level_loss_parts(
         head_logits=head_logits,
         head_targets=head_targets,
         head_mask=head_mask,
@@ -126,11 +197,19 @@ def _factorized_query_local_utility_loss(
             head_targets=head_targets,
             head_mask=head_mask,
         )
-    return (
+    total = (
         point_loss
-        + max(0.0, float(segment_level_loss_weight)) * segment_loss
+        + max(0.0, float(segment_level_loss_weight)) * segment_loss.total
         + max(0.0, float(behavior_rank_loss_weight)) * behavior_rank_loss
         + sparse_rank_weight * sparse_head_rank_loss
+    )
+    return FactorizedQueryLocalUtilityLossParts(
+        total=total,
+        point_bce=point_loss,
+        segment_point_bce_contribution=segment_point_bce_contribution,
+        segment_level=segment_loss,
+        behavior_rank=behavior_rank_loss,
+        sparse_head_rank=sparse_head_rank_loss,
     )
 
 
@@ -289,10 +368,37 @@ def _segment_budget_head_segment_level_loss(
     segment_size: int = 32,
 ) -> torch.Tensor:
     """Return segment-level/listwise loss for the segment-budget head."""
+    return _segment_budget_head_segment_level_loss_parts(
+        head_logits=head_logits,
+        head_targets=head_targets,
+        head_mask=head_mask,
+        global_indices=global_indices,
+        segment_ids=segment_ids,
+        segment_size=segment_size,
+    ).total
+
+
+def _segment_budget_head_segment_level_loss_parts(
+    *,
+    head_logits: torch.Tensor,
+    head_targets: torch.Tensor,
+    head_mask: torch.Tensor,
+    global_indices: torch.Tensor | None = None,
+    segment_ids: torch.Tensor | None = None,
+    segment_size: int = 32,
+) -> SegmentBudgetHeadLossParts:
+    """Return exact segment-level loss parts used by the auxiliary objective."""
     if head_logits.shape != head_targets.shape or head_mask.shape != head_logits.shape:
         raise ValueError("factorized head logits, targets, and mask must have matching shape.")
+    zero = head_logits.new_tensor(0.0)
     if int(head_logits.shape[-1]) <= 4:
-        return head_logits.new_tensor(0.0)
+        return SegmentBudgetHeadLossParts(
+            total=zero,
+            pooled_bce=zero,
+            pairwise_rank=zero,
+            pooled_bce_count=0,
+            pairwise_rank_count=0,
+        )
     size = max(1, int(segment_size))
     seg_logits = head_logits[..., 4].float()
     seg_targets = head_targets[..., 4].float().clamp(0.0, 1.0)
@@ -302,6 +408,8 @@ def _segment_budget_head_segment_level_loss(
     if segment_ids is not None and segment_ids.shape[:2] != seg_mask.shape:
         raise ValueError("segment_ids must match factorized head batch dimensions.")
     losses: list[torch.Tensor] = []
+    bce_losses: list[torch.Tensor] = []
+    pairwise_losses: list[torch.Tensor] = []
     for row in range(int(seg_logits.shape[0])):
         valid_positions = torch.where(seg_mask[row])[0]
         if int(valid_positions.numel()) <= 0:
@@ -331,19 +439,35 @@ def _segment_budget_head_segment_level_loss(
             continue
         pooled_logits = torch.stack(row_segment_logits)
         pooled_targets = torch.stack(row_segment_targets).clamp(0.0, 1.0)
-        losses.append(
-            F.binary_cross_entropy_with_logits(pooled_logits, pooled_targets, reduction="mean")
+        bce_loss = F.binary_cross_entropy_with_logits(
+            pooled_logits, pooled_targets, reduction="mean"
         )
+        bce_losses.append(bce_loss)
+        losses.append(bce_loss)
         if int(pooled_logits.numel()) >= 2:
             target_diff = pooled_targets.unsqueeze(1) - pooled_targets.unsqueeze(0)
             logit_diff = pooled_logits.unsqueeze(1) - pooled_logits.unsqueeze(0)
             pair_mask = target_diff.abs() > 0.05
             if bool(pair_mask.any().item()):
                 direction = torch.sign(target_diff[pair_mask])
-                losses.append(F.softplus(-direction * logit_diff[pair_mask]).mean())
+                pair_loss = F.softplus(-direction * logit_diff[pair_mask]).mean()
+                pairwise_losses.append(pair_loss)
+                losses.append(pair_loss)
     if not losses:
-        return head_logits.new_tensor(0.0)
-    return torch.stack(losses).mean()
+        return SegmentBudgetHeadLossParts(
+            total=zero,
+            pooled_bce=zero,
+            pairwise_rank=zero,
+            pooled_bce_count=0,
+            pairwise_rank_count=0,
+        )
+    return SegmentBudgetHeadLossParts(
+        total=torch.stack(losses).mean(),
+        pooled_bce=torch.stack(bce_losses).mean() if bce_losses else zero,
+        pairwise_rank=torch.stack(pairwise_losses).mean() if pairwise_losses else zero,
+        pooled_bce_count=len(bce_losses),
+        pairwise_rank_count=len(pairwise_losses),
+    )
 
 
 def _train_one_epoch(

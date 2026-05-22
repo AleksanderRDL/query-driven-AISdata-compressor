@@ -19,6 +19,7 @@ from learning.fit_diagnostics import train_target_fit_diagnostics
 from learning.inference import windowed_predict_with_heads
 from learning.model_features import WORKLOAD_BLIND_RANGE_MODEL_TYPE
 from learning.query_prior_fields import QUERY_PRIOR_FIELD_NAMES
+from learning.segment_gradient_diagnostics import segment_rank_loss_gradient_path_diagnostics
 from workloads.query_types import ID_TO_QUERY_NAME
 
 
@@ -130,6 +131,21 @@ def build_final_training_fit_diagnostics(
                 behavior_rank_loss_weight=float(
                     getattr(model_config, "query_local_utility_behavior_rank_loss_weight", 0.0)
                 ),
+            )
+        )
+        fit_diagnostics["segment_rank_loss_gradient_path"] = (
+            segment_rank_loss_gradient_path_diagnostics(
+                point_scores=train_predictions,
+                head_logits=train_head_logits,
+                factorized_targets=factorized_targets,
+                factorized_mask=factorized_mask,
+                scalar_target=training_target,
+                scalar_mask=training_labelled_mask,
+                boundaries=train_boundaries,
+                model_config=model_config,
+                canonical_segment_ids=canonical_segment_ids,
+                train_batch_size=train_batch_size,
+                seed=seed,
             )
         )
         fit_diagnostics["prior_feature_learning_signal"] = _prior_feature_learning_diagnostics(

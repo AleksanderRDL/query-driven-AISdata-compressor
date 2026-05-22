@@ -211,29 +211,99 @@ preserved the Level 1 score, but did not materially change the mask, head
 compression, segment rank fit, or learning-causality readout. Do not rerun this
 path with a larger scalar until the gradient path is measured.
 
+Phase 55 segment-rank gradient instrumentation:
+
+```text
+status: wiring accepted; actual current-config diagnostic still unrun
+implementation:
+  canonical factorized auxiliary loss now exposes decomposed loss parts
+  training-fit diagnostics emit segment_rank_loss_gradient_path
+  reported components include aux segment point BCE, pooled segment BCE,
+  pairwise segment-rank actual share, segment-level total, aux total, primary
+  budget-rank loss, primary balanced point BCE, score L2, gradient norms, and
+  pairwise-to-primary ratios
+validation:
+  focused py_compile passed
+  ruff passed
+  pyright passed
+  focused query-local utility tests passed
+  neighboring loss-property tests passed
+  git diff --check passed
+tiny wiring probe:
+  segment_rank_loss_gradient_path.available = true
+  pairwise_rank_count = 1
+  pairwise_to_primary_l2 = 0.0778908244
+```
+
+Interpretation:
+
+- The instrumentation path is available and does not intentionally change loss,
+  model, target, selector, prior, score, or metric semantics.
+- The tiny wiring probe is not scientific evidence and does not answer the
+  strict segment-head question.
+- The actual current-config gradient-path diagnostic still has to be run and
+  written as an artifact before any new loss scalar, target change, or selector
+  change is admissible.
+
+Phase 56 segment-rank gradient actual measurement:
+
+```text
+artifact: artifacts/results/segment_rank_loss_gradient_path_diagnostic/diagnostic.json
+status: diagnostic completed; not acceptance evidence
+assumption: synthetic_route_families = 4
+reason: source-stratified synthetic replay requires source ids, but the handoff
+        did not pin route-family count
+classification: segment_pairwise_rank_gradient_material
+pairwise_rank_observations: 20
+pooled_bce_observations: 20
+pairwise_to_primary_budget_total_l2: 0.0485257410
+pairwise_to_factorized_point_bce_l2: 4.0774655132
+segment_budget_target_positive_fraction: 0.9916666667
+segment_budget_target_gt_0.01_fraction: 0.9416666667
+active_segment_budget_target_spearman_with_ship_query_evidence: 0.0825715404
+active_segment_budget_target_topk_overlap_with_ship_query_evidence: 0.0
+medium_operational_active_segment_budget_target_spearman_with_ship_query_evidence: -0.0921973738
+```
+
+Interpretation:
+
+- The segment pairwise-rank path is active. It is not gradient-blocked and is
+  stronger than factorized point BCE on the segment head.
+- It is still small relative to the primary budget objective at the output
+  gradient level. This diagnostic does not claim parameter-gradient attribution.
+- The sharper failure is target semantics. The active segment-budget target is
+  almost everywhere positive and has poor or negative ship-query-evidence
+  alignment. The top-k segment target has zero overlap with ship-query evidence
+  in the aggregate and in the `medium_operational` focus family.
+- Do not increase the segment-rank scalar or tune selector allocation from this
+  evidence. The next admissible move is a narrow segment-budget target
+  selectivity fix, then a Level 1 rejection/acceptance wiring run.
+
 Next admissible step:
 
 ```text
-segment_rank_loss_gradient_path_diagnostic
+segment_budget_target_selectivity_candidate_level1_wiring
 ```
 
 Scope:
 
 ```text
-Diagnostic only. Quantify the actual segment-rank loss magnitude and gradient
-contribution against point BCE, pooled segment BCE, existing pairwise segment
-loss, auxiliary-loss scaling, and the primary budget loss before adding another
-loss term or scalar weight.
+Narrow target-semantics change only. Replace or gate the active
+`active_final_score` / `top20_mean` segment-budget target with the smallest
+candidate already supported by target diagnostics that materially improves
+ship-query-evidence selectivity. Do not change selector allocation, metric,
+profile, prior, global sanity gates, or score formula.
 ```
 
 Allowed evidence:
 
-- derive from existing code/artifacts where possible;
-- add focused instrumentation only if loss/gradient fields are missing;
-- one tiny implementation probe only if required to measure gradients;
-- no Level 1 replay unless the diagnostic identifies a materially new root fix.
+- use the Phase 56 artifact and existing target candidate diagnostics first;
+- if the candidate needs wiring, make the smallest target-only semantic change;
+- run Level 1 only after focused static/unit validation;
+- reject immediately if Level 1 degrades QueryLocalUtility, length, target
+  diffusion, or produces a non-causal segment head.
 
-Do not change metric/profile/target/model/prior/selector semantics. Do not add a
+Do not change metric/profile/model/prior/selector semantics. Do not add a
 larger segment-rank scalar, selector floor, raw coverage override, length
 scaffold, generic behavior-rank weight, prior boost, prior residual,
 route-density exposure, or final-grid run. Do not rerun pooled point-score
@@ -305,7 +375,9 @@ segment:
   The segment-budget target is oracle-aligned, but the learned segment head is
   compressed and non-causal. Pooled final point-score allocation scores
   0.114785381, +0.015237081 above primary. Neutral segment score also beats
-  primary by +0.000488398.
+  primary by +0.000488398. Phase 56 showed the segment rank loss is active, but
+  the active segment-budget target is nearly everywhere positive and badly
+  aligned with ship-query evidence.
 
 length:
   Every trajectory remains below the 0.75 length floor. Length-only allocation
@@ -331,37 +403,44 @@ compression and wrong-way retained-boundary ranking, not selector allocation.
 Recommended checkpoint name:
 
 ```text
-segment_rank_loss_gradient_path_diagnostic
+segment_budget_target_selectivity_candidate_level1_wiring
 ```
 
 Hypothesis:
 
-> The rejected top-k rank-loss patch did not move the model because its gradient
-> contribution is likely too small, badly normalized, or dominated by the point
-> BCE / primary budget objective. Measure the actual loss and gradient path
-> before adding another loss term or scalar.
+> The segment head is non-causal mainly because the active segment-budget target
+> is too broad and weakly aligned with ship-query evidence, not because the
+> segment-rank loss has no gradient. A narrower target candidate should improve
+> segment-head materiality without selector tuning.
 
 Evidence level / probe scale:
 
 ```text
-derived diagnostic or instrumentation-only tiny probe
+target-only semantic wiring plus Level 1 rejection/acceptance run
 ```
 
 Exact stop condition:
 
-- Stop once the diagnostic explains whether the segment-rank loss is numerically
-  too small, gradient-blocked, dominated by point/primary losses, or pointed at
-  the wrong pooled targets.
-- Stop earlier if existing artifacts lack the required loss/gradient fields; in
-  that case specify the smallest instrumentation-only probe.
-- Do not change selector, target, model, prior, score, or production loss
-  semantics in this checkpoint.
+- Stop once one narrow segment-budget target candidate has a Level 1 result and
+  either passes without degrading QueryLocalUtility/length/target diffusion or
+  is rejected with a documented reason.
+- Stop earlier if existing candidate diagnostics are insufficient to choose a
+  single target candidate; in that case add a target-only artifact extractor,
+  not a selector or loss change.
+- Do not change selector, model, prior, score, metric, profile, global sanity
+  gates, or production loss scalar weights in this checkpoint.
 - Do not run Level 2, Level 3, or final grid.
 
-Expected artifact path if a run is planned:
+Required prior artifact:
 
 ```text
 artifacts/results/segment_rank_loss_gradient_path_diagnostic/diagnostic.json
+```
+
+Expected result artifact if a Level 1 run is planned:
+
+```text
+artifacts/results/segment_budget_target_selectivity_candidate_level1_wiring/rejection_diagnostic.json
 ```
 
 Forbidden in this checkpoint:
@@ -391,6 +470,7 @@ no final grid
 For the next checkpoint:
 
 ```bash
+jq empty artifacts/results/segment_rank_loss_gradient_path_diagnostic/diagnostic.json
 jq empty artifacts/results/additive_level2_child_gate_root_localization/diagnostic.json
 jq empty artifacts/results/pooled_point_score_segment_allocation_level1_smoke/rejection_diagnostic.json
 jq empty artifacts/results/pooled_point_score_allocation_failure_diagnosis/diagnostic.json
@@ -436,4 +516,5 @@ For later replay only after a new root fix is justified:
 | Priors change heads but not scores | Factorized composition suppresses priors | Diagnose head-to-score composition |
 | Priors change scores but not masks | Selector insensitivity | Diagnose score-to-mask boundary and allocation |
 | Segment head ranks marginal utility negatively | Segment head learning or target calibration issue | Do not tune allocation weights; fix the head learning path or target semantics |
+| Segment-rank gradient is active but segment target is nearly everywhere positive | Target selectivity issue | Fix segment-budget target semantics before touching selector/loss weights |
 | Pooled point score ranks segments better in a counterfactual but fails as primary path | Diagnostic/production mismatch or length-selection interaction | Explain the mismatch before changing selector semantics |

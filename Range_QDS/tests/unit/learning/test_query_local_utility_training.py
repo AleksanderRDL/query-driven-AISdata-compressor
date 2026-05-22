@@ -7,6 +7,7 @@ from typing import cast
 import pytest
 import torch
 
+from config.run_config import ModelConfig
 from learning.factorized_head_diagnostics import (
     _behavior_head_training_signal_diagnostics,
     _factorized_final_score_composition_diagnostics,
@@ -26,10 +27,12 @@ from learning.optimization_epoch import (
     _behavior_head_rank_loss,
     _calibrated_sparse_head_bce_targets,
     _factorized_query_local_utility_loss,
+    _factorized_query_local_utility_loss_parts,
     _segment_budget_head_segment_level_loss,
     _sparse_head_rank_loss,
 )
 from learning.query_prior_fields import QUERY_PRIOR_FIELD_NAMES
+from learning.segment_gradient_diagnostics import segment_rank_loss_gradient_path_diagnostics
 from learning.targets.query_local_utility import (
     QUERY_LOCAL_UTILITY_FINAL_LABEL_FORMULA,
     QUERY_LOCAL_UTILITY_HEAD_NAMES,
@@ -76,6 +79,92 @@ def test_segment_budget_head_has_segment_level_loss() -> None:
     )
 
     assert float(aligned_loss.item()) < float(reversed_loss.item())
+
+
+def test_factorized_loss_parts_preserve_scalar_loss() -> None:
+    head_targets = torch.zeros((1, 8, len(QUERY_LOCAL_UTILITY_HEAD_NAMES)), dtype=torch.float32)
+    head_mask = torch.ones_like(head_targets, dtype=torch.bool)
+    segment_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("segment_budget_target")
+    behavior_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("conditional_behavior_utility")
+    replacement_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("replacement_representative_value")
+    head_targets[0, :, behavior_idx] = torch.linspace(0.1, 0.8, steps=8)
+    head_targets[0, :, replacement_idx] = 0.5
+    head_targets[0, :4, segment_idx] = 1.0
+    head_logits = torch.zeros_like(head_targets)
+    head_logits[0, :4, segment_idx] = -2.0
+    head_logits[0, 4:, segment_idx] = 2.0
+
+    scalar = _factorized_query_local_utility_loss(
+        head_logits=head_logits,
+        head_targets=head_targets,
+        head_mask=head_mask,
+        segment_size=4,
+        segment_level_loss_weight=0.25,
+    )
+    parts = _factorized_query_local_utility_loss_parts(
+        head_logits=head_logits,
+        head_targets=head_targets,
+        head_mask=head_mask,
+        segment_size=4,
+        segment_level_loss_weight=0.25,
+    )
+
+    assert torch.allclose(parts.total, scalar)
+    assert parts.segment_level.pooled_bce_count == 1
+    assert parts.segment_level.pairwise_rank_count == 1
+    assert float(parts.segment_point_bce_contribution.item()) > 0.0
+
+
+def test_segment_rank_loss_gradient_path_diagnostic_reports_component_gradients() -> None:
+    point_count = 8
+    head_targets = torch.zeros(
+        (point_count, len(QUERY_LOCAL_UTILITY_HEAD_NAMES)), dtype=torch.float32
+    )
+    head_mask = torch.ones_like(head_targets, dtype=torch.bool)
+    segment_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("segment_budget_target")
+    behavior_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("conditional_behavior_utility")
+    replacement_idx = tuple(QUERY_LOCAL_UTILITY_HEAD_NAMES).index("replacement_representative_value")
+    scalar_target = torch.linspace(1.0, 0.1, steps=point_count)
+    head_targets[:, 0] = scalar_target
+    head_targets[:, behavior_idx] = torch.linspace(0.2, 0.9, steps=point_count)
+    head_targets[:, replacement_idx] = 0.5
+    head_targets[:4, segment_idx] = 1.0
+    head_logits = torch.zeros_like(head_targets)
+    head_logits[:4, segment_idx] = -2.0
+    head_logits[4:, segment_idx] = 2.0
+    point_scores = torch.linspace(-1.0, 1.0, steps=point_count)
+    cfg = ModelConfig(
+        window_length=8,
+        window_stride=8,
+        loss_objective="budget_topk",
+        budget_loss_ratios=[0.50],
+        budget_loss_temperature=0.25,
+        query_local_utility_aux_loss_weight=0.50,
+        query_local_utility_segment_level_loss_weight=0.25,
+        pointwise_loss_weight=0.25,
+    )
+
+    diagnostic = segment_rank_loss_gradient_path_diagnostics(
+        point_scores=point_scores,
+        head_logits=head_logits,
+        factorized_targets=head_targets,
+        factorized_mask=head_mask,
+        scalar_target=scalar_target,
+        scalar_mask=torch.ones((point_count,), dtype=torch.bool),
+        boundaries=[(0, point_count)],
+        model_config=cfg,
+        canonical_segment_ids=torch.tensor([0, 0, 0, 0, 1, 1, 1, 1], dtype=torch.long),
+        train_batch_size=1,
+        seed=7,
+    )
+
+    assert diagnostic["available"] is True
+    assert diagnostic["segment_loss_observation_counts"]["pairwise_rank"] == 1
+    components = diagnostic["components"]
+    assert components["aux_segment_pairwise_rank_actual_share"]["gradient_available"] is True
+    assert components["aux_pooled_segment_bce_actual_share"]["gradient_available"] is True
+    assert components["primary_budget_total"]["gradient_available"] is True
+    assert diagnostic["gradient_ratios"]["pairwise_rank_to_primary_budget_total_l2"] is not None
 
 
 def test_factorized_query_local_utility_loss_exposes_segment_budget_weights() -> None:

@@ -42,9 +42,11 @@ Active conclusion:
 - Remaining blockers are prior materiality, segment-budget-head materiality,
   the known Level 2 workload-signature KS issue, global sanity/length, and the
   unrun final grid.
-- Next admissible step remains
-  `segment_rank_loss_gradient_path_diagnostic`. Do not run Level 3 or the final
-  grid until the smaller required evidence clears.
+- Next admissible step is
+  `segment_budget_target_selectivity_candidate_level1_wiring`. Do not run
+  Level 2/3 or the final grid until a narrow segment-budget target candidate
+  survives Level 1 without degrading QueryLocalUtility, length, target
+  diffusion, or segment-head materiality.
 
 Standing rejected paths:
 
@@ -504,4 +506,90 @@ Decision:
 - Do not claim final success from this run.
 - It only shows the current configuration can produce a promising surface score
   at one larger point. It does not clear the required learning-causality work.
-- Next admissible step remains `segment_rank_loss_gradient_path_diagnostic`.
+- Next admissible step at that time was
+  `segment_rank_loss_gradient_path_diagnostic`; instrumentation has since been
+  added in Checkpoint 12.
+
+## Checkpoint 12 - Segment-Rank Gradient Instrumentation
+
+Covered phase: `55`.
+
+Status: instrumentation wiring accepted; actual strict diagnostic still unrun.
+
+Key artifacts:
+
+- none. The probe was a direct tiny training-fit invocation, not a benchmark
+  artifact.
+
+Retained facts:
+
+- Existing local artifacts were unavailable and did not expose the required
+  loss/gradient fields.
+- The factorized auxiliary loss now exposes canonical decomposed parts while
+  preserving the scalar production objective.
+- Training-fit diagnostics now emit `segment_rank_loss_gradient_path`, including
+  aux-scaled segment point BCE, pooled segment BCE, pairwise segment-rank share,
+  segment-level total, aux total, primary budget-rank loss, primary balanced
+  point BCE, score L2, gradient norms, and pairwise-to-primary gradient ratios.
+- A tiny wiring probe produced `available=true`, `pairwise_rank_count=1`, and a
+  finite pairwise-to-primary gradient ratio. This proves only instrumentation
+  wiring, not segment-head root cause.
+
+Decision:
+
+- Do not change segment loss weights, target semantics, selector semantics, or
+  run a Level 1/2 replay from this wiring probe.
+- Next admissible step is
+  `segment_rank_loss_gradient_path_diagnostic_actual_measurement`: run the
+  smallest diagnostic-only current-config measurement that writes the
+  gradient-path artifact, then decide whether the segment-rank path is tiny,
+  blocked, dominated, or pointed at the wrong target.
+
+## Checkpoint 13 - Segment-Rank Gradient Actual Measurement
+
+Covered phase: `56`.
+
+Status: diagnostic completed; not acceptance evidence.
+
+Key artifact:
+
+- `artifacts/results/segment_rank_loss_gradient_path_diagnostic/diagnostic.json`
+
+Retained facts:
+
+- The run used the current strict handoff config: seed `2539`, `32` ships,
+  `192` points per ship, `24` requested queries, `4` epochs, `4` train workload
+  replicates, `range_query_mix`, QueryLocalUtility factorized target, and
+  train-side marginal diagnostics enabled.
+- The source-stratified synthetic replay required source ids. The handoff did
+  not state `synthetic_route_families`, so the diagnostic recorded the explicit
+  assumption `synthetic_route_families=4`.
+- `segment_rank_loss_gradient_path.available=true`.
+- Classification:
+  `segment_pairwise_rank_gradient_material`.
+- Pairwise segment-rank observations: `20`; pooled segment-BCE observations:
+  `20`.
+- Pairwise segment-rank output-gradient L2 ratios:
+  `0.0485257410` versus primary budget total and `4.0774655132` versus
+  factorized point BCE.
+- The active segment-budget target is too broad: segment target positive
+  fraction `0.9916666667`, `gt_0.01` fraction `0.9416666667`.
+- The active segment-budget target is poorly aligned with ship-query evidence:
+  aggregate Spearman `0.0825715404`, aggregate top-k overlap `0.0`; in the
+  `medium_operational` focus family Spearman is `-0.0921973738` with top-k
+  overlap `0.0`.
+
+Decision:
+
+- The segment-rank path is not inactive or gradient-blocked. It is active, but
+  its output-gradient is much smaller than the primary budget objective.
+- The stronger root cause is target selectivity. The current segment target is
+  nearly everywhere positive and points away from the ship-query evidence that
+  the segment head needs to expose.
+- Do not increase the segment-rank scalar, tune selector allocation, or add a
+  length scaffold from this evidence.
+- Next admissible step is
+  `segment_budget_target_selectivity_candidate_level1_wiring`: pick one narrow
+  target candidate already supported by diagnostics, wire only that target
+  semantic change, and reject at Level 1 if QueryLocalUtility, length, target
+  diffusion, or segment-head causality degrades.
