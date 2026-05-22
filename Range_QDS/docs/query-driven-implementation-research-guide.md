@@ -1,6 +1,8 @@
 # Range_QDS Query-Driven Implementation and Research Guide
 
-This is the operating guide for work on the query-driven AIS dataset/trajectory compression. It is written for a new engineer or agent starting dev-work from the on the repository.
+This is the operating guide for work on the query-driven AIS dataset/trajectory compression. It is written for a new engineer or agent starting dev-work on the repository.
+
+This guide is intentionally limited to stable intent, protocol, gate order, reference metric/workload definitions, and documentation rules.
 
 ---
 
@@ -40,225 +42,7 @@ The final system must satisfy four requirements:
 
 ---
 
-## 1. Current state in one page
-
-Project status: **active, not accepted**.
-
-### Current evidence boundary
-
-Latest current-code strict reference artifact:
-
-```text
-artifacts/results/additive_qhit_behavior_score_composition_level2_seed2539/example_run.json
-artifacts/results/additive_qhit_behavior_score_composition_level2_seed2539/semantic_diagnostic.json
-```
-
-Latest blocker-localization artifact:
-
-```text
-artifacts/results/additive_level2_child_gate_root_localization/diagnostic.json
-```
-
-Latest rejected wiring artifact:
-
-```text
-artifacts/results/pooled_point_score_segment_allocation_level1_smoke/example_run.json
-artifacts/results/pooled_point_score_segment_allocation_level1_smoke/semantic_diagnostic.json
-artifacts/results/pooled_point_score_segment_allocation_level1_smoke/rejection_diagnostic.json
-```
-
-Latest failure-diagnosis artifact:
-
-```text
-artifacts/results/pooled_point_score_allocation_failure_diagnosis/diagnostic.json
-```
-
-Latest mask-delta diagnostic artifact:
-
-```text
-artifacts/results/segment_allocation_mask_delta_diagnostic/diagnostic.json
-```
-
-Latest segment-head compression diagnostic artifact:
-
-```text
-artifacts/results/segment_budget_head_compression_root_diagnostic/diagnostic.json
-```
-
-Latest rejected rank-loss wiring artifact:
-
-```text
-artifacts/results/segment_budget_head_topk_rank_loss_level1_wiring/example_run.json
-artifacts/results/segment_budget_head_topk_rank_loss_level1_wiring/semantic_diagnostic.json
-artifacts/results/segment_budget_head_topk_rank_loss_level1_wiring/rejection_diagnostic.json
-```
-
-Configuration summary:
-
-```text
-level: strict Level 2 source-stratified synthetic replay
-seed: 2539
-ships: 32
-points per ship: 192
-requested queries: 24
-epochs: 4
-train workload replicates: 4
-train-side marginal diagnostics: enabled
-query_hit_target_variant: raw_query_hit_ship_evidence_multiplier
-score formula: additive_raw_query_hit_and_behavior_with_conditional_replacement_modulation_plus_boundary
-```
-
-Key scores:
-
-```text
-MLQDS QueryLocalUtility:           0.0995482993
-uniform QueryLocalUtility:         0.0992909061
-Douglas-Peucker QueryLocalUtility: 0.1182249577
-MLQDS - uniform:                   +0.0002573932
-MLQDS - Douglas-Peucker:           -0.0186766584
-```
-
-Current gate state:
-
-```text
-passed:
-  workload stability
-  support overlap
-  target diffusion  # final support gt_0.01 = 0.2351190476
-  predictability
-  prior-predictive alignment
-
-failed:
-  workload signature  # known point-hit-fraction KS recurrence at Level 2
-  learning causality
-  global sanity       # length preservation 0.703978 < 0.75
-  final grid          # not admissible
-```
-
-Learning-causality child state:
-
-```text
-passed at threshold but not sufficient for final success:
-  shuffled_scores_should_lose:       0.00638639
-  untrained_model_should_lose:       0.0110130
-  without_behavior_head_should_lose: 0.00622185
-
-failed:
-  shuffled_prior_fields_should_lose:        0.0
-  without_query_prior_features_should_lose: 0.0
-  without_segment_budget_head_should_lose: -0.000488398
-```
-
-Blocker localization from the derived diagnostic:
-
-```text
-prior:   priors are predictive and reach the model, but retained masks do not move
-behavior: behavior ablation is material, but conditional_behavior_utility remains weak
-segment: segment-budget head is compressed/non-causal; pooled point-score allocation looked better counterfactually
-length:  length floor fails; pure length allocation hurts QueryLocalUtility
-```
-
-Rejected Phase 49 wiring checkpoint:
-
-```text
-same-seed additive Level 1 MLQDS QueryLocalUtility:    0.1064832750
-same-seed pooled point-score MLQDS QueryLocalUtility: 0.0856186098
-delta:                                                 -0.0208646652
-same-seed additive Level 1 length preservation:        0.5402177987
-same-seed pooled point-score length preservation:      0.5340749041
-delta:                                                 -0.0061428946
-selector trace source:                                point_score_top20_mean
-target diffusion:                                     passed, final support gt_0.01 = 0.234375
-```
-
-Phase 50 failure diagnosis:
-
-```text
-classification: counterfactual_to_production_score_to_mask_mismatch
-direct QLU-loss source: point-level/local components, not length-score term
-additive retained-segment counts: [3,0,2,3,0,2,3,0,2]
-pooled retained-segment counts:   [3,1,1,3,1,1,3,1,1]
-additive allocation diagnosis:    length_support_materially_influences_allocation
-pooled allocation diagnosis:      score_dominated_length_support_conflict
-```
-
-Phase 51 mask-delta diagnosis:
-
-```text
-classification: learned_slot_spreading_swapped_query_hit_points_for_zero_hit_coverage
-retained-mask Jaccard: 0.6666666667
-removed learned points: [82,178,274]
-added learned points:   [61,157,253]
-removed raw marginal QLU sum: 0.0210543920
-added raw marginal QLU sum:   0.0001858789
-net estimate:                 -0.0208685131
-observed QLU delta:            -0.0208646652
-removed query-hit count: 2
-added query-hit count:   0
-```
-
-Phase 52 segment-head compression root diagnostic:
-
-```text
-classification: broad_soft_target_plus_underpowered_rank_pressure_causes_compressed_wrong_way_segment_head
-segment target positive fraction: 0.9444444444
-segment target support gt_0.01: 0.9126984127
-segment target top-5%-mass recall: 0.1433802217
-target segment oracle alignment:
-  spearman vs oracle mass: 0.8431893688
-  top-25% oracle mass recall: 0.4900304343
-learned segment fit:
-  target std: 0.2152189165
-  prediction std: 0.0109573500
-  prediction std / target std: 0.0509125787
-  Kendall tau: 0.2148176732
-selector allocation:
-  segment_score_to_allocation_spearman: 0.8771587805
-learned retained boundary:
-  raw_score_spearman: 0.7192082111
-  query_hit_branch_spearman: 0.7441348974
-  behavior_branch_spearman: 0.7111436950
-  segment_score_spearman: -0.5381231672
-```
-
-Phase 53 segment top-k rank-loss Level 1 wiring:
-
-```text
-status: rejected; production loss patch reverted
-target diffusion: passed, final support gt_0.01 = 0.234375
-same-seed reference MLQDS QueryLocalUtility: 0.1064832750
-candidate MLQDS QueryLocalUtility:           0.1064832750
-candidate - reference:                       0.0
-same-seed reference length:                  0.5402177987
-candidate length:                            0.5402177987
-candidate - reference length:                0.0
-segment fit:
-  reference prediction std / target std: 0.0259016158
-  candidate prediction std / target std: 0.0265600364
-  reference Kendall tau: 0.1532986111
-  candidate Kendall tau: 0.1497829861
-learned retained boundary:
-  reference segment_score_spearman: 0.4014447884
-  candidate segment_score_spearman: 0.3808049536
-```
-
-Next admissible checkpoint:
-
-```text
-segment_rank_loss_gradient_path_diagnostic
-```
-
-This checkpoint is diagnostic only. It must quantify the actual segment-rank
-loss magnitude and gradient contribution against point BCE, pooled segment BCE,
-existing pairwise segment loss, auxiliary-loss scaling, and the primary budget
-loss before adding another loss term or scalar. It must not change selector,
-score, target, model, prior, metric, workload, or production loss semantics.
-It cannot claim final success, and it cannot proceed to Level 2, Level 3, or
-final grid.
-
----
-
-## 2. Design contract
+## 1. Design contract
 
 The implementation contract connects five components:
 
@@ -287,7 +71,7 @@ Correct order of work:
 
 ---
 
-## 3. Protocol rules
+## 2. Protocol rules
 
 ### Allowed
 
@@ -329,7 +113,7 @@ Any run that violates these rules is diagnostic only.
 
 ---
 
-## 4. Evidence levels and promotion rules
+## 3. Evidence levels and promotion rules
 
 Use the evidence level that can answer the checkpoint question.
 
@@ -339,12 +123,12 @@ Use the evidence level that can answer the checkpoint question.
 | Unit/guardrail tests | Validate implementation contracts | No |
 | Level 1 smoke | Wiring, artifact fields, CLI compatibility | No |
 | Level 2 minimum strict | Early gate localization | No final claim; may justify a targeted next probe |
-| Level 3 strict single-cell | Main current evidence level | Can define current blocker boundary |
+| Level 3 strict single-cell | Main strict single-cell evidence level | Can define blocker boundary |
 | Final grid | Multi-profile/compression/seed evidence | Required for final claim |
 
 ---
 
-## 5. Gate order
+## 4. Gate order
 
 Diagnose in this order. Do not skip ahead to model or selector changes when an
 earlier gate is unhealthy.
@@ -380,14 +164,15 @@ earlier gate is unhealthy.
 
 8. **Global sanity**
    - Endpoint, length, and shape guardrails must be computed and improved where
-     possible. In the current local-query-learning phase, global sanity is not
-     the first hard blocker ahead of learning causality when it already passes.
+     possible. Do not let a global-sanity failure obscure an earlier
+     learning-causality failure unless the checkpoint explicitly targets
+     guardrails.
 
 ---
 
-## 6. Active scoring-profile
+## 5. Reference scoring profile
 
-`QueryLocalUtility` is the active primary metric
+`QueryLocalUtility` is the primary metric for this protocol.
 
 ```yaml
 Point mass:
@@ -404,10 +189,9 @@ Global sanity:
   length_preservation_guardrail: 0.01
 ```
 
+## 6. Reference workload profile
 
-## 7. Active workload-profile
-
-`range_query_mix` is the active primary workload profile
+`range_query_mix` is the primary workload profile for this protocol.
 
 ```yaml
 anchor_family_weights:
@@ -455,55 +239,12 @@ coverage calibration mode not profile_sampled_query_count
 
 ---
 
-## 8. Current blocker and what comes next
+## 7. Documentation and artifact hygiene
 
-The current code path passed strict Level 2 target diffusion under the additive
-q-hit / behavior composition, but is still blocked by learning causality and
-global sanity. `Next-Iterations.md` remains the source of truth for the current
-evidence boundary.
-
-The semantic blocker is:
-
-```text
-query-prior fields are immaterial to retained masks
-behavior ablation is material, but the conditional-behavior head is still weak
-segment-budget head is compressed and not causal
-pooled point-score allocation looked better counterfactually but failed as primary path
-global length preservation is below the acceptance floor
-```
-
-Next admissible work:
-
-1. **Segment-rank loss gradient-path diagnostic**
-   - Phase 53 rejected the top-k rank-loss patch because it did not materially
-     change the mask, score, segment-head compression, or retained-boundary
-     alignment.
-   - Measure actual segment-rank loss magnitude and gradient contribution before
-     adding another loss term, scalar, or target change.
-   - Do not change metric/profile/target/model/prior/selector semantics.
-   - Do not rerun pooled point-score promotion, path-length allocation, selector
-     allocation-source patches, selector floors, raw coverage overrides, or
-     larger segment-rank scalars.
-
-2. **Query-prior materiality remains unresolved**
-   - The additive strict Level 2 localization shows priors are predictive and
-     reach head logits, but retained-mask Jaccard stays `1.0`, mean absolute
-     head-probability delta is about `2.9e-05`, and high-marginal score-output
-     delta is `0.0`.
-   - Do not add another scalar prior boost, generic prior residual,
-     route-density exposure, prior adapter, or prior-only loss from this
-     evidence.
-
----
-
-## 9. Documentation and artifact hygiene
-
-When adding a checkpoint:
-
-1. Keep `query-driven-implementation-progress.md` short.
-2. Record only:
-   - hypothesis,
-   - scale/seed,
-   - gate state,
-   - key numbers,
-   - blocker interpretation,
+1. Keep this guide focused on stable objective, protocol, gates, and profile definitions.
+2. Keep `Next-Iterations.md` focused only on information needed going into the immediate next couple of tasks/iterations.
+3. Keep the historical log `query-driven-implementation-progress.md` short and record only
+    - hypothesis
+    - gate state
+    - key numbers
+    - blocker interpretation

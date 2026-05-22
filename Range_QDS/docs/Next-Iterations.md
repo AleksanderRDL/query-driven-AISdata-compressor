@@ -1,6 +1,6 @@
 # Next Iteration(s)
 
-Use this file as the handoff for the next individual task or tasks to be worked on in the project.
+Use this file as the handoff for the next individual task or tasks to be worked on in the project. It is focused only on information needed going into the immediate next couple of tasks/iterations.
 
 ---
 
@@ -59,6 +59,21 @@ Current formula:
 
 ```text
 additive_raw_query_hit_and_behavior_with_conditional_replacement_modulation_plus_boundary
+```
+
+Current strict replay configuration:
+
+```text
+level: strict Level 2 source-stratified synthetic replay
+seed: 2539
+ships: 32
+points per ship: 192
+requested queries: 24
+epochs: 4
+train workload replicates: 4
+train-side marginal diagnostics: enabled
+query_hit_target_variant: raw_query_hit_ship_evidence_multiplier
+score formula: additive_raw_query_hit_and_behavior_with_conditional_replacement_modulation_plus_boundary
 ```
 
 Strict Level 2 current boundary:
